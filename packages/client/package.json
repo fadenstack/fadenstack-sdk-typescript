@@ -1,0 +1,23 @@
+{
+  "name": "@fadenstack/client",
+  "version": "0.1.0",
+  "description": "The Fadenstack server connection: the gateway's chat, agent sign-in, the agent resource, typed errors",
+  "license": "Apache-2.0",
+  "type": "module",
+  "sideEffects": false,
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": ["dist", "src"],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/fadenstack/fadenstack-sdk-typescript.git",
+    "directory": "packages/client"
+  },
+  "dependencies": {}
+}

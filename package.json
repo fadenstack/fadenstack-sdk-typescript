@@ -1,0 +1,37 @@
+{
+  "name": "fadenstack-sdk-typescript",
+  "private": true,
+  "description": "TypeScript SDK for agents governed by a Fadenstack server",
+  "license": "Apache-2.0",
+  "type": "module",
+  "workspaces": [
+    "packages/client",
+    "packages/agents",
+    "packages/ui",
+    "packages/ui-react",
+    "packages/testing"
+  ],
+  "engines": {
+    "node": ">=20.19"
+  },
+  "scripts": {
+    "build": "tsc -b packages/client packages/agents packages/ui packages/ui-react packages/testing",
+    "clean": "tsc -b --clean packages/client packages/agents packages/ui packages/ui-react packages/testing",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "livecheck": "node --experimental-strip-types samples/livecheck.ts"
+  },
+  "devDependencies": {
+    "@testing-library/react": "^16.3.3",
+    "@types/node": "^20.19.0",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "fake-indexeddb": "^6.2.5",
+    "jsdom": "^27.4.0",
+    "react": "^19.3.0",
+    "react-dom": "^19.3.0",
+    "typescript": "~5.9.3",
+    "vitest": "^4.1.11"
+  }
+}
