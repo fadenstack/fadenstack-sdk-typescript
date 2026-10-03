@@ -20,7 +20,7 @@
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
-    "livecheck": "node --experimental-strip-types samples/livecheck.ts"
+    "livecheck": "node samples/livecheck.mjs"
   },
   "devDependencies": {
     "@testing-library/react": "^16.3.3",

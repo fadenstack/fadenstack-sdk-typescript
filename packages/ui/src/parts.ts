@@ -269,8 +269,9 @@ export class ApprovalPart extends ResponsePart {
     return this.request.source === "gateway" ? this.#context.strings.serverTool : this.#context.strings.approvalClass[this.request.toolClass];
   }
 
+  /** Why it asks: the admin's message for a gateway tool; for the agent's own tools, what its class means. */
   get reason(): string {
-    return this.request.reason;
+    return this.request.source === "gateway" ? this.request.reason : this.#context.strings.approvalWhy[this.request.toolClass];
   }
 
   get state(): ApprovalState {

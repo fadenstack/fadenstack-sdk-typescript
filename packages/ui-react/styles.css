@@ -1042,6 +1042,11 @@
   scrollbar-width: thin;
 }
 
+/* The composer draws the focus ring; the text box inside it does not draw a second one. */
+.fdn-composer textarea:focus-visible {
+  outline: none;
+}
+
 .fdn-composer textarea::placeholder {
   color: var(--fdn-text-faint);
 }

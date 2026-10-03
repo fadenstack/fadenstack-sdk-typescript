@@ -23,6 +23,8 @@ export interface UiStrings {
   // approvals
   approvalTitle(name: string): string;
   approvalClass: Record<ToolClass, string>;
+  /** Why a host tool asks, by its class (a gateway tool says why itself: the admin's message). */
+  approvalWhy: Record<ToolClass, string>;
   serverTool: string;
   allow: string;
   allowForChat: string;
@@ -87,6 +89,12 @@ export const englishStrings: UiStrings = {
   moreCharacters: (count) => `... (${count} more characters)`,
   approvalTitle: (name) => `Run ${name}?`,
   approvalClass: { read: "Read", write: "Changes data", destructive: "Cannot be undone", unknown: "Unclassified" },
+  approvalWhy: {
+    read: "It only reads.",
+    write: "It changes something, which can be changed back.",
+    destructive: "It may do something that cannot be undone.",
+    unknown: "Nobody has said what this tool does.",
+  },
   serverTool: "Server tool",
   allow: "Allow",
   allowForChat: "Allow for this chat",
@@ -151,6 +159,7 @@ export function withStrings(changes: Partial<UiStrings> | undefined): UiStrings 
     ...changes,
     toolClass: { ...englishStrings.toolClass, ...changes.toolClass },
     approvalClass: { ...englishStrings.approvalClass, ...changes.approvalClass },
+    approvalWhy: { ...englishStrings.approvalWhy, ...changes.approvalWhy },
     noticeTitles: { ...englishStrings.noticeTitles, ...changes.noticeTitles },
     modes: { ...englishStrings.modes, ...changes.modes },
   };
