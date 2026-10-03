@@ -4,7 +4,9 @@
   "description": "The React skin for the Fadenstack chat view models: a Copilot-style chat panel",
   "license": "Apache-2.0",
   "type": "module",
-  "sideEffects": false,
+  "sideEffects": [
+    "*.css"
+  ],
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "exports": {
@@ -12,14 +14,25 @@
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js"
     },
-    "./styles.css": "./dist/styles.css"
+    "./styles.css": "./styles.css"
   },
-  "files": ["dist", "src"],
+  "files": [
+    "dist",
+    "src",
+    "styles.css"
+  ],
   "repository": {
     "type": "git",
     "url": "https://github.com/fadenstack/fadenstack-sdk-typescript.git",
     "directory": "packages/ui-react"
   },
-  "dependencies": { "@fadenstack/agents": "0.1.0", "@fadenstack/client": "0.1.0", "@fadenstack/ui": "0.1.0" },
-  "peerDependencies": { "react": ">=18.2", "react-dom": ">=18.2" }
+  "dependencies": {
+    "@fadenstack/agents": "0.1.0",
+    "@fadenstack/client": "0.1.0",
+    "@fadenstack/ui": "0.1.0"
+  },
+  "peerDependencies": {
+    "react": ">=18.2",
+    "react-dom": ">=18.2"
+  }
 }
