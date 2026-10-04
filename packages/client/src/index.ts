@@ -58,6 +58,20 @@ export {
 } from "./models.js";
 export { AgentResource, MAX_EVENTS_PER_REPORT } from "./resources/agent.js";
 export {
+  createAgent,
+  type AgentDefinition,
+  type CreateAgentOptions,
+  type CreatedAgent,
+} from "./resources/agentSetup.js";
+export {
+  SDK_LANGUAGE,
+  SDK_VERSION,
+  toWireManifest,
+  type AppManifest,
+  type ManifestContext,
+  type ManifestTool,
+} from "./manifest.js";
+export {
   OPEN_WORLD_ENFORCED,
   TOOL_MODES,
   TOOL_MODE_HEADER,

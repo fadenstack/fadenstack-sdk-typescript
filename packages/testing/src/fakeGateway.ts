@@ -8,6 +8,8 @@ export interface FakeUser {
   /** The agents granted to the user (slugs); all of them when not given. */
   agents?: string[];
   developerMode?: boolean;
+  /** Has `agents:create`: may create agents (`POST /api/agents`), which they then maintain. */
+  createsAgents?: boolean;
 }
 
 /** An agent the fake server serves. */
@@ -124,6 +126,12 @@ export class FakeGateway {
   readonly modelCalls: FakeModelRequest[] = [];
   /** The events clients reported, as sent. */
   readonly reported: Record<string, unknown>[] = [];
+  /** The manifests apps sent (`PUT /v1/agents/{agent}/manifest`), as sent. */
+  readonly manifests: { agent: string; manifest: Record<string, unknown> }[] = [];
+  /** Tools the gateway held back from requests because the contract does not list them. */
+  readonly heldTools: string[] = [];
+  /** Agents created through the API, by whom, with the body sent. */
+  readonly createdAgents: { slug: string; by: string; body: Record<string, unknown> }[] = [];
   /** Answers to gateway approvals. */
   readonly approvals: { approvalId: string; approved: boolean }[] = [];
   readonly #agents: Map<string, Required<Pick<FakeAgent, "slug" | "name" | "id" | "version">> & FakeAgent>;
@@ -235,10 +243,11 @@ export class FakeGateway {
     const method = request.method;
     if (method === "POST" && path === "/api/auth/jwt/login") return this.#login(body);
     if (method === "POST" && path === "/api/agent-tokens") return this.#issue(request, body);
+    if (method === "POST" && path === "/api/agents") return this.#createAgent(request, body);
     if (method === "POST" && path === "/api/agent-tokens/refresh") return this.#refresh(body);
     if (method === "GET" && path === "/api/health") return json(200, { status: "ok" });
     if (method === "GET" && path === "/v1/features") return json(200, { edition: "community", features: ["agents"] });
-    const match = /^\/v1\/agents\/([^/]+)\/(profile|chat\/completions|events|approvals\/([^/]+))$/.exec(path);
+    const match = /^\/v1\/agents\/([^/]+)\/(profile|chat\/completions|events|manifest|approvals\/([^/]+))$/.exec(path);
     if (!match) return json(404, { detail: "Not Found" });
     const agent = decodeURIComponent(match[1]!);
     const auth = this.#authorize(request, agent);
@@ -247,6 +256,7 @@ export class FakeGateway {
     if (method === "GET" && route === "profile") return json(200, this.#profile(agent, auth));
     if (method === "POST" && route === "chat/completions") return this.#chat(request, agent, body);
     if (method === "POST" && route === "events") return this.#events(body);
+    if (method === "PUT" && route === "manifest") return this.#manifest(agent, body);
     if (method === "POST" && route.startsWith("approvals/")) return this.#approve(decodeURIComponent(match[3]!), body);
     return json(405, { detail: "Method Not Allowed" });
   }
@@ -278,6 +288,30 @@ export class FakeGateway {
     };
     this.#signIns.push(signIn);
     return json(201, this.#tokens(signIn, agent.id));
+  }
+
+  /** A new agent as a draft its creator maintains (and so may use), for someone with agents:create. */
+  #createAgent(request: Request, body: unknown): Response {
+    const userId = this.#logins.get(bearer(request) ?? "");
+    if (!userId) return json(401, { detail: "Unauthorized" });
+    const user = this.#users.find((u) => u.id === userId)!;
+    if (!user.createsAgents) return json(403, { detail: "Permission denied: agents:create" });
+    const b = (body ?? {}) as Record<string, unknown>;
+    const slug = String(b["slug"] ?? "");
+    if (!/^[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?$/.test(slug) || !b["name"]) {
+      return json(422, { detail: [{ msg: "slug and name are required" }] });
+    }
+    if (this.#agents.has(slug)) return json(409, { detail: `An agent '${slug}' exists.` });
+    const version = (b["version"] ?? {}) as Record<string, unknown>;
+    const agent = {
+      slug, name: String(b["name"]), id: `agent-${this.#agents.size + 1}`, version: 1,
+      contract: (version["host_tool_contract"] ?? []) as FakeAgent["contract"],
+      ui: (version["ui"] ?? {}) as Record<string, unknown>,
+    };
+    this.#agents.set(slug, agent);
+    if (user.agents) user.agents.push(slug);
+    this.createdAgents.push({ slug, by: user.email, body: b });
+    return json(201, { id: agent.id, slug, name: agent.name, status: "draft", published_version: null, latest_version: 1 });
   }
 
   #refresh(body: unknown): Response {
@@ -344,14 +378,13 @@ export class FakeGateway {
       if (fn["parameters"]) def.parameters = fn["parameters"] as ToolDefinition["parameters"];
       return def;
     });
+    // As the gateway does: tools outside the contract are held back -- the model never sees them -- and named.
     const contract = agent.contract ?? [];
-    const outside = contract.length ? tools.filter((t) => !contract.some((c) => c.name === t.name)) : [];
-    if (outside.length) {
-      return openAiError(400, `Tools outside the agent's contract: ${outside.map((t) => t.name).join(", ")}`,
-        "tool_not_in_contract", "invalid_request_error");
-    }
+    const held = contract.length ? tools.filter((t) => !contract.some((c) => c.name === t.name)) : [];
+    const offered = tools.filter((t) => !held.includes(t));
+    if (held.length) this.heldTools.push(...held.map((t) => t.name));
     const modelRequest: FakeModelRequest = {
-      agent: slug, messages: b["messages"] as ChatMessage[], tools, stream: b["stream"] === true,
+      agent: slug, messages: b["messages"] as ChatMessage[], tools: offered, stream: b["stream"] === true,
       toolMode: request.headers.get("x-faden-tool-mode"), conversationId: request.headers.get("x-faden-conversation-id"),
       turnId: request.headers.get("x-faden-turn-id"), body: b,
     };
@@ -371,7 +404,27 @@ export class FakeGateway {
       });
     }
     const events = request.headers.get("x-faden-events") !== null;
-    return modelRequest.stream ? this.#stream(reply, events) : this.#whole(reply, events);
+    const response = modelRequest.stream ? this.#stream(reply, events) : this.#whole(reply, events);
+    if (held.length) response.headers.set("x-faden-held-tools", held.map((t) => t.name).sort().join(","));
+    return response;
+  }
+
+  /** What the app brings, checked as the gateway checks it, and kept in `manifests`. */
+  #manifest(agent: string, body: unknown): Response {
+    const m = (body ?? {}) as Record<string, unknown>;
+    const app = (m["app"] ?? {}) as Record<string, unknown>;
+    const tools = Array.isArray(m["tools"]) ? (m["tools"] as Record<string, unknown>[]) : [];
+    const names = tools.map((t) => String(t["name"] ?? ""));
+    const problem = !app["name"] ? "app.name is required"
+      : names.some((n) => !/^[A-Za-z0-9_.:-]{1,128}$/.test(n)) ? "a tool name is not valid"
+      : new Set(names).size !== names.length ? "tool names must be unique"
+      : tools.some((t) => !["read", "write", "destructive", "unknown", undefined].includes(t["class"] as string)) ? "a tool class is not valid"
+      : undefined;
+    if (problem) return openAiError(400, problem, "invalid_manifest", "invalid_request_error");
+    const key = JSON.stringify(m);
+    const isNew = !this.manifests.some((x) => x.agent === agent && JSON.stringify(x.manifest) === key);
+    this.manifests.push({ agent, manifest: m });
+    return json(200, { sha256: `fake-${this.manifests.length}`, new: isNew });
   }
 
   #governance(outcome: string, stage: string, refuse: NonNullable<FakeReply["refuse"]>): Record<string, unknown> {

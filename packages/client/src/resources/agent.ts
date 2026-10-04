@@ -1,4 +1,5 @@
 import type { FadenTransport } from "../http/transport.js";
+import { toWireManifest, type AppManifest } from "../manifest.js";
 import { toAgentProfile, toWireEvent, type AgentClientEvent, type AgentProfile } from "../models.js";
 
 /** The server takes at most this many events per report. */
@@ -30,6 +31,17 @@ export class AgentResource {
       throw new RangeError(`At most ${MAX_EVENTS_PER_REPORT} events per report.`);
     }
     await this.#transport.post<unknown>(this.#route("events"), { events: events.map(toWireEvent) }, signal);
+  }
+
+  /**
+   * Tells the server what the app brings -- its tools with their classes, its context, its greeting -- for its
+   * admins to review. The same manifest again is only counted (`isNew` false).
+   */
+  async reportManifest(manifest: AppManifest, signal?: AbortSignal): Promise<{ sha256: string; isNew: boolean }> {
+    const answer = await this.#transport.json<{ sha256?: string; new?: boolean }>(
+      "PUT", this.#route("manifest"), toWireManifest(manifest), signal,
+    );
+    return { sha256: String(answer?.sha256 ?? ""), isNew: Boolean(answer?.new) };
   }
 
   /** Approves or declines a gateway tool call waiting for the user (`faden.approval_required`). */

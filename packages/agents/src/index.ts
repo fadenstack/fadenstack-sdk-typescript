@@ -1,5 +1,5 @@
 export { FadenAgent } from "./agent.js";
-export { AgentBuilder, type AgentSettings } from "./builder.js";
+export { AgentBuilder, type AgentSettings, type AppDescription } from "./builder.js";
 export { AgentSession, resultText, type SendOptions } from "./session.js";
 export {
   ApprovalDecision,

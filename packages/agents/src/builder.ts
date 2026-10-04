@@ -3,6 +3,7 @@ import {
   narrowestMode,
   type ChatStreamer,
   type FadenClientOptions,
+  type ManifestContext,
   type ReasoningEffort,
   type TokenProvider,
   type ToolMode,
@@ -32,6 +33,19 @@ export interface AgentSettings {
   readonly historyTokens: number;
   readonly report: boolean;
   readonly reasoning: ReasoningEffort | undefined;
+  /** The app the agent runs in, for the manifest it reports when it starts. */
+  readonly app: AppDescription;
+}
+
+/** The app an agent runs in: what its manifest says besides the tools. */
+export interface AppDescription {
+  /** "Chrome extension", "Word add-in". */
+  name: string;
+  version?: string;
+  /** What the app offers the agent to read, by id. */
+  context?: ManifestContext[];
+  /** The greeting and suggestions the app would show. */
+  ui?: { greeting?: string; suggestions?: string[] };
 }
 
 /**
@@ -54,6 +68,7 @@ export class AgentBuilder {
   #historyTokens = 24_000;
   #report = true;
   #reasoning: ReasoningEffort | undefined;
+  #app: AppDescription = { name: "Fadenstack SDK app" };
 
   /** The server, and how the agent signs in (usually an `AgentTokenProvider`). */
   useServer(serverUrl: string | URL, credentials: TokenProvider, options: Omit<FadenClientOptions, "serverUrl" | "credentials"> = {}): this {
@@ -131,9 +146,23 @@ export class AgentBuilder {
     return this;
   }
 
-  /** Whether tool runs and approvals are reported to the server (names and counts only). Default on. */
+  /**
+   * Whether tool runs and approvals (names and counts only), and the app's manifest, are reported to the server.
+   * Default on.
+   */
   useEventReporting(enabled: boolean): this {
     this.#report = enabled;
+    return this;
+  }
+
+  /**
+   * The app the agent runs in. When the agent starts it tells the server what the app brings -- its host tools
+   * with their classes, this context and greeting, the versions -- so the server's admins take new tools in with
+   * a click instead of typing them; until they do, the server holds them back.
+   */
+  describeApp(app: AppDescription): this {
+    if (!app.name?.trim()) throw new TypeError("An app needs a name.");
+    this.#app = app;
     return this;
   }
 
@@ -188,6 +217,7 @@ export class AgentBuilder {
       historyTokens: this.#historyTokens,
       report: this.#report,
       reasoning: this.#reasoning,
+      app: this.#app,
     });
   }
 }

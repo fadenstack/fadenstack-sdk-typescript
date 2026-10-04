@@ -4,7 +4,7 @@ import { FadenError } from "@fadenstack/client";
 import { ApprovalDecision, EntryTypes, TurnStatus } from "@fadenstack/agents";
 import { lastToolResults, lastUserText, type FakeModel } from "@fadenstack/testing";
 
-import { collect, setup, types } from "./helpers.js";
+import { collect, setup, types, until } from "./helpers.js";
 
 /** A model that calls `tool` with `args` once, then answers with what the tool said. */
 function callsOnce(tool: string, args: Record<string, unknown>): FakeModel {
@@ -107,6 +107,43 @@ describe("a turn", () => {
     const session = await s.agent.startSession();
     await session.send("read");
     expect(s.asked.map((a) => a.toolName)).toEqual(["read_page"]); // write now: it asks in ask
+  });
+
+  it("tells the server what the app brings, also the tools its contract does not list yet", async () => {
+    const s = await setup(
+      { agents: [{ slug: "eplan", contract: [{ name: "read_page", risk: "read" }] }], model: () => ({ text: "ok" }) },
+      undefined,
+      (b) => b.describeApp({
+        name: "EPLAN add-in",
+        version: "2.1.0",
+        context: [{ id: "project:pages", title: "The project's pages" }],
+        ui: { greeting: "Ask about your project." },
+      }),
+    );
+    await s.agent.start();
+    expect(s.agent.tools.map((t) => t.name)).toEqual(["read_page"]); // the others wait for the server's review
+    await until(() => s.gateway.manifests.length > 0);
+    const { agent, manifest } = s.gateway.manifests[0]!;
+    expect(agent).toBe("eplan");
+    expect(manifest).toMatchObject({
+      app: { name: "EPLAN add-in", version: "2.1.0" },
+      sdk: { language: "typescript" },
+      context: [{ id: "project:pages", title: "The project's pages" }],
+      ui: { greeting: "Ask about your project." },
+    });
+    expect((manifest["tools"] as { name: string; class: string }[]).map((t) => [t.name, t.class])).toEqual([
+      ["read_page", "read"], ["write_page", "write"], ["delete_page", "destructive"],
+    ]);
+    expect((manifest["tools"] as Record<string, unknown>[])[0]).toMatchObject({
+      description: "Reads a page.", parameters: { type: "object", required: ["page"] },
+    });
+  });
+
+  it("does not report the app when event reporting is off", async () => {
+    const s = await setup({ model: () => ({ text: "ok" }) }, undefined, (b) => b.useEventReporting(false));
+    await s.agent.start();
+    await new Promise((r) => setTimeout(r, 20));
+    expect(s.gateway.manifests).toEqual([]);
   });
 
   it("narrows the session's mode to the agent's ceiling", async () => {

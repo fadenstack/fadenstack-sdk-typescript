@@ -77,6 +77,12 @@ export async function setup(
   return { gateway, client, pages, store, asked, agent };
 }
 
+/** Waits until `condition` holds (up to two seconds): for what the agent does in the background. */
+export async function until(condition: () => boolean): Promise<void> {
+  for (let i = 0; i < 200 && !condition(); i++) await new Promise((r) => setTimeout(r, 10));
+  if (!condition()) throw new Error("Timed out.");
+}
+
 export async function collect(events: AsyncIterable<AgentEvent>): Promise<AgentEvent[]> {
   const out: AgentEvent[] = [];
   for await (const e of events) out.push(e);

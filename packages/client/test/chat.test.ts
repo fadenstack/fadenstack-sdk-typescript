@@ -92,7 +92,7 @@ describe("FadenChatClient.stream", () => {
     await expect(collect(client.chat.stream([{ role: "user", content: "x" }]))).rejects.toThrowError(FadenStreamError);
   });
 
-  it("throws typed errors: a rate limit with its wait, a tool outside the contract", async () => {
+  it("throws a typed error for a rate limit, with its wait", async () => {
     const gateway = new FakeGateway({
       agents: [{ slug: "test-agent", contract: [{ name: "read_page", risk: "read" }] }],
       model: () => ({ rateLimit: { retryAfterS: 7 } }),
@@ -101,10 +101,18 @@ describe("FadenChatClient.stream", () => {
     const limited = await collect(client.chat.stream([{ role: "user", content: "x" }])).catch((e: unknown) => e);
     expect(limited).toBeInstanceOf(FadenRateLimitedError);
     expect((limited as FadenRateLimitedError).retryAfterMs).toBe(7000);
-    const outside = await collect(client.chat.stream([{ role: "user", content: "x" }], { tools: [{ name: "delete_page" }] }))
-      .catch((e: unknown) => e);
-    expect(outside).toBeInstanceOf(FadenApiError);
-    expect((outside as FadenApiError).code).toBe("tool_not_in_contract");
+  });
+
+  it("is answered without a tool the contract does not list: the gateway holds it back", async () => {
+    const gateway = new FakeGateway({
+      agents: [{ slug: "test-agent", contract: [{ name: "read_page", risk: "read" }] }],
+      model: () => ({ text: "ok" }),
+    });
+    const client = await signedIn(gateway);
+    const updates = await collect(client.chat.stream([{ role: "user", content: "x" }], { tools: [{ name: "read_page" }, { name: "delete_page" }] }));
+    expect(updates.some((u) => u.type === "text")).toBe(true);
+    expect(gateway.modelCalls[0]!.tools.map((t) => t.name)).toEqual(["read_page"]);
+    expect(gateway.heldTools).toEqual(["delete_page"]);
   });
 });
 

@@ -8,6 +8,7 @@ import {
   FadenSignInRequiredError,
   FadenUnreachableError,
   MemoryTokenStore,
+  createAgent,
   loginWithPassword,
 } from "@fadenstack/client";
 import { FakeGateway } from "@fadenstack/testing";
@@ -67,6 +68,27 @@ describe("sign-in", () => {
     expect(error).not.toBeInstanceOf(FadenPermissionError);
     expect((error as FadenApiError).status).toBe(404);
     expect(await tokens.isSignedIn()).toBe(false);
+  });
+
+  it("creates the agent from the app's definition for someone with agents:create, then signs in to it", async () => {
+    const { gateway, tokens } = setup({
+      agents: [],
+      users: [{ email: "admin@example.com", password: "p", createsAgents: true, agents: [] }, { email: "u@x", password: "p" }],
+    });
+    const definition = { slug: "test-agent", name: "Test agent", version: { host_tool_contract: [{ name: "read_page", risk: "read" }] } };
+
+    const user = await loginWithPassword({ apiUrl: gateway.serverUrl, email: "u@x", password: "p", fetch: gateway.fetch });
+    const refused = await createAgent({ apiUrl: gateway.serverUrl, loginToken: user, definition, fetch: gateway.fetch }).catch((e: unknown) => e);
+    expect(refused).toBeInstanceOf(FadenPermissionError);
+
+    const admin = await loginWithPassword({ apiUrl: gateway.serverUrl, email: "admin@example.com", password: "p", fetch: gateway.fetch });
+    const created = await createAgent({ apiUrl: gateway.serverUrl, loginToken: admin, definition, fetch: gateway.fetch });
+    expect(created).toMatchObject({ slug: "test-agent", status: "draft" });
+    expect(gateway.createdAgents).toEqual([{ slug: "test-agent", by: "admin@example.com", body: definition }]);
+    await tokens.signIn(admin);
+    expect(await tokens.isSignedIn()).toBe(true);
+    const again = await createAgent({ apiUrl: gateway.serverUrl, loginToken: admin, definition, fetch: gateway.fetch }).catch((e: unknown) => e);
+    expect((again as FadenApiError).status).toBe(409);
   });
 
   it("is refused without a grant", async () => {

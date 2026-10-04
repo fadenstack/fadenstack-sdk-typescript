@@ -1,10 +1,13 @@
 import {
   FadenError,
+  SDK_LANGUAGE,
+  SDK_VERSION,
   decideTool,
   effectiveToolClass,
   narrowestMode,
   parseToolClass,
   type AgentProfile,
+  type AppManifest,
   type FadenClient,
   type ToolDefinition,
   type ToolMode,
@@ -114,6 +117,34 @@ export class FadenAgent {
     }
     this.#tools = tools;
     this.#profile = profile;
+    if (this.settings.report) void this.#reportManifest();
+  }
+
+  /**
+   * Tells the server what this app brings: every host tool with the class its developer gave it -- also those the
+   * contract does not list yet, which is how the server learns of them -- and the app's context and greeting.
+   * Never fails the start: an older server without the route, or no network, just means no report.
+   */
+  async #reportManifest(): Promise<void> {
+    const { app, tools } = this.settings;
+    const manifest: AppManifest = {
+      app: { name: app.name, ...(app.version !== undefined ? { version: app.version } : {}) },
+      sdk: { language: SDK_LANGUAGE, version: SDK_VERSION },
+      tools: tools.filter((t) => t.source === "host").map((t) => ({
+        name: t.name,
+        parameters: t.parameters,
+        toolClass: t.toolClass,
+        ...(t.description !== undefined ? { description: t.description } : {}),
+        ...(t.openWorld !== undefined ? { openWorld: t.openWorld } : {}),
+      })),
+      ...(app.context ? { context: app.context } : {}),
+      ...(app.ui ? { ui: app.ui } : {}),
+    };
+    try {
+      await this.client.agent!.reportManifest(manifest);
+    } catch {
+      // nothing to do: the server learns of the tools at the next start
+    }
   }
 
   /** A new session, in the agent's default mode (`ask`) unless `toolMode` says otherwise. */
