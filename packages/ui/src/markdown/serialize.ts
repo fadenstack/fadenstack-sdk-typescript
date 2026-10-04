@@ -17,6 +17,37 @@ export function markdownToHtml(source: string): string {
   return toHtml(parseMarkdown(source));
 }
 
+/** Markdown blocks as the text a reader sees, for programs that take no formatting: no marks, lists with "- ". */
+export function toPlainText(blocks: readonly MarkdownBlock[]): string {
+  return blocks.map(plainBlock).filter((t) => t !== "").join("\n\n");
+}
+
+/** Markdown as plain text (see `toPlainText`). */
+export function markdownToPlainText(source: string): string {
+  return toPlainText(parseMarkdown(source));
+}
+
+function plainBlock(b: MarkdownBlock): string {
+  switch (b.kind) {
+    case "paragraph":
+    case "heading":
+      return inlineText(b.inlines);
+    case "code":
+      return b.code;
+    case "list":
+      return b.items.map((item, i) => {
+        const box = item.checked === undefined ? "" : item.checked ? "☑ " : "☐ ";
+        return `${b.ordered ? `${b.start + i}.` : "-"} ${box}${toPlainText(item.blocks).replace(/\n/g, "\n  ")}`;
+      }).join("\n");
+    case "quote":
+      return toPlainText(b.blocks);
+    case "table":
+      return tableToTsv(b);
+    case "rule":
+      return "";
+  }
+}
+
 /**
  * A table as tab-separated values, the header first: pasted into a spreadsheet, each cell lands in its own cell.
  * Tabs and line breaks inside a cell become spaces.

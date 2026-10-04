@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { MemoryClipboard, markdownToHtml, tableToTsv, tablesOf, writeClipboard } from "@fadenstack/ui";
+import { MemoryClipboard, markdownToHtml, markdownToPlainText, tableToTsv, tablesOf, writeClipboard } from "@fadenstack/ui";
 
 describe("markdownToHtml", () => {
   it("writes the blocks a mail or document keeps", () => {
@@ -49,6 +49,13 @@ describe("markdownToHtml", () => {
       '<table><thead><tr><th style="text-align:left">Task</th><th style="text-align:right">h</th></tr></thead>' +
       '<tbody><tr><td style="text-align:left">Seal</td><td style="text-align:right">2 000</td></tr></tbody></table>',
     );
+  });
+});
+
+describe("markdownToPlainText", () => {
+  it("keeps what a reader sees", () => {
+    expect(markdownToPlainText("## Hi\n\nHello **Jane**, see [the manual](https://x).\n\n1. Lock out\n2. Open\n\n| A | B |\n|---|---|\n| 1 | 2 |"))
+      .toBe("Hi\n\nHello Jane, see the manual.\n\n1. Lock out\n2. Open\n\nA\tB\n1\t2");
   });
 });
 

@@ -46,4 +46,4 @@ export { formatDuration, formatNumber, formatWhen, preview } from "./format.js";
 export { MarkdownDocument } from "./markdown/document.js";
 export { parseBlocks, parseMarkdown, type PlacedBlock } from "./markdown/parse.js";
 export { inlineText, type Inline, type ListItem, type MarkdownBlock } from "./markdown/model.js";
-export { markdownToHtml, tableToTsv, tablesOf, toHtml } from "./markdown/serialize.js";
+export { markdownToHtml, markdownToPlainText, tableToTsv, tablesOf, toHtml, toPlainText } from "./markdown/serialize.js";
