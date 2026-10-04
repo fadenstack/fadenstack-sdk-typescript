@@ -9,6 +9,7 @@ import {
   FadenUnreachableError,
   MemoryTokenStore,
   createAgent,
+  listModels,
   loginWithPassword,
 } from "@fadenstack/client";
 import { FakeGateway } from "@fadenstack/testing";
@@ -82,6 +83,7 @@ describe("sign-in", () => {
     expect(refused).toBeInstanceOf(FadenPermissionError);
 
     const admin = await loginWithPassword({ apiUrl: gateway.serverUrl, email: "admin@example.com", password: "p", fetch: gateway.fetch });
+    expect(await listModels({ serverUrl: gateway.serverUrl, loginToken: admin, fetch: gateway.fetch })).toEqual(["fake-model"]);
     const created = await createAgent({ apiUrl: gateway.serverUrl, loginToken: admin, definition, fetch: gateway.fetch });
     expect(created).toMatchObject({ slug: "test-agent", status: "draft" });
     expect(gateway.createdAgents).toEqual([{ slug: "test-agent", by: "admin@example.com", body: definition }]);

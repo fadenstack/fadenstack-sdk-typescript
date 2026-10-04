@@ -59,9 +59,11 @@ export {
 export { AgentResource, MAX_EVENTS_PER_REPORT } from "./resources/agent.js";
 export {
   createAgent,
+  listModels,
   type AgentDefinition,
   type CreateAgentOptions,
   type CreatedAgent,
+  type ListModelsOptions,
 } from "./resources/agentSetup.js";
 export {
   SDK_LANGUAGE,

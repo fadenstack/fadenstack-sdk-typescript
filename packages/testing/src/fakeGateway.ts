@@ -78,6 +78,8 @@ export interface FakeGatewayOptions {
   /** Characters per streamed text chunk (default 6). */
   chunkSize?: number;
   now?: () => number;
+  /** The chat models `GET /v1/models` lists for a signed-in user (default `["fake-model"]`). */
+  models?: string[];
 }
 
 /** A request the fake server got. */
@@ -247,6 +249,10 @@ export class FakeGateway {
     if (method === "POST" && path === "/api/agent-tokens/refresh") return this.#refresh(body);
     if (method === "GET" && path === "/api/health") return json(200, { status: "ok" });
     if (method === "GET" && path === "/v1/features") return json(200, { edition: "community", features: ["agents"] });
+    if (method === "GET" && path === "/v1/models") {
+      if (!this.#logins.has(bearer(request) ?? "")) return openAiError(401, "The token is not valid.", "invalid_token", "authentication_error");
+      return json(200, { object: "list", data: (this.#options.models ?? ["fake-model"]).map((id) => ({ id, object: "model" })) });
+    }
     const match = /^\/v1\/agents\/([^/]+)\/(profile|chat\/completions|events|manifest|approvals\/([^/]+))$/.exec(path);
     if (!match) return json(404, { detail: "Not Found" });
     const agent = decodeURIComponent(match[1]!);
@@ -307,6 +313,7 @@ export class FakeGateway {
       slug, name: String(b["name"]), id: `agent-${this.#agents.size + 1}`, version: 1,
       contract: (version["host_tool_contract"] ?? []) as FakeAgent["contract"],
       ui: (version["ui"] ?? {}) as Record<string, unknown>,
+      ...(typeof version["model_alias"] === "string" ? { model: version["model_alias"] } : {}),
     };
     this.#agents.set(slug, agent);
     if (user.agents) user.agents.push(slug);

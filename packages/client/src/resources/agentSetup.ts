@@ -19,6 +19,37 @@ export interface CreateAgentOptions {
   signal?: AbortSignal;
 }
 
+export interface ListModelsOptions {
+  serverUrl: string | URL;
+  /** The user's login token: the plain routes take it. */
+  loginToken: string;
+  fetch?: FetchLike;
+  signal?: AbortSignal;
+}
+
+/**
+ * The chat models the server offers the user (`GET /v1/models`), for someone about to create an agent: the apps
+ * leave the model to the agent, so one created without a model cannot answer.
+ */
+export async function listModels(options: ListModelsOptions): Promise<string[]> {
+  const base = new URL(options.serverUrl);
+  const url = new URL("v1/models", base.href.endsWith("/") ? base : `${base.href}/`);
+  const fetchImpl = options.fetch ?? ((input, init) => globalThis.fetch(input, init));
+  let response: Response;
+  try {
+    const init: RequestInit = { headers: { accept: "application/json", authorization: `Bearer ${options.loginToken}` } };
+    if (options.signal) init.signal = options.signal;
+    response = await fetchImpl(url, init);
+  } catch (error) {
+    if (options.signal?.aborted) throw options.signal.reason ?? error;
+    throw new FadenUnreachableError(`Fadenstack could not be reached: ${(error as Error).message}`, { cause: error });
+  }
+  const text = await response.text();
+  if (!response.ok) throw toApiError(response, text);
+  const data = (JSON.parse(text) as { data?: { id?: unknown }[] }).data ?? [];
+  return data.map((m) => String(m.id ?? "")).filter(Boolean);
+}
+
 /** The agent as the server made it. */
 export interface CreatedAgent {
   id: string;
