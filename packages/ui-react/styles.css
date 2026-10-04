@@ -596,6 +596,8 @@
   border: 1px solid var(--fdn-hairline);
   text-align: left;
   vertical-align: top;
+  /* Not "anywhere" (as the answer around it): a column keeps its longest word; a wider table scrolls sideways. */
+  overflow-wrap: break-word;
 }
 
 .fdn-chat th {
