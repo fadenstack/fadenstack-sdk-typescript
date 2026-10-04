@@ -108,7 +108,8 @@ export class FadenTransport {
       }
       let response: Response;
       try {
-        const init: RequestInit = { method: spec.method, headers, signal };
+        // Never the browser's cookies: a console session for the same server would act instead of the app's user.
+        const init: RequestInit = { method: spec.method, headers, signal, credentials: "omit" };
         if (spec.body !== undefined) init.body = spec.body;
         response = await this.fetch(spec.url, init);
       } catch (error) {

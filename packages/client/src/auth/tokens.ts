@@ -224,7 +224,7 @@ export class AgentTokenProvider implements TokenProvider {
     if (bearer) headers["authorization"] = `Bearer ${bearer}`;
     let response: Response;
     try {
-      const init: RequestInit = { method: "POST", headers, body: JSON.stringify(body) };
+      const init: RequestInit = { method: "POST", headers, body: JSON.stringify(body), credentials: "omit" };
       if (signal) init.signal = signal;
       response = await this.#fetch(new URL(path, this.#apiUrl), init);
     } catch (error) {
@@ -267,6 +267,7 @@ export async function loginWithPassword(options: PasswordLoginOptions): Promise<
   try {
     const init: RequestInit = {
       method: "POST",
+      credentials: "omit",
       headers: { "content-type": "application/x-www-form-urlencoded", accept: "application/json" },
       body: new URLSearchParams({ username: options.email, password: options.password }).toString(),
     };

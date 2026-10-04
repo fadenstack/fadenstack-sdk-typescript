@@ -37,7 +37,10 @@ export async function listModels(options: ListModelsOptions): Promise<string[]> 
   const fetchImpl = options.fetch ?? ((input, init) => globalThis.fetch(input, init));
   let response: Response;
   try {
-    const init: RequestInit = { headers: { accept: "application/json", authorization: `Bearer ${options.loginToken}` } };
+    const init: RequestInit = {
+      credentials: "omit",
+      headers: { accept: "application/json", authorization: `Bearer ${options.loginToken}` },
+    };
     if (options.signal) init.signal = options.signal;
     response = await fetchImpl(url, init);
   } catch (error) {
@@ -71,6 +74,7 @@ export async function createAgent(options: CreateAgentOptions): Promise<CreatedA
   try {
     const init: RequestInit = {
       method: "POST",
+      credentials: "omit",
       headers: {
         "content-type": "application/json",
         accept: "application/json",

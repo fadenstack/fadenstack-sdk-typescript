@@ -93,6 +93,25 @@ describe("sign-in", () => {
     expect((again as FadenApiError).status).toBe(409);
   });
 
+  it("never sends the browser's cookies: a console session must not act instead of the app's user", async () => {
+    const gateway = new FakeGateway({ users: [{ email: "user@example.com", password: "secret", createsAgents: true }] });
+    const seen: { path: string; credentials: RequestCredentials | undefined }[] = [];
+    const fetch: typeof gateway.fetch = (input, init) => {
+      seen.push({ path: new URL(String(input)).pathname, credentials: init?.credentials });
+      return gateway.fetch(input, init);
+    };
+    const { client, tokens } = FadenClient.forAgent({ serverUrl: gateway.serverUrl, agent: "test-agent", fetch });
+    const login = await loginWithPassword({ apiUrl: gateway.serverUrl, email: "user@example.com", password: "secret", fetch });
+    await listModels({ serverUrl: gateway.serverUrl, loginToken: login, fetch });
+    await createAgent({ apiUrl: gateway.serverUrl, loginToken: login, definition: { slug: "other-agent", name: "Other" }, fetch });
+    await tokens.signIn(login);
+    await client.agent!.getProfile();
+    expect(seen.map((s) => s.path)).toEqual([
+      "/api/auth/jwt/login", "/v1/models", "/api/agents", "/api/agent-tokens", "/v1/agents/test-agent/profile",
+    ]);
+    expect(seen.every((s) => s.credentials === "omit")).toBe(true);
+  });
+
   it("is refused without a grant", async () => {
     const { gateway, tokens } = setup({ users: [{ email: "u@x", password: "p", agents: [] }] });
     const login = await loginWithPassword({ apiUrl: gateway.serverUrl, email: "u@x", password: "p", fetch: gateway.fetch });
