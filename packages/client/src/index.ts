@@ -1,6 +1,7 @@
 export { FadenClient, type FadenClientOptions } from "./client.js";
 export {
   FadenError,
+  FadenUnreachableError,
   FadenApiError,
   FadenAuthenticationError,
   FadenPermissionError,

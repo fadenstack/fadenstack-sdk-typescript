@@ -268,7 +268,7 @@ export class FakeGateway {
     if (!agent) return json(404, { detail: "Agent not found" });
     const user = this.#users.find((u) => u.id === userId)!;
     if (user.agents && !user.agents.includes(agent.slug)) {
-      return json(403, { detail: { code: "no_grant", message: "You have no grant for this agent." } });
+      return json(403, { detail: { code: "no_grant", message: "Neither the user nor a team of theirs is granted the agent." } });
     }
     const label = typeof b["device_label"] === "string" ? (b["device_label"] as string) : null;
     if (label !== null && label.length > 200) return json(422, { detail: [{ msg: "device_label is too long" }] });

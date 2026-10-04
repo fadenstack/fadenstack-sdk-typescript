@@ -1,4 +1,4 @@
-import { FadenApiError, FadenError, FadenSignInRequiredError } from "../errors.js";
+import { FadenApiError, FadenError, FadenSignInRequiredError, FadenUnreachableError } from "../errors.js";
 import { toApiError } from "../http/errorReader.js";
 import type { FetchLike } from "../http/transport.js";
 
@@ -229,7 +229,7 @@ export class AgentTokenProvider implements TokenProvider {
       response = await this.#fetch(new URL(path, this.#apiUrl), init);
     } catch (error) {
       if (signal?.aborted) throw signal.reason ?? error;
-      throw new FadenError(`Fadenstack could not be reached: ${(error as Error).message}`, { cause: error });
+      throw new FadenUnreachableError(`Fadenstack could not be reached: ${(error as Error).message}`, { cause: error });
     }
     const text = await response.text();
     if (!response.ok) throw toApiError(response, text);
@@ -274,7 +274,7 @@ export async function loginWithPassword(options: PasswordLoginOptions): Promise<
     response = await fetchImpl(url, init);
   } catch (error) {
     if (options.signal?.aborted) throw options.signal.reason ?? error;
-    throw new FadenError(`Fadenstack could not be reached: ${(error as Error).message}`, { cause: error });
+    throw new FadenUnreachableError(`Fadenstack could not be reached: ${(error as Error).message}`, { cause: error });
   }
   const text = await response.text();
   if (!response.ok) {
@@ -283,7 +283,13 @@ export async function loginWithPassword(options: PasswordLoginOptions): Promise<
     }
     throw toApiError(response, text);
   }
-  const token = (JSON.parse(text) as Record<string, unknown>)["access_token"];
+  let token: unknown;
+  try {
+    token = (JSON.parse(text) as Record<string, unknown>)["access_token"];
+  } catch {
+    // A web page where the API should be: another server, or a path in front of Fadenstack's.
+    throw new FadenApiError(response.status, "This address does not answer like a Fadenstack server.", { code: "not_fadenstack" });
+  }
   if (typeof token !== "string" || !token) throw new FadenError("The server gave no login token.");
   return token;
 }

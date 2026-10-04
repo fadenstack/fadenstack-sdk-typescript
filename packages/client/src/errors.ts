@@ -6,6 +6,12 @@ export class FadenError extends Error {
   }
 }
 
+/**
+ * No answer at all: the address is wrong, the server is down, or the certificate is not trusted (a browser does not
+ * say which). `cause` is the platform's error.
+ */
+export class FadenUnreachableError extends FadenError {}
+
 /** The server answered with an error: its status, and the OpenAI-shaped error's fields. */
 export class FadenApiError extends FadenError {
   readonly status: number;

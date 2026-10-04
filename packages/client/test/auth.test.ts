@@ -6,6 +6,7 @@ import {
   FadenClient,
   FadenPermissionError,
   FadenSignInRequiredError,
+  FadenUnreachableError,
   MemoryTokenStore,
   loginWithPassword,
 } from "@fadenstack/client";
@@ -39,6 +40,33 @@ describe("sign-in", () => {
       .catch((e: unknown) => e);
     expect(error).toBeInstanceOf(FadenApiError);
     expect((error as Error).message).toBe("The e-mail or password is not right.");
+  });
+
+  it("tells no answer at all apart from a refusal", async () => {
+    const offline = () => Promise.reject(new TypeError("Failed to fetch"));
+    const error = await loginWithPassword({ apiUrl: "https://faden.example.com", email: "u@x", password: "p", fetch: offline })
+      .catch((e: unknown) => e);
+    expect(error).toBeInstanceOf(FadenUnreachableError);
+    expect((error as Error).cause).toBeInstanceOf(TypeError);
+  });
+
+  it("says when the address answers with a web page instead of the API", async () => {
+    const page = () => Promise.resolve(new Response("<!doctype html><title>Console</title>", { status: 200, headers: { "content-type": "text/html" } }));
+    const error = await loginWithPassword({ apiUrl: "https://faden.example.com/admin", email: "u@x", password: "p", fetch: page })
+      .catch((e: unknown) => e);
+    expect(error).toBeInstanceOf(FadenApiError);
+    expect((error as FadenApiError).code).toBe("not_fadenstack");
+  });
+
+  it("says there is no such agent (404), apart from no access (403)", async () => {
+    const { gateway, tokens } = setup();
+    const login = await loginWithPassword({ apiUrl: gateway.serverUrl, email: "user@example.com", password: "secret", fetch: gateway.fetch });
+    const other = new AgentTokenProvider({ apiUrl: gateway.serverUrl, agent: "no-such-agent", store: new MemoryTokenStore(), fetch: gateway.fetch });
+    const error = await other.signIn(login).catch((e: unknown) => e);
+    expect(error).toBeInstanceOf(FadenApiError);
+    expect(error).not.toBeInstanceOf(FadenPermissionError);
+    expect((error as FadenApiError).status).toBe(404);
+    expect(await tokens.isSignedIn()).toBe(false);
   });
 
   it("is refused without a grant", async () => {

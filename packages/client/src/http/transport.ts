@@ -1,5 +1,5 @@
 import type { TokenProvider } from "../auth/tokens.js";
-import { FadenError } from "../errors.js";
+import { FadenError, FadenUnreachableError } from "../errors.js";
 import { toApiError } from "./errorReader.js";
 
 /** A `fetch` -- the global one, a test's, or one with the host's own settings. */
@@ -113,7 +113,7 @@ export class FadenTransport {
         response = await this.fetch(spec.url, init);
       } catch (error) {
         if (signal.aborted) throw signal.reason ?? error;
-        throw new FadenError(`Fadenstack could not be reached: ${describe(error)}`, { cause: error });
+        throw new FadenUnreachableError(`Fadenstack could not be reached: ${describe(error)}`, { cause: error });
       }
       if (response.status === 401 && token !== undefined && attempt === 0) {
         await response.body?.cancel().catch(() => undefined);
