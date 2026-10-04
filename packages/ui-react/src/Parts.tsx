@@ -1,4 +1,4 @@
-import type { ReactElement } from "react";
+import { useCallback, type ReactElement } from "react";
 
 import {
   ApprovalPart,
@@ -42,7 +42,10 @@ export function PartView({ part, strings, renderers }: { part: ResponsePart; str
 
 function MarkdownView({ part, strings }: { part: MarkdownPart; strings: UiStrings }): ReactElement {
   useViewModel(part);
-  return <Markdown blocks={part.blocks} strings={strings} streaming={part.isStreaming} onCopyCode={(code) => part.copyCode(code)} />;
+  // Stable callbacks, so blocks that did not change are not rendered again while the answer streams.
+  const copyCode = useCallback((code: string) => part.copyCode(code), [part]);
+  const copyTable = useCallback((table: Parameters<MarkdownPart["copyTable"]>[0]) => part.copyTable(table), [part]);
+  return <Markdown blocks={part.blocks} strings={strings} streaming={part.isStreaming} onCopyCode={copyCode} onCopyTable={copyTable} />;
 }
 
 function ToolCallView({ part, strings }: { part: ToolCallPart; strings: UiStrings }): ReactElement {

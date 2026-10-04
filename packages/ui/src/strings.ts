@@ -61,6 +61,7 @@ export interface UiStrings {
   showEarlier: string;
   copy: string;
   copyCode: string;
+  copyTable: string;
   copied: string;
   edit: string;
   editAndResend: string;
@@ -139,6 +140,7 @@ export const englishStrings: UiStrings = {
   showEarlier: "Show earlier messages",
   copy: "Copy",
   copyCode: "Copy code",
+  copyTable: "Copy table",
   copied: "Copied",
   edit: "Edit",
   editAndResend: "Edit and resend",

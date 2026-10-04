@@ -36,7 +36,9 @@ export {
   browserClipboard,
   immediateScheduler,
   timeoutScheduler,
+  writeClipboard,
   type Clipboard,
+  type ClipboardContent,
   type UiScheduler,
 } from "./services.js";
 export { englishStrings, withStrings, type UiStrings } from "./strings.js";
@@ -44,3 +46,4 @@ export { formatDuration, formatNumber, formatWhen, preview } from "./format.js";
 export { MarkdownDocument } from "./markdown/document.js";
 export { parseBlocks, parseMarkdown, type PlacedBlock } from "./markdown/parse.js";
 export { inlineText, type Inline, type ListItem, type MarkdownBlock } from "./markdown/model.js";
+export { markdownToHtml, tableToTsv, tablesOf, toHtml } from "./markdown/serialize.js";

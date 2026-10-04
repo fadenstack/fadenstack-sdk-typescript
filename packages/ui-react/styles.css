@@ -574,9 +574,15 @@
   font: 12px/1.55 var(--fdn-mono);
 }
 
-.fdn-md-table {
+.fdn-md-table-scroll {
   overflow-x: auto;
   scrollbar-width: thin;
+}
+
+.fdn-md-table-bar {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 2px;
 }
 
 .fdn-chat table {

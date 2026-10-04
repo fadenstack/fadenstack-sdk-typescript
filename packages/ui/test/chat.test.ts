@@ -166,6 +166,8 @@ describe("AgentChatViewModel", () => {
     await vm.send("x");
     vm.turns[0]!.copy();
     expect(clipboard.lastText).toBe("Copy me");
+    // And as HTML, so it pastes formatted into mail and documents.
+    expect(clipboard.lastHtml).toBe("<p>Copy me</p>");
   });
 
   it("says when the agent needs a sign-in", async () => {

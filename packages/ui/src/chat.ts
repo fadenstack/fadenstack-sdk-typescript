@@ -5,10 +5,11 @@ import type { ApprovalBroker, PendingApproval } from "./approvalBroker.js";
 import { AttachmentViewModel } from "./attachments.js";
 import { RenderBatcher } from "./batcher.js";
 import { formatWhen } from "./format.js";
+import { markdownToHtml } from "./markdown/serialize.js";
 import { Observable } from "./observable.js";
 import { NoticePart, type PartContext } from "./parts.js";
 import { citationsRenderer, fallbackRenderer, piiRenderer, type AgentEventRenderer } from "./renderers.js";
-import { browserClipboard, timeoutScheduler, type Clipboard, type UiScheduler } from "./services.js";
+import { browserClipboard, timeoutScheduler, writeClipboard, type Clipboard, type UiScheduler } from "./services.js";
 import { withStrings, type UiStrings } from "./strings.js";
 import { buildTurn, groupTurns } from "./transcriptTurns.js";
 import { TurnViewModel, type TurnHost } from "./turn.js";
@@ -422,8 +423,9 @@ export class AgentChatViewModel extends Observable implements TurnHost {
     return this.send(turn.userText);
   }
 
+  /** Copies an answer: its Markdown as text, and as HTML, so it pastes formatted into mail and documents. */
   copy(text: string): void {
-    void this.#context.clipboard.setText(text);
+    void Promise.resolve(writeClipboard(this.#context.clipboard, { text, html: markdownToHtml(text) })).catch(() => undefined);
   }
 
   // -- the turn -------------------------------------------------------------------------------------

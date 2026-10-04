@@ -5,8 +5,9 @@ import type { PendingApproval } from "./approvalBroker.js";
 import { formatDuration, preview } from "./format.js";
 import { MarkdownDocument } from "./markdown/document.js";
 import type { MarkdownBlock } from "./markdown/model.js";
+import { tableToTsv, toHtml } from "./markdown/serialize.js";
 import { Observable } from "./observable.js";
-import type { Clipboard } from "./services.js";
+import { writeClipboard, type Clipboard } from "./services.js";
 import type { UiStrings } from "./strings.js";
 
 /** What every part can reach: the texts, the clipboard, the locale, the preview length. */
@@ -71,6 +72,11 @@ export class MarkdownPart extends ResponsePart {
 
   copyCode(code: string): void {
     void this.#context.clipboard.setText(code);
+  }
+
+  /** Copies a table: tab-separated for spreadsheets, and as an HTML table for mail and documents. */
+  copyTable(table: Extract<MarkdownBlock, { kind: "table" }>): void {
+    void Promise.resolve(writeClipboard(this.#context.clipboard, { text: tableToTsv(table), html: toHtml([table]) })).catch(() => undefined);
   }
 }
 

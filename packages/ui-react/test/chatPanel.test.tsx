@@ -32,10 +32,11 @@ async function panel(model: FakeModel) {
       },
     }))
     .build();
-  const chat = new AgentChatViewModel(agent, approvals, { scheduler: immediateScheduler, clipboard: new MemoryClipboard() });
+  const clipboard = new MemoryClipboard();
+  const chat = new AgentChatViewModel(agent, approvals, { scheduler: immediateScheduler, clipboard });
   await act(() => chat.initialize());
   render(<ChatPanel chat={chat} />);
-  return { chat, filled };
+  return { chat, filled, clipboard };
 }
 
 describe("ChatPanel", () => {
@@ -59,6 +60,17 @@ describe("ChatPanel", () => {
     expect(document.querySelector(".fdn-md b")).toBeNull();
     expect(screen.getByText("let x = 1;").tagName).toBe("CODE");
     expect(screen.getByRole("button", { name: "Copy code" })).toBeTruthy();
+  });
+
+  it("copies a table of an answer for a spreadsheet", async () => {
+    const { clipboard } = await panel(() => ({ text: "| Task | Interval |\n|---|---|\n| Seal check | 2 000 h |" }));
+    fireEvent.change(screen.getByRole("textbox"), { target: { value: "Intervals?" } });
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Send" }));
+    });
+    fireEvent.click(await screen.findByRole("button", { name: "Copy table" }));
+    expect(clipboard.lastText).toBe("Task\tInterval\nSeal check\t2 000 h");
+    expect(clipboard.lastHtml).toContain("<td>Seal check</td>");
   });
 
   it("asks with a card and runs the tool when Allow is clicked", async () => {
