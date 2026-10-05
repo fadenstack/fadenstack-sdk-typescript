@@ -46,6 +46,7 @@ describe("ChatPanel", () => {
     expect(screen.getByText("I read the page you are on.")).toBeTruthy();
     expect(screen.getByRole("button", { name: "Summarise this page" })).toBeTruthy();
     expect(document.querySelector(".fdn-chat")!.getAttribute("data-theme")).toBe("system");
+    expect(document.querySelector(".fdn-empty-mark .fdn-agent-avatar")).toBeTruthy();
   });
 
   it("sends with Enter and renders the answer as Markdown, never as HTML", async () => {

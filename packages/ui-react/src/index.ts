@@ -1,4 +1,5 @@
 export { ChatPanel, type ChatPanelProps, type ChatTheme } from "./ChatPanel.js";
+export { AgentAvatar, type AgentAvatarProps } from "./AgentAvatar.js";
 export { ChatHeader } from "./Header.js";
 export { Composer } from "./Composer.js";
 export { TurnView } from "./Turn.js";

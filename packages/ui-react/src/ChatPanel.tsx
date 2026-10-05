@@ -5,7 +5,7 @@ import type { AgentChatViewModel } from "@fadenstack/ui";
 import { Composer } from "./Composer.js";
 import { ChatHeader } from "./Header.js";
 import { useStickToBottom, useViewModel } from "./hooks.js";
-import { Icon } from "./icons.js";
+import { AgentAvatar } from "./AgentAvatar.js";
 import type { PartRenderer } from "./Parts.js";
 import { TurnView } from "./Turn.js";
 
@@ -29,6 +29,10 @@ export interface ChatPanelProps {
   placeholder?: string;
   /** Views for parts modules add. */
   partRenderers?: readonly PartRenderer[];
+  /** A custom agent's own thread colour for its avatar's middle plate. Fadenstack's own agents keep the rose. */
+  agentColor?: string;
+  /** Replaces the agent's avatar (the Fadenstack stack) in the empty chat, e.g. with the host's own logo. */
+  avatar?: ReactNode;
   className?: string;
 }
 
@@ -57,13 +61,13 @@ export function ChatPanel(props: ChatPanelProps): ReactElement {
   );
 }
 
-function Conversation({ chat, partRenderers }: ChatPanelProps): ReactElement {
+function Conversation({ chat, partRenderers, agentColor, avatar }: ChatPanelProps): ReactElement {
   const { ref } = useStickToBottom<HTMLDivElement>();
   return (
     <div className="fdn-body" ref={ref} role="log" aria-live="polite" aria-relevant="additions">
       <div className="fdn-turns">
         {chat.isEmpty ? (
-          <EmptyState chat={chat} />
+          <EmptyState chat={chat} avatar={avatar ?? <AgentAvatar size={64} color={agentColor} />} />
         ) : (
           <>
             {chat.hasEarlierTurns && (
@@ -77,10 +81,10 @@ function Conversation({ chat, partRenderers }: ChatPanelProps): ReactElement {
   );
 }
 
-function EmptyState({ chat }: { chat: AgentChatViewModel }): ReactElement {
+function EmptyState({ chat, avatar }: { chat: AgentChatViewModel; avatar: ReactNode }): ReactElement {
   return (
     <div className="fdn-empty">
-      <div className="fdn-empty-mark"><Icon name="sparkle" size={28} /></div>
+      <div className="fdn-empty-mark">{avatar}</div>
       {chat.isReady && <p className="fdn-greeting">{chat.greeting}</p>}
       {chat.suggestions.length > 0 && (
         <div className="fdn-suggestions">

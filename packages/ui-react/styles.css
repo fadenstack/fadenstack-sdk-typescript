@@ -35,6 +35,15 @@
   --fdn-focus: #0b57d0;
   --fdn-shadow: 0 2px 6px rgba(0, 0, 0, 0.15), 0 1px 2px rgba(0, 0, 0, 0.3);
 
+  /* The agent avatar (the Fadenstack stack): navy plates, the rose thread plate. */
+  --fdn-agent-plate: #1c2436;
+  --fdn-agent-plate-side: #0a0e1a;
+  --fdn-agent-thread: #e2325a;
+  --fdn-agent-thread-side: #a8143e;
+  --fdn-agent-hollow: rgba(10, 14, 26, 0.38);
+  --fdn-agent-eye: #ffffff;
+  --fdn-agent-pupil: #0a0e1a;
+
   color-scheme: light;
 }
 
@@ -60,6 +69,11 @@
   --fdn-code-bg: #282a2c;
   --fdn-focus: #a8c7fa;
   --fdn-shadow: 0 2px 6px rgba(0, 0, 0, 0.3), 0 1px 2px rgba(0, 0, 0, 0.5);
+  --fdn-agent-plate: #f3f4f6;
+  --fdn-agent-plate-side: #aeb7c6;
+  --fdn-agent-thread: #ff4d6d;
+  --fdn-agent-thread-side: #c21e48;
+  --fdn-agent-hollow: rgba(10, 14, 26, 0.55);
 
   color-scheme: dark;
 }
@@ -87,6 +101,11 @@
     --fdn-code-bg: #282a2c;
     --fdn-focus: #a8c7fa;
     --fdn-shadow: 0 2px 6px rgba(0, 0, 0, 0.3), 0 1px 2px rgba(0, 0, 0, 0.5);
+    --fdn-agent-plate: #f3f4f6;
+    --fdn-agent-plate-side: #aeb7c6;
+    --fdn-agent-thread: #ff4d6d;
+    --fdn-agent-thread-side: #c21e48;
+    --fdn-agent-hollow: rgba(10, 14, 26, 0.55);
 
     color-scheme: dark;
   }
@@ -106,6 +125,13 @@
     --fdn-accent: Highlight;
     --fdn-on-accent: HighlightText;
     --fdn-focus: Highlight;
+    --fdn-agent-plate: CanvasText;
+    --fdn-agent-plate-side: CanvasText;
+    --fdn-agent-thread: Highlight;
+    --fdn-agent-thread-side: Highlight;
+    --fdn-agent-hollow: transparent;
+    --fdn-agent-eye: Canvas;
+    --fdn-agent-pupil: CanvasText;
   }
 }
 
@@ -974,14 +1000,16 @@
   text-align: center;
 }
 
+/* The agent's face, on its own: the stack has its own silhouette, so no circle behind it. */
 .fdn-empty-mark {
   display: grid;
   place-items: center;
-  width: 52px;
-  height: 52px;
-  border-radius: 50%;
-  background: var(--fdn-accent-soft);
-  color: var(--fdn-on-accent-soft);
+}
+
+.fdn-agent-avatar {
+  display: block;
+  flex: none;
+  overflow: visible;
 }
 
 .fdn-greeting {
