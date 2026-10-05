@@ -1,0 +1,201 @@
+# Testing without a server
+
+`@fadenstack/testing` is a fake Fadenstack server with a scripted model, for tests and demos.
+
+The `FakeGateway` answers the routes an agent uses: sign-in, agent tokens, the profile, chat completions with the
+server's events, event reports and approvals. It checks what the real server checks (tokens, grants, the agent's
+contract, the fields of reported events), so a mistake in your integration shows in a test before it shows against a
+server.
+
+## A first test
+
+The gateway answers in the same process, through its own `fetch`. Pass `gateway.fetch` to the client and to
+`loginWithPassword`:
+
+```ts
+import { expect, it } from "vitest";
+import { FadenClient, loginWithPassword } from "@fadenstack/client";
+import { FadenAgent, MemorySessionStore, defineTool } from "@fadenstack/agents";
+import { FakeGateway, lastToolResults } from "@fadenstack/testing";
+
+it("reads the page before it answers", async () => {
+  const gateway = new FakeGateway({
+    agents: [{ slug: "eplan-assistant", contract: [{ name: "read_page", risk: "read" }] }],
+    model: (request) => lastToolResults(request).size
+      ? { text: "Page 7 shows motor M1." }
+      : { toolCalls: [{ name: "read_page", arguments: { page: 7 } }] },
+  });
+
+  const { client, tokens } = FadenClient.forAgent({
+    serverUrl: gateway.serverUrl,
+    agent: "eplan-assistant",
+    fetch: gateway.fetch,
+  });
+  const login = await loginWithPassword({
+    apiUrl: gateway.serverUrl,
+    email: "user@example.com",
+    password: "secret",
+    fetch: gateway.fetch,
+  });
+  await tokens.signIn(login);
+
+  const readPage = defineTool<{ page: number }>({
+    name: "read_page",
+    toolClass: "read",
+    parameters: { type: "object", properties: { page: { type: "integer" } }, required: ["page"] },
+    run: ({ page }) => `Page ${page}: motor M1, 400 V`,
+  });
+  const agent = FadenAgent.createBuilder()
+    .useClient(client)
+    .addTools(readPage)
+    .useSessionStore(new MemorySessionStore())
+    .build();
+
+  const session = await agent.startSession();
+  const result = await session.send("What is on page 7?");
+
+  expect(result.outcome).toBe("completed");
+  expect(result.text).toBe("Page 7 shows motor M1.");
+  expect(gateway.modelCalls).toHaveLength(2);
+});
+```
+
+The model is called twice: first it asks for `read_page`, then, with the tool's result in the request, it answers.
+
+Without options, the gateway serves one agent, `test-agent`, to one user, `user@example.com` with the password
+`secret`, and its model gives the same short answer to every request.
+
+## Options
+
+| Option | What it is |
+|---|---|
+| `agents` | The agents it serves. Default: one agent, `test-agent`. |
+| `users` | The users it knows. Default: `user@example.com` with the password `secret`. |
+| `model` | The scripted model. See below. |
+| `serverUrl` | The address the in-process `fetch` answers for. Default `https://faden.test`. |
+| `accessTtlSeconds` | How long an access token lasts. Default 600. |
+| `refreshTtlSeconds` | How long a refresh token lasts. Default 86 400. |
+| `chunkSize` | Characters per streamed piece of text. Default 6. |
+| `models` | The models `GET /v1/models` lists. Default `["fake-model"]`. |
+| `now` | The clock, for tests of expiry. |
+
+An agent (`FakeAgent`):
+
+| Field | What it is |
+|---|---|
+| `slug` | The agent's slug. Required. |
+| `name`, `id`, `version`, `model` | What the profile says. |
+| `contract` | The host tool contract: `[{ name, risk }]`, with `risk` `read`, `write` or `destructive`. Empty: no restriction. |
+| `ui` | The profile's `ui`, for example `{ greeting, suggestions }`. |
+| `ceiling` | A limit on the tool modes, as the profile reports it. |
+| `requiredClientModules` | Modules the agent requires. |
+| `localMcpMode` | `disable` or `allow`. |
+
+A user (`FakeUser`):
+
+| Field | What it is |
+|---|---|
+| `email`, `password` | What `loginWithPassword` takes. Required. |
+| `id` | The user's id. |
+| `agents` | The slugs of the agents granted to the user. All agents when not given. |
+| `developerMode` | What the profile reports for local MCP. |
+| `createsAgents` | Whether the user may create agents. |
+
+## Script the model
+
+The model is a function from a `FakeModelRequest` to a `FakeReply`, or a promise of one. It is called for every chat
+request. `gateway.setModel(model)` replaces it.
+
+The request has the `agent`, the `messages`, the `tools` the model is offered, whether it is a `stream`, the
+`toolMode`, `conversationId` and `turnId` from the request's headers, and the whole `body`. Two helpers read it:
+
+- `lastUserText(request)` is the last user message, attachments included.
+- `lastToolResults(request)` maps tool call ids to the results of the tools the model called last. It is empty before
+  any tool ran.
+
+A reply can hold:
+
+| Field | What the agent sees |
+|---|---|
+| `text` | The answer, streamed in pieces. |
+| `reasoning` | Reasoning before the answer. |
+| `toolCalls` | `[{ name, arguments?, id? }]`: calls of your tools. |
+| `events` | Server events sent before the answer, for example citations or a PII notice. |
+| `refuse` | `{ stage: "input", message }` refuses the prompt (outcome `prompt_blocked`); `{ stage: "output", message }` stops the answer (outcome `response_blocked`). Optional `decisionId` and `category`. |
+| `gatewayTool` | A tool the server runs before the answer: `{ name, arguments?, result? }`. With `approval: { message?, timeoutS? }`, your approval handler is asked first, with `source` set to `gateway`. |
+| `deniedTool` | `{ name, message, callId? }`: the server refuses a tool call. The outcome is `tool_denied`. |
+| `rateLimit` | `{ retryAfterS?, code?, message? }`: a 429 instead of an answer. The outcome is `rate_limited`, or `budget_exceeded` with the code `budget_exceeded`. |
+| `streamError` | `{ message, code? }`: the answer breaks off after the text. The turn throws a `FadenStreamError`. |
+| `usage` | `{ prompt, completion }` tokens. |
+| `delayMs` | A pause between streamed pieces. |
+
+The parts are sent in this order: events, the server tool, reasoning, text, tool calls.
+
+## What it answers, and what it refuses
+
+| Route | What it does |
+|---|---|
+| `POST /api/auth/jwt/login` | Signs a user in. Wrong credentials: 400 `LOGIN_BAD_CREDENTIALS`. |
+| `POST /api/agent-tokens` | Signs a device in to an agent. Without a grant: 403. |
+| `POST /api/agent-tokens/refresh` | Renews a sign-in and replaces its refresh token. A refresh token used twice ends the whole sign-in. |
+| `POST /api/agents` | Creates an agent, for a user with `createsAgents`. |
+| `GET /v1/features`, `GET /v1/models`, `GET /api/health` | The server's edition and features, the models, and health. |
+| `GET /v1/agents/{agent}/profile` | The agent's profile. |
+| `POST /v1/agents/{agent}/chat/completions` | Chat, streamed or whole, with the server's events. |
+| `POST /v1/agents/{agent}/events` | Event reports. |
+| `PUT /v1/agents/{agent}/manifest` | The app's manifest. |
+| `POST /v1/agents/{agent}/approvals/{id}` | The answer to a server tool's approval. |
+
+Like the real server, it refuses:
+
+- a missing, unknown, expired or revoked access token (401), and a token for another agent (403);
+- event reports with an unknown event type or a field the type does not have (422), or with more than 100 events;
+- a manifest without an app name, with invalid or repeated tool names, or with an unknown tool class (400);
+- a chat request without `model` or `messages` (400).
+
+Tools outside a non-empty contract are held back: the model is not offered them, and the request still succeeds. The
+gateway lists them in `heldTools` and in the response header `x-faden-held-tools`.
+
+## Inspect and control it
+
+| Member | What it is |
+|---|---|
+| `requests` | Every request, in order: method, path, headers, body. |
+| `modelCalls` | Every model call, as the model saw it. |
+| `reported` | The events clients reported. |
+| `manifests` | The manifests apps sent. |
+| `heldTools` | Tools held back because the contract does not list them. |
+| `approvals` | The answers to server tool approvals. |
+| `createdAgents` | Agents created through the API. |
+| `signIns` | The devices signed in, and whether they were revoked. |
+| `revoke(deviceId?)` | Ends every sign-in, or one device's. |
+| `expireAccessTokens()` | Makes every access token expire, so the next request renews it. |
+| `handle(request)` | Answers one `Request`. `fetch` calls it. |
+
+## Serve it over HTTP
+
+`gateway.listen(port?, host?)` serves the fake over HTTP, for a browser or another process. It runs in Node, picks a
+free port by default, and listens on `127.0.0.1`. It returns the address and a function to stop it:
+
+```ts
+import { FakeGateway } from "@fadenstack/testing";
+
+const gateway = new FakeGateway({ agents: [{ slug: "my-assistant" }] });
+const server = await gateway.listen();
+console.log(`Fake server at ${server.url}`);
+// ... run the client against server.url ...
+await server.close();
+```
+
+The address is `http://`, so the client needs `allowInsecureHttp: true`:
+
+```ts
+const { client, tokens } = FadenClient.forAgent({
+  serverUrl: server.url,
+  agent: "my-assistant",
+  allowInsecureHttp: true,
+});
+```
+
+The fake sends no CORS headers. A browser extension with host permission for the address can call it; a web page
+served from another origin cannot.

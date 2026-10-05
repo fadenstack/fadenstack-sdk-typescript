@@ -1,0 +1,24 @@
+[project]
+site_name = "Fadenstack TypeScript SDK"
+docs_dir = "docs"
+nav = [
+  { "Overview" = "index.md" },
+  { "Build an agent" = "agent.md" },
+  { "Tools and approvals" = "tools.md" },
+  { "Outcomes and errors" = "outcomes.md" },
+  { "Sessions on the device" = "sessions.md" },
+  { "The chat panel" = "chat-panel.md" },
+  { "Testing without a server" = "testing.md" },
+  { "Plain chat completions" = "plain-api.md" },
+]
+
+[project.markdown_extensions]
+admonition = {}
+attr_list = {}
+md_in_html = {}
+toc.permalink = true
+pymdownx.details = {}
+pymdownx.highlight = {}
+pymdownx.inlinehilite = {}
+pymdownx.superfences = {}
+pymdownx.tabbed.alternate_style = true
