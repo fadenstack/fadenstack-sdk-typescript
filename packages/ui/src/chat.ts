@@ -376,7 +376,7 @@ export class AgentChatViewModel extends Observable implements TurnHost {
     this.notify();
   }
 
-  /** Adds context for the next message (a chip in the composer). An implicit chip replaces one with the same title. */
+  /** Adds context for the next message (a chip in the composer). An implicit chip stays until removed; change it with `update`. */
   addAttachment(attachment: AttachmentViewModel): void {
     this.#attachments = [...this.#attachments, attachment];
     this.notify();
