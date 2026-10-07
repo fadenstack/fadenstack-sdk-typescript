@@ -86,7 +86,7 @@ After `agent.start()`, `agent.tools` lists the tools with the classes they run u
 
 When the agent starts, it tells the server what your application brings: every host tool with the class you gave it,
 including tools the contract does not list yet. Administrators review new tools and take them into the agent's
-contract. Until they do, the server holds back the tools its contract does not list.
+contract. Until they do, the server holds back the tools that a non-empty contract does not list.
 
 `describeApp` adds the application's name and version, the context it offers, and the greeting and suggestions it
 would show:

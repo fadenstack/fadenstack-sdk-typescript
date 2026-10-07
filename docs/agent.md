@@ -57,7 +57,7 @@ throw a `FadenApiError` with the code `LOGIN_BAD_CREDENTIALS`.
 login token itself is not kept: hold it only as long as the sign-in takes. The server refuses the sign-in with a
 `FadenPermissionError` (403) when the user has no grant for the agent.
 
-The device label is what the user and administrators see in the list of sign-ins, for example the application and the
+The device label is what administrators see in the agent's list of sign-ins, for example the application and the
 computer. It is cut to 200 characters. After signing in, `tokens.deviceId` is the id the server lists and revokes the
 sign-in by.
 
@@ -70,7 +70,7 @@ to the agent), the SDK forgets the sign-in and throws a `FadenSignInRequiredErro
 |---|---|
 | `isSignedIn()` | Whether a sign-in is kept that can still be renewed. |
 | `signIn(loginToken, deviceLabel?, signal?)` | Signs in this device and keeps the sign-in. Returns the `TokenSet`. |
-| `signOut()` | Forgets the sign-in on this device. It does not end the sign-in on the server: the user does that among their sign-ins in the console. |
+| `signOut()` | Forgets the sign-in on this device. It does not end the sign-in on the server: an administrator does that among the agent's sign-ins in the console. |
 | `getAccessToken(signal?)` | A valid access token, renewed if needed. The client calls this for you. |
 
 See [Your first agent](../../get-started/first-agent.md) for registering the agent and granting it to users.

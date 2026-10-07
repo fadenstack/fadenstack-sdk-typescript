@@ -2,7 +2,8 @@
 
 Agents that run in a browser, a web page or Node and are governed by a [Fadenstack](https://fadenstack.com)
 server. The SDK runs the agent loop on the device: tools, approvals and the conversation itself. The server owns
-the agent's instructions, model and knowledge, and handles personal data, rate limits, budgets and audit.
+the agent's instructions, model and knowledge, and handles personal data, rate limits and audit (budgets are
+planned). Agents need a Fadenstack server from the next release, after 0.4.1.
 
 **Documentation: [developers.fadenstack.com/sdk/typescript](https://developers.fadenstack.com/sdk/typescript/)**
 (the source is in [`docs/`](docs/)).
@@ -16,7 +17,8 @@ the agent's instructions, model and knowledge, and handles personal data, rate l
 | `@fadenstack/testing` | A fake Fadenstack server for tests and demos | — |
 
 The packages are ES modules with type declarations, for browsers (Chrome 116 or later) and Node.js 20.19 or later.
-They use `fetch`, Web Streams and Web Crypto and nothing else; the UI packages add `marked` and React.
+They use `fetch`, Web Streams, Web Crypto and `AbortSignal` (plus IndexedDB in a browser) and nothing else; the UI
+packages add `marked` and React.
 
 ## An agent
 

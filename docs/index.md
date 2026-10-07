@@ -2,13 +2,18 @@
 
 Build agents that run in a browser, a web page or Node and are governed by a Fadenstack server.
 
+!!! note "Server version"
+    Agents need a Fadenstack server from the next release, after 0.4.1. With 0.4.1, only
+    [plain chat completions](plain-api.md) work, without tool modes, rules and the gateway's events.
+
 ## What the SDK does
 
 The SDK runs the agent loop on the device. It sends the conversation to the server, runs the tools your application
 provides, asks the user before a tool changes something, and keeps the conversation on the device.
 
 The server owns the parts that should not live in your application: the agent's instructions, its model and its
-knowledge. It also handles personal data (PII), rate limits, budgets and the audit record.
+knowledge. It also handles personal data (PII), rate limits and the audit record. Budgets are
+<span class="fs-planned">Planned</span>.
 
 You register an agent on the server first, and your application then signs in to it on behalf of a user. See
 [Agents](../../concepts/agents.md) for what the server keeps about an agent, and
