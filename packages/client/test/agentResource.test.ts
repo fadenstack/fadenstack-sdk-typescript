@@ -32,9 +32,11 @@ describe("AgentResource", () => {
     await c.agent!.report([
       { type: "tool.executed", tool: "read_range", source: "host", durationMs: 12.6, outcome: "ok", conversationId: "abc123" },
       { type: "approval.decided", tool: "write_cells", decision: "approved", waitMs: 2000 },
+      { type: "approval.decided", tool: "delete_rows", decision: "approved", scope: "bypass" },
       { type: "session.stats", turns: 3 },
     ]);
-    expect(gateway.reported.map((e) => e["type"])).toEqual(["tool.executed", "approval.decided", "session.stats"]);
+    expect(gateway.reported.map((e) => e["type"])).toEqual(["tool.executed", "approval.decided", "approval.decided", "session.stats"]);
+    expect(gateway.reported[2]).toEqual({ type: "approval.decided", occurred_at: expect.any(String), tool: "delete_rows", decision: "approved", scope: "bypass" });
     expect(gateway.reported[0]).toMatchObject({ duration_ms: 13, conversation_id: "abc123", source: "host" });
   });
 

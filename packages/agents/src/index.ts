@@ -7,7 +7,16 @@ export {
   denyAllApprovals,
   type ApprovalHandler,
   type ApprovalRequest,
+  type ApprovalScope,
+  type PermissionMode,
 } from "./approvals.js";
+export {
+  IndexedDbApprovalStore,
+  MemoryApprovalStore,
+  type ApprovalStore,
+  type IndexedDbApprovalStoreOptions,
+  type StoredApproval,
+} from "./approvalStore.js";
 export type { AgentEvent, AgentResult, ToolOutcome } from "./events.js";
 export {
   checkArguments,

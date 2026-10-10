@@ -55,7 +55,8 @@ for await (const event of session.stream("What is ticket T-1042 about?")) {
 ```
 
 A read tool runs without asking. A tool that changes something asks the user first, and without an approval
-handler the SDK declines it. The docs cover [tools and approvals](docs/tools.md), [outcomes and errors](docs/outcomes.md),
+handler the SDK declines it. A tool that cannot be undone, a tool nobody classified, and a call an administrator's
+rule asks about ask every time. The docs cover [tools and approvals](docs/tools.md), [outcomes and errors](docs/outcomes.md),
 [sessions on the device](docs/sessions.md), [the chat panel](docs/chat-panel.md) and
 [testing without a server](docs/testing.md).
 

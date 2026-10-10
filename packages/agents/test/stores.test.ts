@@ -1,11 +1,35 @@
 import { IDBFactory, IDBKeyRange } from "fake-indexeddb";
 import { describe, expect, it } from "vitest";
 
-import { EventQueue, IndexedDbSessionStore, checkArguments, newId, type TranscriptEntry } from "@fadenstack/agents";
+import {
+  EventQueue,
+  IndexedDbApprovalStore,
+  IndexedDbSessionStore,
+  checkArguments,
+  newId,
+  type TranscriptEntry,
+} from "@fadenstack/agents";
 
 function entry(type: string, data: Record<string, unknown> = {}, at = new Date().toISOString()): TranscriptEntry {
   return { id: newId(), parentId: null, timestamp: at, type, turnId: "t1", status: null, data };
 }
+
+describe("IndexedDbApprovalStore", () => {
+  it("keeps what was allowed always per agent, one entry per tool, and forgets one tool or all", async () => {
+    const store = new IndexedDbApprovalStore({ indexedDB: new IDBFactory() });
+    const at = new Date().toISOString();
+    await store.add("eplan", { tool: "write_page", toolClass: "write", approvedAt: at });
+    await store.add("eplan", { tool: "write_page", toolClass: "write", approvedAt: at });
+    await store.add("eplan", { tool: "rename_page", toolClass: "write", approvedAt: at });
+    await store.add("excel", { tool: "write_cells", toolClass: "write", approvedAt: at });
+    expect((await store.list("eplan")).map((a) => a.tool).sort()).toEqual(["rename_page", "write_page"]);
+    await store.remove("eplan", "write_page");
+    expect((await store.list("eplan")).map((a) => a.tool)).toEqual(["rename_page"]);
+    await store.remove("eplan");
+    expect(await store.list("eplan")).toEqual([]);
+    expect(await store.list("excel")).toEqual([{ tool: "write_cells", toolClass: "write", approvedAt: at }]);
+  });
+});
 
 describe("IndexedDbSessionStore", () => {
   it("keeps a session entry by entry, and lists it by its first message", async () => {

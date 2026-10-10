@@ -3,6 +3,7 @@ import {
   decideTool,
   eventKind,
   narrowestMode,
+  parseToolClass,
   parseToolMode,
   type ChatMessage,
   type ChatOptions,
@@ -16,7 +17,7 @@ import {
 } from "@fadenstack/client";
 
 import type { FadenAgent } from "./agent.js";
-import { ApprovalDecision, type ApprovalRequest } from "./approvals.js";
+import { ApprovalDecision, type ApprovalRequest, type ApprovalScope } from "./approvals.js";
 import { attachmentData, type MessageAttachment } from "./attachments.js";
 import { ContextBuilder } from "./contextBuilder.js";
 import { EventQueue } from "./eventQueue.js";
@@ -38,6 +39,33 @@ const str = (data: unknown, key: string): string | undefined => {
   return typeof v === "string" ? v : undefined;
 };
 
+/** What a turn may do to its session that nobody else may: write the transcript, keep what this chat allowed. */
+interface SessionAccess {
+  append(type: string, turnId: string | null, data: Data, status?: string | null): Promise<void>;
+  readonly approved: Set<string>;
+}
+
+/**
+ * A call of the agent's own tool the gateway marked (`faden.approval_required` without an approvalId): an admin's
+ * "Ask first" rule, or the class the gateway holds for the tool, which the session never takes looser than its own.
+ */
+interface GatewayMark {
+  rule: boolean;
+  toolClass: ToolClass | undefined;
+  message: string;
+}
+
+/** The stricter of two classes; unclassified when either is. */
+function stricterClass(own: ToolClass, other: ToolClass | undefined): ToolClass {
+  if (!other || other === own) return own;
+  if (own === "unknown" || other === "unknown") return "unknown";
+  const rank: Record<ToolClass, number> = { read: 0, write: 1, destructive: 2, unknown: 3 };
+  return rank[other] > rank[own] ? other : own;
+}
+
+/** Destructive and unclassified tools ask every time: never for the chat, never always. */
+const asksEveryTime = (toolClass: ToolClass): boolean => toolClass === "destructive" || toolClass === "unknown";
+
 /**
  * One conversation with the agent, kept on this device (06). A turn sends the history the session rule allows,
  * streams the answer, runs the agent's tools under the session's tool mode -- asking the user where the mode
@@ -49,7 +77,8 @@ export class AgentSession {
   toolMode: ToolMode;
   readonly agent: FadenAgent;
   readonly #entries: TranscriptEntry[];
-  readonly #approvedForSession: Set<string>;
+  /** "Allow for this chat": this object's only, in memory. A session opened again starts asking again. */
+  readonly #approvedForSession = new Set<string>();
   readonly #context: ContextBuilder;
   #running = false;
 
@@ -59,11 +88,6 @@ export class AgentSession {
     this.#entries = entries;
     this.toolMode = toolMode;
     this.#context = new ContextBuilder(agent.settings.historyTokens);
-    this.#approvedForSession = new Set(
-      entries
-        .filter((e) => e.type === EntryTypes.approvalDecision && e.data["for_session"] === true && e.data["approved"] === true)
-        .map((e) => str(e.data, "name") ?? ""),
-    );
   }
 
   /** The mode turns run in: the user's pick, narrowed by the agent's ceiling (EE). */
@@ -81,9 +105,15 @@ export class AgentSession {
     return this.#context.build(this.#entries);
   }
 
-  /** Tools the user approved for the rest of this session. */
+  /** Tools the user approved for the rest of this session ("Allow for this chat"), while this object lives. */
   get approvedForSession(): ReadonlySet<string> {
     return this.#approvedForSession;
+  }
+
+  /** Forgets what the user allowed for this chat: every tool, or `tool` only. */
+  resetApprovals(tool?: string): void {
+    if (tool === undefined) this.#approvedForSession.clear();
+    else this.#approvedForSession.delete(tool);
   }
 
   get isRunning(): boolean {
@@ -111,7 +141,11 @@ export class AgentSession {
     if (options.signal?.aborted) onAbort();
     options.signal?.addEventListener("abort", onAbort, { once: true });
     const queue = new EventQueue<AgentEvent>();
-    const turn = new Turn(this, newId(), (e) => queue.push(e));
+    const access: SessionAccess = {
+      append: (type, turnId, data, status) => this.#append(type, turnId, data, status),
+      approved: this.#approvedForSession,
+    };
+    const turn = new Turn(this, newId(), (e) => queue.push(e), access);
     const run = turn
       .run(message, options.attachments ?? [], stop.signal)
       .then(() => queue.end(), (error: unknown) => queue.end(error ?? new Error("The turn failed.")))
@@ -141,7 +175,7 @@ export class AgentSession {
 
   /** @internal */
   writeStart(): Promise<void> {
-    return this.append(EntryTypes.sessionStart, null, {
+    return this.#append(EntryTypes.sessionStart, null, {
       agent: this.agent.slug,
       agent_version: this.agent.profile.version,
       tool_mode: this.toolMode,
@@ -160,8 +194,8 @@ export class AgentSession {
     return undefined;
   }
 
-  /** @internal Adds an entry to the transcript and the store. A stopped turn is still recorded. */
-  async append(type: string, turnId: string | null, data: Data, status: string | null = null): Promise<void> {
+  /** Adds an entry to the transcript and the store. A stopped turn is still recorded. */
+  async #append(type: string, turnId: string | null, data: Data, status: string | null = null): Promise<void> {
     const entry: TranscriptEntry = {
       id: newId(),
       parentId: this.#entries.length ? this.#entries[this.#entries.length - 1]!.id : null,
@@ -174,21 +208,17 @@ export class AgentSession {
     await this.agent.settings.sessions.append(this.agent.slug, this.id, entry);
     this.#entries.push(entry);
   }
+}
 
-  /** @internal */
-  historyNow(): ChatMessage[] {
-    return this.#context.build(this.#entries);
-  }
-
-  /** @internal */
-  isApprovedForSession(name: string): boolean {
-    return this.#approvedForSession.has(name);
-  }
-
-  /** @internal */
-  approveForSession(name: string): void {
-    this.#approvedForSession.add(name);
-  }
+/** How a call that needed approval was settled. */
+interface Settled {
+  approved: boolean;
+  /** Nobody answered in time. */
+  timedOut: boolean;
+  /** How long the user took; undefined when nobody was asked. */
+  waitedMs: number | undefined;
+  /** The user's reason for declining. */
+  reason: string | undefined;
 }
 
 /** One turn: the loop of model calls and tool runs, and its record. */
@@ -196,18 +226,21 @@ class Turn {
   readonly #session: AgentSession;
   readonly #id: string;
   readonly #emit: (event: AgentEvent) => void;
+  readonly #access: SessionAccess;
   readonly #notices: GovernanceNotice[] = [];
   readonly #deniedByGateway = new Set<string>();
+  readonly #marks = new Map<string, GatewayMark>();
   #text = "";
   #usage: Usage | undefined;
   #blocked: GovernanceNotice | undefined;
   #toolDenied = false;
   #mode: ToolMode = "ask";
 
-  constructor(session: AgentSession, id: string, emit: (event: AgentEvent) => void) {
+  constructor(session: AgentSession, id: string, emit: (event: AgentEvent) => void, access: SessionAccess) {
     this.#session = session;
     this.#id = id;
     this.#emit = emit;
+    this.#access = access;
   }
 
   get #agent(): FadenAgent {
@@ -219,8 +252,8 @@ class Turn {
     this.#mode = this.#session.effectiveToolMode;
     const user: Data = { text: message };
     if (attachments.length) user["attachments"] = attachments.map(attachmentData);
-    await this.#session.append(EntryTypes.userMessage, this.#id, user);
-    await this.#session.append(EntryTypes.turnStart, this.#id, {
+    await this.#access.append(EntryTypes.userMessage, this.#id, user);
+    await this.#access.append(EntryTypes.turnStart, this.#id, {
       tool_mode: this.#session.toolMode,
       effective_tool_mode: this.#mode,
     });
@@ -272,7 +305,7 @@ class Turn {
     if (this.#agent.settings.reasoning) options.reasoningEffort = this.#agent.settings.reasoning;
     let text = "";
     const calls: ToolCall[] = [];
-    for await (const update of this.#agent.settings.chat.stream(this.#session.historyNow(), options)) {
+    for await (const update of this.#agent.settings.chat.stream(this.#session.history, options)) {
       switch (update.type) {
         case "text":
           text += update.text;
@@ -303,7 +336,7 @@ class Turn {
     if (this.#blocked) calls.length = 0; // a refused answer's tool calls never run
     this.#text += text;
     if (text || calls.length) {
-      await this.#session.append(EntryTypes.assistantMessage, this.#id, {
+      await this.#access.append(EntryTypes.assistantMessage, this.#id, {
         text,
         tool_calls: calls.map((c) => ({ id: c.id, name: c.name, arguments: c.argumentsJson || "{}" })),
         origin: "model",
@@ -320,7 +353,10 @@ class Turn {
         await this.#keepRound(value);
         break;
       case "faden.approval_required":
-        await this.#answerGatewayApproval(value, signal);
+        // With an approvalId the gateway runs the tool and waits for the answer; without, the call is one of the
+        // agent's own tools, which the session asks about as the gateway says.
+        if (str(value, "approvalId")) await this.#answerGatewayApproval(value, signal);
+        else this.#mark(value);
         break;
       case "faden.tool_denied": {
         this.#toolDenied = true;
@@ -367,10 +403,10 @@ class Turn {
           names.set(id, name);
           return { id, name, arguments: str(c["function"], "arguments") ?? "{}" };
         });
-        await this.#session.append(EntryTypes.assistantMessage, this.#id, { text: str(m, "content") ?? "", tool_calls: calls, origin: "gateway" });
+        await this.#access.append(EntryTypes.assistantMessage, this.#id, { text: str(m, "content") ?? "", tool_calls: calls, origin: "gateway" });
       } else if (role === "tool") {
         const callId = str(m, "tool_call_id") ?? "";
-        await this.#session.append(EntryTypes.toolComplete, this.#id, {
+        await this.#access.append(EntryTypes.toolComplete, this.#id, {
           call_id: callId, name: names.get(callId) ?? null, source: "gateway", result: str(m, "content") ?? "", origin: "gateway",
         });
       }
@@ -384,24 +420,39 @@ class Turn {
     const request: ApprovalRequest = {
       callId: str(value, "toolCallId") ?? "",
       toolName: str(value, "toolCallName") ?? "",
-      toolClass: "unknown",
+      toolClass: parseToolClass(str(value, "toolClass")),
       source: "gateway",
       reason: str(value, "message") ?? "",
       arguments: {},
     };
-    const timeoutS = value && typeof value === "object" ? (value as Data)["timeoutS"] : undefined;
-    const { decision } = await this.#ask(request, typeof timeoutS === "number" ? timeoutS * 1000 : 5 * 60_000, signal);
-    if (!decision) return; // timed out: the gateway expires it on its own
-    await this.#agent.client.agent!.answerApproval(approvalId, decision.approved, signal);
-    if (!decision.approved) this.#toolDenied = true;
+    const timeoutS = (value as Data)["timeoutS"];
+    // A gateway that does not say whether a rule asks is taken as one: it asks every time.
+    const rule = (value as Data)["rule"] !== false;
+    const settled = await this.#approve(request, rule, typeof timeoutS === "number" ? timeoutS * 1000 : 5 * 60_000, signal);
+    if (settled.timedOut) return; // the gateway expires it on its own
+    await this.#agent.client.agent!.answerApproval(approvalId, settled.approved, signal);
+    if (!settled.approved) this.#toolDenied = true;
+  }
+
+  /** The gateway's word on a call of the agent's own tool, kept until the call runs. */
+  #mark(value: unknown): void {
+    const callId = str(value, "toolCallId");
+    if (!callId) return;
+    const toolClass = str(value, "toolClass");
+    this.#marks.set(callId, {
+      rule: (value as Data)["rule"] !== false,
+      toolClass: toolClass === undefined ? undefined : parseToolClass(toolClass),
+      message: str(value, "message") ?? "",
+    });
   }
 
   async #runTool(call: ToolCall, signal: AbortSignal): Promise<void> {
     const tool = this.#agent.find(call.name);
     const source = tool?.source ?? "host";
-    const toolClass: ToolClass = tool?.toolClass ?? "unknown";
+    const mark = this.#marks.get(call.id);
+    const toolClass: ToolClass = tool ? stricterClass(tool.toolClass, mark?.toolClass) : "unknown";
     const args = call.arguments ?? {};
-    await this.#session.append(EntryTypes.toolStart, this.#id, { call_id: call.id, name: call.name, source, tool_class: toolClass });
+    await this.#access.append(EntryTypes.toolStart, this.#id, { call_id: call.id, name: call.name, source, tool_class: toolClass });
     this.#emit({ type: "tool_started", turnId: this.#id, callId: call.id, name: call.name, toolClass, source, arguments: args });
     const started = performance.now();
     let result: string;
@@ -414,11 +465,11 @@ class Turn {
     } else if (call.argumentsError !== undefined) {
       [result, outcome] = [`Error: the arguments are not valid JSON (${call.argumentsError}).`, "error"];
     } else {
-      ({ result, outcome, waited } = await this.#decideAndRun(tool, call, args, signal));
+      ({ result, outcome, waited } = await this.#decideAndRun(tool, toolClass, mark, call, args, signal));
     }
     // The tool's own time: the user's time on the approval card is reported apart (approval.decided).
     const ran = Math.max(0, performance.now() - started - waited);
-    await this.#session.append(EntryTypes.toolComplete, this.#id, {
+    await this.#access.append(EntryTypes.toolComplete, this.#id, {
       call_id: call.id, name: call.name, source, result, outcome, duration_ms: Math.round(ran), origin: "client",
     });
     this.#emit({ type: "tool_completed", turnId: this.#id, callId: call.id, name: call.name, source, outcome, result, durationMs: ran });
@@ -431,10 +482,13 @@ class Turn {
     }
   }
 
-  /** Asks if the mode says so, then runs the tool; also returns how long the asking took. */
-  async #decideAndRun(tool: AgentTool, call: ToolCall, args: Record<string, unknown>, signal: AbortSignal):
-    Promise<{ result: string; outcome: ToolOutcome; waited: number }> {
-    const decision = decideTool(this.#mode, tool.toolClass);
+  /**
+   * Asks if the mode or an admin's rule says so, then runs the tool; also returns how long the asking took.
+   * `toolClass` is the stricter of the tool's own and the gateway's.
+   */
+  async #decideAndRun(tool: AgentTool, toolClass: ToolClass, mark: GatewayMark | undefined, call: ToolCall,
+    args: Record<string, unknown>, signal: AbortSignal): Promise<{ result: string; outcome: ToolOutcome; waited: number }> {
+    const decision = decideTool(this.#mode, toolClass);
     if (decision === "hidden") {
       this.#toolDenied = true;
       const why = `the tool mode is ${this.#mode}`;
@@ -444,27 +498,22 @@ class Turn {
     const invalid = checkArguments(tool.parameters, args);
     if (invalid) return { result: `Error: ${invalid}`, outcome: "error", waited: 0 };
     let waited = 0;
-    if (decision === "ask") {
-      const asked = await this.#ask({
+    const rule = mark?.rule === true;
+    if (rule || decision === "ask") {
+      const settled = await this.#approve({
         callId: call.id,
         toolName: tool.name,
-        toolClass: tool.toolClass,
+        toolClass,
         source: tool.source,
-        reason: tool.toolClass === "unknown"
-          ? "Nobody has said what this tool does."
-          : `'${tool.name}' is ${tool.toolClass}; the tool mode is ${this.#mode}.`,
+        reason: rule ? mark.message
+          : toolClass === "unknown" ? "Nobody has said what this tool does."
+          : `'${tool.name}' is ${toolClass}; the tool mode is ${this.#mode}.`,
         arguments: args,
-      }, undefined, signal);
-      waited = asked.waitedMs ?? 0;
-      if (asked.waitedMs !== undefined) {
-        this.#agent.reporter.add({
-          type: "approval.decided", conversationId: this.#session.id, tool: tool.name, waitMs: asked.waitedMs,
-          decision: !asked.decision ? "timeout" : asked.decision.approved ? "approved" : "denied",
-        });
-      }
-      if (!asked.decision?.approved) {
+      }, rule, undefined, signal);
+      waited = settled.waitedMs ?? 0;
+      if (!settled.approved) {
         this.#toolDenied = true;
-        const reason = asked.decision?.reason ? ` (${asked.decision.reason})` : "";
+        const reason = settled.reason ? ` (${settled.reason})` : "";
         return { result: `The user declined to run '${tool.name}'${reason}.`, outcome: "denied", waited };
       }
     }
@@ -472,7 +521,7 @@ class Turn {
       const invocation: ToolInvocation = {
         tool,
         arguments: { ...args },
-        toolClass: tool.toolClass,
+        toolClass,
         context: { signal, callId: call.id, sessionId: this.#session.id, turnId: this.#id },
       };
       const value = await this.#invoker()(invocation);
@@ -495,12 +544,25 @@ class Turn {
   }
 
   /**
-   * Asks the user, unless they approved this tool for the session. `decision` is undefined when the time ran
-   * out; `waitedMs` is how long the user took (undefined when nobody was asked).
+   * Settles a call that needs approval, first that applies: an admin's rule asks (once only, even in bypass);
+   * bypass mode approves; a destructive or unclassified tool asks (once only); what the user allowed always, then
+   * what they allowed for this chat, approves; else the user is asked, and may allow once, for this chat or always.
+   * Every outcome goes in the transcript and the server's record, with what let the call through.
    */
-  async #ask(request: ApprovalRequest, timeoutMs: number | undefined, signal: AbortSignal):
-    Promise<{ decision: ApprovalDecision | undefined; waitedMs: number | undefined }> {
-    if (this.#session.isApprovedForSession(request.toolName)) return { decision: ApprovalDecision.approve(), waitedMs: undefined };
+  async #approve(base: ApprovalRequest, rule: boolean, timeoutMs: number | undefined, signal: AbortSignal): Promise<Settled> {
+    const { toolName: name, toolClass } = base;
+    const open = !rule && !asksEveryTime(toolClass);
+    const standing: ApprovalScope | undefined = rule ? undefined
+      : this.#agent.permissionMode === "bypass" ? "bypass"
+      : !open ? undefined
+      : (await this.#approvedAlways(name, toolClass)) ? "always"
+      : this.#access.approved.has(name) ? "chat"
+      : undefined;
+    if (standing) {
+      await this.#record(base, { approved: true, scope: standing, asked: false, rule, timedOut: false, waitedMs: undefined });
+      return { approved: true, timedOut: false, waitedMs: undefined, reason: undefined };
+    }
+    const request: ApprovalRequest = { ...base, canAllowForSession: open, canAllowAlways: open, ...(rule ? { requiredByRule: true } : {}) };
     this.#emit({ type: "approval_requested", turnId: this.#id, request });
     const limit = timeoutMs === undefined ? signal : AbortSignal.any([signal, AbortSignal.timeout(timeoutMs)]);
     const started = performance.now();
@@ -514,18 +576,63 @@ class Turn {
       decision = undefined; // the time ran out
     }
     const waitedMs = performance.now() - started;
-    await this.#session.append(EntryTypes.approvalDecision, this.#id, {
+    // What the request offered, and nothing more: a handler cannot widen it.
+    let scope: ApprovalScope | undefined = !decision?.approved ? undefined
+      : decision.always && open ? "always"
+      : decision.forSession && open ? "chat"
+      : "once";
+    if (scope === "always" && !(await this.#keepAlways(name, toolClass))) scope = "once";
+    if (scope === "chat") this.#access.approved.add(name);
+    await this.#record(base, { approved: scope !== undefined, scope, asked: true, rule, timedOut: decision === undefined, waitedMs });
+    const decided: ApprovalDecision = !decision ? ApprovalDecision.deny("No answer in time.")
+      : scope === "always" ? ApprovalDecision.approveAlways()
+      : scope === "chat" ? ApprovalDecision.approveForSession()
+      : scope === "once" ? ApprovalDecision.approve()
+      : decision;
+    this.#emit({ type: "approval_decided", turnId: this.#id, request, decision: decided });
+    return { approved: scope !== undefined, timedOut: decision === undefined, waitedMs, reason: decision?.reason };
+  }
+
+  /** The approval's transcript entry, and the server's record of it (names only). */
+  async #record(request: ApprovalRequest, how: {
+    approved: boolean; scope: ApprovalScope | undefined; asked: boolean; rule: boolean; timedOut: boolean; waitedMs: number | undefined;
+  }): Promise<void> {
+    await this.#access.append(EntryTypes.approvalDecision, this.#id, {
       call_id: request.callId,
       name: request.toolName,
       source: request.source,
-      approved: decision?.approved ?? false,
-      for_session: decision?.forSession ?? false,
-      timed_out: decision === undefined,
-      wait_ms: Math.round(waitedMs),
+      approved: how.approved,
+      for_session: how.asked && how.scope === "chat",
+      scope: how.scope ?? null,
+      asked: how.asked,
+      rule: how.rule,
+      timed_out: how.timedOut,
+      wait_ms: Math.round(how.waitedMs ?? 0),
     });
-    if (decision?.approved && decision.forSession) this.#session.approveForSession(request.toolName);
-    this.#emit({ type: "approval_decided", turnId: this.#id, request, decision: decision ?? ApprovalDecision.deny("No answer in time.") });
-    return { decision, waitedMs };
+    this.#agent.reporter.add({
+      type: "approval.decided", conversationId: this.#session.id, tool: request.toolName,
+      decision: how.timedOut ? "timeout" : how.approved ? "approved" : "denied",
+      ...(how.waitedMs !== undefined ? { waitMs: how.waitedMs } : {}),
+      ...(how.scope ? { scope: how.scope } : {}),
+    });
+  }
+
+  async #approvedAlways(name: string, toolClass: ToolClass): Promise<boolean> {
+    try {
+      const kept = await this.#agent.settings.approvalStore.list(this.#agent.slug);
+      return kept.some((a) => a.tool === name && a.toolClass === toolClass);
+    } catch {
+      return false; // a store that cannot be read approves nothing
+    }
+  }
+
+  async #keepAlways(name: string, toolClass: ToolClass): Promise<boolean> {
+    try {
+      await this.#agent.settings.approvalStore.add(this.#agent.slug, { tool: name, toolClass, approvedAt: new Date().toISOString() });
+      return true;
+    } catch {
+      return false; // not kept: this call runs, the next one asks
+    }
   }
 
   async #notice(notice: GovernanceNotice): Promise<void> {
@@ -535,12 +642,12 @@ class Turn {
     if (notice.category) data["category"] = notice.category;
     if (notice.decisionId) data["decision_id"] = notice.decisionId;
     if (notice.retryAfterMs !== undefined) data["retry_after_ms"] = notice.retryAfterMs;
-    await this.#session.append(EntryTypes.governanceNotice, this.#id, data);
+    await this.#access.append(EntryTypes.governanceNotice, this.#id, data);
     this.#emit({ type: "notice", turnId: this.#id, notice });
   }
 
   async #end(status: string, outcome: ChatOutcome | undefined): Promise<void> {
-    await this.#session.append(EntryTypes.turnEnd, this.#id, {
+    await this.#access.append(EntryTypes.turnEnd, this.#id, {
       status,
       outcome: outcome ?? null,
       usage: this.#usage

@@ -120,7 +120,7 @@ The entry types, as `EntryTypes` names them:
 | `assistant.message` | A model's answer: its text and tool calls. |
 | `tool.execution_start` | A tool started. |
 | `tool.execution_complete` | A tool ended: its result and outcome. |
-| `approval.decision` | The user's decision on a tool call. |
+| `approval.decision` | How a call that needed approval was decided: `approved`, what let it through (`scope`: `once`, `chat`, `always` or `bypass`), whether the user was `asked`, whether an administrator's `rule` asked, `timed_out`, `wait_ms`. |
 | `governance.notice` | A refusal or a limit. |
 | `compaction` | The history was compacted. This SDK does not write such entries. |
 | `assistant.turn_end` | The turn ended: its status, outcome and usage. |

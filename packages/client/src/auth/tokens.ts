@@ -1,6 +1,6 @@
 import { FadenApiError, FadenError, FadenSignInRequiredError, FadenUnreachableError } from "../errors.js";
 import { toApiError } from "../http/errorReader.js";
-import type { FetchLike } from "../http/transport.js";
+import { requireSecureUrl, type FetchLike } from "../http/transport.js";
 
 /** An agent sign-in on one device: a short access token and the refresh token that renews it. Times in ms since the epoch. */
 export interface TokenSet {
@@ -101,6 +101,8 @@ export interface AgentTokenProviderOptions {
   fetch?: FetchLike;
   /** The time, for tests. */
   now?: () => number;
+  /** Allow `http://` to another machine. Off: tokens go over https, or plain http only to this machine. */
+  allowInsecureHttp?: boolean;
 }
 
 /**
@@ -119,7 +121,7 @@ export class AgentTokenProvider implements TokenProvider {
   #refreshing: Promise<TokenSet> | undefined;
 
   constructor(options: AgentTokenProviderOptions) {
-    const base = new URL(options.apiUrl);
+    const base = requireSecureUrl(options.apiUrl, "apiUrl", options.allowInsecureHttp);
     this.#apiUrl = base.href.endsWith("/") ? base : new URL(`${base.href}/`);
     this.agent = options.agent;
     this.#store = options.store ?? new MemoryTokenStore();
@@ -253,6 +255,8 @@ export interface PasswordLoginOptions {
   password: string;
   fetch?: FetchLike;
   signal?: AbortSignal;
+  /** Allow `http://` to another machine (a development server). Off: the password goes over https only. */
+  allowInsecureHttp?: boolean;
 }
 
 /**
@@ -260,7 +264,7 @@ export interface PasswordLoginOptions {
  * with. Keep it only as long as the sign-in takes.
  */
 export async function loginWithPassword(options: PasswordLoginOptions): Promise<string> {
-  const base = new URL(options.apiUrl);
+  const base = requireSecureUrl(options.apiUrl, "apiUrl", options.allowInsecureHttp);
   const url = new URL("api/auth/jwt/login", base.href.endsWith("/") ? base : `${base.href}/`);
   const fetchImpl = options.fetch ?? ((input, init) => globalThis.fetch(input, init));
   let response: Response;

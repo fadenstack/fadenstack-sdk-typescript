@@ -79,8 +79,12 @@ Every tool has a class that says what it does:
 
 The agent's host tool contract on the server can make a class stricter, never looser. When the agent starts, each of
 your tools gets the stricter of your class and the contract's. If you gave no class, the contract's class is used.
-Tools that a non-empty contract does not list are not offered to the model; an empty contract restricts nothing.
-After `agent.start()`, `agent.tools` lists the tools with the classes they run under.
+Tools that a non-empty contract does not list are not offered to the model. An agent without a contract, or a
+contract entry without a `risk`, vouches for nothing: those tools are `unknown`, whatever class you gave them, and
+ask every time. After `agent.start()`, `agent.tools` lists the tools with the classes they run under.
+
+The server may also hold a stricter class for a tool than the contract says (an administrator's classification). It
+tells the session when the model calls the tool, and the call runs under the stricter of the two.
 
 ## The app manifest
 
@@ -124,8 +128,9 @@ const session = await agent.startSession("read_only");
 session.toolMode = "auto"; // from the next turn on
 ```
 
-A hidden tool is not offered to the model. If the model calls it anyway, the call is refused: the turn gets a
-`tool_denied` notice with the category `mode`, and the model is told the tool is not allowed.
+A hidden tool is not offered to the model. If the model calls it anyway, the call is refused, by the server as it
+hands the call over or else by the session: the turn gets a `tool_denied` notice, and the model is told the tool is not
+allowed.
 
 `session.effectiveToolMode` is the mode turns run in: `session.toolMode`, narrowed by any limit the agent's profile
 sets. (planned) The Enterprise edition is planned; with it, an administrator may in future narrow the modes a user can
@@ -146,8 +151,10 @@ const agent = FadenAgent.createBuilder()
   .useClient(client)
   .addTools(readPage, deletePage)
   .useApprovals(async (request, signal) => {
-    const answer = await showApprovalDialog(request, signal); // "allow", "always" or "deny"
-    if (answer === "always") return ApprovalDecision.approveForSession();
+    // Offer only what the request allows: request.canAllowForSession, request.canAllowAlways.
+    const answer = await showApprovalDialog(request, signal); // "allow", "chat", "always" or "deny"
+    if (answer === "chat") return ApprovalDecision.approveForSession();
+    if (answer === "always") return ApprovalDecision.approveAlways();
     return answer === "allow" ? ApprovalDecision.approve() : ApprovalDecision.deny("Declined in the dialog.");
   })
   .build();
@@ -163,27 +170,71 @@ The handler gets an `ApprovalRequest`:
 | `toolName` | The tool. |
 | `toolClass` | The class it runs under. |
 | `source` | `host`, `mcp`, or `gateway` for a tool the server runs. |
-| `reason` | Why it asks: the tool's class and the mode, or the administrator's message for a server tool. |
+| `reason` | Why it asks: the tool's class and the mode, or the administrator's message for a rule or a server tool. |
 | `arguments` | The call's arguments, already checked. Empty for a server tool. |
+| `canAllowForSession` | Whether to offer "Allow for this chat". |
+| `canAllowAlways` | Whether to offer "Allow always". |
+| `requiredByRule` | An administrator's "Ask first" rule covers the call. |
 
 It returns an `ApprovalDecision`:
 
 | Decision | Effect |
 |---|---|
-| `ApprovalDecision.approve()` | The tool runs. |
-| `ApprovalDecision.approveForSession()` | The tool runs, and later calls of the same tool in this session run without asking. This holds when the session is opened again. |
+| `ApprovalDecision.approve()` | The tool runs, this once. |
+| `ApprovalDecision.approveForSession()` | The tool runs, and later calls of the same tool run without asking while this session object lives. A session opened again asks again. |
+| `ApprovalDecision.approveAlways()` | The tool runs, and later calls of it run without asking in every session on this device, until the approvals are reset. |
 | `ApprovalDecision.deny(reason?)` | The tool does not run. The model is told the user declined, with your reason, and the turn's outcome is `tool_denied`. |
 
-A decision is a plain object, `{ approved, forSession?, reason? }`, so you can also return one directly.
+A decision is a plain object, `{ approved, forSession?, always?, reason? }`, so you can also return one directly.
+`forSession` and `always` count only where the request offers them; elsewhere they approve the one call.
 
 The `signal` aborts when the turn is stopped. The SDK stops waiting for your handler then, so close your dialog when
 it aborts. Approvals for your own tools have no time limit of their own.
 
+### What asks, in order
+
+A call the tool mode or an administrator's rule asks about is settled by the first of these that applies:
+
+1. An administrator's "Ask first" rule covers it: it asks, with Allow and Deny only, every time. Nothing below
+   changes that, bypass mode included.
+2. The agent runs in bypass mode: it runs without asking.
+3. The tool is `destructive` or `unknown`: it asks, with Allow and Deny only, every time.
+4. The user allowed the tool always, under the class it has now: it runs without asking.
+5. The user allowed the tool for this chat: it runs without asking.
+6. It asks, with Allow, Allow for this chat, Allow always and Deny.
+
+Every outcome goes in the session's transcript as an `approval.decision` entry, with what let the call through
+(`scope`: `once`, `chat`, `always` or `bypass`), and is reported to the server the same way.
+
+### Allow always
+
+What the user allows always is kept per agent on this device, by tool name and class, in an `ApprovalStore`: IndexedDB
+in a browser and memory elsewhere unless you pass your own to `useApprovalStore`. It is checked at every call: a tool
+that became `destructive` or `unknown`, or that an administrator's rule now covers, asks again.
+
+`agent.resetApprovals()` forgets every tool's, `agent.resetApprovals("write_page")` one tool's.
+`session.resetApprovals()` forgets what was allowed for that chat.
+
+### Bypass mode
+
+`usePermissionMode("bypass")` approves every call that would ask, `destructive` and `unknown` ones too, without asking
+anyone. It is for development and trusted automation, set in your code; never offer it to users. An administrator's
+"Ask first" rule still asks. The agent warns once on the console when it starts in bypass mode, and the transcript and
+the server's record say `bypass` for each call it let through. A tool the mode hides stays hidden.
+
+### Rules from the administrator
+
+An administrator can say a tool needs the user's approval ("Ask first"). When the model calls one of your tools such a
+rule covers, the server marks the call before the session runs it, and the session asks with the administrator's
+message as the `reason`, whatever the tool's class, every time. A tool a rule denies is not offered, and a call of it
+is refused. (An older version of this SDK does not read the mark.)
+
 ### Server tools that ask
 
 The server can hold one of its own tools for the user's approval. The same handler is asked, with `source` set to
-`gateway`, and its answer goes back to the server. The server waits only for a limited time: when it runs out, the
-`signal` aborts, the server does not run the call, and `approval_decided` reports that no answer came in time.
+`gateway`, and its answer goes back to the server. The server says the tool's class and whether a rule asks; one that
+says neither asks every time. The server waits only for a limited time: when it runs out, the `signal` aborts, the
+server does not run the call, and `approval_decided` reports that no answer came in time.
 
 ### Approvals in a chat UI
 
