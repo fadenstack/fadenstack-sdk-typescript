@@ -365,6 +365,17 @@ export class AgentChatViewModel extends Observable implements TurnHost {
     this.notify();
   }
 
+  /**
+   * Forgets what the user allowed always for this agent on this device, and what they allowed for this chat: the
+   * next call of those tools asks again.
+   */
+  async resetApprovals(): Promise<void> {
+    this.#modeMenuOpen = false;
+    this.notify();
+    this.#session?.resetApprovals();
+    await this.#agent.resetApprovals();
+  }
+
   /** The user's pick for this chat; the next turn runs in it. New chats start in `ask`. */
   selectToolMode(mode: ToolMode): void {
     const option = this.toolModes.find((o) => o.mode === mode);

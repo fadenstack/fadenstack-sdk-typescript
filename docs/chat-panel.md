@@ -62,12 +62,15 @@ Call `chat.dispose()` when you remove the panel. It stops a running turn and sto
 - **Text and tool calls interleave** in the order they happened.
 - **Each tool call is one line**, "Running read_page" and then "Ran read_page", with its duration. Your tools that
   are not `read` show their class, and server tools a badge. The line expands to the tool's input and output.
-- **Approvals are cards** with Allow, Allow for this chat, and Deny, above their tool's line.
+- **Approvals are cards** with Allow, Allow for this chat, Allow always and Deny, above their tool's line. A tool
+  that cannot be undone or that nobody classified, and a call an administrator's rule asks about, offer Allow and Deny
+  only: they ask every time.
 - **Refusals and limits are notices.** A refused prompt is marked "Not sent", with Edit and resend.
 - **Reasoning and citations** are collapsible. A PII notice says how many values of which kind were kept from the
   model.
 - **The header** has the agent's name, the tool mode, the history (open or delete a chat), a new chat, and your
-  own buttons.
+  own buttons. The tool-mode menu ends with Reset approvals, which forgets what was allowed for this chat and always
+  (`chat.resetApprovals()`).
 - **The composer** has context chips, Enter to send, Shift+Enter for a new line, and Esc to stop.
 - **After an answer**: copy (the Markdown as text, and as HTML so it pastes formatted into mail and documents), retry
   for a turn that failed or was stopped, edit, and the turn's duration and tokens.

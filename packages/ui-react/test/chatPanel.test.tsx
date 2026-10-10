@@ -10,9 +10,12 @@ import { FakeGateway, lastToolResults, type FakeModel } from "@fadenstack/testin
 
 afterEach(cleanup);
 
-async function panel(model: FakeModel) {
+async function panel(model: FakeModel, risk: "write" | "destructive" = "write") {
   const gateway = new FakeGateway({
-    agents: [{ slug: "page", name: "Page assistant", ui: { greeting: "I read the page you are on.", suggestions: ["Summarise this page"] } }],
+    agents: [{
+      slug: "page", name: "Page assistant", ui: { greeting: "I read the page you are on.", suggestions: ["Summarise this page"] },
+      contract: [{ name: "fill_field", risk }],
+    }],
     model,
   });
   const { client, tokens } = FadenClient.forAgent({ serverUrl: gateway.serverUrl, agent: "page", fetch: gateway.fetch });
@@ -100,5 +103,43 @@ describe("ChatPanel", () => {
       fireEvent.click(screen.getByRole("menuitemradio", { name: /Read only/ }));
     });
     expect(chat.toolMode).toBe("read_only");
+  });
+
+  it("offers Allow for this chat and Allow always for a tool that changes something", async () => {
+    await panel((r) => (lastToolResults(r).size ? { text: "Filled in." } : { toolCalls: [{ name: "fill_field", arguments: { value: "Jane" } }] }));
+    fireEvent.change(screen.getByRole("textbox"), { target: { value: "Fill my name" } });
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Send" }));
+    });
+    expect(await screen.findByRole("button", { name: "Allow for this chat" })).toBeTruthy();
+    const always = screen.getByRole("button", { name: "Allow always" });
+    await act(async () => {
+      fireEvent.click(always);
+    });
+    await waitFor(() => expect(screen.getByText("Allowed always")).toBeTruthy());
+  });
+
+  it("offers only Allow and Deny for a tool that cannot be undone", async () => {
+    await panel((r) => (lastToolResults(r).size ? { text: "Sent." } : { toolCalls: [{ name: "fill_field", arguments: { value: "Jane" } }] }), "destructive");
+    fireEvent.change(screen.getByRole("textbox"), { target: { value: "Send it" } });
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Send" }));
+    });
+    expect(await screen.findByRole("button", { name: "Allow" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Deny" })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Allow for this chat" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Allow always" })).toBeNull();
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Deny" }));
+    });
+  });
+
+  it("resets approvals from the tool-mode menu", async () => {
+    const { chat } = await panel(() => ({ text: "ok" }));
+    fireEvent.click(screen.getByRole("button", { name: /Tool mode/ }));
+    await act(async () => {
+      fireEvent.click(screen.getByRole("menuitem", { name: "Reset approvals" }));
+    });
+    expect(chat.isModeMenuOpen).toBe(false);
   });
 });

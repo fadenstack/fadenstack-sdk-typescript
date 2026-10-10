@@ -10,7 +10,15 @@ import {
 } from "@fadenstack/client";
 
 import { FadenAgent } from "./agent.js";
-import { approvalsFrom, denyAllApprovals, type ApprovalDecision, type ApprovalHandler, type ApprovalRequest } from "./approvals.js";
+import {
+  approvalsFrom,
+  denyAllApprovals,
+  type ApprovalDecision,
+  type ApprovalHandler,
+  type ApprovalRequest,
+  type PermissionMode,
+} from "./approvals.js";
+import { IndexedDbApprovalStore, MemoryApprovalStore, type ApprovalStore } from "./approvalStore.js";
 import { IndexedDbSessionStore } from "./indexedDbSessionStore.js";
 import { MemorySessionStore, type SessionStore } from "./sessionStore.js";
 import type { ChatStage, FadenModule, ToolSource, ToolStage } from "./stages.js";
@@ -28,6 +36,9 @@ export interface AgentSettings {
   readonly modules: readonly string[];
   readonly approvals: ApprovalHandler;
   readonly sessions: SessionStore;
+  /** Where "Allow always" is kept. */
+  readonly approvalStore: ApprovalStore;
+  readonly permissionMode: PermissionMode;
   readonly defaultMode: ToolMode;
   readonly maxRounds: number;
   readonly historyTokens: number;
@@ -63,6 +74,8 @@ export class AgentBuilder {
   #agent: string | undefined;
   #approvals: ApprovalHandler = denyAllApprovals;
   #sessions: SessionStore | undefined;
+  #approvalStore: ApprovalStore | undefined;
+  #permissionMode: PermissionMode = "ask";
   #defaultMode: ToolMode = "ask";
   #maxRounds = 16;
   #historyTokens = 24_000;
@@ -114,6 +127,24 @@ export class AgentBuilder {
     return this;
   }
 
+  /** Where "Allow always" is kept; by default IndexedDB in a browser, memory elsewhere. */
+  useApprovalStore(store: ApprovalStore): this {
+    this.#approvalStore = store;
+    return this;
+  }
+
+  /**
+   * `ask` (the default): calls the tool mode asks about wait for the user. `bypass`: they are approved without
+   * asking, destructive ones too -- for development and trusted automation, never a user's choice. An admin's
+   * "Ask first" rule still asks, and the transcript and the server's record say `bypass` for each call it let
+   * through. The agent warns once when it starts in bypass.
+   */
+  usePermissionMode(mode: PermissionMode): this {
+    if (mode !== "ask" && mode !== "bypass") throw new TypeError(`A permission mode is ask or bypass, not '${String(mode)}'.`);
+    this.#permissionMode = mode;
+    return this;
+  }
+
   /**
    * The mode new sessions start in. It can only be stricter than `ask`: every session starts asking unless the
    * user widens that session (sdk/07 §1).
@@ -158,7 +189,8 @@ export class AgentBuilder {
   /**
    * The app the agent runs in. When the agent starts it tells the server what the app brings -- its host tools
    * with their classes, this context and greeting, the versions -- so the server's admins take new tools in with
-   * a click instead of typing them; until they do, the server holds them back.
+   * a click instead of typing them; until they do, the server holds them back. (An agent with no contract at all
+   * holds nothing back: every tool is unclassified then, and asks every time.)
    */
   describeApp(app: AppDescription): this {
     if (!app.name?.trim()) throw new TypeError("An app needs a name.");
@@ -202,7 +234,7 @@ export class AgentBuilder {
     // Lower order is further from the transport: wrap from the transport outwards.
     let chat: ChatStreamer = client.chat;
     for (const stage of [...this.#chatStages].sort((a, b) => b.order - a.order)) chat = stage.wrap(chat);
-    return new FadenAgent({
+    return FadenAgent.create({
       client,
       agent,
       chat,
@@ -212,6 +244,8 @@ export class AgentBuilder {
       modules: [...this.#modules],
       approvals: this.#approvals,
       sessions: this.#sessions ?? (globalThis.indexedDB ? new IndexedDbSessionStore() : new MemorySessionStore()),
+      approvalStore: this.#approvalStore ?? (globalThis.indexedDB ? new IndexedDbApprovalStore() : new MemoryApprovalStore()),
+      permissionMode: this.#permissionMode,
       defaultMode: this.#defaultMode,
       maxRounds: this.#maxRounds,
       historyTokens: this.#historyTokens,

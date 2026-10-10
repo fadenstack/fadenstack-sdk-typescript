@@ -116,12 +116,15 @@ export interface ToolExecutedEvent extends ClientEventBase {
   outcome: "ok" | "error" | "denied" | "cancelled";
 }
 
-/** The user decided on a tool that needed approval. */
+/** A call that needed approval was decided: by the user, or by an approval that stood (this chat, always, bypass mode). */
 export interface ApprovalDecidedEvent extends ClientEventBase {
   type: "approval.decided";
   tool: string;
   decision: "approved" | "denied" | "timeout";
+  /** How long the user took; not given when nobody was asked. */
   waitMs?: number;
+  /** What let an approved call through: the user once, this chat, always on this device, or bypass mode. */
+  scope?: "once" | "chat" | "always" | "bypass";
 }
 
 /** A local MCP server was attached, and the tools it offers. */
@@ -162,6 +165,7 @@ export function toWireEvent(event: AgentClientEvent): Record<string, unknown> {
       put("tool", event.tool);
       put("decision", event.decision);
       put("wait_ms", event.waitMs === undefined ? undefined : Math.max(0, Math.round(event.waitMs)));
+      put("scope", event.scope);
       break;
     case "local_mcp.attached":
       put("label", event.label);

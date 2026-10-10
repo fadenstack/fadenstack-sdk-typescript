@@ -30,7 +30,10 @@ async function waitFor<T>(find: () => T | undefined, timeoutMs = 2000): Promise<
 
 async function chat(options: FakeGatewayOptions = {}) {
   const gateway = new FakeGateway({
-    agents: [{ slug: "page", name: "Page assistant", ui: { greeting: "I read pages.", suggestions: ["Summarise", 7, "Explain"] } }],
+    agents: [{
+      slug: "page", name: "Page assistant", ui: { greeting: "I read pages.", suggestions: ["Summarise", 7, "Explain"] },
+      contract: [{ name: "read_page", risk: "read" }, { name: "fill_field", risk: "write" }],
+    }],
     ...options,
   });
   const { client, tokens } = FadenClient.forAgent({ serverUrl: gateway.serverUrl, agent: "page", fetch: gateway.fetch });
@@ -151,6 +154,49 @@ describe("AgentChatViewModel", () => {
     expect(small.turns.map((t) => t.userText)).toEqual(["Question 1", "Question 2", "Question 3", "Question 4", "Question 5"]);
     expect(small.hasEarlierTurns).toBe(false);
     expect(small.turns[0]!.parts[0]).toBeInstanceOf(MarkdownPart);
+  });
+
+  it("lets a card allow a tool always, shows no card for calls a standing approval let through, and resets", async () => {
+    const { vm, written, agent } = await chat({
+      model: (r) => (lastToolResults(r).size ? { text: "Done." } : { toolCalls: [{ name: "fill_field", arguments: { text: "Jane" } }] }),
+    });
+    const sending = vm.send("Fill in my name");
+    const card = await waitFor(() => vm.turns[0]!.parts.find((p): p is ApprovalPart => p instanceof ApprovalPart && p.isPending));
+    expect(card).toMatchObject({ canAllowForSession: true, canAllowAlways: true });
+    card.allowAlways();
+    await sending;
+    expect(card.state).toBe("approved_always");
+    expect(card.stateText).toBe("Allowed always");
+    await vm.send("Again");
+    expect(written).toEqual(["Jane", "Jane"]);
+    expect(vm.turns[1]!.parts.some((p) => p instanceof ApprovalPart)).toBe(false);
+    // Opened again: the asked card shows how it was answered; the call allowed always shows none.
+    const reopened = new AgentChatViewModel(agent, new ApprovalBroker(), { scheduler: immediateScheduler });
+    await reopened.initialize();
+    await reopened.openSession(vm.currentSessionId!);
+    const cards = reopened.turns.flatMap((t) => t.parts.filter((p): p is ApprovalPart => p instanceof ApprovalPart));
+    expect(cards.map((c) => c.state)).toEqual(["approved_always"]);
+    await vm.resetApprovals();
+    const asking = vm.send("Once more");
+    const next = await waitFor(() => vm.turns[2]!.parts.find((p): p is ApprovalPart => p instanceof ApprovalPart && p.isPending));
+    next.deny();
+    await asking;
+  });
+
+  it("a card for a tool that cannot be undone offers Allow and Deny only", async () => {
+    const { vm } = await chat({
+      agents: [{ slug: "page", contract: [{ name: "read_page", risk: "read" }, { name: "fill_field", risk: "destructive" }] }],
+      model: (r) => (lastToolResults(r).size ? { text: "Done." } : { toolCalls: [{ name: "fill_field", arguments: { text: "Jane" } }] }),
+    });
+    const sending = vm.send("Fill in my name");
+    const card = await waitFor(() => vm.turns[0]!.parts.find((p): p is ApprovalPart => p instanceof ApprovalPart && p.isPending));
+    expect(card).toMatchObject({ canAllowForSession: false, canAllowAlways: false, isDangerous: true });
+    card.allowForSession(); // not offered: nothing happens
+    card.allowAlways();
+    expect(card.isPending).toBe(true);
+    card.allow();
+    await sending;
+    expect(card.state).toBe("approved");
   });
 
   it("refuses a mode above the agent's ceiling and explains the limit", async () => {

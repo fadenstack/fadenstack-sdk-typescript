@@ -211,7 +211,7 @@ export class TurnViewModel extends Observable {
     const card = [...this.#parts].reverse().find((p): p is ApprovalPart =>
       p instanceof ApprovalPart && p.request.callId === request.callId && p.toolName === request.toolName);
     if (card?.isPending) {
-      const state: ApprovalState = decision.approved ? (decision.forSession ? "approved_for_session" : "approved")
+      const state: ApprovalState = decision.approved ? (decision.always ? "approved_always" : decision.forSession ? "approved_for_session" : "approved")
         : decision.reason === "No answer in time." ? "expired" : "denied";
       card.setState(state);
     }

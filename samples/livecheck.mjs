@@ -4,6 +4,9 @@
 //
 //   FADEN_USER_EMAIL=... FADEN_USER_PASSWORD=... NODE_EXTRA_CA_CERTS=ca.crt \
 //     node samples/livecheck.mjs --server https://faden.example --agent browser-assistant
+//
+// Over https only, or plain http to this machine; --allow-http allows plain http to another (a development server):
+// the password and the tokens then cross the network readable.
 import { AgentTokenProvider, FadenClient, MemoryTokenStore, loginWithPassword } from "@fadenstack/client";
 import { FadenAgent, MemorySessionStore, defineTool } from "@fadenstack/agents";
 
@@ -13,10 +16,11 @@ const arg = (name, fallback) => {
 };
 const server = arg("server", process.env.FADEN_SERVER);
 const agentSlug = arg("agent", "browser-assistant");
+const allowInsecureHttp = process.argv.includes("--allow-http");
 const email = process.env.FADEN_USER_EMAIL;
 const password = process.env.FADEN_USER_PASSWORD;
 if (!server || !email || !password) {
-  console.error("Usage: FADEN_USER_EMAIL=... FADEN_USER_PASSWORD=... node samples/livecheck.mjs --server https://... [--agent slug]");
+  console.error("Usage: FADEN_USER_EMAIL=... FADEN_USER_PASSWORD=... node samples/livecheck.mjs --server https://... [--agent slug] [--allow-http]");
   process.exit(2);
 }
 
@@ -34,8 +38,9 @@ async function check(name, run) {
 }
 
 const store = new MemoryTokenStore();
-const tokens = new AgentTokenProvider({ apiUrl: server, agent: agentSlug, store });
-const client = new FadenClient({ serverUrl: server, agent: agentSlug, credentials: tokens, allowInsecureHttp: server.startsWith("http://") });
+const tokens = new AgentTokenProvider({ apiUrl: server, agent: agentSlug, store, allowInsecureHttp });
+const local = ["localhost", "127.0.0.1", "[::1]"].includes(new URL(server).hostname);
+const client = new FadenClient({ serverUrl: server, agent: agentSlug, credentials: tokens, allowInsecureHttp: allowInsecureHttp || local });
 const filled = [];
 const page = "# Pump P-200 maintenance guide\n\n| Task | Interval |\n| --- | --- |\n| Seal check | 2 000 h |\n| Bearing lubrication | 4 000 h |";
 const agent = FadenAgent.createBuilder()
@@ -61,7 +66,7 @@ const agent = FadenAgent.createBuilder()
   .build();
 
 await check("signin", async () => {
-  const login = await loginWithPassword({ apiUrl: server, email, password });
+  const login = await loginWithPassword({ apiUrl: server, email, password, allowInsecureHttp });
   const set = await tokens.signIn(login, "Fadenstack TypeScript LiveCheck");
   return `device ${set.deviceId}`;
 });
@@ -117,7 +122,7 @@ await check("refresh", async () => {
 
 await check("events", async () => {
   await agent.flush();
-  if (agent.reporter.lastError) throw agent.reporter.lastError;
+  if (agent.lastReportError) throw agent.lastReportError;
   return "reported without error";
 });
 

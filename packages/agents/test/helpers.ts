@@ -44,6 +44,13 @@ export class Pages {
   });
 }
 
+/** The contract the server keeps for the page tools: their classes, vouched for. */
+export const PAGE_CONTRACT = [
+  { name: "read_page", risk: "read" },
+  { name: "write_page", risk: "write" },
+  { name: "delete_page", risk: "destructive" },
+] as const satisfies { name: string; risk: "read" | "write" | "destructive" }[];
+
 export interface Setup {
   gateway: FakeGateway;
   client: FadenClient;
@@ -59,7 +66,7 @@ export async function setup(
   answer: (request: ApprovalRequest) => ApprovalDecision | Promise<ApprovalDecision> = () => ({ approved: true }),
   configure: (builder: AgentBuilder) => AgentBuilder = (b) => b,
 ): Promise<Setup> {
-  const gateway = new FakeGateway({ agents: [{ slug: "eplan" }], ...options });
+  const gateway = new FakeGateway({ agents: [{ slug: "eplan", contract: [...PAGE_CONTRACT] }], ...options });
   const { client, tokens } = FadenClient.forAgent({ serverUrl: gateway.serverUrl, agent: "eplan", fetch: gateway.fetch });
   await tokens.signIn(await loginWithPassword({ apiUrl: gateway.serverUrl, email: "user@example.com", password: "secret", fetch: gateway.fetch }));
   const pages = new Pages();

@@ -62,12 +62,13 @@ export function buildTurn(entries: readonly TranscriptEntry[], context: PartCont
         break;
       }
       case EntryTypes.approvalDecision: {
+        if (d["asked"] === false) break; // let through by this chat's, an always or a bypass approval: no card, as live
         const request: ApprovalRequest = {
           callId: str(d, "call_id") ?? "", toolName: str(d, "name") ?? "", toolClass: "unknown",
           source: str(d, "source") ?? "host", reason: "", arguments: {},
         };
         const decided: ApprovalState = d["timed_out"] === true ? "expired" : d["approved"] !== true ? "denied"
-          : d["for_session"] === true ? "approved_for_session" : "approved";
+          : d["scope"] === "always" ? "approved_always" : d["for_session"] === true ? "approved_for_session" : "approved";
         turn.addApprovalPart(new ApprovalPart(context, request, decided));
         break;
       }

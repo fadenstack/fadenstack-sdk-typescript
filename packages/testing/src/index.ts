@@ -8,5 +8,6 @@ export {
   type FakeModel,
   type FakeModelRequest,
   type FakeReply,
+  type FakeToolRule,
   type FakeUser,
 } from "./fakeGateway.js";

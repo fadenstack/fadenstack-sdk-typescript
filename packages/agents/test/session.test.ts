@@ -58,14 +58,23 @@ describe("a turn", () => {
     expect(lastToolResults(s.gateway.modelCalls[1]!).values().next().value).toBe("The user declined to run 'delete_page' (not today).");
   });
 
-  it("stops asking for a tool approved for the session, also after the session is reopened", async () => {
+  it("stops asking for a tool approved for the chat, until the chat is opened again", async () => {
     const s = await setup({ model: callsOnce("write_page", { page: 8, text: "x" }) }, () => ApprovalDecision.approveForSession());
     const session = await s.agent.startSession();
     await session.send("one");
     await session.send("two");
     expect(s.asked).toHaveLength(1);
+    expect(s.asked[0]).toMatchObject({ canAllowForSession: true, canAllowAlways: true });
+    const decisions = session.transcript.filter((e) => e.type === EntryTypes.approvalDecision).map((e) => e.data);
+    expect(decisions).toMatchObject([
+      { approved: true, scope: "chat", asked: true, for_session: true },
+      { approved: true, scope: "chat", asked: false, for_session: false },
+    ]);
+    // Opened again (another window, the next day): it asks again.
     const reopened = await s.agent.openSession(session.id);
-    expect(reopened.approvedForSession.has("write_page")).toBe(true);
+    expect(reopened.approvedForSession.size).toBe(0);
+    await reopened.send("three");
+    expect(s.asked).toHaveLength(2);
   });
 
   it("runs write tools in auto, still asks before destructive ones", async () => {
@@ -83,7 +92,8 @@ describe("a turn", () => {
     const session = await s.agent.startSession("read_only");
     const events = await collect(session.stream("write"));
     expect(s.gateway.modelCalls[0]!.tools.map((t) => t.name)).toEqual(["read_page"]);
-    expect(events.find((e) => e.type === "notice")).toMatchObject({ notice: { outcome: "tool_denied", category: "mode" } });
+    // The gateway refuses the call as it hands it over; the session would refuse it on its own too.
+    expect(events.find((e) => e.type === "notice")).toMatchObject({ notice: { outcome: "tool_denied" } });
     expect(events.find((e) => e.type === "tool_completed")).toMatchObject({ outcome: "denied" });
     expect(s.pages.pages.get(8)).toBe("Terminal X2");
   });

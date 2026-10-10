@@ -162,6 +162,8 @@ const agent = FadenAgent.createBuilder()
 | `addToolSource(source)` | Tools that are added once the agent's profile is known. |
 | `useApprovals(handler)` | Who decides on tool calls that need approval. Without one, every such call is declined. |
 | `useSessionStore(store)` | Where sessions live. By default IndexedDB in a browser and memory elsewhere. See [Sessions on the device](sessions.md). |
+| `useApprovalStore(store)` | Where "Allow always" is kept. By default IndexedDB in a browser and memory elsewhere. See [Tools and approvals](tools.md#allow-always). |
+| `usePermissionMode(mode)` | `ask` (the default), or `bypass` for development and trusted automation. See [Tools and approvals](tools.md#bypass-mode). |
 | `useDefaultToolMode(mode)` | The mode new sessions start in. It can only be stricter than `ask`. |
 | `useMaxRounds(rounds)` | Model calls per turn before the loop stops. Default 16. |
 | `useHistoryBudget(tokens)` | About how many tokens of history a request carries. Older turns are left out. Default 24 000. |
@@ -183,7 +185,8 @@ The agent starts the first time you open a session, or when you call `agent.star
   its instructions;
 - checks that the builder has every module the profile requires, and throws a `FadenError` if not;
 - settles the tools: host tools outside a non-empty contract are dropped, the others run under the stricter of your
-  class and the contract's;
+  class and the contract's; without a contract, or for an entry without a `risk`, a tool is `unknown` and asks;
+- warns once, on the console, when the agent runs in bypass mode;
 - reports the app's manifest to the server, unless event reporting is off.
 
 After that, `agent.profile` is the `AgentProfile` and `agent.tools` lists the tools with the classes they run under.
@@ -233,7 +236,7 @@ Every event has a `type` and the `turnId` of its turn:
 | `tool_started` | `callId`, `name`, `toolClass`, `source`, `arguments` | A tool starts. `source` is `host` for your tools, `mcp` for a tool from an MCP server, or `gateway` for a tool the server runs. For a server tool, `arguments` is empty: the server keeps them. |
 | `tool_completed` | `callId`, `name`, `source`, `outcome`, `result`, `durationMs` | A tool ended. `outcome` is `ok`, `error`, `denied` or `cancelled`. The duration leaves out the time spent waiting for an approval. |
 | `approval_requested` | `request` | A tool call waits for the user. Your approval handler is asked right after. |
-| `approval_decided` | `request`, `decision` | The user decided, or no answer came in time. |
+| `approval_decided` | `request`, `decision` | The user decided, or no answer came in time. Calls that an approval for this chat, an approval kept always, or bypass mode let through are not asked, and send neither event. |
 | `notice` | `notice` | A refusal or a limit, to show on the turn. See [Outcomes and errors](outcomes.md#notices). |
 | `gateway_event` | `event` | An event from the server, as it arrived: citations, a PII notice, and others. |
 | `turn_completed` | `result` | The turn ended. `result` is the `AgentResult`. |
@@ -309,8 +312,9 @@ what the question was about.
 
 With event reporting on, the agent tells the server what happened on the device: tool runs, approval decisions and
 session counts. A report holds names, durations, outcomes and counts, never arguments, results or messages. Reports go
-out after each turn. A report that fails is dropped and never fails the turn; `agent.reporter.lastError` holds the
-last failure.
+out after each turn. A report that fails is dropped and never fails the turn; `agent.lastReportError` holds the
+last failure. Each approval is reported with what let the call through (`scope`: `once`, `chat`, `always` or
+`bypass`), also when nobody was asked.
 
 | Method | What it does |
 |---|---|

@@ -9,9 +9,12 @@ import {
   type AgentProfile,
   type AppManifest,
   type FadenClient,
+  type ToolClass,
   type ToolDefinition,
   type ToolMode,
 } from "@fadenstack/client";
+
+import type { PermissionMode } from "./approvals.js";
 
 import { AgentBuilder, type AgentSettings } from "./builder.js";
 import { EventReporter } from "./reporter.js";
@@ -25,15 +28,23 @@ import { newId, type SessionInfo } from "./transcript.js";
  * The loop runs here (01-design §5); every model call goes through the gateway. .NET: `Faden.Agents.FadenAgent`.
  */
 export class FadenAgent {
+  /** @internal */
   readonly settings: AgentSettings;
+  /** @internal */
   readonly reporter: EventReporter;
   #profile: AgentProfile | undefined;
   #tools: readonly AgentTool[] = [];
   #starting: Promise<void> | undefined;
+  #warned = false;
 
-  constructor(settings: AgentSettings) {
+  private constructor(settings: AgentSettings) {
     this.settings = settings;
     this.reporter = new EventReporter(settings.client, settings.report);
+  }
+
+  /** @internal The builder's way in: `FadenAgent.createBuilder()...build()`. */
+  static create(settings: AgentSettings): FadenAgent {
+    return new FadenAgent(settings);
   }
 
   static createBuilder(): AgentBuilder {
@@ -58,6 +69,16 @@ export class FadenAgent {
     return this.#profile !== undefined;
   }
 
+  /** `ask`, or `bypass` when the app set it (`usePermissionMode`). */
+  get permissionMode(): PermissionMode {
+    return this.settings.permissionMode;
+  }
+
+  /** The last report to the server that failed, for diagnostics (reports never fail a turn). */
+  get lastReportError(): unknown {
+    return this.reporter.lastError;
+  }
+
   /** The tools the agent runs, with their effective classes, once started. */
   get tools(): readonly AgentTool[] {
     return this.#tools;
@@ -75,7 +96,9 @@ export class FadenAgent {
 
   /**
    * Loads the profile, checks the modules the agent requires, and settles the tools: host tools outside the
-   * agent's contract are dropped, the others get the stricter of their own class and the contract's.
+   * agent's contract are dropped, the others get the stricter of their own class and the contract's. Without a
+   * contract -- or for an entry without a risk -- nobody on the server vouched for a tool: it is unclassified, and
+   * always asks.
    */
   start(signal?: AbortSignal): Promise<void> {
     if (this.#profile) return Promise.resolve();
@@ -102,7 +125,8 @@ export class FadenAgent {
     for (const tool of this.settings.tools) {
       const entry = contract.get(tool.name);
       if (contract.size > 0 && !entry) continue; // the gateway refuses it anyway; not offering it keeps the model from trying
-      const toolClass = effectiveToolClass(tool.toolClass, entry ? parseToolClass(entry.risk) : undefined);
+      const risk: ToolClass = entry ? parseToolClass(entry.risk) : "unknown";
+      const toolClass = risk === "unknown" ? "unknown" : effectiveToolClass(tool.toolClass, risk);
       tools.push(toolClass === tool.toolClass ? tool : withToolClass(tool, toolClass));
     }
     const context: AgentContext = {
@@ -117,6 +141,11 @@ export class FadenAgent {
     }
     this.#tools = tools;
     this.#profile = profile;
+    if (this.settings.permissionMode === "bypass" && !this.#warned) {
+      this.#warned = true;
+      console.warn(`The agent '${this.slug}' runs in bypass mode: tool calls that would ask are approved without asking, ` +
+        "destructive ones too; an admin's \"Ask first\" rule still asks. Use it only for development and trusted automation.");
+    }
     if (this.settings.report) void this.#reportManifest();
   }
 
@@ -169,6 +198,14 @@ export class FadenAgent {
 
   deleteSession(sessionId: string): Promise<void> {
     return this.settings.sessions.delete(this.slug, sessionId);
+  }
+
+  /**
+   * Forgets what the user allowed always on this device for this agent: every tool, or `tool` only. (What a chat
+   * allowed ends with that chat: `AgentSession.resetApprovals`.)
+   */
+  resetApprovals(tool?: string): Promise<void> {
+    return this.settings.approvalStore.remove(this.slug, tool);
   }
 
   /** Sends what is left to report. */

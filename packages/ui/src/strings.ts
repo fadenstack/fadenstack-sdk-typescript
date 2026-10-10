@@ -28,9 +28,13 @@ export interface UiStrings {
   serverTool: string;
   allow: string;
   allowForChat: string;
+  allowAlways: string;
   deny: string;
   allowed: string;
   allowedForChat: string;
+  allowedAlways: string;
+  /** The tool-mode menu's item that forgets what was allowed for this chat and always. */
+  resetApprovals: string;
   denied: string;
   noAnswer: string;
   // notices
@@ -99,9 +103,12 @@ export const englishStrings: UiStrings = {
   serverTool: "Server tool",
   allow: "Allow",
   allowForChat: "Allow for this chat",
+  allowAlways: "Allow always",
   deny: "Deny",
   allowed: "Allowed",
   allowedForChat: "Allowed for this chat",
+  allowedAlways: "Allowed always",
+  resetApprovals: "Reset approvals",
   denied: "Denied",
   noAnswer: "No answer in time",
   noticeTitles: {

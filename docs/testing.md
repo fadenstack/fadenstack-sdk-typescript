@@ -77,6 +77,7 @@ Without options, the gateway serves one agent, `test-agent`, to one user, `user@
 | `refreshTtlSeconds` | How long a refresh token lasts. Default 86 400. |
 | `chunkSize` | Characters per streamed piece of text. Default 6. |
 | `models` | The models `GET /v1/models` lists. Default `["fake-model"]`. |
+| `toolRules` | The administrator's tool rules: `[{ pattern, action, message }]`, `action` `deny` or `approval_required`, `*` in a pattern for any characters. As on the server, a denied tool is not offered and a call of it is refused; a call a rule asks about is marked, so the session asks every time. |
 | `now` | The clock, for tests of expiry. |
 
 An agent (`FakeAgent`):
@@ -85,7 +86,7 @@ An agent (`FakeAgent`):
 |---|---|
 | `slug` | The agent's slug. Required. |
 | `name`, `id`, `version`, `model` | What the profile says. |
-| `contract` | The host tool contract: `[{ name, risk }]`, with `risk` `read`, `write` or `destructive`. Empty: no restriction. |
+| `contract` | The host tool contract: `[{ name, risk }]`, with `risk` `read`, `write` or `destructive`. Empty: nothing is held back, and every tool is unclassified, so it asks. |
 | `ui` | The profile's `ui`, for example `{ greeting, suggestions }`. |
 | `ceiling` | A limit on the tool modes, as the profile reports it. |
 | `requiredClientModules` | Modules the agent requires. |
@@ -122,7 +123,7 @@ A reply can hold:
 | `toolCalls` | `[{ name, arguments?, id? }]`: calls of your tools. |
 | `events` | Server events sent before the answer, for example citations or a PII notice. |
 | `refuse` | `{ stage: "input", message }` refuses the prompt (outcome `prompt_blocked`); `{ stage: "output", message }` stops the answer (outcome `response_blocked`). Optional `decisionId` and `category`. |
-| `gatewayTool` | A tool the server runs before the answer: `{ name, arguments?, result? }`. With `approval: { message?, timeoutS? }`, your approval handler is asked first, with `source` set to `gateway`. |
+| `gatewayTool` | A tool the server runs before the answer: `{ name, arguments?, result? }`. With `approval: { message?, timeoutS?, rule?, toolClass? }`, your approval handler is asked first, with `source` set to `gateway`. Without `rule: false` and a `toolClass`, the call asks every time, as from a server that does not say. |
 | `deniedTool` | `{ name, message, callId? }`: the server refuses a tool call. The outcome is `tool_denied`. |
 | `rateLimit` | `{ retryAfterS?, code?, message? }`: a 429 instead of an answer. The outcome is `rate_limited`, or `budget_exceeded` with the code `budget_exceeded`. |
 | `streamError` | `{ message, code? }`: the answer breaks off after the text. The turn throws a `FadenStreamError`. |

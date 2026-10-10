@@ -1,4 +1,12 @@
-import type { ChatMessage, FetchLike, ToolDefinition } from "@fadenstack/client";
+import {
+  decideTool,
+  parseToolClass,
+  parseToolMode,
+  type ChatMessage,
+  type FetchLike,
+  type ToolClass,
+  type ToolDefinition,
+} from "@fadenstack/client";
 
 /** A user the fake server knows. */
 export interface FakeUser {
@@ -53,7 +61,16 @@ export interface FakeReply {
    * A tool the gateway runs itself before the answer: start and end events, the round to keep. With
    * `approval`, it first waits for the client's answer (`faden.approval_required`).
    */
-  gatewayTool?: { name: string; arguments?: Record<string, unknown>; result?: string; approval?: { message?: string; timeoutS?: number } };
+  gatewayTool?: {
+    name: string;
+    arguments?: Record<string, unknown>;
+    result?: string;
+    /**
+     * It waits for the client's answer. `rule` (whether an admin's rule asks) and `toolClass` are sent when given,
+     * as a current gateway sends them; without them the event is an older gateway's.
+     */
+    approval?: { message?: string; timeoutS?: number; rule?: boolean; toolClass?: string };
+  };
   /** A client tool the gateway refuses (`faden.tool_denied`), e.g. by a tool rule. */
   deniedTool?: { name: string; message: string; callId?: string };
   usage?: { prompt: number; completion: number };
@@ -66,6 +83,13 @@ export interface FakeReply {
 }
 
 export type FakeModel = (request: FakeModelRequest) => FakeReply | Promise<FakeReply>;
+
+/** An admin's tool rule, as the gateway applies it: the first whose pattern (`*` for any characters) matches. */
+export interface FakeToolRule {
+  pattern: string;
+  action: "deny" | "approval_required";
+  message: string;
+}
 
 export interface FakeGatewayOptions {
   agents?: FakeAgent[];
@@ -80,6 +104,12 @@ export interface FakeGatewayOptions {
   now?: () => number;
   /** The chat models `GET /v1/models` lists for a signed-in user (default `["fake-model"]`). */
   models?: string[];
+  /**
+   * The tenant's tool rules. As the gateway does: a tool a deny rule covers is not offered; a call of the client's
+   * own tool that a rule says needs approval is marked (`faden.approval_required` without an approvalId,
+   * `rule: true`), and such a tool is not offered to a client that does not read events.
+   */
+  toolRules?: FakeToolRule[];
 }
 
 /** A request the fake server got. */
@@ -107,7 +137,7 @@ interface SignIn {
 /** The fields the real gateway accepts per event type (`extra=forbid`): anything else is a 422. */
 const EVENT_FIELDS: Record<string, readonly string[]> = {
   "tool.executed": ["tool", "source", "server", "duration_ms", "outcome"],
-  "approval.decided": ["tool", "decision", "wait_ms"],
+  "approval.decided": ["tool", "decision", "wait_ms", "scope"],
   "local_mcp.attached": ["label", "command", "url", "tools"],
   "session.stats": ["turns", "compactions", "retention_sessions", "retention_days"],
 };
@@ -388,8 +418,14 @@ export class FakeGateway {
     // As the gateway does: tools outside the contract are held back -- the model never sees them -- and named.
     const contract = agent.contract ?? [];
     const held = contract.length ? tools.filter((t) => !contract.some((c) => c.name === t.name)) : [];
-    const offered = tools.filter((t) => !held.includes(t));
     if (held.length) this.heldTools.push(...held.map((t) => t.name));
+    const events = request.headers.get("x-faden-events") !== null;
+    // A tool a rule refuses is not offered, nor one a rule asks about to a client that cannot be told.
+    const refused = tools.filter((t) => !held.includes(t) && this.#refusedAtOffer(t.name, events));
+    const offered = tools.filter((t) => !held.includes(t) && !refused.includes(t));
+    const leading = refused.map((t) => toolDenied("", t.name, this.#rule(t.name)!.message, this.#decision()));
+    const screen = (calls: WireCall[]) =>
+      events ? [...leading, ...this.#screen(agent, request.headers.get("x-faden-tool-mode"), calls)] : [];
     const modelRequest: FakeModelRequest = {
       agent: slug, messages: b["messages"] as ChatMessage[], tools: offered, stream: b["stream"] === true,
       toolMode: request.headers.get("x-faden-tool-mode"), conversationId: request.headers.get("x-faden-conversation-id"),
@@ -410,8 +446,7 @@ export class FakeGateway {
         faden: { governance },
       });
     }
-    const events = request.headers.get("x-faden-events") !== null;
-    const response = modelRequest.stream ? this.#stream(reply, events) : this.#whole(reply, events);
+    const response = modelRequest.stream ? this.#stream(reply, events, screen) : this.#whole(reply, events, screen);
     if (held.length) response.headers.set("x-faden-held-tools", held.map((t) => t.name).sort().join(","));
     return response;
   }
@@ -441,7 +476,50 @@ export class FakeGateway {
     };
   }
 
-  #whole(reply: FakeReply, events: boolean): Response {
+  /** Whether a rule keeps `name` from being offered at all. */
+  #refusedAtOffer(name: string, events: boolean): boolean {
+    const rule = this.#rule(name);
+    return rule !== undefined && (rule.action === "deny" || !events);
+  }
+
+  #rule(name: string): FakeToolRule | undefined {
+    return (this.#options.toolRules ?? []).find((r) => globMatch(r.pattern, name));
+  }
+
+  /**
+   * What the gateway says about the client's own calls as it hands them over: a call a rule refuses or the mode
+   * hides is `faden.tool_denied`; one a rule or the mode asks about is `faden.approval_required` without an
+   * approvalId, with the class the gateway holds (the contract's risk, else unknown) and whether a rule asks.
+   */
+  #screen(agent: FakeAgent, modeHeader: string | null, calls: WireCall[]): Record<string, unknown>[] {
+    const mode = parseToolMode(modeHeader) ?? "ask";
+    const events: Record<string, unknown>[] = [];
+    for (const call of calls) {
+      const name = call.function.name;
+      const rule = this.#rule(name);
+      const toolClass: ToolClass = parseToolClass((agent.contract ?? []).find((c) => c.name === name)?.risk);
+      const decision = decideTool(mode, toolClass);
+      if (rule?.action === "deny" || decision === "hidden") {
+        events.push(toolDenied(call.id, name, rule?.action === "deny" ? rule.message : `The tool mode is ${mode}.`, this.#decision()));
+      } else if (rule?.action === "approval_required") {
+        events.push({ type: "CUSTOM", name: "faden.approval_required", value: {
+          toolCallId: call.id, toolCallName: name, message: rule.message, decisionId: this.#decision(), toolClass, rule: true,
+        } });
+      } else if (decision === "ask") {
+        events.push({ type: "CUSTOM", name: "faden.approval_required", value: {
+          toolCallId: call.id, toolCallName: name, message: `'${name}' is ${toolClass}; the tool mode is ${mode}.`,
+          decisionId: null, toolClass, rule: false,
+        } });
+      }
+    }
+    return events;
+  }
+
+  #decision(): string {
+    return `decision-${this.#next()}`;
+  }
+
+  #whole(reply: FakeReply, events: boolean, screen: (calls: WireCall[]) => Record<string, unknown>[]): Response {
     const message: Record<string, unknown> = { role: "assistant", content: reply.text ?? null };
     if (reply.reasoning) message["reasoning_content"] = reply.reasoning;
     const calls = this.#calls(reply);
@@ -452,13 +530,14 @@ export class FakeGateway {
       usage: usage(reply),
     };
     const faden: Record<string, unknown> = {};
-    if (events && reply.events?.length) faden["events"] = reply.events;
+    const all = [...(reply.events ?? []), ...screen(calls)];
+    if (events && all.length) faden["events"] = all;
     if (reply.refuse?.stage === "output") faden["governance"] = this.#governance("response_blocked", "output", reply.refuse);
     if (Object.keys(faden).length) out["faden"] = faden;
     return json(200, out);
   }
 
-  #stream(reply: FakeReply, events: boolean): Response {
+  #stream(reply: FakeReply, events: boolean, screen: (calls: WireCall[]) => Record<string, unknown>[]): Response {
     const id = `chatcmpl-${this.#next()}`;
     const chunkSize = this.#options.chunkSize ?? 6;
     const encoder = new TextEncoder();
@@ -497,6 +576,7 @@ export class FakeGateway {
             await send(`data: ${JSON.stringify({ error: { message: reply.streamError.message, code: reply.streamError.code ?? "upstream_error" } })}\n\n`);
           } else {
             const calls = self.#calls(reply);
+            for (const event of screen(calls)) await send(faden(event));
             calls.forEach((call, index) => {
               // Split each call over two chunks, as models stream them.
               const args = call.function.arguments;
@@ -533,6 +613,8 @@ export class FakeGateway {
       await send(faden({ type: "CUSTOM", name: "faden.approval_required", value: {
         approvalId, toolCallId: callId, toolCallName: tool.name, message: tool.approval.message ?? `Run ${tool.name}?`,
         timeoutS: tool.approval.timeoutS ?? 300,
+        ...(tool.approval.toolClass !== undefined ? { toolClass: tool.approval.toolClass } : {}),
+        ...(tool.approval.rule !== undefined ? { rule: tool.approval.rule } : {}),
       } }));
       const approved = await answered;
       this.#pendingApprovals.delete(approvalId);
@@ -580,7 +662,7 @@ export class FakeGateway {
     return json(200, { status: approved ? "approved" : "rejected" });
   }
 
-  #calls(reply: FakeReply): { id: string; type: "function"; function: { name: string; arguments: string } }[] {
+  #calls(reply: FakeReply): WireCall[] {
     return (reply.toolCalls ?? []).map((c) => ({
       id: c.id ?? `call_${this.#next()}`,
       type: "function" as const,
@@ -635,4 +717,17 @@ export function lastToolResults(request: FakeModelRequest): Map<string, string> 
     results.set(m.tool_call_id, m.content);
   }
   return results;
+}
+
+/** A tool call as the model sends it. */
+type WireCall = { id: string; type: "function"; function: { name: string; arguments: string } };
+
+function toolDenied(callId: string, name: string, message: string, decisionId: string): Record<string, unknown> {
+  return { type: "CUSTOM", name: "faden.tool_denied", value: { toolCallId: callId, toolCallName: name, message, decisionId } };
+}
+
+/** A tool rule's pattern: `*` stands for any characters, everything else for itself (fnmatch, as the gateway). */
+function globMatch(pattern: string, name: string): boolean {
+  const parts = pattern.split("*").map((p) => p.replace(/[.+?^${}()|[\]\\]/g, "\\$&"));
+  return new RegExp(`^${parts.join(".*")}$`).test(name);
 }

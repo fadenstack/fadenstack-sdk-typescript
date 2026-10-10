@@ -237,9 +237,12 @@ export class ToolCallPart extends ResponsePart {
   }
 }
 
-export type ApprovalState = "pending" | "approved" | "approved_for_session" | "denied" | "expired";
+export type ApprovalState = "pending" | "approved" | "approved_for_session" | "approved_always" | "denied" | "expired";
 
-/** "Run delete_page?" with Allow, Allow for this chat, and Deny -- answered in place, like Copilot. */
+/**
+ * "Run delete_page?" with Allow, Allow for this chat, Allow always and Deny -- answered in place, like Copilot.
+ * Destructive and unclassified tools, and calls an admin's rule covers, offer Allow and Deny only.
+ */
 export class ApprovalPart extends ResponsePart {
   readonly kind = "approval";
   readonly request: ApprovalRequest;
@@ -275,9 +278,21 @@ export class ApprovalPart extends ResponsePart {
     return this.request.source === "gateway" ? this.#context.strings.serverTool : this.#context.strings.approvalClass[this.request.toolClass];
   }
 
-  /** Why it asks: the admin's message for a gateway tool; for the agent's own tools, what its class means. */
+  /** Why it asks: the admin's message for a gateway tool or a rule; for the agent's own tools, what its class means. */
   get reason(): string {
-    return this.request.source === "gateway" ? this.request.reason : this.#context.strings.approvalWhy[this.request.toolClass];
+    return this.request.source === "gateway" || this.request.requiredByRule
+      ? this.request.reason
+      : this.#context.strings.approvalWhy[this.request.toolClass];
+  }
+
+  /** Whether the card offers "Allow for this chat". */
+  get canAllowForSession(): boolean {
+    return this.request.canAllowForSession === true;
+  }
+
+  /** Whether the card offers "Allow always". */
+  get canAllowAlways(): boolean {
+    return this.request.canAllowAlways === true;
   }
 
   get state(): ApprovalState {
@@ -295,6 +310,8 @@ export class ApprovalPart extends ResponsePart {
         return s.allowed;
       case "approved_for_session":
         return s.allowedForChat;
+      case "approved_always":
+        return s.allowedAlways;
       case "denied":
         return s.denied;
       case "expired":
@@ -309,7 +326,13 @@ export class ApprovalPart extends ResponsePart {
   }
 
   allowForSession(): void {
+    if (!this.canAllowForSession) return;
     this.#decide(ApprovalDecision.approveForSession(), "approved_for_session");
+  }
+
+  allowAlways(): void {
+    if (!this.canAllowAlways) return;
+    this.#decide(ApprovalDecision.approveAlways(), "approved_always");
   }
 
   deny(): void {
