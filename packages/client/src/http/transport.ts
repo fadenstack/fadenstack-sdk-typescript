@@ -182,6 +182,26 @@ function requireUrl(value: string | URL, name: string, allowInsecureHttp: boolea
   return url;
 }
 
+/** Whether `url` is this machine: localhost, 127.0.0.0/8 or ::1. */
+export function isLoopback(url: URL): boolean {
+  const host = url.hostname.toLowerCase();
+  return host === "localhost" || host === "[::1]" || /^127(\.\d{1,3}){3}$/.test(host);
+}
+
+/**
+ * `value` as an address credentials may go to: https, http to this machine, or any http with
+ * `allowInsecureHttp` (a development server). Sign-ins, logins and agent setup check it before they send anything.
+ */
+export function requireSecureUrl(value: string | URL, name: string, allowInsecureHttp?: boolean): URL {
+  let url: URL;
+  try {
+    url = new URL(value);
+  } catch {
+    throw new TypeError(`${name} is not a URL: ${String(value)}`);
+  }
+  return requireUrl(url, name, allowInsecureHttp || isLoopback(url));
+}
+
 function withSlash(url: URL): URL {
   return url.href.endsWith("/") ? url : new URL(`${url.href}/`);
 }

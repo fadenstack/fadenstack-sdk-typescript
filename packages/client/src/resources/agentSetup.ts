@@ -1,6 +1,6 @@
 import { FadenUnreachableError } from "../errors.js";
 import { toApiError } from "../http/errorReader.js";
-import type { FetchLike } from "../http/transport.js";
+import { requireSecureUrl, type FetchLike } from "../http/transport.js";
 
 /** An agent definition as `POST /api/agents` takes it -- what an app ships in its `contracts/*.json`. */
 export interface AgentDefinition {
@@ -17,6 +17,8 @@ export interface CreateAgentOptions {
   definition: AgentDefinition;
   fetch?: FetchLike;
   signal?: AbortSignal;
+  /** Allow `http://` to another machine (a development server). Off: the login token goes over https only. */
+  allowInsecureHttp?: boolean;
 }
 
 export interface ListModelsOptions {
@@ -25,6 +27,8 @@ export interface ListModelsOptions {
   loginToken: string;
   fetch?: FetchLike;
   signal?: AbortSignal;
+  /** Allow `http://` to another machine (a development server). Off: the login token goes over https only. */
+  allowInsecureHttp?: boolean;
 }
 
 /**
@@ -32,7 +36,7 @@ export interface ListModelsOptions {
  * leave the model to the agent, so one created without a model cannot answer.
  */
 export async function listModels(options: ListModelsOptions): Promise<string[]> {
-  const base = new URL(options.serverUrl);
+  const base = requireSecureUrl(options.serverUrl, "serverUrl", options.allowInsecureHttp);
   const url = new URL("v1/models", base.href.endsWith("/") ? base : `${base.href}/`);
   const fetchImpl = options.fetch ?? ((input, init) => globalThis.fetch(input, init));
   let response: Response;
@@ -67,7 +71,7 @@ export interface CreatedAgent {
  * without its agent and is signed in by someone with `agents:create` (otherwise 403).
  */
 export async function createAgent(options: CreateAgentOptions): Promise<CreatedAgent> {
-  const base = new URL(options.apiUrl);
+  const base = requireSecureUrl(options.apiUrl, "apiUrl", options.allowInsecureHttp);
   const url = new URL("api/agents", base.href.endsWith("/") ? base : `${base.href}/`);
   const fetchImpl = options.fetch ?? ((input, init) => globalThis.fetch(input, init));
   let response: Response;

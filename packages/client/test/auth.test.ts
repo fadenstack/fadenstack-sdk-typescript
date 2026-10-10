@@ -169,3 +169,31 @@ describe("tokens", () => {
     expect(await again.getAccessToken()).toMatch(/^access\./);
   });
 });
+
+describe("plain http", () => {
+  const login = { email: "user@example.com", password: "secret" };
+  const never = () => Promise.reject(new Error("nothing may be sent"));
+
+  it("sends no password, login or token to another machine over plain http", async () => {
+    let sent = 0;
+    const fetch = () => {
+      sent += 1;
+      return never();
+    };
+    expect(() => new AgentTokenProvider({ apiUrl: "http://faden.lan", agent: "a", fetch })).toThrow("https");
+    await expect(loginWithPassword({ apiUrl: "http://faden.lan", ...login, fetch })).rejects.toThrow("https");
+    await expect(listModels({ serverUrl: "http://faden.lan", loginToken: "t", fetch })).rejects.toThrow("https");
+    await expect(createAgent({ apiUrl: "http://faden.lan", loginToken: "t", definition: { slug: "a", name: "A" }, fetch }))
+      .rejects.toThrow("https");
+    expect(sent).toBe(0);
+  });
+
+  it("allows plain http to this machine, or to another when the app says so", async () => {
+    for (const url of ["http://localhost:8000", "http://127.0.0.1:8000", "http://[::1]:8000"]) {
+      expect(() => new AgentTokenProvider({ apiUrl: url, agent: "a" })).not.toThrow();
+    }
+    expect(() => new AgentTokenProvider({ apiUrl: "http://faden.lan", agent: "a", allowInsecureHttp: true })).not.toThrow();
+    await expect(loginWithPassword({ apiUrl: "http://faden.lan", ...login, fetch: never, allowInsecureHttp: true }))
+      .rejects.toThrow("could not be reached");
+  });
+});

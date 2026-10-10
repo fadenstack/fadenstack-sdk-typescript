@@ -43,7 +43,9 @@ The packages are ES modules with type declarations. They use standard web APIs o
 and `AbortSignal`, plus IndexedDB in a browser for sessions.
 
 The client talks to a server over HTTPS. It refuses an `http://` address unless you set `allowInsecureHttp`, which is
-meant for a development server on your own machine.
+meant for a development server on your own machine. Sign-in, `loginWithPassword`, `listModels` and `createAgent`
+send a password or a token: they refuse `http://` to another machine unless you set `allowInsecureHttp` for them
+too, and allow it to this machine (`localhost`, `127.0.0.1`, `::1`).
 
 ## Dependencies
 
