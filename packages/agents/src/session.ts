@@ -73,7 +73,7 @@ const asksEveryTime = (toolClass: ToolClass): boolean => toolClass === "destruct
  */
 export class AgentSession {
   readonly id: string;
-  /** The mode the user picked for this session (sdk/07). New sessions start in `ask`. */
+  /** The mode the user picked for this session. New sessions start in `ask`. */
   toolMode: ToolMode;
   readonly agent: FadenAgent;
   readonly #entries: TranscriptEntry[];
@@ -389,7 +389,7 @@ class Turn {
     this.#emit({ type: "gateway_event", turnId: this.#id, event });
   }
 
-  /** The gateway's own tool round, kept so the model still knows what it searched (02 §7). */
+  /** The gateway's own tool round, kept so the model still knows what it searched. */
   async #keepRound(value: unknown): Promise<void> {
     const messages = value && typeof value === "object" ? (value as Data)["messages"] : undefined;
     if (!Array.isArray(messages)) return;

@@ -41,7 +41,7 @@ const NAME = /^[A-Za-z0-9_-]{1,64}$/;
 
 /**
  * A host tool: `defineTool({ name: "read_page", toolClass: "read", parameters, run })`. Without a class it is
- * `unknown` and always asks (sdk/07). The arguments are checked against `parameters` before `run`.
+ * `unknown` and always asks. The arguments are checked against `parameters` before `run`.
  */
 export function defineTool<A extends Record<string, unknown> = Record<string, unknown>>(spec: ToolSpec<A>): AgentTool {
   if (!NAME.test(spec.name)) throw new TypeError(`A tool name is letters, digits, _ and -, up to 64: '${spec.name}'.`);

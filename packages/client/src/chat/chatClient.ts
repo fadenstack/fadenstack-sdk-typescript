@@ -140,7 +140,7 @@ export function requestBody(messages: readonly ChatMessage[], options: ChatOptio
   return body;
 }
 
-/** A prompt the gateway refused (422 `policy_blocked`) is an answer, not an error (04 §8). */
+/** A prompt the gateway refused (422 `policy_blocked`) is an answer, not an error. */
 function refusal(response: Response, body: string): GovernanceNotice | undefined {
   if (response.status !== 422) return undefined;
   const parsed = parseError(body, "The prompt was refused.");

@@ -57,7 +57,7 @@ export interface Usage {
 }
 
 /**
- * One of the gateway's events (AG-UI vocabulary, 02 §7): a gateway tool starting or ending, citations, a PII
+ * One of the gateway's events (AG-UI vocabulary): a gateway tool starting or ending, citations, a PII
  * notice, a gateway round to keep, an approval the gateway waits for, a refused tool.
  */
 export interface FadenEvent {

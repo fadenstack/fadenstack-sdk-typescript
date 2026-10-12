@@ -3,7 +3,7 @@ import type { ChatOutcome, FadenEvent, GovernanceNotice, ToolClass, ToolMode, Us
 import type { ApprovalDecision, ApprovalRequest } from "./approvals.js";
 
 /**
- * What happens during a turn, in order, for a UI to render (AG-UI's vocabulary in our own types, 01-design §9).
+ * What happens during a turn, in order, for a UI to render (AG-UI's vocabulary in our own types).
  * Every event names its turn.
  */
 export type AgentEvent =
@@ -42,7 +42,7 @@ export type AgentEvent =
 
 export type ToolOutcome = "ok" | "error" | "denied" | "cancelled";
 
-/** How a turn ended. A refusal is a result, not an error (04 §8). */
+/** How a turn ended. A refusal is a result, not an error. */
 export interface AgentResult {
   turnId: string;
   outcome: ChatOutcome;

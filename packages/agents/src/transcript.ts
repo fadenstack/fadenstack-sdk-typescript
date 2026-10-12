@@ -1,5 +1,5 @@
 /**
- * One line of a local session's transcript (06 §3). The entry types and the `data` keys are the same in every
+ * One line of a local session's transcript. The entry types and the `data` keys are the same in every
  * SDK. The transcript is the truth about a session: requests are built from it, and nothing of it is kept on
  * the server.
  */
@@ -30,7 +30,7 @@ export const EntryTypes = {
   turnEnd: "assistant.turn_end",
 } as const;
 
-/** How a turn ended; blocked, failed and cancelled turns are not sent to the model again (04 §8). */
+/** How a turn ended; blocked, failed and cancelled turns are not sent to the model again. */
 export const TurnStatus = {
   ok: "ok",
   promptBlocked: "prompt_blocked",

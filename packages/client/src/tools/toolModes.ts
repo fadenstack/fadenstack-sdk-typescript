@@ -1,5 +1,5 @@
 /**
- * Tool classes and tool modes (sdk/07-tool-classes.md): the same names and the same table as the gateway's,
+ * Tool classes and tool modes: the same names and the same table as the gateway's,
  * so a session and the gateway decide alike.
  */
 
@@ -67,7 +67,7 @@ const RANK: Record<ToolClass, number> = { read: 0, write: 1, destructive: 2, unk
 
 /**
  * The class a tool runs under: the stricter of the integrator's and the agent contract's `risk`. The client may
- * be stricter than the server, never looser (01-design §6).
+ * be stricter than the server, never looser.
  */
 export function effectiveToolClass(declared: ToolClass, contract: ToolClass | undefined): ToolClass {
   if (!contract || contract === "unknown") return declared;

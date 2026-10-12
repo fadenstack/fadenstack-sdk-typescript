@@ -1,7 +1,7 @@
 import { sessionInfo, type SessionInfo, type TranscriptEntry } from "./transcript.js";
 
 /**
- * Where an agent's sessions live: on the device (06 §3). Integrators may plug their own (e.g. into the host
+ * Where an agent's sessions live: on the device. Integrators may plug their own (e.g. into the host
  * application's project).
  */
 export interface SessionStore {

@@ -423,7 +423,7 @@ export class CitationsPart extends ResponsePart {
   }
 }
 
-// -- primitives for features and modules (01-design §9) ------------------------------------------
+// -- primitives for features and modules ------------------------------------------
 
 /** A titled card with fields. */
 export class CardPart extends ResponsePart {

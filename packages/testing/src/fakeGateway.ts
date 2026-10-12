@@ -130,7 +130,7 @@ interface SignIn {
   refreshExpires: number;
   revoked: boolean;
   label: string | null;
-  /** Refresh tokens already used: a replay ends the sign-in (02 §4). */
+  /** Refresh tokens already used: a replay ends the sign-in. */
   spent: Set<string>;
 }
 

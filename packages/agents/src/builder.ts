@@ -147,7 +147,7 @@ export class AgentBuilder {
 
   /**
    * The mode new sessions start in. It can only be stricter than `ask`: every session starts asking unless the
-   * user widens that session (sdk/07 §1).
+   * user widens that session.
    */
   useDefaultToolMode(mode: ToolMode): this {
     this.#defaultMode = narrowestMode("ask", mode);

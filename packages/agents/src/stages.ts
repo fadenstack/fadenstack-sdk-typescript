@@ -3,7 +3,7 @@ import type { AgentClientEvent, AgentProfile, ChatStreamer, FadenClient, ToolCla
 import type { AgentTool, ToolCallContext } from "./tools.js";
 
 /**
- * Where a stage sits (01-design §4, "the builder owns the order"). Outgoing: context → local PII masking →
+ * Where a stage sits: the builder owns the order. Outgoing: context → local PII masking →
  * transport. A tool call: approval (the loop) → unmask arguments → run → mask the result. A lower number is
  * further from the transport; modules pick their slot, not their call order.
  */
@@ -36,7 +36,7 @@ export interface ToolStage {
 export interface AgentContext {
   readonly client: FadenClient;
   readonly profile: AgentProfile;
-  /** Reports an event to the server (names and counts, never content: 06 §5). */
+  /** Reports an event to the server (names and counts, never content). */
   report(event: AgentClientEvent): Promise<void>;
 }
 

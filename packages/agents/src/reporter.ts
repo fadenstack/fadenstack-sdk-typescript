@@ -2,7 +2,7 @@ import { MAX_EVENTS_PER_REPORT, type AgentClientEvent, type FadenClient } from "
 
 /**
  * Tells the server what happened on the device -- tool runs, approvals, session counts -- as names, durations
- * and outcomes, never content (06 §5). Sent after each turn; a report that fails is dropped, never the turn.
+ * and outcomes, never content. Sent after each turn; a report that fails is dropped, never the turn.
  */
 export class EventReporter {
   readonly #client: FadenClient;

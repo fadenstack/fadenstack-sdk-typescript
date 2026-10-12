@@ -107,7 +107,7 @@ export interface AgentTokenProviderOptions {
 
 /**
  * An agent sign-in on this device: a short access token for one agent, renewed with a refresh token the server
- * replaces on every use (02 §4). Kept in a `TokenStore` between runs. Concurrent callers share one refresh.
+ * replaces on every use. Kept in a `TokenStore` between runs. Concurrent callers share one refresh.
  */
 export class AgentTokenProvider implements TokenProvider {
   readonly agent: string;

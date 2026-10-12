@@ -31,7 +31,7 @@ export interface RequestSpec {
 
 /**
  * Authenticated requests to a Fadenstack server, with the client's tokens and typed errors. Public, so modules
- * add resources without copying the plumbing (01-design §3a).
+ * add resources without copying the plumbing.
  */
 export class FadenTransport {
   readonly serverUrl: URL;

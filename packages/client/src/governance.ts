@@ -1,5 +1,5 @@
 /**
- * How a turn ended (04 §8). A refusal is part of the result, not an error: the user sees the notice on the
+ * How a turn ended. A refusal is part of the result, not an error: the user sees the notice on the
  * turn and goes on in the same session.
  */
 export type ChatOutcome =
