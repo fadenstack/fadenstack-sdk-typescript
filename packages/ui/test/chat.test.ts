@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
-import { FadenClient, loginWithPassword } from "@fadenstack/client";
-import { FadenAgent, MemorySessionStore, defineTool } from "@fadenstack/agents";
+import { FadenstackClient, loginWithPassword } from "@fadenstack/client";
+import { FadenstackAgent, MemorySessionStore, defineTool } from "@fadenstack/agents";
 import {
   AgentChatViewModel,
   ApprovalBroker,
@@ -36,11 +36,11 @@ async function chat(options: FakeGatewayOptions = {}) {
     }],
     ...options,
   });
-  const { client, tokens } = FadenClient.forAgent({ serverUrl: gateway.serverUrl, agent: "page", fetch: gateway.fetch });
+  const { client, tokens } = FadenstackClient.forAgent({ serverUrl: gateway.serverUrl, agent: "page", fetch: gateway.fetch });
   await tokens.signIn(await loginWithPassword({ apiUrl: gateway.serverUrl, email: "user@example.com", password: "secret", fetch: gateway.fetch }));
   const written: string[] = [];
   const approvals = new ApprovalBroker();
-  const agent = FadenAgent.createBuilder()
+  const agent = FadenstackAgent.createBuilder()
     .useClient(client)
     .useSessionStore(new MemorySessionStore())
     .useApprovals(approvals)
@@ -218,8 +218,8 @@ describe("AgentChatViewModel", () => {
 
   it("says when the agent needs a sign-in", async () => {
     const gateway = new FakeGateway({ agents: [{ slug: "page" }] });
-    const { client } = FadenClient.forAgent({ serverUrl: gateway.serverUrl, agent: "page", fetch: gateway.fetch });
-    const agent = FadenAgent.createBuilder().useClient(client).useSessionStore(new MemorySessionStore()).build();
+    const { client } = FadenstackClient.forAgent({ serverUrl: gateway.serverUrl, agent: "page", fetch: gateway.fetch });
+    const agent = FadenstackAgent.createBuilder().useClient(client).useSessionStore(new MemorySessionStore()).build();
     const vm = new AgentChatViewModel(agent, new ApprovalBroker(), { scheduler: immediateScheduler });
     await vm.initialize();
     expect(vm.signInRequired).toBe(true);

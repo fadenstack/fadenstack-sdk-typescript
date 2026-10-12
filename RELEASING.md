@@ -34,7 +34,7 @@ published by hand.
 
     ```bash
     npm ci
-    node scripts/version.mjs --check 0.1.0
+    node scripts/version.mjs --check 0.2.0
     npm run typecheck && npm test && npm run build
     npm publish --workspaces --access public          # add --tag next for an rc version
     ```

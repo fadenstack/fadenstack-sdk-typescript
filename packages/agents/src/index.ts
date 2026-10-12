@@ -1,4 +1,4 @@
-export { FadenAgent } from "./agent.js";
+export { FadenstackAgent } from "./agent.js";
 export { AgentBuilder, type AgentSettings, type AppDescription } from "./builder.js";
 export { AgentSession, resultText, type SendOptions } from "./session.js";
 export {
@@ -31,7 +31,7 @@ export {
   StageOrder,
   type AgentContext,
   type ChatStage,
-  type FadenModule,
+  type FadenstackModule,
   type ToolInvocation,
   type ToolInvoker,
   type ToolSource,

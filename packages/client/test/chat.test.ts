@@ -1,17 +1,17 @@
 import { describe, expect, it } from "vitest";
 
 import {
-  FadenApiError,
-  FadenClient,
-  FadenRateLimitedError,
-  FadenStreamError,
+  FadenstackApiError,
+  FadenstackClient,
+  FadenstackRateLimitedError,
+  FadenstackStreamError,
   StaticTokenProvider,
   type ChatUpdate,
 } from "@fadenstack/client";
 import { FakeGateway } from "@fadenstack/testing";
 
 async function signedIn(gateway: FakeGateway, agent = "test-agent") {
-  const { client, tokens } = FadenClient.forAgent({ serverUrl: gateway.serverUrl, agent, fetch: gateway.fetch });
+  const { client, tokens } = FadenstackClient.forAgent({ serverUrl: gateway.serverUrl, agent, fetch: gateway.fetch });
   const login = await gateway.fetch(`${gateway.serverUrl}/api/auth/jwt/login`, {
     method: "POST",
     headers: { "content-type": "application/x-www-form-urlencoded" },
@@ -27,7 +27,7 @@ async function collect(updates: AsyncIterable<ChatUpdate>): Promise<ChatUpdate[]
   return out;
 }
 
-describe("FadenChatClient.stream", () => {
+describe("FadenstackChatClient.stream", () => {
   it("streams reasoning, text, whole tool calls, usage and the finish", async () => {
     const gateway = new FakeGateway({
       model: () => ({ reasoning: "Let me look.", text: "Reading page 7.", toolCalls: [{ name: "read_page", arguments: { page: 7 } }] }),
@@ -89,7 +89,7 @@ describe("FadenChatClient.stream", () => {
   it("throws a stream error when the answer breaks off", async () => {
     const gateway = new FakeGateway({ model: () => ({ text: "Half", streamError: { message: "Upstream went away.", code: "upstream_error" } }) });
     const client = await signedIn(gateway);
-    await expect(collect(client.chat.stream([{ role: "user", content: "x" }]))).rejects.toThrowError(FadenStreamError);
+    await expect(collect(client.chat.stream([{ role: "user", content: "x" }]))).rejects.toThrowError(FadenstackStreamError);
   });
 
   it("throws a typed error for a rate limit, with its wait", async () => {
@@ -99,8 +99,8 @@ describe("FadenChatClient.stream", () => {
     });
     const client = await signedIn(gateway);
     const limited = await collect(client.chat.stream([{ role: "user", content: "x" }])).catch((e: unknown) => e);
-    expect(limited).toBeInstanceOf(FadenRateLimitedError);
-    expect((limited as FadenRateLimitedError).retryAfterMs).toBe(7000);
+    expect(limited).toBeInstanceOf(FadenstackRateLimitedError);
+    expect((limited as FadenstackRateLimitedError).retryAfterMs).toBe(7000);
   });
 
   it("is answered without a tool the contract does not list: the gateway holds it back", async () => {
@@ -116,7 +116,7 @@ describe("FadenChatClient.stream", () => {
   });
 });
 
-describe("FadenChatClient.complete", () => {
+describe("FadenstackChatClient.complete", () => {
   it("returns the whole answer with its tool calls", async () => {
     const gateway = new FakeGateway({ model: () => ({ text: "Done.", toolCalls: [{ name: "f", arguments: "{bad" }] }) });
     const client = await signedIn(gateway);
@@ -135,20 +135,20 @@ describe("FadenChatClient.complete", () => {
   });
 
   it("needs a model on the plain routes", async () => {
-    const client = new FadenClient({ serverUrl: "https://faden.test", credentials: new StaticTokenProvider("t") });
+    const client = new FadenstackClient({ serverUrl: "https://faden.test", credentials: new StaticTokenProvider("t") });
     await expect(client.chat.complete([{ role: "user", content: "x" }])).rejects.toThrow("model");
   });
 });
 
-describe("FadenClient options", () => {
+describe("FadenstackClient options", () => {
   it("refuses http unless allowed", () => {
-    expect(() => new FadenClient({ serverUrl: "http://faden.test" })).toThrow("https");
-    expect(new FadenClient({ serverUrl: "http://localhost:8000", allowInsecureHttp: true }).transport.serverUrl.href)
+    expect(() => new FadenstackClient({ serverUrl: "http://faden.test" })).toThrow("https");
+    expect(new FadenstackClient({ serverUrl: "http://localhost:8000", allowInsecureHttp: true }).transport.serverUrl.href)
       .toBe("http://localhost:8000/");
   });
 
   it("keeps a path in the server URL", () => {
-    const client = new FadenClient({ serverUrl: "https://host.example/faden", agent: "a b" });
+    const client = new FadenstackClient({ serverUrl: "https://host.example/faden", agent: "a b" });
     expect(client.chat.endpoint.href).toBe("https://host.example/faden/v1/agents/a%20b/chat/completions");
   });
 });

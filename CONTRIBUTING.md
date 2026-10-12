@@ -34,7 +34,7 @@ not wasted. Small fixes (a typo, a broken link) can go straight to a pull reques
 - **One change per pull request**, as small as it can be.
 - **Tests:** add or change tests that show the change works, and run `npm run typecheck` and `npm test`.
 - **Documentation:** when you change what a developer sees or does, change the page in `docs/`.
-- **Runtimes:** the packages run in browsers and in Node.js 20.19 or later, on standard web APIs only. Don't add
+- **Runtimes:** the packages run in browsers and in Node.js 24 or later, on standard web APIs only. Don't add
   Node-only APIs or new dependencies to the library packages without agreeing it in the issue first. A change to a
   public API that breaks existing code needs to be agreed there too.
 - **Commit messages** say what the change does, in a plain sentence ("Agents: a declined tool call ends the
@@ -52,7 +52,7 @@ may sign.
 
 ## Setting up for development
 
-You need Node.js 20.19 or later and git.
+You need Node.js 24 or later and git.
 
 ```bash
 git clone https://github.com/fadenstack/fadenstack-sdk-typescript.git

@@ -2,11 +2,11 @@ import { describe, expect, it } from "vitest";
 
 import {
   AgentTokenProvider,
-  FadenApiError,
-  FadenClient,
-  FadenPermissionError,
-  FadenSignInRequiredError,
-  FadenUnreachableError,
+  FadenstackApiError,
+  FadenstackClient,
+  FadenstackPermissionError,
+  FadenstackSignInRequiredError,
+  FadenstackUnreachableError,
   MemoryTokenStore,
   createAgent,
   listModels,
@@ -21,7 +21,7 @@ function setup(options: ConstructorParameters<typeof FakeGateway>[0] = {}) {
   const gateway = new FakeGateway({ ...options, now: clock });
   const store = new MemoryTokenStore();
   const tokens = new AgentTokenProvider({ apiUrl: gateway.serverUrl, agent: "test-agent", store, fetch: gateway.fetch, now: clock });
-  const client = new FadenClient({ serverUrl: gateway.serverUrl, agent: "test-agent", credentials: tokens, fetch: gateway.fetch });
+  const client = new FadenstackClient({ serverUrl: gateway.serverUrl, agent: "test-agent", credentials: tokens, fetch: gateway.fetch });
   const tick = (ms: number) => (now += ms);
   return { gateway, client, tokens, store, tick, now: clock };
 }
@@ -40,7 +40,7 @@ describe("sign-in", () => {
     const { gateway } = setup();
     const error = await loginWithPassword({ apiUrl: gateway.serverUrl, email: "user@example.com", password: "nope", fetch: gateway.fetch })
       .catch((e: unknown) => e);
-    expect(error).toBeInstanceOf(FadenApiError);
+    expect(error).toBeInstanceOf(FadenstackApiError);
     expect((error as Error).message).toBe("The e-mail or password is not right.");
   });
 
@@ -48,7 +48,7 @@ describe("sign-in", () => {
     const offline = () => Promise.reject(new TypeError("Failed to fetch"));
     const error = await loginWithPassword({ apiUrl: "https://faden.example.com", email: "u@x", password: "p", fetch: offline })
       .catch((e: unknown) => e);
-    expect(error).toBeInstanceOf(FadenUnreachableError);
+    expect(error).toBeInstanceOf(FadenstackUnreachableError);
     expect((error as Error).cause).toBeInstanceOf(TypeError);
   });
 
@@ -56,8 +56,8 @@ describe("sign-in", () => {
     const page = () => Promise.resolve(new Response("<!doctype html><title>Console</title>", { status: 200, headers: { "content-type": "text/html" } }));
     const error = await loginWithPassword({ apiUrl: "https://faden.example.com/admin", email: "u@x", password: "p", fetch: page })
       .catch((e: unknown) => e);
-    expect(error).toBeInstanceOf(FadenApiError);
-    expect((error as FadenApiError).code).toBe("not_fadenstack");
+    expect(error).toBeInstanceOf(FadenstackApiError);
+    expect((error as FadenstackApiError).code).toBe("not_fadenstack");
   });
 
   it("says there is no such agent (404), apart from no access (403)", async () => {
@@ -65,9 +65,9 @@ describe("sign-in", () => {
     const login = await loginWithPassword({ apiUrl: gateway.serverUrl, email: "user@example.com", password: "secret", fetch: gateway.fetch });
     const other = new AgentTokenProvider({ apiUrl: gateway.serverUrl, agent: "no-such-agent", store: new MemoryTokenStore(), fetch: gateway.fetch });
     const error = await other.signIn(login).catch((e: unknown) => e);
-    expect(error).toBeInstanceOf(FadenApiError);
-    expect(error).not.toBeInstanceOf(FadenPermissionError);
-    expect((error as FadenApiError).status).toBe(404);
+    expect(error).toBeInstanceOf(FadenstackApiError);
+    expect(error).not.toBeInstanceOf(FadenstackPermissionError);
+    expect((error as FadenstackApiError).status).toBe(404);
     expect(await tokens.isSignedIn()).toBe(false);
   });
 
@@ -80,7 +80,7 @@ describe("sign-in", () => {
 
     const user = await loginWithPassword({ apiUrl: gateway.serverUrl, email: "u@x", password: "p", fetch: gateway.fetch });
     const refused = await createAgent({ apiUrl: gateway.serverUrl, loginToken: user, definition, fetch: gateway.fetch }).catch((e: unknown) => e);
-    expect(refused).toBeInstanceOf(FadenPermissionError);
+    expect(refused).toBeInstanceOf(FadenstackPermissionError);
 
     const admin = await loginWithPassword({ apiUrl: gateway.serverUrl, email: "admin@example.com", password: "p", fetch: gateway.fetch });
     expect(await listModels({ serverUrl: gateway.serverUrl, loginToken: admin, fetch: gateway.fetch })).toEqual(["fake-model"]);
@@ -90,7 +90,7 @@ describe("sign-in", () => {
     await tokens.signIn(admin);
     expect(await tokens.isSignedIn()).toBe(true);
     const again = await createAgent({ apiUrl: gateway.serverUrl, loginToken: admin, definition, fetch: gateway.fetch }).catch((e: unknown) => e);
-    expect((again as FadenApiError).status).toBe(409);
+    expect((again as FadenstackApiError).status).toBe(409);
   });
 
   it("never sends the browser's cookies: a console session must not act instead of the app's user", async () => {
@@ -100,7 +100,7 @@ describe("sign-in", () => {
       seen.push({ path: new URL(String(input)).pathname, credentials: init?.credentials });
       return gateway.fetch(input, init);
     };
-    const { client, tokens } = FadenClient.forAgent({ serverUrl: gateway.serverUrl, agent: "test-agent", fetch });
+    const { client, tokens } = FadenstackClient.forAgent({ serverUrl: gateway.serverUrl, agent: "test-agent", fetch });
     const login = await loginWithPassword({ apiUrl: gateway.serverUrl, email: "user@example.com", password: "secret", fetch });
     await listModels({ serverUrl: gateway.serverUrl, loginToken: login, fetch });
     await createAgent({ apiUrl: gateway.serverUrl, loginToken: login, definition: { slug: "other-agent", name: "Other" }, fetch });
@@ -115,12 +115,12 @@ describe("sign-in", () => {
   it("is refused without a grant", async () => {
     const { gateway, tokens } = setup({ users: [{ email: "u@x", password: "p", agents: [] }] });
     const login = await loginWithPassword({ apiUrl: gateway.serverUrl, email: "u@x", password: "p", fetch: gateway.fetch });
-    await expect(tokens.signIn(login)).rejects.toBeInstanceOf(FadenPermissionError);
+    await expect(tokens.signIn(login)).rejects.toBeInstanceOf(FadenstackPermissionError);
   });
 
   it("requires a sign-in before the first request", async () => {
     const { client } = setup();
-    await expect(client.agent!.getProfile()).rejects.toBeInstanceOf(FadenSignInRequiredError);
+    await expect(client.agent!.getProfile()).rejects.toBeInstanceOf(FadenstackSignInRequiredError);
   });
 });
 
@@ -151,7 +151,7 @@ describe("tokens", () => {
     const s = await signedIn();
     s.gateway.revoke();
     s.gateway.expireAccessTokens();
-    await expect(s.client.agent!.getProfile()).rejects.toBeInstanceOf(FadenSignInRequiredError);
+    await expect(s.client.agent!.getProfile()).rejects.toBeInstanceOf(FadenstackSignInRequiredError);
     expect(await s.tokens.isSignedIn()).toBe(false);
     expect(await s.store.load(AgentTokenProvider.storeKey(s.gateway.serverUrl, "test-agent"))).toBeUndefined();
   });
@@ -159,7 +159,7 @@ describe("tokens", () => {
   it("asks for a new sign-in once the refresh token expired", async () => {
     const s = await signedIn({ accessTtlSeconds: 60, refreshTtlSeconds: 120 });
     s.tick(121_000);
-    await expect(s.client.agent!.getProfile()).rejects.toBeInstanceOf(FadenSignInRequiredError);
+    await expect(s.client.agent!.getProfile()).rejects.toBeInstanceOf(FadenstackSignInRequiredError);
   });
 
   it("keeps the sign-in in its store for the next run", async () => {

@@ -1,15 +1,15 @@
 import {
-  FadenClient,
+  FadenstackClient,
   narrowestMode,
   type ChatStreamer,
-  type FadenClientOptions,
+  type FadenstackClientOptions,
   type ManifestContext,
   type ReasoningEffort,
   type TokenProvider,
   type ToolMode,
 } from "@fadenstack/client";
 
-import { FadenAgent } from "./agent.js";
+import { FadenstackAgent } from "./agent.js";
 import {
   approvalsFrom,
   denyAllApprovals,
@@ -21,12 +21,12 @@ import {
 import { IndexedDbApprovalStore, MemoryApprovalStore, type ApprovalStore } from "./approvalStore.js";
 import { IndexedDbSessionStore } from "./indexedDbSessionStore.js";
 import { MemorySessionStore, type SessionStore } from "./sessionStore.js";
-import type { ChatStage, FadenModule, ToolSource, ToolStage } from "./stages.js";
+import type { ChatStage, FadenstackModule, ToolSource, ToolStage } from "./stages.js";
 import type { AgentTool } from "./tools.js";
 
 /** What an agent was built with. */
 export interface AgentSettings {
-  readonly client: FadenClient;
+  readonly client: FadenstackClient;
   readonly agent: string;
   /** The gateway's chat, wrapped in the chat stages. */
   readonly chat: ChatStreamer;
@@ -61,7 +61,7 @@ export interface AppDescription {
 
 /**
  * Puts an agent together: the server, the agent, its host tools, who approves, where sessions live, and the
- * modules. `FadenAgent.createBuilder().useClient(client).useAgent("browser-assistant").addTools(...tools).build()`.
+ * modules. `FadenstackAgent.createBuilder().useClient(client).useAgent("browser-assistant").addTools(...tools).build()`.
  */
 export class AgentBuilder {
   readonly #tools: AgentTool[] = [];
@@ -69,8 +69,8 @@ export class AgentBuilder {
   readonly #chatStages: { order: number; wrap: ChatStage }[] = [];
   readonly #toolStages: { order: number; stage: ToolStage }[] = [];
   readonly #modules: string[] = [];
-  #client: FadenClient | undefined;
-  #options: FadenClientOptions | undefined;
+  #client: FadenstackClient | undefined;
+  #options: FadenstackClientOptions | undefined;
   #agent: string | undefined;
   #approvals: ApprovalHandler = denyAllApprovals;
   #sessions: SessionStore | undefined;
@@ -84,14 +84,14 @@ export class AgentBuilder {
   #app: AppDescription = { name: "Fadenstack SDK app" };
 
   /** The server, and how the agent signs in (usually an `AgentTokenProvider`). */
-  useServer(serverUrl: string | URL, credentials: TokenProvider, options: Omit<FadenClientOptions, "serverUrl" | "credentials"> = {}): this {
+  useServer(serverUrl: string | URL, credentials: TokenProvider, options: Omit<FadenstackClientOptions, "serverUrl" | "credentials"> = {}): this {
     this.#options = { ...options, serverUrl, credentials };
     this.#client = undefined;
     return this;
   }
 
   /** A client made elsewhere; it must be for the agent's route (`agent` in its options). */
-  useClient(client: FadenClient): this {
+  useClient(client: FadenstackClient): this {
     this.#client = client;
     this.#agent ??= client.options.agent;
     this.#options = undefined;
@@ -210,19 +210,19 @@ export class AgentBuilder {
     return this;
   }
 
-  use(module: FadenModule): this {
+  use(module: FadenstackModule): this {
     if (module.name) this.#modules.push(module.name);
     module.configure(this);
     return this;
   }
 
-  build(): FadenAgent {
+  build(): FadenstackAgent {
     const agent = this.#agent;
     if (!agent) throw new Error("Call useAgent(slug).");
     let client = this.#client;
     if (!client) {
       if (!this.#options) throw new Error("Call useServer(...) or useClient(...).");
-      client = new FadenClient({ ...this.#options, agent });
+      client = new FadenstackClient({ ...this.#options, agent });
     } else if (client.options.agent !== agent) {
       throw new Error(`The client is for '${client.options.agent ?? "(no agent)"}', not '${agent}': one agent per client.`);
     }
@@ -234,7 +234,7 @@ export class AgentBuilder {
     // Lower order is further from the transport: wrap from the transport outwards.
     let chat: ChatStreamer = client.chat;
     for (const stage of [...this.#chatStages].sort((a, b) => b.order - a.order)) chat = stage.wrap(chat);
-    return FadenAgent.create({
+    return FadenstackAgent.create({
       client,
       agent,
       chat,

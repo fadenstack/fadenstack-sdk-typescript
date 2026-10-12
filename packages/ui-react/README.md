@@ -10,13 +10,13 @@ npm install @fadenstack/client @fadenstack/agents @fadenstack/ui @fadenstack/ui-
 
 ```tsx
 import { createRoot } from "react-dom/client";
-import { FadenAgent } from "@fadenstack/agents";
+import { FadenstackAgent } from "@fadenstack/agents";
 import { AgentChatViewModel, ApprovalBroker } from "@fadenstack/ui";
 import { ChatPanel } from "@fadenstack/ui-react";
 import "@fadenstack/ui-react/styles.css";
 
 const approvals = new ApprovalBroker();
-const agent = FadenAgent.createBuilder().useClient(client).useApprovals(approvals).build();
+const agent = FadenstackAgent.createBuilder().useClient(client).useApprovals(approvals).build();
 
 const chat = new AgentChatViewModel(agent, approvals);
 await chat.initialize();

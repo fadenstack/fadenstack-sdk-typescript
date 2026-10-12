@@ -12,7 +12,7 @@
     "packages/testing"
   ],
   "engines": {
-    "node": ">=20.19"
+    "node": ">=24"
   },
   "scripts": {
     "build": "tsc -b packages/client packages/agents packages/ui packages/ui-react packages/testing",
@@ -24,7 +24,7 @@
   },
   "devDependencies": {
     "@testing-library/react": "^16.3.3",
-    "@types/node": "^20.19.0",
+    "@types/node": "^24.0.0",
     "@types/react": "^19.3.0",
     "@types/react-dom": "^19.3.0",
     "fake-indexeddb": "^6.2.5",

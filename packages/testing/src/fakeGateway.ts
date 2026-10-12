@@ -31,7 +31,7 @@ export interface FakeAgent {
   contract?: { name: string; risk?: "read" | "write" | "destructive"; approval?: string }[];
   ui?: Record<string, unknown>;
   localMcpMode?: "disable" | "allow";
-  /** An EE tool-mode ceiling. */
+  /** A tool-mode ceiling, as an administrator's rules set it. */
   ceiling?: "off" | "read_only" | "ask" | "auto";
   requiredClientModules?: string[];
 }

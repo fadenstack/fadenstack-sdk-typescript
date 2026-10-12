@@ -13,13 +13,13 @@ npm install --save-dev @fadenstack/testing
 import { FakeGateway, lastToolResults } from "@fadenstack/testing";
 
 const gateway = new FakeGateway({
-  agents: [{ slug: "eplan-assistant", contract: [{ name: "read_page", risk: "read" }] }],
+  agents: [{ slug: "docs-assistant", contract: [{ name: "read_page", risk: "read" }] }],
   model: (request) => lastToolResults(request).size
-    ? { text: "Page 7 shows motor M1." }
+    ? { text: "Page 7 shows table T1." }
     : { toolCalls: [{ name: "read_page", arguments: { page: 7 } }] },
 });
 
-// Pass gateway.serverUrl and gateway.fetch to FadenClient.forAgent and loginWithPassword.
+// Pass gateway.serverUrl and gateway.fetch to FadenstackClient.forAgent and loginWithPassword.
 ```
 
 The gateway answers in the same process through its own `fetch`, or over HTTP with `listen()` in Node.

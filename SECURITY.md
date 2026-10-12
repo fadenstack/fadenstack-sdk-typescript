@@ -13,7 +13,7 @@ Report it in one of these ways:
 
 Describe what you found and how to reproduce it:
 
-- the package and its version (`@fadenstack/client 0.1.0`, for example), where it runs (a browser, an extension or
+- the package and its version (`@fadenstack/client 0.2.0`, for example), where it runs (a browser, an extension or
   Node.js), and the server release it talks to;
 - the steps, the code or a small proof of concept;
 - what an attacker gains, and what they need first (an account, access to the device, access to the network).
@@ -38,7 +38,7 @@ Security fixes go into the latest release. Update the `@fadenstack` packages to 
 
 | Version | Security fixes |
 | --- | --- |
-| 0.1.x (latest) | Yes |
+| 0.2.x (latest) | Yes |
 | older | No: update first |
 
 ## Scope

@@ -1,13 +1,13 @@
 import { AgentTokenProvider, type AgentTokenProviderOptions, type TokenProvider, type TokenStore } from "./auth/tokens.js";
-import { FadenChatClient, type ChatClientSettings } from "./chat/chatClient.js";
-import { FadenTransport, type FetchLike, type TransportOptions } from "./http/transport.js";
+import { FadenstackChatClient, type ChatClientSettings } from "./chat/chatClient.js";
+import { FadenstackTransport, type FetchLike, type TransportOptions } from "./http/transport.js";
 import type { ServerFeatures } from "./models.js";
 import { AgentResource } from "./resources/agent.js";
 import type { ToolMode } from "./tools/toolModes.js";
 
-/** How a `FadenClient` reaches its server, and as whom. */
-export interface FadenClientOptions {
-  /** The Fadenstack server, e.g. `https://faden.plant.local`. */
+/** How a `FadenstackClient` reaches its server, and as whom. */
+export interface FadenstackClientOptions {
+  /** The Fadenstack server, e.g. `https://ai.example.internal`. */
   serverUrl: string | URL;
   /** The backend (sign-in, agent tokens), when it is not at `serverUrl`. */
   apiUrl?: string | URL;
@@ -34,18 +34,18 @@ export interface FadenClientOptions {
 /**
  * The connection to a Fadenstack server. With an agent it is that agent's client -- one agent per client --
  * and `chat` calls the agent's endpoint; without one it uses the plain `/v1` routes with an API token.
- * .NET: `Faden.FadenClient`.
+ * .NET: `Fadenstack.FadenstackClient`.
  */
-export class FadenClient {
-  readonly options: Readonly<FadenClientOptions>;
+export class FadenstackClient {
+  readonly options: Readonly<FadenstackClientOptions>;
   /** Authenticated requests, for modules that add their own resources. */
-  readonly transport: FadenTransport;
+  readonly transport: FadenstackTransport;
   /** The gateway's chat completions. */
-  readonly chat: FadenChatClient;
+  readonly chat: FadenstackChatClient;
   /** The client's agent (profile, events, approvals); undefined without an agent. */
   readonly agent: AgentResource | undefined;
 
-  constructor(options: FadenClientOptions) {
+  constructor(options: FadenstackClientOptions) {
     this.options = { ...options };
     const transport: TransportOptions = { serverUrl: options.serverUrl };
     if (options.apiUrl !== undefined) transport.apiUrl = options.apiUrl;
@@ -53,14 +53,14 @@ export class FadenClient {
     if (options.allowInsecureHttp !== undefined) transport.allowInsecureHttp = options.allowInsecureHttp;
     if (options.fetch !== undefined) transport.fetch = options.fetch;
     if (options.timeoutMs !== undefined) transport.timeoutMs = options.timeoutMs;
-    this.transport = new FadenTransport(transport);
+    this.transport = new FadenstackTransport(transport);
     const chat: ChatClientSettings = {
       toolMode: options.toolMode ?? "ask",
       gatewayEvents: options.gatewayEvents ?? true,
     };
     if (options.agent !== undefined) chat.agent = options.agent;
     if (options.model !== undefined) chat.model = options.model;
-    this.chat = new FadenChatClient(this.transport, chat);
+    this.chat = new FadenstackChatClient(this.transport, chat);
     this.agent = options.agent ? new AgentResource(this.transport, options.agent) : undefined;
   }
 
@@ -74,13 +74,13 @@ export class FadenClient {
    * `tokens.signIn(loginToken)`.
    */
   static forAgent(
-    options: Omit<FadenClientOptions, "agent" | "credentials"> & { agent: string; store?: TokenStore },
-  ): { client: FadenClient; tokens: AgentTokenProvider } {
+    options: Omit<FadenstackClientOptions, "agent" | "credentials"> & { agent: string; store?: TokenStore },
+  ): { client: FadenstackClient; tokens: AgentTokenProvider } {
     const { store, ...rest } = options;
     const tokenOptions: AgentTokenProviderOptions = { apiUrl: options.apiUrl ?? options.serverUrl, agent: options.agent };
     if (store) tokenOptions.store = store;
     if (options.fetch) tokenOptions.fetch = options.fetch;
     const tokens = new AgentTokenProvider(tokenOptions);
-    return { client: new FadenClient({ ...rest, credentials: tokens }), tokens };
+    return { client: new FadenstackClient({ ...rest, credentials: tokens }), tokens };
   }
 }

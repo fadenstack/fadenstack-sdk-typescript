@@ -1,14 +1,13 @@
-export { FadenClient, type FadenClientOptions } from "./client.js";
+export { FadenstackClient, type FadenstackClientOptions } from "./client.js";
 export {
-  FadenError,
-  FadenUnreachableError,
-  FadenApiError,
-  FadenAuthenticationError,
-  FadenPermissionError,
-  FadenRateLimitedError,
-  FadenFeatureNotAvailableError,
-  FadenStreamError,
-  FadenSignInRequiredError,
+  FadenstackError,
+  FadenstackUnreachableError,
+  FadenstackApiError,
+  FadenstackAuthenticationError,
+  FadenstackPermissionError,
+  FadenstackRateLimitedError,
+  FadenstackStreamError,
+  FadenstackSignInRequiredError,
   isAbortError,
 } from "./errors.js";
 export {
@@ -22,9 +21,9 @@ export {
   type TokenSet,
   type TokenStore,
 } from "./auth/tokens.js";
-export { FadenTransport, jsonRequest, type FetchLike, type RequestSpec, type TransportOptions } from "./http/transport.js";
+export { FadenstackTransport, jsonRequest, type FetchLike, type RequestSpec, type TransportOptions } from "./http/transport.js";
 export { parseError, toApiError, retryAfterMs, type ParsedError } from "./http/errorReader.js";
-export { FadenChatClient, requestBody, toolCall, toFadenEvent, type ChatClientSettings } from "./chat/chatClient.js";
+export { FadenstackChatClient, requestBody, toolCall, toFadenstackEvent, type ChatClientSettings } from "./chat/chatClient.js";
 export { readSse, type SseEvent } from "./chat/sse.js";
 export {
   eventKind,
@@ -34,7 +33,7 @@ export {
   type ChatStreamer,
   type ChatUpdate,
   type ContentPart,
-  type FadenEvent,
+  type FadenstackEvent,
   type FinishReason,
   type JsonSchema,
   type ReasoningEffort,

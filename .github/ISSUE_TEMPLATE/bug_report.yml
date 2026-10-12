@@ -12,7 +12,7 @@ body:
     id: package
     attributes:
       label: Package and version
-      placeholder: "@fadenstack/agents 0.1.0"
+      placeholder: "@fadenstack/agents 0.2.0"
     validations:
       required: true
   - type: input

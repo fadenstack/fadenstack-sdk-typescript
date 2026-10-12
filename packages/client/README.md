@@ -11,9 +11,9 @@ npm install @fadenstack/client
 ```
 
 ```ts
-import { FadenClient, StaticTokenProvider } from "@fadenstack/client";
+import { FadenstackClient, StaticTokenProvider } from "@fadenstack/client";
 
-const client = new FadenClient({
+const client = new FadenstackClient({
   serverUrl: "https://ai.example.internal",
   credentials: new StaticTokenProvider(process.env.FADEN_API_TOKEN ?? ""),
   model: "my-model",
@@ -24,7 +24,7 @@ console.log(response.refused ? `Refused: ${response.refused.message}` : response
 ```
 
 The server's policies apply to every call. The package is an ES module with type declarations, for browsers
-(Chrome 116 or later) and Node.js 20.19 or later, and has no dependencies. It needs a Fadenstack server 0.4.2 or
+(Chrome 116 or later) and Node.js 24 or later, and has no dependencies. It needs a Fadenstack server 0.4.2 or
 later.
 
 - Documentation: <https://developers.fadenstack.com/sdk/typescript/>

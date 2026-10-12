@@ -9,8 +9,8 @@ npm install @fadenstack/client @fadenstack/agents
 ```
 
 ```ts
-import { FadenClient, loginWithPassword } from "@fadenstack/client";
-import { FadenAgent, defineTool } from "@fadenstack/agents";
+import { FadenstackClient, loginWithPassword } from "@fadenstack/client";
+import { FadenstackAgent, defineTool } from "@fadenstack/agents";
 
 const serverUrl = "https://ai.example.internal";
 
@@ -22,7 +22,7 @@ const readTicket = defineTool<{ id: string }>({
   run: ({ id }) => `Ticket ${id}: the printer on floor 2 jams on A3 paper.`,
 });
 
-const { client, tokens } = FadenClient.forAgent({ serverUrl, agent: "my-assistant" });
+const { client, tokens } = FadenstackClient.forAgent({ serverUrl, agent: "my-assistant" });
 if (!(await tokens.isSignedIn())) {
   const login = await loginWithPassword({
     apiUrl: serverUrl,
@@ -32,7 +32,7 @@ if (!(await tokens.isSignedIn())) {
   await tokens.signIn(login, "Ticket script"); // the login token is not kept
 }
 
-const agent = FadenAgent.createBuilder().useClient(client).addTools(readTicket).build();
+const agent = FadenstackAgent.createBuilder().useClient(client).addTools(readTicket).build();
 const session = await agent.startSession(); // starts in "ask"
 for await (const event of session.stream("What is ticket T-1042 about?")) {
   if (event.type === "text") process.stdout.write(event.text);
@@ -46,8 +46,7 @@ Related packages: [`@fadenstack/ui`](https://www.npmjs.com/package/@fadenstack/u
 [`@fadenstack/ui-react`](https://www.npmjs.com/package/@fadenstack/ui-react) for a chat panel,
 [`@fadenstack/testing`](https://www.npmjs.com/package/@fadenstack/testing) for tests without a server.
 
-The package is an ES module with type declarations, for browsers (Chrome 116 or later) and Node.js 20.19 or
-later. It needs a Fadenstack server 0.4.2 or later.
+The package is an ES module with type declarations, for browsers (Chrome 116 or later) and Node.js 24 or later. It needs a Fadenstack server 0.4.2 or later.
 
 - Documentation: <https://developers.fadenstack.com/sdk/typescript/>
 - Source and issues: <https://github.com/fadenstack/fadenstack-sdk-typescript>

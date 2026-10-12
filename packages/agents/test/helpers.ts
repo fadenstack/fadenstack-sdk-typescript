@@ -1,6 +1,6 @@
-import { FadenClient, loginWithPassword } from "@fadenstack/client";
+import { FadenstackClient, loginWithPassword } from "@fadenstack/client";
 import {
-  FadenAgent,
+  FadenstackAgent,
   MemorySessionStore,
   defineTool,
   type AgentBuilder,
@@ -12,7 +12,7 @@ import { FakeGateway, type FakeGatewayOptions } from "@fadenstack/testing";
 
 /** A page document the tools work on. */
 export class Pages {
-  readonly pages = new Map<number, string>([[7, "Motor M1, 400 V"], [8, "Terminal X2"]]);
+  readonly pages = new Map<number, string>([[7, "Table T1, 4 rows"], [8, "Figure F2"]]);
   readonly deleted: number[] = [];
 
   read = defineTool<{ page: number }>({
@@ -53,11 +53,11 @@ export const PAGE_CONTRACT = [
 
 export interface Setup {
   gateway: FakeGateway;
-  client: FadenClient;
+  client: FadenstackClient;
   pages: Pages;
   store: MemorySessionStore;
   asked: ApprovalRequest[];
-  agent: FadenAgent;
+  agent: FadenstackAgent;
 }
 
 /** A signed-in agent on a fake gateway, with page tools and approvals answered by `answer`. */
@@ -66,13 +66,13 @@ export async function setup(
   answer: (request: ApprovalRequest) => ApprovalDecision | Promise<ApprovalDecision> = () => ({ approved: true }),
   configure: (builder: AgentBuilder) => AgentBuilder = (b) => b,
 ): Promise<Setup> {
-  const gateway = new FakeGateway({ agents: [{ slug: "eplan", contract: [...PAGE_CONTRACT] }], ...options });
-  const { client, tokens } = FadenClient.forAgent({ serverUrl: gateway.serverUrl, agent: "eplan", fetch: gateway.fetch });
+  const gateway = new FakeGateway({ agents: [{ slug: "docs", contract: [...PAGE_CONTRACT] }], ...options });
+  const { client, tokens } = FadenstackClient.forAgent({ serverUrl: gateway.serverUrl, agent: "docs", fetch: gateway.fetch });
   await tokens.signIn(await loginWithPassword({ apiUrl: gateway.serverUrl, email: "user@example.com", password: "secret", fetch: gateway.fetch }));
   const pages = new Pages();
   const store = new MemorySessionStore();
   const asked: ApprovalRequest[] = [];
-  const builder = FadenAgent.createBuilder()
+  const builder = FadenstackAgent.createBuilder()
     .useClient(client)
     .addTools(pages.read, pages.write, pages.delete)
     .useSessionStore(store)

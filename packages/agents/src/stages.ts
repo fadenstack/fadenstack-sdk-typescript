@@ -1,4 +1,4 @@
-import type { AgentClientEvent, AgentProfile, ChatStreamer, FadenClient, ToolClass } from "@fadenstack/client";
+import type { AgentClientEvent, AgentProfile, ChatStreamer, FadenstackClient, ToolClass } from "@fadenstack/client";
 
 import type { AgentTool, ToolCallContext } from "./tools.js";
 
@@ -34,7 +34,7 @@ export interface ToolStage {
 
 /** What a tool source or module can see of the running agent. */
 export interface AgentContext {
-  readonly client: FadenClient;
+  readonly client: FadenstackClient;
   readonly profile: AgentProfile;
   /** Reports an event to the server (names and counts, never content). */
   report(event: AgentClientEvent): Promise<void>;
@@ -49,7 +49,7 @@ export interface ToolSource {
 /**
  * A package that plugs into the agent. It is active only when added to the builder, never by being installed.
  */
-export interface FadenModule {
+export interface FadenstackModule {
   /** The name an agent profile's `required_client_modules` uses (`pii.local`), or undefined. */
   readonly name?: string;
   configure(builder: import("./builder.js").AgentBuilder): void;

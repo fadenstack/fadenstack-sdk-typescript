@@ -14,21 +14,21 @@ The gateway answers in the same process, through its own `fetch`. Pass `gateway.
 
 ```ts
 import { expect, it } from "vitest";
-import { FadenClient, loginWithPassword } from "@fadenstack/client";
-import { FadenAgent, MemorySessionStore, defineTool } from "@fadenstack/agents";
+import { FadenstackClient, loginWithPassword } from "@fadenstack/client";
+import { FadenstackAgent, MemorySessionStore, defineTool } from "@fadenstack/agents";
 import { FakeGateway, lastToolResults } from "@fadenstack/testing";
 
 it("reads the page before it answers", async () => {
   const gateway = new FakeGateway({
-    agents: [{ slug: "eplan-assistant", contract: [{ name: "read_page", risk: "read" }] }],
+    agents: [{ slug: "docs-assistant", contract: [{ name: "read_page", risk: "read" }] }],
     model: (request) => lastToolResults(request).size
-      ? { text: "Page 7 shows motor M1." }
+      ? { text: "Page 7 shows table T1." }
       : { toolCalls: [{ name: "read_page", arguments: { page: 7 } }] },
   });
 
-  const { client, tokens } = FadenClient.forAgent({
+  const { client, tokens } = FadenstackClient.forAgent({
     serverUrl: gateway.serverUrl,
-    agent: "eplan-assistant",
+    agent: "docs-assistant",
     fetch: gateway.fetch,
   });
   const login = await loginWithPassword({
@@ -43,9 +43,9 @@ it("reads the page before it answers", async () => {
     name: "read_page",
     toolClass: "read",
     parameters: { type: "object", properties: { page: { type: "integer" } }, required: ["page"] },
-    run: ({ page }) => `Page ${page}: motor M1, 400 V`,
+    run: ({ page }) => `Page ${page}: table T1, 4 rows`,
   });
-  const agent = FadenAgent.createBuilder()
+  const agent = FadenstackAgent.createBuilder()
     .useClient(client)
     .addTools(readPage)
     .useSessionStore(new MemorySessionStore())
@@ -55,7 +55,7 @@ it("reads the page before it answers", async () => {
   const result = await session.send("What is on page 7?");
 
   expect(result.outcome).toBe("completed");
-  expect(result.text).toBe("Page 7 shows motor M1.");
+  expect(result.text).toBe("Page 7 shows table T1.");
   expect(gateway.modelCalls).toHaveLength(2);
 });
 ```
@@ -125,8 +125,8 @@ A reply can hold:
 | `refuse` | `{ stage: "input", message }` refuses the prompt (outcome `prompt_blocked`); `{ stage: "output", message }` stops the answer (outcome `response_blocked`). Optional `decisionId` and `category`. |
 | `gatewayTool` | A tool the server runs before the answer: `{ name, arguments?, result? }`. With `approval: { message?, timeoutS?, rule?, toolClass? }`, your approval handler is asked first, with `source` set to `gateway`. Without `rule: false` and a `toolClass`, the call asks every time, as from a server that does not say. |
 | `deniedTool` | `{ name, message, callId? }`: the server refuses a tool call. The outcome is `tool_denied`. |
-| `rateLimit` | `{ retryAfterS?, code?, message? }`: a 429 instead of an answer. The outcome is `rate_limited`, or `budget_exceeded` with the code `budget_exceeded`. |
-| `streamError` | `{ message, code? }`: the answer breaks off after the text. The turn throws a `FadenStreamError`. |
+| `rateLimit` | `{ retryAfterS?, code?, message? }`: a 429 instead of an answer. The outcome is `rate_limited`, and the error carries `code`. |
+| `streamError` | `{ message, code? }`: the answer breaks off after the text. The turn throws a `FadenstackStreamError`. |
 | `usage` | `{ prompt, completion }` tokens. |
 | `delayMs` | A pause between streamed pieces. |
 
@@ -191,7 +191,7 @@ await server.close();
 The address is `http://`, so the client needs `allowInsecureHttp: true`:
 
 ```ts
-const { client, tokens } = FadenClient.forAgent({
+const { client, tokens } = FadenstackClient.forAgent({
   serverUrl: server.url,
   agent: "my-assistant",
   allowInsecureHttp: true,

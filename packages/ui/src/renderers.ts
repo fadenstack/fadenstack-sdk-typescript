@@ -1,15 +1,15 @@
-import { eventKind, type FadenEvent } from "@fadenstack/client";
+import { eventKind, type FadenstackEvent } from "@fadenstack/client";
 
 import { CitationsPart, NoticePart, type Citation, type PartContext } from "./parts.js";
 import type { TurnViewModel } from "./turn.js";
 
 /**
  * Turns a gateway event into parts of the answer. Core renders citations, PII notices and, for an event it does
- * not know, a generic notice (so a core UI shows EE events sensibly before it knows them). Modules add their own
+ * not know, a generic notice (so a UI shows an extension's events sensibly before it knows them). Modules add their own
  * through `AgentChatOptions.renderers`; the first that handles an event wins.
  */
 export interface AgentEventRenderer {
-  render(event: FadenEvent, turn: TurnViewModel, context: PartContext): boolean;
+  render(event: FadenstackEvent, turn: TurnViewModel, context: PartContext): boolean;
 }
 
 type Json = Record<string, unknown>;

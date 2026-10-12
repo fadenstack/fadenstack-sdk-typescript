@@ -60,7 +60,7 @@ export interface Usage {
  * One of the gateway's events (AG-UI vocabulary): a gateway tool starting or ending, citations, a PII
  * notice, a gateway round to keep, an approval the gateway waits for, a refused tool.
  */
-export interface FadenEvent {
+export interface FadenstackEvent {
   /** AG-UI type: `TOOL_CALL_START`, `TOOL_CALL_END`, `CUSTOM`. */
   type: string;
   /** For `CUSTOM`: `faden.gateway_round`, `faden.approval_required`, ... */
@@ -71,7 +71,7 @@ export interface FadenEvent {
 }
 
 /** `type`, or `name` for a custom event. */
-export function eventKind(event: FadenEvent): string {
+export function eventKind(event: FadenstackEvent): string {
   return event.type === "CUSTOM" && event.name ? event.name : event.type;
 }
 
@@ -84,7 +84,7 @@ export type ChatUpdate =
   /** Tool calls, whole, once the model finished writing them. */
   | { type: "tool_calls"; calls: ToolCall[] }
   | { type: "usage"; usage: Usage }
-  | { type: "event"; event: FadenEvent }
+  | { type: "event"; event: FadenstackEvent }
   /** The gateway refused the prompt (`prompt_blocked`) or stopped the answer (`response_blocked`). */
   | { type: "refused"; notice: GovernanceNotice }
   | { type: "finish"; reason: FinishReason; responseId?: string; model?: string };
@@ -98,7 +98,7 @@ export interface ChatResponse {
   toolCalls: ToolCall[];
   finishReason?: FinishReason;
   usage?: Usage;
-  events: FadenEvent[];
+  events: FadenstackEvent[];
   /** Set when the gateway refused the prompt or the answer. */
   refused?: GovernanceNotice;
 }

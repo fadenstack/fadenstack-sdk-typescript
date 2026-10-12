@@ -1,11 +1,11 @@
-import { MAX_EVENTS_PER_REPORT, type AgentClientEvent, type FadenClient } from "@fadenstack/client";
+import { MAX_EVENTS_PER_REPORT, type AgentClientEvent, type FadenstackClient } from "@fadenstack/client";
 
 /**
  * Tells the server what happened on the device -- tool runs, approvals, session counts -- as names, durations
  * and outcomes, never content. Sent after each turn; a report that fails is dropped, never the turn.
  */
 export class EventReporter {
-  readonly #client: FadenClient;
+  readonly #client: FadenstackClient;
   readonly #enabled: boolean;
   #pending: AgentClientEvent[] = [];
   #flushing: Promise<void> = Promise.resolve();
@@ -13,7 +13,7 @@ export class EventReporter {
   /** The last report that failed, for diagnostics. */
   lastError: unknown;
 
-  constructor(client: FadenClient, enabled: boolean) {
+  constructor(client: FadenstackClient, enabled: boolean) {
     this.#client = client;
     this.#enabled = enabled && client.agent !== undefined;
   }

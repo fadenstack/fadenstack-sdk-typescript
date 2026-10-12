@@ -1,7 +1,7 @@
-import { FadenStreamError } from "../errors.js";
+import { FadenstackStreamError } from "../errors.js";
 import { readNotice, type GovernanceNotice } from "../governance.js";
 import { parseError, toApiError } from "../http/errorReader.js";
-import type { FadenTransport, RequestSpec } from "../http/transport.js";
+import type { FadenstackTransport, RequestSpec } from "../http/transport.js";
 import { TOOL_MODE_HEADER, type ToolMode } from "../tools/toolModes.js";
 import { readSse, type SseEvent } from "./sse.js";
 import type {
@@ -10,7 +10,7 @@ import type {
   ChatResponse,
   ChatStreamer,
   ChatUpdate,
-  FadenEvent,
+  FadenstackEvent,
   FinishReason,
   ToolCall,
   Usage,
@@ -32,12 +32,12 @@ type Json = Record<string, unknown>;
  * approvals, notices) arrive as `event` updates, and a refused prompt or answer as a `refused` update, not
  * an error. For an agent it calls `/v1/agents/{agent}/chat/completions`; otherwise `/v1/chat/completions`.
  */
-export class FadenChatClient implements ChatStreamer {
+export class FadenstackChatClient implements ChatStreamer {
   readonly endpoint: URL;
-  readonly #transport: FadenTransport;
+  readonly #transport: FadenstackTransport;
   readonly #settings: ChatClientSettings;
 
-  constructor(transport: FadenTransport, settings: ChatClientSettings) {
+  constructor(transport: FadenstackTransport, settings: ChatClientSettings) {
     this.#transport = transport;
     this.#settings = settings;
     this.endpoint = settings.agent
@@ -69,7 +69,7 @@ export class FadenChatClient implements ChatStreamer {
       yield { type: "finish", reason: "content_filter" };
       return;
     }
-    if (!response.body) throw new FadenStreamError("The answer had no body.");
+    if (!response.body) throw new FadenstackStreamError("The answer had no body.");
     const assembler = new StreamAssembler();
     for await (const sse of readSse(response.body, options.signal)) {
       yield* assembler.read(sse);
@@ -158,8 +158,8 @@ const str = (o: unknown, key: string): string | undefined => {
   return typeof v === "string" ? v : undefined;
 };
 
-export function toFadenEvent(raw: Json): FadenEvent {
-  const event: FadenEvent = { type: str(raw, "type") ?? "", raw };
+export function toFadenstackEvent(raw: Json): FadenstackEvent {
+  const event: FadenstackEvent = { type: str(raw, "type") ?? "", raw };
   const name = str(raw, "name");
   if (name !== undefined) event.name = name;
   if ("value" in raw) event.value = raw["value"];
@@ -201,7 +201,7 @@ function toResponse(root: Json): ChatResponse {
   if (model) response.model = model;
   const faden = root["faden"] as Json | undefined;
   if (faden && Array.isArray(faden["events"])) {
-    response.events = (faden["events"] as Json[]).filter((e) => e && typeof e === "object").map(toFadenEvent);
+    response.events = (faden["events"] as Json[]).filter((e) => e && typeof e === "object").map(toFadenstackEvent);
   }
   const choice = Array.isArray(root["choices"]) ? (root["choices"] as Json[])[0] : undefined;
   if (choice) {
@@ -243,7 +243,7 @@ class StreamAssembler {
       } catch {
         return; // a malformed event is skipped, as clients that do not know it do
       }
-      const event = toFadenEvent(raw);
+      const event = toFadenstackEvent(raw);
       yield { type: "event", event };
       if (event.type === "CUSTOM" && event.name === "faden.governance" && event.value) {
         yield { type: "refused", notice: readNotice(event.value) };
@@ -263,7 +263,7 @@ class StreamAssembler {
     const choices = Array.isArray(root["choices"]) ? (root["choices"] as Json[]) : [];
     const error = root["error"];
     if (error && typeof error === "object" && choices.length === 0) {
-      throw new FadenStreamError(str(error, "message") ?? "The answer broke off.", str(error, "code"));
+      throw new FadenstackStreamError(str(error, "message") ?? "The answer broke off.", str(error, "code"));
     }
     this.#responseId ??= str(root, "id");
     this.#model ??= str(root, "model");

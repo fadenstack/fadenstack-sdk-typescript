@@ -1,4 +1,4 @@
-import type { ChatOutcome, FadenEvent, GovernanceNotice, ToolClass, ToolMode, Usage } from "@fadenstack/client";
+import type { ChatOutcome, FadenstackEvent, GovernanceNotice, ToolClass, ToolMode, Usage } from "@fadenstack/client";
 
 import type { ApprovalDecision, ApprovalRequest } from "./approvals.js";
 
@@ -37,7 +37,7 @@ export type AgentEvent =
   /** A refusal or a limit, to show on the turn. */
   | { type: "notice"; turnId: string; notice: GovernanceNotice }
   /** Any other gateway event (citations, a PII notice, events core does not know yet). */
-  | { type: "gateway_event"; turnId: string; event: FadenEvent }
+  | { type: "gateway_event"; turnId: string; event: FadenstackEvent }
   | { type: "turn_completed"; turnId: string; result: AgentResult };
 
 export type ToolOutcome = "ok" | "error" | "denied" | "cancelled";

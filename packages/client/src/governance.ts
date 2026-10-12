@@ -10,12 +10,12 @@ export type ChatOutcome =
   | "response_blocked"
   /** At least one tool call was refused (the answer may still be complete). */
   | "tool_denied"
-  | "rate_limited"
-  | "budget_exceeded";
+  /** A limit applied (429); the notice carries the server's message. */
+  | "rate_limited";
 
 /** What the user is told about a refusal, and what an auditor finds it by. */
 export interface GovernanceNotice {
-  /** `prompt_blocked`, `response_blocked`, `tool_denied`, `rate_limited`, `budget_exceeded`, `round_limit`, ... */
+  /** `prompt_blocked`, `response_blocked`, `tool_denied`, `rate_limited`, `round_limit`, ... */
   outcome: string;
   /** `input`, `output`, `tool`. */
   stage?: string;
@@ -24,7 +24,7 @@ export interface GovernanceNotice {
   message: string;
   decisionId?: string;
   requestId?: string;
-  /** For a rate limit or budget: when to try again. */
+  /** For a limit (429): when to try again. */
   retryAfterMs?: number;
 }
 
