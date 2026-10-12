@@ -1,6 +1,6 @@
 {
   "name": "@fadenstack/testing",
-  "version": "0.2.0",
+  "version": "0.2.0-rc.1",
   "description": "A scripted fake Fadenstack server for testing agents offline",
   "license": "Apache-2.0",
   "author": "Emagin8 UG (haftungsbeschränkt)",
@@ -37,6 +37,6 @@
     "access": "public"
   },
   "dependencies": {
-    "@fadenstack/client": "0.2.0"
+    "@fadenstack/client": "0.2.0-rc.1"
   }
 }

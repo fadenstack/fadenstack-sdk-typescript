@@ -4,7 +4,8 @@ import { describe, expect, it } from "vitest";
 import { SDK_VERSION } from "@fadenstack/client";
 
 const root = new URL("../../../", import.meta.url);
-const read = (path: string) => readFileSync(new URL(path, root), "utf8");
+// Line endings as git checks them out on this machine; the packed files carry what the checkout has.
+const read = (path: string) => readFileSync(new URL(path, root), "utf8").replace(/\r\n/g, "\n");
 const packages = ["client", "agents", "ui", "ui-react", "testing"];
 
 describe("what a release publishes", () => {
