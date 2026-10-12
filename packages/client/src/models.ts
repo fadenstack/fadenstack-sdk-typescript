@@ -20,7 +20,7 @@ export interface AgentProfile {
   /** What the SDKs show: `greeting`, `suggestions`. */
   ui: Record<string, unknown>;
   extensions: Record<string, unknown>;
-  /** SDK modules the agent needs (e.g. `pii.local`, EE); the SDK refuses to run without them. */
+  /** SDK modules the agent needs (e.g. `pii.local`, from an extension); the SDK refuses to run without them. */
   requiredClientModules: string[];
   edition: string;
   features: string[];
@@ -90,7 +90,7 @@ export function toAgentProfile(json: unknown): AgentProfile {
 }
 
 /**
- * What the SDK reports about its work (02 §9, 06 §5): names, counts, durations, outcomes -- never arguments,
+ * What the SDK reports about its work: names, counts, durations, outcomes -- never arguments,
  * results or messages. The server refuses any other field.
  */
 export type AgentClientEvent =

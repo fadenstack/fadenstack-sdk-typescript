@@ -14,14 +14,14 @@ import { defineTool } from "@fadenstack/agents";
 
 const readPage = defineTool<{ page: number }>({
   name: "read_page",
-  description: "Reads a page of the open schematic.",
+  description: "Reads a page of the open document.",
   toolClass: "read",
   parameters: {
     type: "object",
     properties: { page: { type: "integer", description: "The page number." } },
     required: ["page"],
   },
-  run: ({ page }) => schematic.page(page),
+  run: ({ page }) => document.page(page),
 });
 ```
 
@@ -96,16 +96,16 @@ contract. Until they do, the server holds back the tools that a non-empty contra
 would show:
 
 ```ts
-import { FadenAgent } from "@fadenstack/agents";
+import { FadenstackAgent } from "@fadenstack/agents";
 
-const agent = FadenAgent.createBuilder()
+const agent = FadenstackAgent.createBuilder()
   .useClient(client)
   .addTools(readPage)
   .describeApp({
-    name: "Schematic viewer",
+    name: "Document viewer",
     version: "2.4.0",
     context: [{ id: "page:current", title: "The open page", kind: "page" }],
-    ui: { greeting: "Ask me about the open schematic.", suggestions: ["What is on this page?"] },
+    ui: { greeting: "Ask me about the open document.", suggestions: ["What is on this page?"] },
   })
   .build();
 ```
@@ -133,8 +133,7 @@ hands the call over or else by the session: the turn gets a `tool_denied` notice
 allowed.
 
 `session.effectiveToolMode` is the mode turns run in: `session.toolMode`, narrowed by any limit the agent's profile
-sets. (planned) The Enterprise edition is planned; with it, an administrator may in future narrow the modes a user can
-pick.
+sets: the server may limit the modes a user can pick (a ceiling, from an administrator's rules).
 
 To show in your UI what a mode does with a tool, `@fadenstack/client` exports `decideTool(mode, toolClass)`, which
 returns `run`, `ask` or `hidden`.
@@ -145,9 +144,9 @@ A tool call that asks goes to your approval handler. Pass it to the builder as a
 `request` method:
 
 ```ts
-import { ApprovalDecision, FadenAgent } from "@fadenstack/agents";
+import { ApprovalDecision, FadenstackAgent } from "@fadenstack/agents";
 
-const agent = FadenAgent.createBuilder()
+const agent = FadenstackAgent.createBuilder()
   .useClient(client)
   .addTools(readPage, deletePage)
   .useApprovals(async (request, signal) => {
@@ -247,7 +246,7 @@ A tool source adds tools once the agent's profile is known, for example the tool
 application:
 
 ```ts
-import { FadenAgent, type AgentContext, type AgentTool, type ToolSource } from "@fadenstack/agents";
+import { FadenstackAgent, type AgentContext, type AgentTool, type ToolSource } from "@fadenstack/agents";
 
 const pluginTools: ToolSource = {
   async getTools(context: AgentContext): Promise<readonly AgentTool[]> {
@@ -255,7 +254,7 @@ const pluginTools: ToolSource = {
   },
 };
 
-const agent = FadenAgent.createBuilder().useClient(client).addToolSource(pluginTools).build();
+const agent = FadenstackAgent.createBuilder().useClient(client).addToolSource(pluginTools).build();
 ```
 
 `getTools(context, signal)` is called when the agent starts. `context` has the `client` and the agent's `profile`.

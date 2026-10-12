@@ -1,4 +1,9 @@
-/** The panel's icons, inline (no icon library): 16 px, `currentColor`. */
+/**
+ * The panel's icons, inline (no icon library): 16 px, `currentColor`.
+ *
+ * Most paths are Google's Material Icons (https://github.com/google/material-design-icons), some of them changed,
+ * under the Apache License 2.0. The package's NOTICE says so.
+ */
 import type { ReactElement } from "react";
 
 const paths = {

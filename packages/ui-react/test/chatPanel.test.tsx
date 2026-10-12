@@ -2,8 +2,8 @@
 import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it } from "vitest";
 
-import { FadenClient, loginWithPassword } from "@fadenstack/client";
-import { FadenAgent, MemorySessionStore, defineTool } from "@fadenstack/agents";
+import { FadenstackClient, loginWithPassword } from "@fadenstack/client";
+import { FadenstackAgent, MemorySessionStore, defineTool } from "@fadenstack/agents";
 import { AgentChatViewModel, ApprovalBroker, MemoryClipboard, immediateScheduler } from "@fadenstack/ui";
 import { ChatPanel } from "@fadenstack/ui-react";
 import { FakeGateway, lastToolResults, type FakeModel } from "@fadenstack/testing";
@@ -18,11 +18,11 @@ async function panel(model: FakeModel, risk: "write" | "destructive" = "write") 
     }],
     model,
   });
-  const { client, tokens } = FadenClient.forAgent({ serverUrl: gateway.serverUrl, agent: "page", fetch: gateway.fetch });
+  const { client, tokens } = FadenstackClient.forAgent({ serverUrl: gateway.serverUrl, agent: "page", fetch: gateway.fetch });
   await tokens.signIn(await loginWithPassword({ apiUrl: gateway.serverUrl, email: "user@example.com", password: "secret", fetch: gateway.fetch }));
   const filled: string[] = [];
   const approvals = new ApprovalBroker();
-  const agent = FadenAgent.createBuilder()
+  const agent = FadenstackAgent.createBuilder()
     .useClient(client)
     .useSessionStore(new MemorySessionStore())
     .useApprovals(approvals)

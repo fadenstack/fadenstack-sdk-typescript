@@ -1,8 +1,23 @@
 {
   "name": "@fadenstack/ui-react",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "The React skin for the Fadenstack chat view models: a Copilot-style chat panel",
   "license": "Apache-2.0",
+  "author": "Emagin8 UG (haftungsbeschränkt)",
+  "homepage": "https://developers.fadenstack.com/sdk/typescript/",
+  "bugs": "https://github.com/fadenstack/fadenstack-sdk-typescript/issues",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/fadenstack/fadenstack-sdk-typescript.git",
+    "directory": "packages/ui-react"
+  },
+  "keywords": [
+    "fadenstack",
+    "ai",
+    "agents",
+    "chat",
+    "react"
+  ],
   "type": "module",
   "sideEffects": [
     "*.css"
@@ -19,17 +34,16 @@
   "files": [
     "dist",
     "src",
-    "styles.css"
+    "styles.css",
+    "NOTICE"
   ],
-  "repository": {
-    "type": "git",
-    "url": "https://github.com/fadenstack/fadenstack-sdk-typescript.git",
-    "directory": "packages/ui-react"
+  "publishConfig": {
+    "access": "public"
   },
   "dependencies": {
-    "@fadenstack/agents": "0.1.0",
-    "@fadenstack/client": "0.1.0",
-    "@fadenstack/ui": "0.1.0"
+    "@fadenstack/agents": "0.2.0",
+    "@fadenstack/client": "0.2.0",
+    "@fadenstack/ui": "0.2.0"
   },
   "peerDependencies": {
     "react": ">=18.2",

@@ -36,10 +36,10 @@ What this protects, and what it does not:
 these limits are deleted when a new session is created. To change the limits, pass your own:
 
 ```ts
-import { FadenAgent, IndexedDbSessionStore } from "@fadenstack/agents";
+import { FadenstackAgent, IndexedDbSessionStore } from "@fadenstack/agents";
 
 const sessions = new IndexedDbSessionStore({ retention: { maxSessions: 20, maxAgeDays: 30 } });
-const agent = FadenAgent.createBuilder().useClient(client).useSessionStore(sessions).build();
+const agent = FadenstackAgent.createBuilder().useClient(client).useSessionStore(sessions).build();
 ```
 
 | Option | What it is |

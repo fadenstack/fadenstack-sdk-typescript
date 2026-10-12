@@ -1,9 +1,9 @@
-import type { ChatOutcome, FadenEvent, GovernanceNotice, ToolClass, ToolMode, Usage } from "@fadenstack/client";
+import type { ChatOutcome, FadenstackEvent, GovernanceNotice, ToolClass, ToolMode, Usage } from "@fadenstack/client";
 
 import type { ApprovalDecision, ApprovalRequest } from "./approvals.js";
 
 /**
- * What happens during a turn, in order, for a UI to render (AG-UI's vocabulary in our own types, 01-design §9).
+ * What happens during a turn, in order, for a UI to render (AG-UI's vocabulary in our own types).
  * Every event names its turn.
  */
 export type AgentEvent =
@@ -37,12 +37,12 @@ export type AgentEvent =
   /** A refusal or a limit, to show on the turn. */
   | { type: "notice"; turnId: string; notice: GovernanceNotice }
   /** Any other gateway event (citations, a PII notice, events core does not know yet). */
-  | { type: "gateway_event"; turnId: string; event: FadenEvent }
+  | { type: "gateway_event"; turnId: string; event: FadenstackEvent }
   | { type: "turn_completed"; turnId: string; result: AgentResult };
 
 export type ToolOutcome = "ok" | "error" | "denied" | "cancelled";
 
-/** How a turn ended. A refusal is a result, not an error (04 §8). */
+/** How a turn ended. A refusal is a result, not an error. */
 export interface AgentResult {
   turnId: string;
   outcome: ChatOutcome;

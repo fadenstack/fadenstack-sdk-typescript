@@ -3,7 +3,7 @@
 Build agents that run in a browser, a web page or Node and are governed by a Fadenstack server.
 
 !!! note "Server version"
-    Agents need a Fadenstack server from the next release, after 0.4.1. With 0.4.1, only
+    Agents need a Fadenstack server 0.4.2 or later. With 0.4.1 and older, only
     [plain chat completions](plain-api.md) work, without tool modes, rules and the gateway's events.
 
 ## What the SDK does
@@ -12,8 +12,7 @@ The SDK runs the agent loop on the device. It sends the conversation to the serv
 provides, asks the user before a tool changes something, and keeps the conversation on the device.
 
 The server owns the parts that should not live in your application: the agent's instructions, its model and its
-knowledge. It also handles personal data (PII), rate limits and the audit record. Budgets are
-<span class="fs-planned">Planned</span>.
+knowledge. It also handles personal data (PII), rate limits and the audit record.
 
 You register an agent on the server first, and your application then signs in to it on behalf of a user. See
 [Agents](../../concepts/agents.md) for what the server keeps about an agent, and
@@ -25,10 +24,10 @@ The SDK also powers Fadenstack's browser agent.
 
 | Package | What it is | .NET |
 |---|---|---|
-| `@fadenstack/client` | The server connection: the gateway's chat completions (streamed, with the gateway's events), agent sign-in, the agent resource (profile, event reports, approvals), tool classes and modes, typed errors | `Faden.Client` |
-| `@fadenstack/agents` | The agent: the builder, the tool loop, tool classes and modes, approvals, sessions on the device, outcomes, stages and modules | `Faden.Agents` |
-| `@fadenstack/ui` | View models for a chat with an agent, with no UI framework | `Faden.UI` |
-| `@fadenstack/ui-react` | The React skin for those view models: a chat panel | `Faden.UI.Wpf` |
+| `@fadenstack/client` | The server connection: the gateway's chat completions (streamed, with the gateway's events), agent sign-in, the agent resource (profile, event reports, approvals), tool classes and modes, typed errors | `Fadenstack.Client` |
+| `@fadenstack/agents` | The agent: the builder, the tool loop, tool classes and modes, approvals, sessions on the device, outcomes, stages and modules | `Fadenstack.Agents` |
+| `@fadenstack/ui` | View models for a chat with an agent, with no UI framework | `Fadenstack.UI` |
+| `@fadenstack/ui-react` | The React skin for those view models: a chat panel | `Fadenstack.UI.Wpf` |
 | `@fadenstack/testing` | A fake Fadenstack server for tests and demos | — |
 
 The packages follow the [.NET SDK](../dotnet/index.md): the same concepts, the same tool classes and modes, and the
@@ -37,7 +36,7 @@ same transcript format for sessions.
 ## Runtimes
 
 - Browsers: Chrome 116 or later, in a web page or a browser extension.
-- Node.js 20.19 or later.
+- Node.js 24 or later.
 
 The packages are ES modules with type declarations. They use standard web APIs only: `fetch`, Web Streams, Web Crypto
 and `AbortSignal`, plus IndexedDB in a browser for sessions.
@@ -59,10 +58,20 @@ too, and allow it to this machine (`localhost`, `127.0.0.1`, `::1`).
 
 ## Install
 
-The packages will be published to npm with the first release. Until then, build them from source and add them to your
-project.
+Install the packages you need from npm, by name:
 
-You need Node.js 20.19 or later and git:
+```bash
+npm install @fadenstack/client @fadenstack/agents
+```
+
+Add `@fadenstack/ui` and `@fadenstack/ui-react` for the chat panel. Add `@fadenstack/testing` as a development
+dependency for [testing without a server](testing.md). The packages are released together, with one version; keep them
+on the same version.
+
+### From source
+
+To try changes that are not released yet, build the packages from source and add them to your project. You need
+Node.js 24 or later and git:
 
 ```bash
 git clone https://github.com/fadenstack/fadenstack-sdk-typescript.git
@@ -83,7 +92,7 @@ Then add the packages you need to your project, in one of two ways.
     npm pack --workspaces --pack-destination ../fadenstack-packages
 
     # in your project
-    npm install ../fadenstack-packages/fadenstack-client-0.1.0.tgz ../fadenstack-packages/fadenstack-agents-0.1.0.tgz
+    npm install ../fadenstack-packages/fadenstack-client-0.2.0.tgz ../fadenstack-packages/fadenstack-agents-0.2.0.tgz
     ```
 
     Install packages that depend on each other in one command. npm then finds `@fadenstack/client` among the files
@@ -102,20 +111,14 @@ Then add the packages you need to your project, in one of two ways.
     Linked packages resolve their own imports from the SDK's `node_modules`. If you link `@fadenstack/ui-react`, make
     your bundler use a single copy of React, for example with Vite's `resolve.dedupe`.
 
-Once the packages are on npm, you install them by name:
-
-```bash
-npm install @fadenstack/client @fadenstack/agents
-```
-
 ## A complete example
 
 This Node script signs in to the agent `my-assistant`, gives it one tool, and prints the answer as it streams. It
 reads the user's e-mail and password from the environment.
 
 ```ts
-import { FadenClient, loginWithPassword } from "@fadenstack/client";
-import { FadenAgent, defineTool } from "@fadenstack/agents";
+import { FadenstackClient, loginWithPassword } from "@fadenstack/client";
+import { FadenstackAgent, defineTool } from "@fadenstack/agents";
 
 const serverUrl = "https://ai.example.internal";
 
@@ -133,7 +136,7 @@ const readTicket = defineTool<{ id: string }>({
 });
 
 // A client for one agent. Here the sign-in is kept in memory, for as long as the process runs.
-const { client, tokens } = FadenClient.forAgent({ serverUrl, agent: "my-assistant" });
+const { client, tokens } = FadenstackClient.forAgent({ serverUrl, agent: "my-assistant" });
 if (!(await tokens.isSignedIn())) {
   const login = await loginWithPassword({
     apiUrl: serverUrl,
@@ -143,7 +146,7 @@ if (!(await tokens.isSignedIn())) {
   await tokens.signIn(login, "Ticket script");
 }
 
-const agent = FadenAgent.createBuilder().useClient(client).addTools(readTicket).build();
+const agent = FadenstackAgent.createBuilder().useClient(client).addTools(readTicket).build();
 
 const session = await agent.startSession();
 for await (const event of session.stream("What is ticket T-1042 about?")) {

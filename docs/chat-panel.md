@@ -14,20 +14,20 @@ The UI comes in two packages, and the split is strict:
 
 ```tsx
 import { createRoot } from "react-dom/client";
-import { FadenClient } from "@fadenstack/client";
-import { FadenAgent } from "@fadenstack/agents";
+import { FadenstackClient } from "@fadenstack/client";
+import { FadenstackAgent } from "@fadenstack/agents";
 import { AgentChatViewModel, ApprovalBroker } from "@fadenstack/ui";
 import { ChatPanel } from "@fadenstack/ui-react";
 import "@fadenstack/ui-react/styles.css";
 
-const { client } = FadenClient.forAgent({
+const { client } = FadenstackClient.forAgent({
   serverUrl: "https://ai.example.internal",
   agent: "my-assistant",
   store,
 });
 
 const approvals = new ApprovalBroker(); // approval cards in the chat decide
-const agent = FadenAgent.createBuilder()
+const agent = FadenstackAgent.createBuilder()
   .useClient(client)
   .addTools(...tools)
   .useApprovals(approvals)

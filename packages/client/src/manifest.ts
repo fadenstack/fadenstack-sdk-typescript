@@ -3,7 +3,7 @@ import type { ToolClass } from "./tools/toolModes.js";
 
 /** This SDK, as manifests name it. */
 export const SDK_LANGUAGE = "typescript";
-export const SDK_VERSION = "0.1.0";
+export const SDK_VERSION = "0.2.0";
 
 /** A host tool as the app's developer describes it: its class is a suggestion the server's admins review. */
 export interface ManifestTool {

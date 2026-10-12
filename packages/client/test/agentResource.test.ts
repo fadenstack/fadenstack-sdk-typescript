@@ -1,10 +1,10 @@
 import { describe, expect, it } from "vitest";
 
-import { FadenClient, decideTool, effectiveToolClass, loginWithPassword, narrowestMode, toWireEvent } from "@fadenstack/client";
+import { FadenstackClient, decideTool, effectiveToolClass, loginWithPassword, narrowestMode, toWireEvent } from "@fadenstack/client";
 import { FakeGateway } from "@fadenstack/testing";
 
 async function client(gateway: FakeGateway) {
-  const { client, tokens } = FadenClient.forAgent({ serverUrl: gateway.serverUrl, agent: "excel", fetch: gateway.fetch });
+  const { client, tokens } = FadenstackClient.forAgent({ serverUrl: gateway.serverUrl, agent: "excel", fetch: gateway.fetch });
   await tokens.signIn(await loginWithPassword({ apiUrl: gateway.serverUrl, email: "user@example.com", password: "secret", fetch: gateway.fetch }));
   return client;
 }

@@ -1,4 +1,4 @@
-import type { FadenTransport } from "../http/transport.js";
+import type { FadenstackTransport } from "../http/transport.js";
 import { toWireManifest, type AppManifest } from "../manifest.js";
 import { toAgentProfile, toWireEvent, type AgentClientEvent, type AgentProfile } from "../models.js";
 
@@ -8,9 +8,9 @@ export const MAX_EVENTS_PER_REPORT = 100;
 /** The client's agent: its profile, the events the SDK reports, and approvals the gateway waits for. */
 export class AgentResource {
   readonly agent: string;
-  readonly #transport: FadenTransport;
+  readonly #transport: FadenstackTransport;
 
-  constructor(transport: FadenTransport, agent: string) {
+  constructor(transport: FadenstackTransport, agent: string) {
     this.#transport = transport;
     this.agent = agent;
   }

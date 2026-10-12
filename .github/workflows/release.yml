@@ -1,0 +1,67 @@
+name: Release
+
+# A tag v<version> publishes the five @fadenstack packages to npm. The version is the one in the packages
+# (scripts/version.mjs sets it), and the tag must name it. A version with a suffix (v0.2.0-rc.1) is published
+# under the dist-tag `next`, so `npm install` keeps getting the latest release.
+#
+# npm trusts this workflow (trusted publishing): npm trades the job's GitHub OIDC token for a short-lived
+# credential, so no token is stored. Each package's trusted publisher names this file (release.yml) and the
+# environment `npm`. From a public repository, npm adds a provenance statement.
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    environment: npm
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24
+          registry-url: https://registry.npmjs.org
+
+      # Trusted publishing needs npm 11.5.1 or later.
+      - name: npm 11
+        run: npm install --global npm@11
+
+      - name: The tag names the version
+        run: node scripts/version.mjs --check "${GITHUB_REF_NAME#v}"
+
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm test
+      - run: npm run build
+
+      # In the workspaces' order, which is the order they depend on each other. A package already on npm at this
+      # version is skipped, so a rerun finishes a release that stopped half-way; a version can never be replaced.
+      - name: Publish
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          case "$version" in
+            *-*) dist_tag=next ;;
+            *) dist_tag=latest ;;
+          esac
+          for dir in $(node -p "require('./package.json').workspaces.join(' ')"); do
+            name=$(node -p "require('./$dir/package.json').name")
+            if [ -n "$(npm view "$name@$version" version 2>/dev/null)" ]; then
+              echo "$name@$version is on npm already"
+              continue
+            fi
+            npm publish --workspace "$dir" --access public --tag "$dist_tag"
+          done

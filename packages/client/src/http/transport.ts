@@ -1,5 +1,5 @@
 import type { TokenProvider } from "../auth/tokens.js";
-import { FadenError, FadenUnreachableError } from "../errors.js";
+import { FadenstackError, FadenstackUnreachableError } from "../errors.js";
 import { toApiError } from "./errorReader.js";
 
 /** A `fetch` -- the global one, a test's, or one with the host's own settings. */
@@ -31,9 +31,9 @@ export interface RequestSpec {
 
 /**
  * Authenticated requests to a Fadenstack server, with the client's tokens and typed errors. Public, so modules
- * add resources without copying the plumbing (01-design §3a).
+ * add resources without copying the plumbing.
  */
-export class FadenTransport {
+export class FadenstackTransport {
   readonly serverUrl: URL;
   readonly apiUrl: URL;
   readonly timeoutMs: number;
@@ -114,7 +114,7 @@ export class FadenTransport {
         response = await this.fetch(spec.url, init);
       } catch (error) {
         if (signal.aborted) throw signal.reason ?? error;
-        throw new FadenUnreachableError(`Fadenstack could not be reached: ${describe(error)}`, { cause: error });
+        throw new FadenstackUnreachableError(`Fadenstack could not be reached: ${describe(error)}`, { cause: error });
       }
       if (response.status === 401 && token !== undefined && attempt === 0) {
         await response.body?.cancel().catch(() => undefined);
@@ -142,7 +142,7 @@ export class FadenTransport {
     let timedOut = false;
     const timer = setTimeout(() => {
       timedOut = true;
-      controller.abort(new FadenError(`Fadenstack did not answer within ${Math.round(this.timeoutMs / 1000)} s.`));
+      controller.abort(new FadenstackError(`Fadenstack did not answer within ${Math.round(this.timeoutMs / 1000)} s.`));
     }, this.timeoutMs);
     try {
       return await work(controller.signal);

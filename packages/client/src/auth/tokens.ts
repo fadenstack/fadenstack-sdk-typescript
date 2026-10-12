@@ -1,4 +1,4 @@
-import { FadenApiError, FadenError, FadenSignInRequiredError, FadenUnreachableError } from "../errors.js";
+import { FadenstackApiError, FadenstackError, FadenstackSignInRequiredError, FadenstackUnreachableError } from "../errors.js";
 import { toApiError } from "../http/errorReader.js";
 import { requireSecureUrl, type FetchLike } from "../http/transport.js";
 
@@ -107,7 +107,7 @@ export interface AgentTokenProviderOptions {
 
 /**
  * An agent sign-in on this device: a short access token for one agent, renewed with a refresh token the server
- * replaces on every use (02 §4). Kept in a `TokenStore` between runs. Concurrent callers share one refresh.
+ * replaces on every use. Kept in a `TokenStore` between runs. Concurrent callers share one refresh.
  */
 export class AgentTokenProvider implements TokenProvider {
   readonly agent: string;
@@ -189,17 +189,17 @@ export class AgentTokenProvider implements TokenProvider {
 
   async #refresh(current: TokenSet | undefined): Promise<TokenSet> {
     if (!current || current.refreshExpiresAt <= this.#now()) {
-      throw new FadenSignInRequiredError(`Sign in to the agent '${this.agent}' on this device.`);
+      throw new FadenstackSignInRequiredError(`Sign in to the agent '${this.agent}' on this device.`);
     }
     let renewed: TokenSet;
     try {
       renewed = await this.#issue("api/agent-tokens/refresh", { refresh_token: current.refreshToken }, undefined,
         AbortSignal.timeout(REFRESH_TIMEOUT_MS));
     } catch (error) {
-      if (error instanceof FadenApiError && (error.status === 401 || error.status === 403)) {
+      if (error instanceof FadenstackApiError && (error.status === 401 || error.status === 403)) {
         // Revoked, reused elsewhere (the whole sign-in ended), or the user lost access.
         await this.signOut();
-        throw new FadenSignInRequiredError(`The sign-in to '${this.agent}' ended: ${error.message}`, { cause: error });
+        throw new FadenstackSignInRequiredError(`The sign-in to '${this.agent}' ended: ${error.message}`, { cause: error });
       }
       throw error;
     }
@@ -231,7 +231,7 @@ export class AgentTokenProvider implements TokenProvider {
       response = await this.#fetch(new URL(path, this.#apiUrl), init);
     } catch (error) {
       if (signal?.aborted) throw signal.reason ?? error;
-      throw new FadenUnreachableError(`Fadenstack could not be reached: ${(error as Error).message}`, { cause: error });
+      throw new FadenstackUnreachableError(`Fadenstack could not be reached: ${(error as Error).message}`, { cause: error });
     }
     const text = await response.text();
     if (!response.ok) throw toApiError(response, text);
@@ -279,12 +279,12 @@ export async function loginWithPassword(options: PasswordLoginOptions): Promise<
     response = await fetchImpl(url, init);
   } catch (error) {
     if (options.signal?.aborted) throw options.signal.reason ?? error;
-    throw new FadenUnreachableError(`Fadenstack could not be reached: ${(error as Error).message}`, { cause: error });
+    throw new FadenstackUnreachableError(`Fadenstack could not be reached: ${(error as Error).message}`, { cause: error });
   }
   const text = await response.text();
   if (!response.ok) {
     if (response.status === 400 && text.includes("LOGIN_BAD_CREDENTIALS")) {
-      throw new FadenApiError(400, "The e-mail or password is not right.", { code: "LOGIN_BAD_CREDENTIALS" });
+      throw new FadenstackApiError(400, "The e-mail or password is not right.", { code: "LOGIN_BAD_CREDENTIALS" });
     }
     throw toApiError(response, text);
   }
@@ -293,8 +293,8 @@ export async function loginWithPassword(options: PasswordLoginOptions): Promise<
     token = (JSON.parse(text) as Record<string, unknown>)["access_token"];
   } catch {
     // A web page where the API should be: another server, or a path in front of Fadenstack's.
-    throw new FadenApiError(response.status, "This address does not answer like a Fadenstack server.", { code: "not_fadenstack" });
+    throw new FadenstackApiError(response.status, "This address does not answer like a Fadenstack server.", { code: "not_fadenstack" });
   }
-  if (typeof token !== "string" || !token) throw new FadenError("The server gave no login token.");
+  if (typeof token !== "string" || !token) throw new FadenstackError("The server gave no login token.");
   return token;
 }

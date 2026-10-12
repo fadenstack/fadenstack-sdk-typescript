@@ -18,15 +18,15 @@ describe("IndexedDbApprovalStore", () => {
   it("keeps what was allowed always per agent, one entry per tool, and forgets one tool or all", async () => {
     const store = new IndexedDbApprovalStore({ indexedDB: new IDBFactory() });
     const at = new Date().toISOString();
-    await store.add("eplan", { tool: "write_page", toolClass: "write", approvedAt: at });
-    await store.add("eplan", { tool: "write_page", toolClass: "write", approvedAt: at });
-    await store.add("eplan", { tool: "rename_page", toolClass: "write", approvedAt: at });
+    await store.add("docs", { tool: "write_page", toolClass: "write", approvedAt: at });
+    await store.add("docs", { tool: "write_page", toolClass: "write", approvedAt: at });
+    await store.add("docs", { tool: "rename_page", toolClass: "write", approvedAt: at });
     await store.add("excel", { tool: "write_cells", toolClass: "write", approvedAt: at });
-    expect((await store.list("eplan")).map((a) => a.tool).sort()).toEqual(["rename_page", "write_page"]);
-    await store.remove("eplan", "write_page");
-    expect((await store.list("eplan")).map((a) => a.tool)).toEqual(["rename_page"]);
-    await store.remove("eplan");
-    expect(await store.list("eplan")).toEqual([]);
+    expect((await store.list("docs")).map((a) => a.tool).sort()).toEqual(["rename_page", "write_page"]);
+    await store.remove("docs", "write_page");
+    expect((await store.list("docs")).map((a) => a.tool)).toEqual(["rename_page"]);
+    await store.remove("docs");
+    expect(await store.list("docs")).toEqual([]);
     expect(await store.list("excel")).toEqual([{ tool: "write_cells", toolClass: "write", approvedAt: at }]);
   });
 });
@@ -34,16 +34,16 @@ describe("IndexedDbApprovalStore", () => {
 describe("IndexedDbSessionStore", () => {
   it("keeps a session entry by entry, and lists it by its first message", async () => {
     const store = new IndexedDbSessionStore({ indexedDB: new IDBFactory(), keyRange: IDBKeyRange });
-    await store.append("eplan", "s1", entry("session.start"));
-    await store.append("eplan", "s1", entry("user.message", { text: "What is on page 7?" }));
-    await store.append("eplan", "s1", entry("assistant.message", { text: "Motor M1" }));
-    const read = await store.read("eplan", "s1");
+    await store.append("docs", "s1", entry("session.start"));
+    await store.append("docs", "s1", entry("user.message", { text: "What is on page 7?" }));
+    await store.append("docs", "s1", entry("assistant.message", { text: "Table T1" }));
+    const read = await store.read("docs", "s1");
     expect(read.map((e) => e.type)).toEqual(["session.start", "user.message", "assistant.message"]);
-    expect(await store.list("eplan")).toEqual([expect.objectContaining({ id: "s1", agent: "eplan", title: "What is on page 7?" })]);
+    expect(await store.list("docs")).toEqual([expect.objectContaining({ id: "s1", agent: "docs", title: "What is on page 7?" })]);
     expect(await store.list("other")).toEqual([]);
-    await store.delete("eplan", "s1");
-    expect(await store.read("eplan", "s1")).toEqual([]);
-    expect(await store.list("eplan")).toEqual([]);
+    await store.delete("docs", "s1");
+    expect(await store.read("docs", "s1")).toEqual([]);
+    expect(await store.list("docs")).toEqual([]);
   });
 
   it("keeps the newest sessions and none older than the age limit", async () => {

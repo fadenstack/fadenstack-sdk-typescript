@@ -9,12 +9,12 @@ answer. See [Chat completions](../../api/chat-completions.md) for the API itself
 
 ## The client without an agent
 
-Create a `FadenClient` with an API token and a model:
+Create a `FadenstackClient` with an API token and a model:
 
 ```ts
-import { FadenClient, StaticTokenProvider } from "@fadenstack/client";
+import { FadenstackClient, StaticTokenProvider } from "@fadenstack/client";
 
-const client = new FadenClient({
+const client = new FadenstackClient({
   serverUrl: "https://ai.example.internal",
   credentials: new StaticTokenProvider(process.env.FADEN_API_TOKEN ?? ""),
   model: "my-model", // a model the server offers
@@ -28,7 +28,7 @@ const client = new FadenClient({
 | `serverUrl` | The Fadenstack server. Required. |
 | `credentials` | Where access tokens come from: a `StaticTokenProvider` with an API token, or an agent sign-in. |
 | `model` | The model for the plain routes. An agent's model is the agent's, whatever this says. |
-| `agent` | The agent's slug or id. With it, chat goes to the agent's route instead; `FadenClient.forAgent` sets it. |
+| `agent` | The agent's slug or id. With it, chat goes to the agent's route instead; `FadenstackClient.forAgent` sets it. |
 | `toolMode` | The tool mode sent with each request, unless a request says otherwise. Default `ask`. |
 | `gatewayEvents` | Whether to ask the gateway for its events: tool rounds, approvals, notices. Default on. |
 | `apiUrl` | The server's backend for sign-in, when it is not at `serverUrl`. |
@@ -36,8 +36,8 @@ const client = new FadenClient({
 | `timeoutMs` | How long one request may take, in milliseconds. The default is five minutes. A streamed answer that has started is not cut off by it. |
 | `allowInsecureHttp` | Allows an `http://` address. Only for a development server on your own machine. |
 
-`client.getFeatures()` returns the server's edition and features (`GET /v1/features`, on a server from the next
-release, after 0.4.1).
+`client.getFeatures()` returns the server's edition and features (`GET /v1/features`, on a server 0.4.2 or
+later).
 
 ## A whole answer
 
@@ -133,4 +133,4 @@ const features = await client.transport.get<{ edition: string; features: string[
 ```
 
 `gateway(path)` builds an address under the server, `api(path)` one under the backend. `get`, `post`, `patch`,
-`delete` and `json` send JSON and throw a `FadenApiError` for an error status.
+`delete` and `json` send JSON and throw a `FadenstackApiError` for an error status.

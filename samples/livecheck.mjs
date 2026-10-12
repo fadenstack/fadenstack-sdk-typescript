@@ -7,8 +7,8 @@
 //
 // Over https only, or plain http to this machine; --allow-http allows plain http to another (a development server):
 // the password and the tokens then cross the network readable.
-import { AgentTokenProvider, FadenClient, MemoryTokenStore, loginWithPassword } from "@fadenstack/client";
-import { FadenAgent, MemorySessionStore, defineTool } from "@fadenstack/agents";
+import { AgentTokenProvider, FadenstackClient, MemoryTokenStore, loginWithPassword } from "@fadenstack/client";
+import { FadenstackAgent, MemorySessionStore, defineTool } from "@fadenstack/agents";
 
 const arg = (name, fallback) => {
   const i = process.argv.indexOf(`--${name}`);
@@ -40,10 +40,10 @@ async function check(name, run) {
 const store = new MemoryTokenStore();
 const tokens = new AgentTokenProvider({ apiUrl: server, agent: agentSlug, store, allowInsecureHttp });
 const local = ["localhost", "127.0.0.1", "[::1]"].includes(new URL(server).hostname);
-const client = new FadenClient({ serverUrl: server, agent: agentSlug, credentials: tokens, allowInsecureHttp: allowInsecureHttp || local });
+const client = new FadenstackClient({ serverUrl: server, agent: agentSlug, credentials: tokens, allowInsecureHttp: allowInsecureHttp || local });
 const filled = [];
 const page = "# Pump P-200 maintenance guide\n\n| Task | Interval |\n| --- | --- |\n| Seal check | 2 000 h |\n| Bearing lubrication | 4 000 h |";
-const agent = FadenAgent.createBuilder()
+const agent = FadenstackAgent.createBuilder()
   .useClient(client)
   .useSessionStore(new MemorySessionStore())
   .addTools(

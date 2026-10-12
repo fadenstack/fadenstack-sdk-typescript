@@ -1,5 +1,5 @@
 import {
-  FadenError,
+  FadenstackError,
   SDK_LANGUAGE,
   SDK_VERSION,
   decideTool,
@@ -8,7 +8,7 @@ import {
   parseToolClass,
   type AgentProfile,
   type AppManifest,
-  type FadenClient,
+  type FadenstackClient,
   type ToolClass,
   type ToolDefinition,
   type ToolMode,
@@ -25,9 +25,9 @@ import { newId, type SessionInfo } from "./transcript.js";
 
 /**
  * An agent served by a Fadenstack server and run on this device: its profile, its tools, and its sessions.
- * The loop runs here (01-design §5); every model call goes through the gateway. .NET: `Faden.Agents.FadenAgent`.
+ * The loop runs here; every model call goes through the gateway. .NET: `Fadenstack.Agents.FadenstackAgent`.
  */
-export class FadenAgent {
+export class FadenstackAgent {
   /** @internal */
   readonly settings: AgentSettings;
   /** @internal */
@@ -42,9 +42,9 @@ export class FadenAgent {
     this.reporter = new EventReporter(settings.client, settings.report);
   }
 
-  /** @internal The builder's way in: `FadenAgent.createBuilder()...build()`. */
-  static create(settings: AgentSettings): FadenAgent {
-    return new FadenAgent(settings);
+  /** @internal The builder's way in: `FadenstackAgent.createBuilder()...build()`. */
+  static create(settings: AgentSettings): FadenstackAgent {
+    return new FadenstackAgent(settings);
   }
 
   static createBuilder(): AgentBuilder {
@@ -55,7 +55,7 @@ export class FadenAgent {
     return this.settings.agent;
   }
 
-  get client(): FadenClient {
+  get client(): FadenstackClient {
     return this.settings.client;
   }
 
@@ -84,7 +84,7 @@ export class FadenAgent {
     return this.#tools;
   }
 
-  /** The most any session may use: the profile's ceiling (EE), or `auto`. */
+  /** The most any session may use: the profile's ceiling, if the server sets one, or `auto`. */
   get ceiling(): ToolMode {
     return this.#profile?.toolModes.ceiling ?? "auto";
   }
@@ -118,7 +118,7 @@ export class FadenAgent {
     const profile = await this.client.agent!.getProfile(signal);
     const missing = profile.requiredClientModules.filter((m) => !this.settings.modules.includes(m));
     if (missing.length) {
-      throw new FadenError(`The agent '${this.slug}' needs the module(s) ${missing.join(", ")}; add them to the builder.`);
+      throw new FadenstackError(`The agent '${this.slug}' needs the module(s) ${missing.join(", ")}; add them to the builder.`);
     }
     const contract = new Map(profile.hostToolContract.map((t) => [t.name, t]));
     const tools: AgentTool[] = [];

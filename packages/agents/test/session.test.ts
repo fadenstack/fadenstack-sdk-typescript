@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { FadenError } from "@fadenstack/client";
+import { FadenstackError } from "@fadenstack/client";
 import { ApprovalDecision, EntryTypes, TurnStatus } from "@fadenstack/agents";
 import { lastToolResults, lastUserText, type FakeModel } from "@fadenstack/testing";
 
@@ -26,23 +26,23 @@ describe("a turn", () => {
     ]);
     const done = events.at(-1);
     expect(done).toMatchObject({ type: "turn_completed", result: { outcome: "completed" } });
-    expect((done as { result: { text: string } }).result.text).toContain("Motor M1, 400 V");
+    expect((done as { result: { text: string } }).result.text).toContain("Table T1, 4 rows");
     expect(s.asked).toEqual([]);
     // The second model call saw the tool's answer, linked to its call.
     const second = s.gateway.modelCalls[1]!;
     expect(second.messages.at(-2)).toMatchObject({ role: "assistant", tool_calls: [{ function: { name: "read_page" } }] });
-    expect(second.messages.at(-1)).toMatchObject({ role: "tool", content: "Motor M1, 400 V" });
+    expect(second.messages.at(-1)).toMatchObject({ role: "tool", content: "Table T1, 4 rows" });
     expect(second.toolMode).toBe("ask");
     expect(second.conversationId).toBe(session.id);
   });
 
   it("asks before a write tool in ask, and runs it once allowed", async () => {
-    const s = await setup({ model: callsOnce("write_page", { page: 8, text: "Terminal X3" }) });
+    const s = await setup({ model: callsOnce("write_page", { page: 8, text: "Figure F3" }) });
     const session = await s.agent.startSession();
     const result = await session.send("Rename the terminal");
     expect(s.asked).toHaveLength(1);
-    expect(s.asked[0]).toMatchObject({ toolName: "write_page", toolClass: "write", source: "host", arguments: { page: 8, text: "Terminal X3" } });
-    expect(s.pages.pages.get(8)).toBe("Terminal X3");
+    expect(s.asked[0]).toMatchObject({ toolName: "write_page", toolClass: "write", source: "host", arguments: { page: 8, text: "Figure F3" } });
+    expect(s.pages.pages.get(8)).toBe("Figure F3");
     expect(result.outcome).toBe("completed");
     await s.agent.flush();
     expect(s.gateway.reported.map((e) => e["type"])).toEqual(["approval.decided", "tool.executed"]);
@@ -95,7 +95,7 @@ describe("a turn", () => {
     // The gateway refuses the call as it hands it over; the session would refuse it on its own too.
     expect(events.find((e) => e.type === "notice")).toMatchObject({ notice: { outcome: "tool_denied" } });
     expect(events.find((e) => e.type === "tool_completed")).toMatchObject({ outcome: "denied" });
-    expect(s.pages.pages.get(8)).toBe("Terminal X2");
+    expect(s.pages.pages.get(8)).toBe("Figure F2");
   });
 
   it("checks the arguments before asking", async () => {
@@ -109,7 +109,7 @@ describe("a turn", () => {
 
   it("offers only the tools in the agent's contract, under the stricter class", async () => {
     const s = await setup({
-      agents: [{ slug: "eplan", contract: [{ name: "read_page", risk: "write" }, { name: "write_page", risk: "write" }] }],
+      agents: [{ slug: "docs", contract: [{ name: "read_page", risk: "write" }, { name: "write_page", risk: "write" }] }],
       model: callsOnce("read_page", { page: 7 }),
     });
     await s.agent.start();
@@ -121,10 +121,10 @@ describe("a turn", () => {
 
   it("tells the server what the app brings, also the tools its contract does not list yet", async () => {
     const s = await setup(
-      { agents: [{ slug: "eplan", contract: [{ name: "read_page", risk: "read" }] }], model: () => ({ text: "ok" }) },
+      { agents: [{ slug: "docs", contract: [{ name: "read_page", risk: "read" }] }], model: () => ({ text: "ok" }) },
       undefined,
       (b) => b.describeApp({
-        name: "EPLAN add-in",
+        name: "Viewer add-in",
         version: "2.1.0",
         context: [{ id: "project:pages", title: "The project's pages" }],
         ui: { greeting: "Ask about your project." },
@@ -134,9 +134,9 @@ describe("a turn", () => {
     expect(s.agent.tools.map((t) => t.name)).toEqual(["read_page"]); // the others wait for the server's review
     await until(() => s.gateway.manifests.length > 0);
     const { agent, manifest } = s.gateway.manifests[0]!;
-    expect(agent).toBe("eplan");
+    expect(agent).toBe("docs");
     expect(manifest).toMatchObject({
-      app: { name: "EPLAN add-in", version: "2.1.0" },
+      app: { name: "Viewer add-in", version: "2.1.0" },
       sdk: { language: "typescript" },
       context: [{ id: "project:pages", title: "The project's pages" }],
       ui: { greeting: "Ask about your project." },
@@ -157,7 +157,7 @@ describe("a turn", () => {
   });
 
   it("narrows the session's mode to the agent's ceiling", async () => {
-    const s = await setup({ agents: [{ slug: "eplan", ceiling: "read_only" }], model: () => ({ text: "ok" }) });
+    const s = await setup({ agents: [{ slug: "docs", ceiling: "read_only" }], model: () => ({ text: "ok" }) });
     const session = await s.agent.startSession("auto");
     expect(session.effectiveToolMode).toBe("read_only");
     await session.send("hi");
@@ -213,13 +213,13 @@ describe("refusals are outcomes", () => {
     const result = await session.send("write");
     expect(result.outcome).toBe("tool_denied");
     expect(result.notices[0]).toMatchObject({ message: "Writing is blocked by a rule." });
-    expect(s.pages.pages.get(8)).toBe("Terminal X2");
+    expect(s.pages.pages.get(8)).toBe("Figure F2");
   });
 });
 
 describe("the gateway's own tools", () => {
   it("keeps the gateway's round in the transcript and sends it back", async () => {
-    const s = await setup({ model: () => ({ gatewayTool: { name: "knowledge_search", arguments: { q: "motor" }, result: "M1 is 400 V" }, text: "M1 runs at 400 V." }) });
+    const s = await setup({ model: () => ({ gatewayTool: { name: "knowledge_search", arguments: { q: "sales" }, result: "T1 has 4 rows" }, text: "M1 runs at 400 V." }) });
     const session = await s.agent.startSession();
     const events = await collect(session.stream("Voltage of M1?"));
     expect(events.filter((e) => e.type === "tool_started" || e.type === "tool_completed").map((e) => [e.type, (e as { source: string }).source]))
@@ -227,7 +227,7 @@ describe("the gateway's own tools", () => {
     await session.send("And M2?");
     const history = s.gateway.modelCalls[1]!.messages;
     expect(history.map((m) => m.role)).toEqual(["user", "assistant", "tool", "assistant", "user"]);
-    expect(history[2]).toMatchObject({ role: "tool", content: "M1 is 400 V" });
+    expect(history[2]).toMatchObject({ role: "tool", content: "T1 has 4 rows" });
   });
 
   it("answers the gateway's approval with the user's decision", async () => {
@@ -279,8 +279,8 @@ describe("stopping", () => {
 
 describe("the agent", () => {
   it("refuses to start without a module the agent requires", async () => {
-    const s = await setup({ agents: [{ slug: "eplan", requiredClientModules: ["pii.local"] }] });
-    await expect(s.agent.start()).rejects.toBeInstanceOf(FadenError);
+    const s = await setup({ agents: [{ slug: "docs", requiredClientModules: ["pii.local"] }] });
+    await expect(s.agent.start()).rejects.toBeInstanceOf(FadenstackError);
   });
 
   it("lists sessions by their first message, newest first, and deletes them", async () => {
@@ -308,9 +308,9 @@ describe("the agent", () => {
   it("sends attachments before the question, and keeps them for later turns", async () => {
     const s = await setup({ model: () => ({ text: "ok" }) });
     const session = await s.agent.startSession();
-    await session.send("Summarise this", { attachments: [{ title: "Selection", content: "Motor list", kind: "selection", source: "page", reference: "page:selection" }] });
+    await session.send("Summarise this", { attachments: [{ title: "Selection", content: "Sales list", kind: "selection", source: "page", reference: "page:selection" }] });
     await session.send("Shorter");
     const first = s.gateway.modelCalls[1]!.messages[0]!;
-    expect(first.content).toBe('<attachment title="Selection" kind="selection" source="page" reference="page:selection">\nMotor list\n</attachment>\n\nSummarise this');
+    expect(first.content).toBe('<attachment title="Selection" kind="selection" source="page" reference="page:selection">\nSales list\n</attachment>\n\nSummarise this');
   });
 });

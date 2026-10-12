@@ -26,8 +26,7 @@ message. See [Outcomes](../../concepts/outcomes.md) for why refusals are outcome
 | `prompt_blocked` | An input check refused the prompt. Nothing of it reached a model. |
 | `response_blocked` | An output check stopped the answer. Tool calls in it never run. |
 | `tool_denied` | At least one tool call was refused: by the tool mode, by the user, or by the server. The answer may still be complete. |
-| `rate_limited` | A rate limit stopped the turn. |
-| `budget_exceeded` | A budget is used up. |
+| `rate_limited` | A limit of the server stopped the turn (429). The notice carries the server's message. |
 
 When a turn has both a refusal and a denied tool call, `prompt_blocked` or `response_blocked` wins over
 `tool_denied`.
@@ -43,13 +42,13 @@ collected in `result.notices`:
 
 | Field | What it is |
 |---|---|
-| `outcome` | What it is about: `prompt_blocked`, `response_blocked`, `tool_denied`, `rate_limited`, `budget_exceeded`, `round_limit`, or another value the server sends. |
+| `outcome` | What it is about: `prompt_blocked`, `response_blocked`, `tool_denied`, `rate_limited`, `round_limit`, or another value the server sends. |
 | `message` | What to tell the user. For a policy, this is the administrator's message. |
 | `stage` | Where it happened: `input`, `output` or `tool`. Optional. |
 | `category` | The kind of rule, for example `mode` when the tool mode hid a tool. Optional. |
 | `decisionId` | The id auditors and support find the decision by. Optional. |
 | `requestId` | The server's id for the request. Optional. |
-| `retryAfterMs` | For a rate limit or budget: when to try again, if the server said. Optional. |
+| `retryAfterMs` | For a limit (429): when to try again, if the server said. Optional. |
 
 A `round_limit` notice means the agent stopped calling tools after the most model calls a turn may make
 (`useMaxRounds`). The turn's outcome is still `completed` or `tool_denied`.
@@ -67,19 +66,18 @@ Errors are thrown only when a turn cannot run or cannot finish: the server canno
 the server answered with an error that is not a refusal, or the answer broke off. A turn that fails is recorded with
 the status `error` and left out of later requests. `stream` yields no `turn_completed` for it.
 
-All the SDK's errors derive from `FadenError`:
+All the SDK's errors derive from `FadenstackError`:
 
 | Error | When |
 |---|---|
-| `FadenSignInRequiredError` | The agent's sign-in is gone: never made, expired or revoked. Sign in again. |
-| `FadenUnreachableError` | No answer at all: the address is wrong, the server is down, or its certificate is not trusted (a browser does not say which). `cause` is the platform's error. |
-| `FadenApiError` | The server answered with an error. `status` is the HTTP status, and `code`, `type` and `param` are the error's fields. |
-| `FadenAuthenticationError` | A `FadenApiError` for 401. The client has already retried once with a renewed token. |
-| `FadenPermissionError` | A `FadenApiError` for 403: the user may not do this, for example without a grant for the agent or when the agent is retired. |
-| `FadenRateLimitedError` | A `FadenApiError` for 429. `retryAfterMs` says when to try again, if the server said; `isBudget` is true for a budget. In an agent's turn this becomes the outcome `rate_limited` or `budget_exceeded` instead. |
-| `FadenFeatureNotAvailableError` | A `FadenApiError` for a route this server does not offer (404 with the code `ee_required`). |
-| `FadenStreamError` | An answer that had started broke off, and the server said so. `code` is the server's code. |
-| `FadenError` | Also thrown on its own, for example when the server did not answer within `timeoutMs`, or when the agent's profile requires a module the builder does not have. |
+| `FadenstackSignInRequiredError` | The agent's sign-in is gone: never made, expired or revoked. Sign in again. |
+| `FadenstackUnreachableError` | No answer at all: the address is wrong, the server is down, or its certificate is not trusted (a browser does not say which). `cause` is the platform's error. |
+| `FadenstackApiError` | The server answered with an error. `status` is the HTTP status, and `code`, `type` and `param` are the error's fields. |
+| `FadenstackAuthenticationError` | A `FadenstackApiError` for 401. The client has already retried once with a renewed token. |
+| `FadenstackPermissionError` | A `FadenstackApiError` for 403: the user may not do this, for example without a grant for the agent or when the agent is retired. |
+| `FadenstackRateLimitedError` | A `FadenstackApiError` for 429. `retryAfterMs` says when to try again, if the server said, and `code` which limit applied. In an agent's turn this becomes the outcome `rate_limited` instead. |
+| `FadenstackStreamError` | An answer that had started broke off, and the server said so. `code` is the server's code. |
+| `FadenstackError` | Also thrown on its own, for example when the server did not answer within `timeoutMs`, or when the agent's profile requires a module the builder does not have. |
 
 When you stop a turn with an `AbortSignal`, the signal's reason is thrown. `isAbortError(error)` from
 `@fadenstack/client` is true for it, so you can tell a stop from a failure.
@@ -90,9 +88,9 @@ not on the device.
 
 ```ts
 import {
-  FadenApiError,
-  FadenSignInRequiredError,
-  FadenUnreachableError,
+  FadenstackApiError,
+  FadenstackSignInRequiredError,
+  FadenstackUnreachableError,
   isAbortError,
 } from "@fadenstack/client";
 
@@ -101,9 +99,9 @@ async function ask(text: string): Promise<void> {
     showResult(await session.send(text));
   } catch (error) {
     if (isAbortError(error)) return; // the user stopped it
-    if (error instanceof FadenSignInRequiredError) return showSignIn();
-    if (error instanceof FadenUnreachableError) return showOffline();
-    if (error instanceof FadenApiError) return showError(`${error.status}: ${error.message}`);
+    if (error instanceof FadenstackSignInRequiredError) return showSignIn();
+    if (error instanceof FadenstackUnreachableError) return showOffline();
+    if (error instanceof FadenstackApiError) return showError(`${error.status}: ${error.message}`);
     throw error;
   }
 }

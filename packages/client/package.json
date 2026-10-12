@@ -1,8 +1,24 @@
 {
   "name": "@fadenstack/client",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "The Fadenstack server connection: the gateway's chat, agent sign-in, the agent resource, typed errors",
   "license": "Apache-2.0",
+  "author": "Emagin8 UG (haftungsbeschränkt)",
+  "homepage": "https://developers.fadenstack.com/sdk/typescript/",
+  "bugs": "https://github.com/fadenstack/fadenstack-sdk-typescript/issues",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/fadenstack/fadenstack-sdk-typescript.git",
+    "directory": "packages/client"
+  },
+  "keywords": [
+    "fadenstack",
+    "ai",
+    "llm",
+    "agents",
+    "governance",
+    "openai-compatible"
+  ],
   "type": "module",
   "sideEffects": false,
   "main": "./dist/index.js",
@@ -13,11 +29,13 @@
       "import": "./dist/index.js"
     }
   },
-  "files": ["dist", "src"],
-  "repository": {
-    "type": "git",
-    "url": "https://github.com/fadenstack/fadenstack-sdk-typescript.git",
-    "directory": "packages/client"
+  "files": [
+    "dist",
+    "src",
+    "NOTICE"
+  ],
+  "publishConfig": {
+    "access": "public"
   },
   "dependencies": {}
 }

@@ -1,5 +1,5 @@
-import type { AgentEvent, AgentSession, FadenAgent, MessageAttachment, TranscriptEntry } from "@fadenstack/agents";
-import { FadenSignInRequiredError, TOOL_MODES, narrowestMode, type ToolMode } from "@fadenstack/client";
+import type { AgentEvent, AgentSession, FadenstackAgent, MessageAttachment, TranscriptEntry } from "@fadenstack/agents";
+import { FadenstackSignInRequiredError, TOOL_MODES, narrowestMode, type ToolMode } from "@fadenstack/client";
 
 import type { ApprovalBroker, PendingApproval } from "./approvalBroker.js";
 import { AttachmentViewModel } from "./attachments.js";
@@ -59,11 +59,11 @@ export interface SessionItem {
  * A chat with one agent, for any skin: the conversation as turns, the composer, the tool-mode picker, the session
  * history. The agent's events reach the view models in batches, one per `renderIntervalMs`, however fast it
  * streams. Opened sessions show their latest turns and load older ones on request, so long sessions open fast and
- * stay light. .NET: `Faden.UI.ViewModels.AgentChatViewModel`.
+ * stay light. .NET: `Fadenstack.UI.ViewModels.AgentChatViewModel`.
  */
 export class AgentChatViewModel extends Observable implements TurnHost {
   readonly strings: UiStrings;
-  readonly #agent: FadenAgent;
+  readonly #agent: FadenstackAgent;
   readonly #approvals: ApprovalBroker;
   readonly #batcher: RenderBatcher;
   readonly #renderers: AgentEventRenderer[];
@@ -96,7 +96,7 @@ export class AgentChatViewModel extends Observable implements TurnHost {
   #error: string | undefined;
   #mode: ToolMode = "ask";
 
-  constructor(agent: FadenAgent, approvals: ApprovalBroker, options: AgentChatOptions = {}) {
+  constructor(agent: FadenstackAgent, approvals: ApprovalBroker, options: AgentChatOptions = {}) {
     super();
     this.#agent = agent;
     this.#approvals = approvals;
@@ -117,7 +117,7 @@ export class AgentChatViewModel extends Observable implements TurnHost {
 
   // -- state ----------------------------------------------------------------------------------------
 
-  get agent(): FadenAgent {
+  get agent(): FadenstackAgent {
     return this.#agent;
   }
 
@@ -199,7 +199,7 @@ export class AgentChatViewModel extends Observable implements TurnHost {
     return this.#mode;
   }
 
-  /** The picker's modes; those above the agent's ceiling (EE) cannot be picked. */
+  /** The picker's modes; those above the ceiling the server sets cannot be picked. */
   get toolModes(): readonly ToolModeOption[] {
     const ceiling = this.#agent.ceiling;
     return TOOL_MODES.map((mode) => ({
@@ -236,7 +236,7 @@ export class AgentChatViewModel extends Observable implements TurnHost {
       await this.refreshSessions();
       this.#ready = true;
     } catch (error) {
-      if (error instanceof FadenSignInRequiredError) this.#signInRequired = true;
+      if (error instanceof FadenstackSignInRequiredError) this.#signInRequired = true;
       this.#error = error instanceof Error ? error.message : String(error);
     }
     this.notify();
@@ -465,7 +465,7 @@ export class AgentChatViewModel extends Observable implements TurnHost {
     } catch (error) {
       if (signal.aborted) {
         this.#batcher.enqueue(() => turn.stop());
-      } else if (error instanceof FadenSignInRequiredError) {
+      } else if (error instanceof FadenstackSignInRequiredError) {
         this.#batcher.enqueue(() => {
           this.#signInRequired = true;
           turn.fail(error.message);

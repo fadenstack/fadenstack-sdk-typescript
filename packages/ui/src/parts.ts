@@ -370,7 +370,7 @@ export class NoticePart extends ResponsePart {
 
   static from(notice: GovernanceNotice, strings: UiStrings): NoticePart {
     const severity: NoticeSeverity = notice.outcome === "prompt_blocked" || notice.outcome === "response_blocked" ? "blocked"
-      : notice.outcome === "tool_denied" || notice.outcome === "rate_limited" || notice.outcome === "budget_exceeded" ? "warning"
+      : notice.outcome === "tool_denied" || notice.outcome === "rate_limited" ? "warning"
       : "info";
     const title = strings.noticeTitles[notice.outcome] ?? strings.noticeFallback;
     const message = notice.retryAfterMs !== undefined
@@ -423,7 +423,7 @@ export class CitationsPart extends ResponsePart {
   }
 }
 
-// -- primitives for features and modules (01-design §9) ------------------------------------------
+// -- primitives for features and modules ------------------------------------------
 
 /** A titled card with fields. */
 export class CardPart extends ResponsePart {

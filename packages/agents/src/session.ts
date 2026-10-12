@@ -1,5 +1,5 @@
 import {
-  FadenRateLimitedError,
+  FadenstackRateLimitedError,
   decideTool,
   eventKind,
   narrowestMode,
@@ -8,7 +8,7 @@ import {
   type ChatMessage,
   type ChatOptions,
   type ChatOutcome,
-  type FadenEvent,
+  type FadenstackEvent,
   type GovernanceNotice,
   type ToolCall,
   type ToolClass,
@@ -16,7 +16,7 @@ import {
   type Usage,
 } from "@fadenstack/client";
 
-import type { FadenAgent } from "./agent.js";
+import type { FadenstackAgent } from "./agent.js";
 import { ApprovalDecision, type ApprovalRequest, type ApprovalScope } from "./approvals.js";
 import { attachmentData, type MessageAttachment } from "./attachments.js";
 import { ContextBuilder } from "./contextBuilder.js";
@@ -73,16 +73,16 @@ const asksEveryTime = (toolClass: ToolClass): boolean => toolClass === "destruct
  */
 export class AgentSession {
   readonly id: string;
-  /** The mode the user picked for this session (sdk/07). New sessions start in `ask`. */
+  /** The mode the user picked for this session. New sessions start in `ask`. */
   toolMode: ToolMode;
-  readonly agent: FadenAgent;
+  readonly agent: FadenstackAgent;
   readonly #entries: TranscriptEntry[];
   /** "Allow for this chat": this object's only, in memory. A session opened again starts asking again. */
   readonly #approvedForSession = new Set<string>();
   readonly #context: ContextBuilder;
   #running = false;
 
-  constructor(agent: FadenAgent, id: string, entries: TranscriptEntry[], toolMode: ToolMode) {
+  constructor(agent: FadenstackAgent, id: string, entries: TranscriptEntry[], toolMode: ToolMode) {
     this.agent = agent;
     this.id = id;
     this.#entries = entries;
@@ -90,7 +90,7 @@ export class AgentSession {
     this.#context = new ContextBuilder(agent.settings.historyTokens);
   }
 
-  /** The mode turns run in: the user's pick, narrowed by the agent's ceiling (EE). */
+  /** The mode turns run in: the user's pick, narrowed by the ceiling the server sets, if any. */
   get effectiveToolMode(): ToolMode {
     return narrowestMode(this.toolMode, this.agent.ceiling);
   }
@@ -243,7 +243,7 @@ class Turn {
     this.#access = access;
   }
 
-  get #agent(): FadenAgent {
+  get #agent(): FadenstackAgent {
     return this.#session.agent;
   }
 
@@ -274,11 +274,11 @@ class Turn {
         await this.#end(TurnStatus.cancelled, undefined);
         throw signal.reason ?? error;
       }
-      if (error instanceof FadenRateLimitedError) {
-        const notice: GovernanceNotice = { outcome: error.isBudget ? "budget_exceeded" : "rate_limited", message: error.message };
+      if (error instanceof FadenstackRateLimitedError) {
+        const notice: GovernanceNotice = { outcome: "rate_limited", message: error.message };
         if (error.retryAfterMs !== undefined) notice.retryAfterMs = error.retryAfterMs;
         await this.#notice(notice);
-        await this.#end(TurnStatus.error, error.isBudget ? "budget_exceeded" : "rate_limited");
+        await this.#end(TurnStatus.error, "rate_limited");
         return;
       }
       await this.#end(TurnStatus.error, undefined);
@@ -346,7 +346,7 @@ class Turn {
     return calls;
   }
 
-  async #onGatewayEvent(event: FadenEvent, signal: AbortSignal): Promise<void> {
+  async #onGatewayEvent(event: FadenstackEvent, signal: AbortSignal): Promise<void> {
     const value = event.value;
     switch (eventKind(event)) {
       case "faden.gateway_round":
@@ -389,7 +389,7 @@ class Turn {
     this.#emit({ type: "gateway_event", turnId: this.#id, event });
   }
 
-  /** The gateway's own tool round, kept so the model still knows what it searched (02 §7). */
+  /** The gateway's own tool round, kept so the model still knows what it searched. */
   async #keepRound(value: unknown): Promise<void> {
     const messages = value && typeof value === "object" ? (value as Data)["messages"] : undefined;
     if (!Array.isArray(messages)) return;

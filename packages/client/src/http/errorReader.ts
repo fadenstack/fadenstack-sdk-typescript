@@ -1,9 +1,8 @@
 import {
-  FadenApiError,
-  FadenAuthenticationError,
-  FadenFeatureNotAvailableError,
-  FadenPermissionError,
-  FadenRateLimitedError,
+  FadenstackApiError,
+  FadenstackAuthenticationError,
+  FadenstackPermissionError,
+  FadenstackRateLimitedError,
 } from "../errors.js";
 
 /** An error body's fields: the gateway's OpenAI shape (`error`) or the backend's `detail`. */
@@ -63,23 +62,20 @@ function withFaden(parsed: ParsedError, faden: Record<string, unknown> | undefin
 }
 
 /** The typed error for a failed response, from its status and body. */
-export function toApiError(response: Response, body: string): FadenApiError {
+export function toApiError(response: Response, body: string): FadenstackApiError {
   const status = response.status;
   const parsed = parseError(body, `${status} ${response.statusText}`.trim());
   const fields = { code: parsed.code, type: parsed.type, param: parsed.param };
   switch (status) {
     case 401:
-      return new FadenAuthenticationError(status, parsed.message, { ...fields, type: "authentication_error" });
+      return new FadenstackAuthenticationError(status, parsed.message, { ...fields, type: "authentication_error" });
     case 403:
-      return new FadenPermissionError(status, parsed.message, fields);
-    case 404:
-      return parsed.code === "ee_required"
-        ? new FadenFeatureNotAvailableError(parsed.message)
-        : new FadenApiError(status, parsed.message, fields);
+      return new FadenstackPermissionError(status, parsed.message, fields);
+
     case 429:
-      return new FadenRateLimitedError(status, parsed.message, parsed.code, retryAfterMs(response.headers));
+      return new FadenstackRateLimitedError(status, parsed.message, parsed.code, retryAfterMs(response.headers));
     default:
-      return new FadenApiError(status, parsed.message, fields);
+      return new FadenstackApiError(status, parsed.message, fields);
   }
 }
 

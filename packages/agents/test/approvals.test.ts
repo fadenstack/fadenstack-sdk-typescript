@@ -28,7 +28,7 @@ describe("Allow for this chat and Allow always", () => {
     await first.send("write");
     expect(s.asked).toHaveLength(1);
     expect(s.asked[0]).toMatchObject({ toolClass: "write", canAllowForSession: true, canAllowAlways: true });
-    expect(await approvals.list("eplan")).toMatchObject([{ tool: "write_page", toolClass: "write" }]);
+    expect(await approvals.list("docs")).toMatchObject([{ tool: "write_page", toolClass: "write" }]);
     const second = await s.agent.startSession();
     await second.send("write again");
     expect(s.asked).toHaveLength(1);
@@ -50,14 +50,14 @@ describe("Allow for this chat and Allow always", () => {
     expect(s.asked[0]).toMatchObject({ toolClass: "destructive", canAllowForSession: false, canAllowAlways: false });
     expect(decisions(session).map((d) => d["scope"])).toEqual(["once", "once"]);
     expect(session.approvedForSession.size).toBe(0);
-    expect(await approvals.list("eplan")).toEqual([]);
+    expect(await approvals.list("docs")).toEqual([]);
   });
 
   it("an approval kept always no longer holds once the tool became destructive", async () => {
     const approvals = new MemoryApprovalStore();
-    await approvals.add("eplan", { tool: "write_page", toolClass: "write", approvedAt: new Date().toISOString() });
+    await approvals.add("docs", { tool: "write_page", toolClass: "write", approvedAt: new Date().toISOString() });
     const s = await setup({
-      agents: [{ slug: "eplan", contract: [{ name: "write_page", risk: "destructive" }] }],
+      agents: [{ slug: "docs", contract: [{ name: "write_page", risk: "destructive" }] }],
       model: once({ name: "write_page", arguments: { page: 8, text: "x" } }),
     }, () => ApprovalDecision.approve(), (b) => b.useApprovalStore(approvals));
     const session = await s.agent.startSession();
@@ -70,15 +70,15 @@ describe("Allow for this chat and Allow always", () => {
     const approvals = new MemoryApprovalStore();
     const s = await setup({ model: once({ name: "write_page", arguments: { page: 8, text: "x" } }) },
       () => ApprovalDecision.approveAlways(), (b) => b.useApprovalStore(approvals));
-    await approvals.add("eplan", { tool: "other_tool", toolClass: "write", approvedAt: new Date().toISOString() });
+    await approvals.add("docs", { tool: "other_tool", toolClass: "write", approvedAt: new Date().toISOString() });
     const session = await s.agent.startSession();
     await session.send("write");
     await s.agent.resetApprovals("write_page");
-    expect((await approvals.list("eplan")).map((a) => a.tool)).toEqual(["other_tool"]);
+    expect((await approvals.list("docs")).map((a) => a.tool)).toEqual(["other_tool"]);
     await session.send("write again");
     expect(s.asked).toHaveLength(2);
     await s.agent.resetApprovals();
-    expect(await approvals.list("eplan")).toEqual([]);
+    expect(await approvals.list("docs")).toEqual([]);
   });
 
   it("a chat's approval ends with a reset of the chat", async () => {
@@ -94,7 +94,7 @@ describe("Allow for this chat and Allow always", () => {
 
 describe("without a tool contract", () => {
   it("every tool is unclassified: a tool its app calls read asks, every time", async () => {
-    const s = await setup({ agents: [{ slug: "eplan" }], model: once({ name: "read_page", arguments: { page: 7 } }) },
+    const s = await setup({ agents: [{ slug: "docs" }], model: once({ name: "read_page", arguments: { page: 7 } }) },
       () => ApprovalDecision.approveForSession());
     await s.agent.start();
     expect(s.agent.tools.map((t) => t.toolClass)).toEqual(["unknown", "unknown", "unknown"]);
@@ -106,7 +106,7 @@ describe("without a tool contract", () => {
   });
 
   it("a contract entry without a risk leaves that tool unclassified", async () => {
-    const s = await setup({ agents: [{ slug: "eplan", contract: [{ name: "read_page" }, { name: "write_page", risk: "write" }] }] });
+    const s = await setup({ agents: [{ slug: "docs", contract: [{ name: "read_page" }, { name: "write_page", risk: "write" }] }] });
     await s.agent.start();
     expect(s.agent.tools.map((t) => [t.name, t.toolClass])).toEqual([["read_page", "unknown"], ["write_page", "write"]]);
   });
@@ -130,7 +130,7 @@ describe("an admin's Ask first rule", () => {
 
   it("asks also in bypass mode, and over an approval kept always", async () => {
     const approvals = new MemoryApprovalStore();
-    await approvals.add("eplan", { tool: "read_page", toolClass: "read", approvedAt: new Date().toISOString() });
+    await approvals.add("docs", { tool: "read_page", toolClass: "read", approvedAt: new Date().toISOString() });
     vi.spyOn(console, "warn").mockImplementation(() => undefined);
     const s = await setup({ toolRules: rules, model: once({ name: "read_page", arguments: { page: 7 } }) },
       () => ApprovalDecision.deny("no"), (b) => b.usePermissionMode("bypass").useApprovalStore(approvals));
@@ -148,7 +148,7 @@ describe("an admin's Ask first rule", () => {
     const session = await s.agent.startSession("auto");
     const result = await session.send("write");
     expect(s.gateway.modelCalls[0]!.tools.map((t) => t.name)).not.toContain("write_page");
-    expect(s.pages.pages.get(8)).toBe("Terminal X2");
+    expect(s.pages.pages.get(8)).toBe("Figure F2");
     expect(result.outcome).toBe("tool_denied");
   });
 
@@ -190,7 +190,7 @@ describe("bypass mode", () => {
     const session = await s.agent.startSession("read_only");
     const result = await session.send("write");
     expect(result.outcome).toBe("tool_denied");
-    expect(s.pages.pages.get(8)).toBe("Terminal X2");
+    expect(s.pages.pages.get(8)).toBe("Figure F2");
   });
 });
 
@@ -198,7 +198,7 @@ describe("the order", () => {
   it("destructive beats always, always beats this chat, this chat beats asking", async () => {
     const approvals = new MemoryApprovalStore();
     // Kept always for a destructive tool (an older store, or the app's own): it still asks.
-    await approvals.add("eplan", { tool: "delete_page", toolClass: "destructive", approvedAt: new Date().toISOString() });
+    await approvals.add("docs", { tool: "delete_page", toolClass: "destructive", approvedAt: new Date().toISOString() });
     let answer = ApprovalDecision.approve();
     const s = await setup({ model: once({ name: "delete_page", arguments: { page: 7 } }) }, () => answer,
       (b) => b.useApprovalStore(approvals));
@@ -210,7 +210,7 @@ describe("the order", () => {
     answer = ApprovalDecision.approveForSession();
     await session.send("write"); // asked: allowed for this chat
     await session.send("write"); // this chat, not asked
-    await approvals.add("eplan", { tool: "write_page", toolClass: "write", approvedAt: new Date().toISOString() });
+    await approvals.add("docs", { tool: "write_page", toolClass: "write", approvedAt: new Date().toISOString() });
     await session.send("write"); // always, over this chat
     expect(s.asked).toHaveLength(2);
     expect(decisions(session).map((d) => [d["scope"], d["asked"]])).toEqual([

@@ -1,4 +1,4 @@
-import { FadenUnreachableError } from "../errors.js";
+import { FadenstackUnreachableError } from "../errors.js";
 import { toApiError } from "../http/errorReader.js";
 import { requireSecureUrl, type FetchLike } from "../http/transport.js";
 
@@ -49,7 +49,7 @@ export async function listModels(options: ListModelsOptions): Promise<string[]> 
     response = await fetchImpl(url, init);
   } catch (error) {
     if (options.signal?.aborted) throw options.signal.reason ?? error;
-    throw new FadenUnreachableError(`Fadenstack could not be reached: ${(error as Error).message}`, { cause: error });
+    throw new FadenstackUnreachableError(`Fadenstack could not be reached: ${(error as Error).message}`, { cause: error });
   }
   const text = await response.text();
   if (!response.ok) throw toApiError(response, text);
@@ -90,7 +90,7 @@ export async function createAgent(options: CreateAgentOptions): Promise<CreatedA
     response = await fetchImpl(url, init);
   } catch (error) {
     if (options.signal?.aborted) throw options.signal.reason ?? error;
-    throw new FadenUnreachableError(`Fadenstack could not be reached: ${(error as Error).message}`, { cause: error });
+    throw new FadenstackUnreachableError(`Fadenstack could not be reached: ${(error as Error).message}`, { cause: error });
   }
   const text = await response.text();
   if (!response.ok) throw toApiError(response, text);

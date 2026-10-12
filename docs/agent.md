@@ -4,15 +4,15 @@ Connect to the server, sign in to an agent, build it with your tools, and run tu
 
 ## The client
 
-A `FadenClient` is the connection to a Fadenstack server. For an agent, create it with `FadenClient.forAgent`, which
+A `FadenstackClient` is the connection to a Fadenstack server. For an agent, create it with `FadenstackClient.forAgent`, which
 returns the client and the sign-in that goes with it:
 
 ```ts
-import { FadenClient } from "@fadenstack/client";
+import { FadenstackClient } from "@fadenstack/client";
 
-const { client, tokens } = FadenClient.forAgent({
+const { client, tokens } = FadenstackClient.forAgent({
   serverUrl: "https://ai.example.internal",
-  agent: "eplan-assistant",
+  agent: "docs-assistant",
 });
 ```
 
@@ -46,16 +46,16 @@ import { loginWithPassword } from "@fadenstack/client";
 
 if (!(await tokens.isSignedIn())) {
   const login = await loginWithPassword({ apiUrl: "https://ai.example.internal", email, password });
-  await tokens.signIn(login, "EPLAN on PC-7"); // the login token is not kept
+  await tokens.signIn(login, "Viewer on PC-7"); // the login token is not kept
 }
 ```
 
 `loginWithPassword({ apiUrl, email, password, fetch?, signal? })` returns the user's login token. Wrong credentials
-throw a `FadenApiError` with the code `LOGIN_BAD_CREDENTIALS`.
+throw a `FadenstackApiError` with the code `LOGIN_BAD_CREDENTIALS`.
 
 `signIn(loginToken, deviceLabel?, signal?)` creates the sign-in for this device and keeps it in the token store. The
 login token itself is not kept: hold it only as long as the sign-in takes. The server refuses the sign-in with a
-`FadenPermissionError` (403) when the user has no grant for the agent.
+`FadenstackPermissionError` (403) when the user has no grant for the agent.
 
 The device label is what administrators see in the agent's list of sign-ins, for example the application and the
 computer. It is cut to 200 characters. After signing in, `tokens.deviceId` is the id the server lists and revokes the
@@ -64,7 +64,7 @@ sign-in by.
 The sign-in is a short-lived access token and a refresh token. The SDK renews the access token before it expires, and
 the server replaces the refresh token on every renewal. Requests that need a token at the same time share one renewal.
 When the server refuses the renewal (the sign-in was revoked, its refresh token was used twice, or the user lost access
-to the agent), the SDK forgets the sign-in and throws a `FadenSignInRequiredError`. Sign in again.
+to the agent), the SDK forgets the sign-in and throws a `FadenstackSignInRequiredError`. Sign in again.
 
 | Method | What it does |
 |---|---|
@@ -125,9 +125,9 @@ export class ChromeStorageTokenStore implements TokenStore {
 ```
 
 ```ts
-const { client, tokens } = FadenClient.forAgent({
+const { client, tokens } = FadenstackClient.forAgent({
   serverUrl: "https://ai.example.internal",
-  agent: "eplan-assistant",
+  agent: "docs-assistant",
   store: new ChromeStorageTokenStore(),
 });
 ```
@@ -140,13 +140,13 @@ A desktop or Node application can keep the sign-in in a file that only the user 
 
 ## Build the agent
 
-`FadenAgent.createBuilder()` puts an agent together. The builder takes the client, your tools, who approves tool
+`FadenstackAgent.createBuilder()` puts an agent together. The builder takes the client, your tools, who approves tool
 calls, and where sessions live:
 
 ```ts
-import { FadenAgent } from "@fadenstack/agents";
+import { FadenstackAgent } from "@fadenstack/agents";
 
-const agent = FadenAgent.createBuilder()
+const agent = FadenstackAgent.createBuilder()
   .useClient(client)
   .addTools(readPage, deletePage)
   .useApprovals(async (request, signal) => askTheUser(request, signal)) // without it: declined
@@ -155,7 +155,7 @@ const agent = FadenAgent.createBuilder()
 
 | Method | What it does |
 |---|---|
-| `useClient(client)` | The client from `FadenClient.forAgent`. The agent is the client's agent. |
+| `useClient(client)` | The client from `FadenstackClient.forAgent`. The agent is the client's agent. |
 | `useServer(serverUrl, credentials, options?)` | Instead of `useClient`: the builder creates the client. Needs `useAgent`. |
 | `useAgent(slug)` | The agent's slug or id. Not needed with `useClient`. |
 | `addTools(...tools)` | Host tools, from `defineTool`. See [Tools and approvals](tools.md). |
@@ -183,7 +183,7 @@ The agent starts the first time you open a session, or when you call `agent.star
 
 - loads the agent's profile from the server: its name, version, model, host tool contract and tool modes, but never
   its instructions;
-- checks that the builder has every module the profile requires, and throws a `FadenError` if not;
+- checks that the builder has every module the profile requires, and throws a `FadenstackError` if not;
 - settles the tools: host tools outside a non-empty contract are dropped, the others run under the stricter of your
   class and the contract's; without a contract, or for an entry without a `risk`, a tool is `unknown` and asks;
 - warns once, on the console, when the agent runs in bypass mode;
@@ -254,7 +254,7 @@ A turn that fails or is stopped yields no `turn_completed`: the stream throws in
 `session.send(message, options?)` runs the turn and returns its `AgentResult` once it has ended:
 
 ```ts
-const result = await session.send("Which pages show motor M1?");
+const result = await session.send("Which pages show table T1?");
 console.log(result.outcome, result.text);
 ```
 

@@ -116,7 +116,6 @@ export const englishStrings: UiStrings = {
     response_blocked: "The answer was stopped",
     tool_denied: "A tool was not allowed",
     rate_limited: "Too many requests",
-    budget_exceeded: "Budget used up",
     round_limit: "Stopped",
   },
   noticeFallback: "Notice",
