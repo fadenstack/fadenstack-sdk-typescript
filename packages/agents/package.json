@@ -3,6 +3,22 @@
   "version": "0.1.0",
   "description": "A Fadenstack agent run on the device: the tool loop, tool classes and modes, approvals, local sessions",
   "license": "Apache-2.0",
+  "author": "Emagin8 UG (haftungsbeschränkt)",
+  "homepage": "https://developers.fadenstack.com/sdk/typescript/",
+  "bugs": "https://github.com/fadenstack/fadenstack-sdk-typescript/issues",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/fadenstack/fadenstack-sdk-typescript.git",
+    "directory": "packages/agents"
+  },
+  "keywords": [
+    "fadenstack",
+    "ai",
+    "llm",
+    "agents",
+    "governance",
+    "tools"
+  ],
   "type": "module",
   "sideEffects": false,
   "main": "./dist/index.js",
@@ -13,11 +29,15 @@
       "import": "./dist/index.js"
     }
   },
-  "files": ["dist", "src"],
-  "repository": {
-    "type": "git",
-    "url": "https://github.com/fadenstack/fadenstack-sdk-typescript.git",
-    "directory": "packages/agents"
+  "files": [
+    "dist",
+    "src",
+    "NOTICE"
+  ],
+  "publishConfig": {
+    "access": "public"
   },
-  "dependencies": { "@fadenstack/client": "0.1.0" }
+  "dependencies": {
+    "@fadenstack/client": "0.1.0"
+  }
 }
