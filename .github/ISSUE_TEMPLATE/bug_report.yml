@@ -1,0 +1,50 @@
+name: Bug report
+description: Something in the TypeScript SDK does not work as it should.
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thank you for reporting. Please search the [existing issues](https://github.com/fadenstack/fadenstack-sdk-typescript/issues) first.
+        A security problem is reported privately: see [SECURITY.md](https://github.com/fadenstack/fadenstack-sdk-typescript/security/policy).
+        Leave out passwords, tokens, API keys and personal data.
+  - type: input
+    id: package
+    attributes:
+      label: Package and version
+      placeholder: "@fadenstack/agents 0.1.0"
+    validations:
+      required: true
+  - type: input
+    id: runtime
+    attributes:
+      label: Where it runs
+      description: The browser and its version (in a page or an extension), or the Node.js version.
+      placeholder: "Chrome 141, in a side panel extension"
+    validations:
+      required: true
+  - type: input
+    id: server
+    attributes:
+      label: Server release
+      description: What `faden version` prints on the Fadenstack server, if you know it.
+      placeholder: "0.4.3"
+  - type: textarea
+    id: happened
+    attributes:
+      label: What happened
+      description: What you did, step by step, and what happened then. A small script or page that shows it helps most.
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: What you expected
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Error or console output
+      description: The error with its stack, or the part of the console that matters, without secrets.
+      render: text
