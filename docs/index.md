@@ -3,7 +3,7 @@
 Build agents that run in a browser, a web page or Node and are governed by a Fadenstack server.
 
 !!! note "Server version"
-    Agents need a Fadenstack server from the next release, after 0.4.1. With 0.4.1, only
+    Agents need a Fadenstack server 0.4.2 or later. With 0.4.1 and older, only
     [plain chat completions](plain-api.md) work, without tool modes, rules and the gateway's events.
 
 ## What the SDK does
@@ -59,10 +59,20 @@ too, and allow it to this machine (`localhost`, `127.0.0.1`, `::1`).
 
 ## Install
 
-The packages will be published to npm with the first release. Until then, build them from source and add them to your
-project.
+Install the packages you need from npm, by name:
 
-You need Node.js 20.19 or later and git:
+```bash
+npm install @fadenstack/client @fadenstack/agents
+```
+
+Add `@fadenstack/ui` and `@fadenstack/ui-react` for the chat panel. Add `@fadenstack/testing` as a development
+dependency for [testing without a server](testing.md). The packages are released together, with one version; keep them
+on the same version.
+
+### From source
+
+To try changes that are not released yet, build the packages from source and add them to your project. You need
+Node.js 20.19 or later and git:
 
 ```bash
 git clone https://github.com/fadenstack/fadenstack-sdk-typescript.git
@@ -101,12 +111,6 @@ Then add the packages you need to your project, in one of two ways.
 
     Linked packages resolve their own imports from the SDK's `node_modules`. If you link `@fadenstack/ui-react`, make
     your bundler use a single copy of React, for example with Vite's `resolve.dedupe`.
-
-Once the packages are on npm, you install them by name:
-
-```bash
-npm install @fadenstack/client @fadenstack/agents
-```
 
 ## A complete example
 

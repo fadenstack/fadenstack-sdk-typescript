@@ -3,7 +3,7 @@
 Agents that run in a browser, a web page or Node and are governed by a [Fadenstack](https://fadenstack.com)
 server. The SDK runs the agent loop on the device: tools, approvals and the conversation itself. The server owns
 the agent's instructions, model and knowledge, and handles personal data, rate limits and audit (budgets are
-planned). Agents need a Fadenstack server from the next release, after 0.4.1.
+planned). Agents need a Fadenstack server 0.4.2 or later.
 
 **Documentation: [developers.fadenstack.com/sdk/typescript](https://developers.fadenstack.com/sdk/typescript/)**
 (the source is in [`docs/`](docs/)).
@@ -62,8 +62,12 @@ rule asks about ask every time. The docs cover [tools and approvals](docs/tools.
 
 ## Install
 
-The packages are published to npm with the first release. Until then, build them from source and install the
-packed files or the package folders; [Install](docs/index.md#install) shows both.
+```bash
+npm install @fadenstack/client @fadenstack/agents
+```
+
+Add `@fadenstack/ui` and `@fadenstack/ui-react` for the chat panel, and `@fadenstack/testing` for tests.
+[Install](docs/index.md#install) also shows how to build from source.
 
 ## Build and test
 
@@ -76,6 +80,11 @@ npm run build       # each package's dist/
 
 To preview the documentation on its own: `pip install zensical`, then `zensical serve` in this folder.
 
+## Contributing
+
+Questions, bug reports and pull requests are welcome: see [CONTRIBUTING.md](CONTRIBUTING.md). Report a security
+problem privately, as [SECURITY.md](SECURITY.md) describes.
+
 ## License
 
-Apache-2.0. See [LICENSE](LICENSE) and [NOTICE](NOTICE).
+Apache-2.0. See [LICENSE](LICENSE) and [NOTICE](NOTICE). The name and logo are covered by [TRADEMARKS.md](TRADEMARKS.md).

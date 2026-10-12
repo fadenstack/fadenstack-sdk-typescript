@@ -36,8 +36,8 @@ const client = new FadenClient({
 | `timeoutMs` | How long one request may take, in milliseconds. The default is five minutes. A streamed answer that has started is not cut off by it. |
 | `allowInsecureHttp` | Allows an `http://` address. Only for a development server on your own machine. |
 
-`client.getFeatures()` returns the server's edition and features (`GET /v1/features`, on a server from the next
-release, after 0.4.1).
+`client.getFeatures()` returns the server's edition and features (`GET /v1/features`, on a server 0.4.2 or
+later).
 
 ## A whole answer
 
