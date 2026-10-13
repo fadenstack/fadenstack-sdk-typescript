@@ -1,6 +1,6 @@
 {
   "name": "@fadenstack/client",
-  "version": "0.2.0-rc.1",
+  "version": "0.2.0-rc.2",
   "description": "The Fadenstack server connection: the gateway's chat, agent sign-in, the agent resource, typed errors",
   "license": "Apache-2.0",
   "author": "Emagin8 UG (haftungsbeschränkt)",

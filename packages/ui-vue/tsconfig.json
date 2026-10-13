@@ -1,0 +1,20 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "noEmit": true,
+    "jsx": "preserve",
+    "types": ["node"],
+    "paths": {
+      "@fadenstack/client": ["../client/src/index.ts"],
+      "@fadenstack/agents": ["../agents/src/index.ts"],
+      "@fadenstack/ui": ["../ui/src/index.ts"],
+      "@fadenstack/ui-web": ["../ui-web/src/index.ts"],
+      "@fadenstack/ui-react": ["../ui-react/src/index.ts"],
+      "@fadenstack/ui-vue": ["./src/index.ts"],
+      "@fadenstack/testing": ["../testing/src/index.ts"]
+    }
+  },
+  "include": ["src/**/*.ts", "src/**/*.vue", "test/**/*.ts", "test/**/*.vue"]
+}

@@ -1,10 +1,10 @@
 # Releasing
 
 A tag publishes a release. `.github/workflows/release.yml` checks that the tag names the packages' version, runs
-the type check and the tests, builds, and publishes the five `@fadenstack` packages to npm with trusted
+the type check and the tests, builds, and publishes the seven `@fadenstack` packages to npm with trusted
 publishing: no npm token is stored anywhere.
 
-1. Set the version in all five packages and in `SDK_VERSION`, then update the lock file:
+1. Set the version in all seven packages and in `SDK_VERSION`, then update the lock file:
 
     ```bash
     node scripts/version.mjs 0.2.0
@@ -27,10 +27,11 @@ workflow stops half-way, run it again: it skips the packages that are on npm alr
 ## Before the first release (once)
 
 npm lets a package trust a workflow only after the package exists, so the first version of each package is
-published by hand.
+published by hand. A package added later (as `ui-web` and `ui-vue` were, after 0.2.0-rc.1) needs these steps
+for itself before its first tagged release: publish it alone with `npm publish -w packages/<name> --access public`.
 
 1. Your npm account has two-factor authentication and may publish in the `fadenstack` organisation.
-2. Build and publish the five packages from a clean checkout of the tag:
+2. Build and publish the seven packages from a clean checkout of the tag:
 
     ```bash
     npm ci
@@ -42,7 +43,7 @@ published by hand.
 3. Trust this workflow for each package, with npm 11.15 or later:
 
     ```bash
-    for p in client agents ui ui-react testing; do
+    for p in client agents ui ui-web ui-react ui-vue testing; do
       npx npm@11 trust github "@fadenstack/$p" --file release.yml \
         --repo fadenstack/fadenstack-sdk-typescript --env npm --allow-publish
     done

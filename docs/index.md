@@ -27,7 +27,9 @@ The SDK also powers Fadenstack's browser agent.
 | `@fadenstack/client` | The server connection: the gateway's chat completions (streamed, with the gateway's events), agent sign-in, the agent resource (profile, event reports, approvals), tool classes and modes, typed errors | `Fadenstack.Client` |
 | `@fadenstack/agents` | The agent: the builder, the tool loop, tool classes and modes, approvals, sessions on the device, outcomes, stages and modules | `Fadenstack.Agents` |
 | `@fadenstack/ui` | View models for a chat with an agent, with no UI framework | `Fadenstack.UI` |
+| `@fadenstack/ui-web` | The web look every skin shares: the stylesheet, icons, the agent's avatar, the panel's browser behaviours | `Fadenstack.UI.Wpf` (its themes) |
 | `@fadenstack/ui-react` | The React skin for those view models: a chat panel | `Fadenstack.UI.Wpf` |
+| `@fadenstack/ui-vue` | The Vue skin for the same view models: the same chat panel | `Fadenstack.UI.Wpf` |
 | `@fadenstack/testing` | A fake Fadenstack server for tests and demos | — |
 
 The packages follow the [.NET SDK](../dotnet/index.md): the same concepts, the same tool classes and modes, and the
@@ -53,7 +55,9 @@ too, and allow it to this machine (`localhost`, `127.0.0.1`, `::1`).
 | `@fadenstack/client` | Nothing |
 | `@fadenstack/agents` | `@fadenstack/client` |
 | `@fadenstack/ui` | `@fadenstack/agents`, `@fadenstack/client`, and `marked` for Markdown |
-| `@fadenstack/ui-react` | The three packages above, with React and React DOM 18.2 or later as peer dependencies |
+| `@fadenstack/ui-web` | `@fadenstack/ui` |
+| `@fadenstack/ui-react` | The four packages above, with React and React DOM 18.2 or later as peer dependencies |
+| `@fadenstack/ui-vue` | `@fadenstack/ui`, `@fadenstack/ui-web` and the two below them, with Vue 3.5 or later as a peer dependency |
 | `@fadenstack/testing` | `@fadenstack/client` |
 
 ## Install
@@ -64,7 +68,8 @@ Install the packages you need from npm, by name:
 npm install @fadenstack/client @fadenstack/agents
 ```
 
-Add `@fadenstack/ui` and `@fadenstack/ui-react` for the chat panel. Add `@fadenstack/testing` as a development
+Add `@fadenstack/ui`, `@fadenstack/ui-web` and `@fadenstack/ui-react` or `@fadenstack/ui-vue` for the
+[chat panel](chat-panel.md). Add `@fadenstack/testing` as a development
 dependency for [testing without a server](testing.md). The packages are released together, with one version; keep them
 on the same version.
 

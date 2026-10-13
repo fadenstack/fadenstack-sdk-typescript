@@ -190,7 +190,7 @@ The agent starts the first time you open a session, or when you call `agent.star
 - reports the app's manifest to the server, unless event reporting is off.
 
 After that, `agent.profile` is the `AgentProfile` and `agent.tools` lists the tools with the classes they run under.
-When a new version of the agent is published, `agent.restart()` loads the profile again.
+When a new version of the agent is published, `agent.restart()` loads the profile again. `agent.profile.user.language` is the language the user picked for all their clients and the console, or `null`; `agent.setUserLanguage(tag)` keeps a new one (`null` forgets it). The chat panel does both: see [Languages](chat-panel.md#languages).
 
 ## Sessions
 

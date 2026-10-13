@@ -12,12 +12,14 @@ the agent's instructions, model and knowledge, and handles personal data, rate l
 | `@fadenstack/client` | The server connection: the gateway's chat completions (streamed, with the gateway's events), agent sign-in, the agent resource, tool classes and modes, typed errors | `Fadenstack.Client` |
 | `@fadenstack/agents` | The agent: the builder, the tool loop, approvals, sessions on the device, outcomes, stages and modules | `Fadenstack.Agents` |
 | `@fadenstack/ui` | View models for a chat with an agent, with no UI framework | `Fadenstack.UI` |
+| `@fadenstack/ui-web` | The web look every skin shares: the stylesheet, icons, the agent's avatar, the panel's browser behaviours | `Fadenstack.UI.Wpf` (its themes) |
 | `@fadenstack/ui-react` | The React skin for those view models: a chat panel | `Fadenstack.UI.Wpf` |
+| `@fadenstack/ui-vue` | The Vue skin for the same view models: the same chat panel | `Fadenstack.UI.Wpf` |
 | `@fadenstack/testing` | A fake Fadenstack server for tests and demos | — |
 
 The packages are ES modules with type declarations, for browsers (Chrome 116 or later) and Node.js 24 or later.
 They use `fetch`, Web Streams, Web Crypto and `AbortSignal` (plus IndexedDB in a browser) and nothing else; the UI
-packages add `marked` and React.
+packages add `marked`, and React or Vue.
 
 ## An agent
 
@@ -65,7 +67,8 @@ rule asks about ask every time. The docs cover [tools and approvals](docs/tools.
 npm install @fadenstack/client @fadenstack/agents
 ```
 
-Add `@fadenstack/ui` and `@fadenstack/ui-react` for the chat panel, and `@fadenstack/testing` for tests.
+Add `@fadenstack/ui`, `@fadenstack/ui-web` and `@fadenstack/ui-react` or `@fadenstack/ui-vue` for the chat panel, and
+`@fadenstack/testing` for tests.
 [Install](docs/index.md#install) also shows how to build from source.
 
 ## Build and test

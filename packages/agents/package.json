@@ -1,6 +1,6 @@
 {
   "name": "@fadenstack/agents",
-  "version": "0.2.0-rc.1",
+  "version": "0.2.0-rc.2",
   "description": "A Fadenstack agent run on the device: the tool loop, tool classes and modes, approvals, local sessions",
   "license": "Apache-2.0",
   "author": "Emagin8 UG (haftungsbeschränkt)",
@@ -38,6 +38,6 @@
     "access": "public"
   },
   "dependencies": {
-    "@fadenstack/client": "0.2.0-rc.1"
+    "@fadenstack/client": "0.2.0-rc.2"
   }
 }

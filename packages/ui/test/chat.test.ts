@@ -13,6 +13,8 @@ import {
   RenderBatcher,
   ToolCallPart,
   immediateScheduler,
+  type AgentChatOptions,
+  type OutgoingMessage,
   type UiScheduler,
 } from "@fadenstack/ui";
 import { FakeGateway, lastToolResults, type FakeGatewayOptions } from "@fadenstack/testing";
@@ -28,7 +30,7 @@ async function waitFor<T>(find: () => T | undefined, timeoutMs = 2000): Promise<
   }
 }
 
-async function chat(options: FakeGatewayOptions = {}) {
+async function chat(options: FakeGatewayOptions = {}, chatOptions: AgentChatOptions = {}) {
   const gateway = new FakeGateway({
     agents: [{
       slug: "page", name: "Page assistant", ui: { greeting: "I read pages.", suggestions: ["Summarise", 7, "Explain"] },
@@ -57,7 +59,7 @@ async function chat(options: FakeGatewayOptions = {}) {
     )
     .build();
   const clipboard = new MemoryClipboard();
-  const vm = new AgentChatViewModel(agent, approvals, { scheduler: immediateScheduler, clipboard });
+  const vm = new AgentChatViewModel(agent, approvals, { scheduler: immediateScheduler, clipboard, ...chatOptions });
   await vm.initialize();
   return { gateway, vm, written, clipboard, agent };
 }
@@ -247,5 +249,84 @@ describe("RenderBatcher", () => {
     const log: string[] = [];
     batcher.enqueue(() => log.push("x"));
     expect(log).toEqual(["x"]);
+  });
+});
+
+describe("AgentChatViewModel's beforeSend and afterSend", () => {
+  it("run around every send: the composer, a suggestion and Retry; attachments added first go with the message", async () => {
+    const log: string[] = [];
+    let vm!: AgentChatViewModel;
+    const setup = await chat({ model: () => ({ text: "ok" }) }, {
+      beforeSend: async (message: OutgoingMessage, signal: AbortSignal) => {
+        log.push(`before ${message.text} busy=${vm.isBusy} aborted=${signal.aborted}`);
+        await Promise.resolve();
+        if (message.text === "Explain") vm.attach({ title: "Selection", content: "Hello", kind: "selection" });
+      },
+      afterSend: (message) => log.push(`after ${message.text}`),
+    });
+    vm = setup.vm;
+    vm.setInput("Explain");
+    await vm.send();
+    await vm.send("Summarise");
+    await vm.retry(vm.turns[1]!);
+    expect(log).toEqual([
+      "before Explain busy=true aborted=false", "after Explain",
+      "before Summarise busy=true aborted=false", "after Summarise",
+      "before Summarise busy=true aborted=false", "after Summarise",
+    ]);
+    expect(vm.turns.map((t) => t.userText)).toEqual(["Explain", "Summarise", "Summarise"]);
+    expect(vm.turns[0]!.attachments.map((a) => a.title)).toEqual(["Selection"]);
+    expect(String(setup.gateway.modelCalls[0]!.messages[0]!.content)).toContain('<attachment title="Selection"');
+    expect(vm.input).toBe("");
+  });
+
+  it("send nothing when beforeSend throws: the text stays, the error says why, and the next message clears it", async () => {
+    let refuse = true;
+    const after: string[] = [];
+    const { vm, gateway } = await chat({ model: () => ({ text: "ok" }) }, {
+      beforeSend: () => {
+        if (refuse) throw new Error("Select a file first.");
+      },
+      afterSend: (message) => after.push(message.text),
+    });
+    vm.setInput("Summarise the file");
+    await vm.send();
+    expect(vm).toMatchObject({ isBusy: false, error: "Select a file first.", input: "Summarise the file", isEmpty: true });
+    expect(gateway.modelCalls).toHaveLength(0);
+    refuse = false;
+    await vm.send();
+    expect(vm.error).toBeUndefined();
+    expect(vm.turns).toHaveLength(1);
+    expect(after).toEqual(["Summarise the file", "Summarise the file"]);
+  });
+
+  it("are stopped by Stop while the host prepares: no turn, no error", async () => {
+    let started!: () => void;
+    const preparing = new Promise<void>((r) => (started = r));
+    const after: string[] = [];
+    const { vm, gateway } = await chat({ model: () => ({ text: "ok" }) }, {
+      beforeSend: (_message, signal) => new Promise<void>((_resolve, reject) => {
+        started();
+        signal.addEventListener("abort", () => reject(signal.reason));
+      }),
+      afterSend: (message) => after.push(message.text),
+    });
+    const sending = vm.send("Go");
+    await preparing;
+    expect(vm.isBusy).toBe(true);
+    expect(vm.canSend).toBe(false);
+    vm.stop();
+    await sending;
+    expect(vm).toMatchObject({ isBusy: false, error: undefined, isEmpty: true });
+    expect(gateway.modelCalls).toHaveLength(0);
+    expect(after).toEqual(["Go"]);
+  });
+
+  it("are not needed: a chat without them sends as before", async () => {
+    const after: string[] = [];
+    const { vm } = await chat({ model: () => ({ text: "ok" }) }, { afterSend: (m) => after.push(m.text) });
+    await vm.send("Hi");
+    expect(vm.turns).toHaveLength(1);
+    expect(after).toEqual(["Hi"]);
   });
 });

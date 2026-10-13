@@ -10,7 +10,10 @@ import { Observable } from "./observable.js";
 import { writeClipboard, type Clipboard } from "./services.js";
 import type { UiStrings } from "./strings.js";
 
-/** What every part can reach: the texts, the clipboard, the locale, the preview length. */
+/**
+ * What every part can reach: the texts, the clipboard, the locale, the preview length. The chat's parts share one,
+ * so when the user picks another language, `strings` changes for all of them at once.
+ */
 export interface PartContext {
   strings: UiStrings;
   clipboard: Clipboard;
@@ -28,6 +31,11 @@ export abstract class ResponsePart extends Observable {
   abstract readonly kind: string;
   /** A stable key for the skin's list. */
   readonly key: string = `p${++partCounter}`;
+
+  /** @internal The language changed: the part's texts read the new one, its views draw them again. */
+  retext(): void {
+    this.notify();
+  }
 }
 
 let partCounter = 0;
@@ -88,17 +96,16 @@ export class ReasoningPart extends ResponsePart {
   #text = "";
   #streaming = true;
   #expanded = false;
-  #title: string;
+  #seconds: number | undefined;
 
   constructor(context: PartContext, started: Date) {
     super();
     this.#context = context;
     this.#started = started;
-    this.#title = context.strings.thinking;
   }
 
   get title(): string {
-    return this.#title;
+    return this.#seconds === undefined ? this.#context.strings.thinking : this.#context.strings.thoughtFor(this.#seconds);
   }
 
   get isStreaming(): boolean {
@@ -129,8 +136,7 @@ export class ReasoningPart extends ResponsePart {
   complete(now: Date): void {
     if (!this.#streaming) return;
     this.#streaming = false;
-    const seconds = Math.max(1, Math.round((now.getTime() - this.#started.getTime()) / 1000));
-    this.#title = this.#context.strings.thoughtFor(seconds);
+    this.#seconds = Math.max(1, Math.round((now.getTime() - this.#started.getTime()) / 1000));
     this.notify();
   }
 }
@@ -354,29 +360,65 @@ export class ApprovalPart extends ResponsePart {
 
 export type NoticeSeverity = "info" | "warning" | "blocked" | "error";
 
+/** A notice's texts in a language: the chat's own notices work them out again when the language changes. */
+export interface NoticeTexts {
+  title: string;
+  message: string;
+  detail?: string | undefined;
+}
+
 /** A refusal, a limit, an error, or a feature's notice ("3 names masked locally"). */
 export class NoticePart extends ResponsePart {
   readonly kind = "notice";
+  readonly severity: NoticeSeverity;
+  #fixed: NoticeTexts;
+  #texts: ((strings: UiStrings) => NoticeTexts) | undefined;
+  #context: PartContext | undefined;
 
-  constructor(
-    readonly severity: NoticeSeverity,
-    readonly title: string,
-    readonly message: string,
-    /** For support: the decision id of a refusal. */
-    readonly detail?: string,
-  ) {
+  /** A notice with its own texts (a module's: in the module's words). */
+  constructor(severity: NoticeSeverity, title: string, message: string, detail?: string) {
     super();
+    this.severity = severity;
+    this.#fixed = { title, message, detail };
   }
 
-  static from(notice: GovernanceNotice, strings: UiStrings): NoticePart {
+  /** @internal A notice in the panel's words: in its language, and again in the next one the user picks. */
+  static localized(context: PartContext, severity: NoticeSeverity, texts: (strings: UiStrings) => NoticeTexts): NoticePart {
+    const part = new NoticePart(severity, "", "");
+    part.#texts = texts;
+    part.#context = context;
+    return part;
+  }
+
+  get title(): string {
+    return this.#current().title;
+  }
+
+  get message(): string {
+    return this.#current().message;
+  }
+
+  /** For support: the decision id of a refusal. */
+  get detail(): string | undefined {
+    return this.#current().detail;
+  }
+
+  /** @internal */
+  static from(notice: GovernanceNotice, context: PartContext): NoticePart {
     const severity: NoticeSeverity = notice.outcome === "prompt_blocked" || notice.outcome === "response_blocked" ? "blocked"
       : notice.outcome === "tool_denied" || notice.outcome === "rate_limited" ? "warning"
       : "info";
-    const title = strings.noticeTitles[notice.outcome] ?? strings.noticeFallback;
-    const message = notice.retryAfterMs !== undefined
-      ? `${notice.message} ${strings.tryAgainIn(Math.ceil(notice.retryAfterMs / 1000))}`
-      : notice.message;
-    return new NoticePart(severity, title, message, notice.decisionId ? strings.decision(notice.decisionId) : undefined);
+    return NoticePart.localized(context, severity, (strings) => ({
+      title: strings.noticeTitles[notice.outcome] ?? strings.noticeFallback,
+      message: notice.retryAfterMs !== undefined
+        ? `${notice.message} ${strings.tryAgainIn(Math.ceil(notice.retryAfterMs / 1000))}`
+        : notice.message,
+      detail: notice.decisionId ? strings.decision(notice.decisionId) : undefined,
+    }));
+  }
+
+  #current(): NoticeTexts {
+    return this.#texts && this.#context ? this.#texts(this.#context.strings) : this.#fixed;
   }
 }
 

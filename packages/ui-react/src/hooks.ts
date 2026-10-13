@@ -1,6 +1,7 @@
 import { useEffect, useLayoutEffect, useRef, useSyncExternalStore } from "react";
 
 import type { Observable } from "@fadenstack/ui";
+import { dismissOnOutside, stickToBottom } from "@fadenstack/ui-web";
 
 /** Re-renders when `vm` changes; returns it. Each view watches its own view model, so one change re-renders one view. */
 export function useViewModel<T extends Observable>(vm: T): T {
@@ -18,18 +19,14 @@ export function useStickToBottom<T extends HTMLElement>(): { ref: React.RefObjec
   useLayoutEffect(() => {
     const box = ref.current;
     if (!box) return;
+    const sticky = stickToBottom(box);
     const onScroll = () => {
-      stuck.current = box.scrollHeight - box.scrollTop - box.clientHeight < 48;
+      stuck.current = sticky.stuck;
     };
     box.addEventListener("scroll", onScroll, { passive: true });
-    const observer = typeof ResizeObserver === "undefined" ? undefined : new ResizeObserver(() => {
-      if (stuck.current) box.scrollTop = box.scrollHeight;
-    });
-    const content = box.firstElementChild;
-    if (observer && content) observer.observe(content);
     return () => {
       box.removeEventListener("scroll", onScroll);
-      observer?.disconnect();
+      sticky.stop();
     };
   }, []);
   return { ref, stuck };
@@ -38,18 +35,7 @@ export function useStickToBottom<T extends HTMLElement>(): { ref: React.RefObjec
 /** Closes a menu on a click outside it or Escape. */
 export function useDismiss(open: boolean, close: () => void, ref: React.RefObject<HTMLElement | null>): void {
   useEffect(() => {
-    if (!open) return;
-    const onPointer = (e: PointerEvent) => {
-      if (ref.current && !ref.current.contains(e.target as Node)) close();
-    };
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") close();
-    };
-    document.addEventListener("pointerdown", onPointer);
-    document.addEventListener("keydown", onKey);
-    return () => {
-      document.removeEventListener("pointerdown", onPointer);
-      document.removeEventListener("keydown", onKey);
-    };
+    if (!open || !ref.current) return;
+    return dismissOnOutside(ref.current, close);
   }, [open, close, ref]);
 }

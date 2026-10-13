@@ -101,6 +101,7 @@ A user (`FakeUser`):
 | `agents` | The slugs of the agents granted to the user. All agents when not given. |
 | `developerMode` | What the profile reports for local MCP. |
 | `createsAgents` | Whether the user may create agents. |
+| `language` | The language the user picked for all their clients, in the profile's `user`. |
 
 ## Script the model
 
@@ -142,6 +143,7 @@ The parts are sent in this order: events, the server tool, reasoning, text, tool
 | `POST /api/agents` | Creates an agent, for a user with `createsAgents`. |
 | `GET /v1/features`, `GET /v1/models`, `GET /api/health` | The server's edition and features, the models, and health. |
 | `GET /v1/agents/{agent}/profile` | The agent's profile. |
+| `PATCH /v1/agents/{agent}/user` | Keeps the user's language (`{ "language": tag }`, or `null` to forget it). A value that is not a language tag: 400. |
 | `POST /v1/agents/{agent}/chat/completions` | Chat, streamed or whole, with the server's events. |
 | `POST /v1/agents/{agent}/events` | Event reports. |
 | `PUT /v1/agents/{agent}/manifest` | The app's manifest. |
@@ -165,6 +167,7 @@ gateway lists them in `heldTools` and in the response header `x-faden-held-tools
 | `modelCalls` | Every model call, as the model saw it. |
 | `reported` | The events clients reported. |
 | `manifests` | The manifests apps sent. |
+| `languageOf(email)` | The language a user picked for all their clients, or `null`. |
 | `heldTools` | Tools held back because the contract does not list them. |
 | `approvals` | The answers to server tool approvals. |
 | `createdAgents` | Agents created through the API. |

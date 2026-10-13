@@ -1,6 +1,7 @@
 import { useEffect, useLayoutEffect, useRef, type ReactElement, type ReactNode } from "react";
 
 import type { AgentChatViewModel, AttachmentViewModel, UiStrings } from "@fadenstack/ui";
+import { composerKey, fitToContent, focusAtEnd } from "@fadenstack/ui-web";
 
 import { useViewModel } from "./hooks.js";
 import { Icon } from "./icons.js";
@@ -17,17 +18,12 @@ export function Composer({ chat, accessory, placeholder }: {
   const box = useRef<HTMLTextAreaElement>(null);
 
   useEffect(() => chat.onComposerFocus(() => {
-    box.current?.focus();
-    const end = box.current?.value.length ?? 0;
-    box.current?.setSelectionRange(end, end);
+    if (box.current) focusAtEnd(box.current);
   }), [chat]);
 
   // Grows with its text, up to a third of the panel.
   useLayoutEffect(() => {
-    const el = box.current;
-    if (!el) return;
-    el.style.height = "auto";
-    el.style.height = `${Math.min(el.scrollHeight, Math.max(120, window.innerHeight / 3))}px`;
+    if (box.current) fitToContent(box.current);
   }, [chat.input]);
 
   const send = () => {
@@ -44,18 +40,17 @@ export function Composer({ chat, accessory, placeholder }: {
       <textarea
         ref={box}
         rows={1}
+        dir="auto"
         value={chat.input}
         placeholder={placeholder ?? strings.composerPlaceholder}
         aria-label={placeholder ?? strings.composerPlaceholder}
         onChange={(e) => chat.setInput(e.target.value)}
         onKeyDown={(e) => {
-          if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) {
-            e.preventDefault();
-            send();
-          } else if (e.key === "Escape" && chat.isBusy) {
-            e.preventDefault();
-            chat.stop();
-          }
+          const action = composerKey({ key: e.key, shiftKey: e.shiftKey, isComposing: e.nativeEvent.isComposing }, chat.isBusy);
+          if (!action) return;
+          e.preventDefault();
+          if (action === "send") send();
+          else chat.stop();
         }}
       />
       <div className="fdn-composer-bar">
@@ -82,13 +77,13 @@ function AttachmentChipView({ attachment, chat, strings }: { attachment: Attachm
         <button type="button" className="fdn-chip-toggle" aria-pressed={attachment.included} title={strings.includeAttachment}
           onClick={() => attachment.toggle()}>
           <Icon name="page" size={12} />
-          <span className="fdn-chip-title">{attachment.title}</span>
+          <span className="fdn-chip-title" dir="auto">{attachment.title}</span>
           {attachment.subtitle && <span className="fdn-chip-sub">{attachment.subtitle}</span>}
         </button>
       ) : (
         <>
           <Icon name="page" size={12} />
-          <span className="fdn-chip-title">{attachment.title}</span>
+          <span className="fdn-chip-title" dir="auto">{attachment.title}</span>
           {attachment.subtitle && <span className="fdn-chip-sub">{attachment.subtitle}</span>}
           <button type="button" className="fdn-chip-remove" aria-label={`${strings.removeAttachment} ${attachment.title}`}
             onClick={() => chat.removeAttachment(attachment)}>
