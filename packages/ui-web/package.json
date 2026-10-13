@@ -1,6 +1,6 @@
 {
   "name": "@fadenstack/ui-web",
-  "version": "0.2.0-rc.1",
+  "version": "0.2.0-rc.2",
   "description": "The web look of the Fadenstack chat for any framework: the stylesheet, icons, the agent's avatar and the panel's browser behaviours",
   "license": "Apache-2.0",
   "author": "Emagin8 UG (haftungsbeschränkt)",
@@ -41,6 +41,6 @@
     "access": "public"
   },
   "dependencies": {
-    "@fadenstack/ui": "0.2.0-rc.1"
+    "@fadenstack/ui": "0.2.0-rc.2"
   }
 }
