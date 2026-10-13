@@ -1,25 +1,60 @@
-# Fadenstack TypeScript SDK
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="docs/images/readme/banner-dark.png">
+    <img alt="Fadenstack SDK for TypeScript: governed AI agents inside your own software" src="docs/images/readme/banner-light.png" width="100%">
+  </picture>
+</p>
+
+<p align="center">
+  <a href="https://www.npmjs.com/package/@fadenstack/agents"><img alt="npm" src="https://img.shields.io/npm/v/@fadenstack/agents/next?logo=npm&label=npm&color=CB3837"></a>
+  <a href="https://github.com/fadenstack/fadenstack-sdk-typescript/actions/workflows/release.yml"><img alt="Release" src="https://github.com/fadenstack/fadenstack-sdk-typescript/actions/workflows/release.yml/badge.svg"></a>
+  <img alt="Types included" src="https://img.shields.io/badge/types-included-3178C6?logo=typescript&logoColor=white">
+  <img alt="Node.js 24 or later" src="https://img.shields.io/badge/node-%E2%89%A5%2024-339933?logo=nodedotjs&logoColor=white">
+  <a href="https://www.npmjs.com/package/@fadenstack/agents"><img alt="npm provenance" src="https://img.shields.io/badge/npm-provenance-2E7D32?logo=npm"></a>
+  <a href="https://developers.fadenstack.com/sdk/typescript/"><img alt="Documentation" src="https://img.shields.io/badge/docs-developers.fadenstack.com-E2325A"></a>
+  <a href="LICENSE"><img alt="License: Apache-2.0" src="https://img.shields.io/github/license/fadenstack/fadenstack-sdk-typescript?color=blue"></a>
+</p>
+
+<p align="center">
+  <a href="https://developers.fadenstack.com/sdk/typescript/"><b>Documentation</b></a> ·
+  <a href="#an-agent"><b>Quick start</b></a> ·
+  <a href="docs/chat-panel.md"><b>Chat panel</b></a> ·
+  <a href="https://www.npmjs.com/org/fadenstack"><b>npm</b></a> ·
+  <a href="https://fadenstack.com"><b>fadenstack.com</b></a>
+</p>
 
 Agents that run in a browser, a web page or Node and are governed by a [Fadenstack](https://fadenstack.com)
 server. The SDK runs the agent loop on the device: tools, approvals and the conversation itself. The server owns
 the agent's instructions, model and knowledge, and handles personal data, rate limits and audit. Agents need a Fadenstack server 0.4.2 or later.
 
-**Documentation: [developers.fadenstack.com/sdk/typescript](https://developers.fadenstack.com/sdk/typescript/)**
-(the source is in [`docs/`](docs/)).
+## Highlights
 
-| Package | What it is | .NET |
-|---|---|---|
-| `@fadenstack/client` | The server connection: the gateway's chat completions (streamed, with the gateway's events), agent sign-in, the agent resource, tool classes and modes, typed errors | `Fadenstack.Client` |
-| `@fadenstack/agents` | The agent: the builder, the tool loop, approvals, sessions on the device, outcomes, stages and modules | `Fadenstack.Agents` |
-| `@fadenstack/ui` | View models for a chat with an agent, with no UI framework | `Fadenstack.UI` |
-| `@fadenstack/ui-web` | The web look every skin shares: the stylesheet, icons, the agent's avatar, the panel's browser behaviours | `Fadenstack.UI.Wpf` (its themes) |
-| `@fadenstack/ui-react` | The React skin for those view models: a chat panel | `Fadenstack.UI.Wpf` |
-| `@fadenstack/ui-vue` | The Vue skin for the same view models: the same chat panel | `Fadenstack.UI.Wpf` |
-| `@fadenstack/testing` | A fake Fadenstack server for tests and demos | — |
+- **The loop runs in your app.** Tools are plain functions with a class (read, write, destructive); the agent asks
+  before anything that changes something, and the conversation stays on the device.
+- **The server governs.** Instructions, model, knowledge, tool rules, personal data and audit are your
+  administrator's, in the Fadenstack console; the app never holds the instructions.
+- **A chat panel in React or Vue.** Framework-free view models with two skins that render the same DOM and share one
+  stylesheet, in English, German, French, Spanish and Simplified Chinese. The user picks the language, and it follows
+  them to every client.
+- **Small and standard.** ES modules with type declarations, `fetch`, Web Streams and Web Crypto only; published
+  with npm provenance. A fake server (`@fadenstack/testing`) runs your tests without one.
+
+## Packages
+
+| Package | Version | What it is | .NET |
+|---|---|---|---|
+| [`@fadenstack/client`](https://www.npmjs.com/package/@fadenstack/client) | [![@fadenstack/client](https://img.shields.io/npm/v/@fadenstack/client/next?label=&color=CB3837)](https://www.npmjs.com/package/@fadenstack/client) | The server connection: the gateway's chat completions (streamed, with the gateway's events), agent sign-in, the agent resource, tool classes and modes, typed errors | `Fadenstack.Client` |
+| [`@fadenstack/agents`](https://www.npmjs.com/package/@fadenstack/agents) | [![@fadenstack/agents](https://img.shields.io/npm/v/@fadenstack/agents/next?label=&color=CB3837)](https://www.npmjs.com/package/@fadenstack/agents) | The agent: the builder, the tool loop, approvals, sessions on the device, outcomes, stages and modules | `Fadenstack.Agents` |
+| [`@fadenstack/ui`](https://www.npmjs.com/package/@fadenstack/ui) | [![@fadenstack/ui](https://img.shields.io/npm/v/@fadenstack/ui/next?label=&color=CB3837)](https://www.npmjs.com/package/@fadenstack/ui) | View models for a chat with an agent, with no UI framework | `Fadenstack.UI` |
+| [`@fadenstack/ui-web`](https://www.npmjs.com/package/@fadenstack/ui-web) | [![@fadenstack/ui-web](https://img.shields.io/npm/v/@fadenstack/ui-web/next?label=&color=CB3837)](https://www.npmjs.com/package/@fadenstack/ui-web) | The web look every skin shares: the stylesheet, icons, the agent's avatar, the panel's browser behaviours | `Fadenstack.UI.Wpf` (its themes) |
+| [`@fadenstack/ui-react`](https://www.npmjs.com/package/@fadenstack/ui-react) | [![@fadenstack/ui-react](https://img.shields.io/npm/v/@fadenstack/ui-react/next?label=&color=CB3837)](https://www.npmjs.com/package/@fadenstack/ui-react) | The React skin for those view models: a chat panel | `Fadenstack.UI.Wpf` |
+| [`@fadenstack/ui-vue`](https://www.npmjs.com/package/@fadenstack/ui-vue) | [![@fadenstack/ui-vue](https://img.shields.io/npm/v/@fadenstack/ui-vue/next?label=&color=CB3837)](https://www.npmjs.com/package/@fadenstack/ui-vue) | The Vue skin for the same view models: the same chat panel | `Fadenstack.UI.Wpf` |
+| [`@fadenstack/testing`](https://www.npmjs.com/package/@fadenstack/testing) | [![@fadenstack/testing](https://img.shields.io/npm/v/@fadenstack/testing/next?label=&color=CB3837)](https://www.npmjs.com/package/@fadenstack/testing) | A fake Fadenstack server for tests and demos | — |
 
 The packages are ES modules with type declarations, for browsers (Chrome 116 or later) and Node.js 24 or later.
 They use `fetch`, Web Streams, Web Crypto and `AbortSignal` (plus IndexedDB in a browser) and nothing else; the UI
 packages add `marked`, and React or Vue.
+
 
 ## An agent
 
