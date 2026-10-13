@@ -1,62 +1,108 @@
 # The chat panel
 
-Put a ready-made chat with your agent into a React application, or bind the same view models to another framework.
+Put a ready-made chat with your agent into a React or Vue application, or bind the same view models to another
+framework.
 
-The UI comes in two packages, and the split is strict:
+The UI comes in layers, and the split is strict:
 
 - **`@fadenstack/ui`** holds all of the behaviour, as view models with no UI framework: the chat
-  (`AgentChatViewModel`), its turns, the parts of each answer, the tool-mode picker, the history, attachments, and an
-  `ApprovalBroker` that turns approvals into cards in the chat.
-- **`@fadenstack/ui-react`** only renders. Its `ChatPanel` binds the view models with React's
-  `useSyncExternalStore`. A skin for Vue, Lit or another framework binds to the same view models.
+  (`AgentChatViewModel`), its turns, the parts of each answer, the tool-mode picker, the history, attachments, an
+  `ApprovalBroker` that turns approvals into cards in the chat, and every text the panel shows, in several languages.
+- **`@fadenstack/ui-web`** holds the look every web skin shares: the stylesheet, the icons, the agent's avatar, and
+  the panel's browser behaviours (staying at the bottom while an answer streams, closing a menu on a click outside).
+- **`@fadenstack/ui-react`** and **`@fadenstack/ui-vue`** only render. Both draw the same markup with the same
+  stylesheet, so the panel looks and behaves the same in either. A skin for Lit or another framework binds to the same
+  view models and uses `@fadenstack/ui-web` the same way.
 
 ## Add the panel
 
-```tsx
-import { createRoot } from "react-dom/client";
-import { FadenstackClient } from "@fadenstack/client";
-import { FadenstackAgent } from "@fadenstack/agents";
-import { AgentChatViewModel, ApprovalBroker } from "@fadenstack/ui";
-import { ChatPanel } from "@fadenstack/ui-react";
-import "@fadenstack/ui-react/styles.css";
+=== "React"
 
-const { client } = FadenstackClient.forAgent({
-  serverUrl: "https://ai.example.internal",
-  agent: "my-assistant",
-  store,
-});
+    ```tsx
+    import { createRoot } from "react-dom/client";
+    import { FadenstackClient } from "@fadenstack/client";
+    import { FadenstackAgent } from "@fadenstack/agents";
+    import { AgentChatViewModel, ApprovalBroker, stringsFor } from "@fadenstack/ui";
+    import { ChatPanel } from "@fadenstack/ui-react";
+    import "@fadenstack/ui-web/styles.css";
 
-const approvals = new ApprovalBroker(); // approval cards in the chat decide
-const agent = FadenstackAgent.createBuilder()
-  .useClient(client)
-  .addTools(...tools)
-  .useApprovals(approvals)
-  .build();
+    const { client } = FadenstackClient.forAgent({
+      serverUrl: "https://ai.example.internal",
+      agent: "my-assistant",
+      store,
+    });
 
-const chat = new AgentChatViewModel(agent, approvals);
-await chat.initialize();
-createRoot(document.getElementById("chat")!).render(<ChatPanel chat={chat} />);
-```
+    const approvals = new ApprovalBroker(); // approval cards in the chat decide
+    const agent = FadenstackAgent.createBuilder()
+      .useClient(client)
+      .addTools(...tools)
+      .useApprovals(approvals)
+      .build();
+
+    const chat = new AgentChatViewModel(agent, approvals, { locale: navigator.language, strings: stringsFor() });
+    await chat.initialize();
+    createRoot(document.getElementById("chat")!).render(<ChatPanel chat={chat} />);
+    ```
+
+=== "Vue"
+
+    ```ts
+    import { createApp, h, markRaw } from "vue";
+    import { FadenstackClient } from "@fadenstack/client";
+    import { FadenstackAgent } from "@fadenstack/agents";
+    import { AgentChatViewModel, ApprovalBroker, stringsFor } from "@fadenstack/ui";
+    import { ChatPanel } from "@fadenstack/ui-vue";
+    import "@fadenstack/ui-web/styles.css";
+
+    const { client } = FadenstackClient.forAgent({
+      serverUrl: "https://ai.example.internal",
+      agent: "my-assistant",
+      store,
+    });
+
+    const approvals = new ApprovalBroker(); // approval cards in the chat decide
+    const agent = FadenstackAgent.createBuilder()
+      .useClient(client)
+      .addTools(...tools)
+      .useApprovals(approvals)
+      .build();
+
+    const chat = markRaw(new AgentChatViewModel(agent, approvals, { locale: navigator.language, strings: stringsFor() }));
+    await chat.initialize();
+    createApp({ render: () => h(ChatPanel, { chat }) }).mount("#chat");
+    ```
+
+    Keep the view model out of `ref()` and `reactive()`: a Vue proxy breaks its private fields. `markRaw` makes sure
+    Vue never wraps it. The panel watches the view model itself.
 
 Give the same `ApprovalBroker` to the builder and to the view model. Without a chat listening to it, the broker
 declines every request.
 
 `initialize()` starts the agent, reads its name, greeting and suggestions from the profile, and loads the session list.
 It does not throw: a failure shows in `chat.error`. When the agent needs a sign-in, `chat.signInRequired` is true, and
-the panel shows what you pass as `signIn` instead of the conversation. Sign the user in, then call `initialize()`
-again:
+the panel shows your sign-in instead of the conversation. Sign the user in, then call `initialize()` again:
 
-```tsx
-<ChatPanel chat={chat} signIn={<SignInForm onSignedIn={() => void chat.initialize()} />} />
-```
+=== "React"
+
+    ```tsx
+    <ChatPanel chat={chat} signIn={<SignInForm onSignedIn={() => void chat.initialize()} />} />
+    ```
+
+=== "Vue"
+
+    ```vue
+    <ChatPanel :chat="chat">
+      <template #sign-in><SignInForm @signed-in="chat.initialize()" /></template>
+    </ChatPanel>
+    ```
 
 Call `chat.dispose()` when you remove the panel. It stops a running turn and stops listening to the broker.
 
 ## What the panel shows
 
 - **The answer streams as Markdown**: headings, lists, code blocks with a copy button, tables with a copy button,
-  quotes and links. It is built as React elements, never as HTML: HTML in an answer shows as text. Links open only
-  for `http`, `https` and `mailto` addresses.
+  quotes and links. It is built as elements, never as HTML: HTML in an answer shows as text. Links open only for
+  `http`, `https` and `mailto` addresses.
 - **Remote images are never loaded**: no image in an answer is, because a remote image can carry data out. An image
   shows as its alternative text in brackets, with its address as the tooltip.
 - **Text and tool calls interleave** in the order they happened.
@@ -85,22 +131,50 @@ Turns out of view are not laid out. An opened session shows its latest turns fir
 
 ## Panel options
 
-| Prop | What it is |
-|---|---|
-| `chat` | The `AgentChatViewModel`. Required. |
-| `theme` | `system` (default) follows the browser's light or dark setting; `light` or `dark` fixes one. |
-| `headerExtra` | Your buttons in the header, for example settings or sign out. |
-| `composerAccessory` | Your controls in the composer, for example to attach the page or the selection. |
-| `contextBar` | Shown above the composer, for example the page the agent works on. |
-| `signIn` | Shown instead of the chat while the agent needs a sign-in. |
-| `placeholder` | The composer's placeholder. |
-| `partRenderers` | Views for parts that modules add. Tried before the built-in views. |
-| `agentColor` | A colour for the middle plate of the agent's avatar. |
-| `avatar` | Replaces the agent's avatar in the empty chat, for example with your own logo. |
-| `className` | More classes for the panel's root element. |
+React takes everything as props. Vue takes values as props and your own content as slots.
 
-`@fadenstack/ui-react` also exports the panel's pieces (`ChatHeader`, `Composer`, `TurnView`, `PartView`,
-`Markdown`, `AgentAvatar`) and the hook `useViewModel`, for a layout of your own.
+| React prop | Vue | What it is |
+|---|---|---|
+| `chat` | prop `chat` | The `AgentChatViewModel`. Required. |
+| `theme` | prop `theme` | `system` (default) follows the browser's light or dark setting; `light` or `dark` fixes one. |
+| `headerExtra` | slot `#header-extra` | Your buttons in the header, for example settings or sign out. |
+| `composerAccessory` | slot `#composer-accessory` | Your controls in the composer, for example to attach the page or the selection. |
+| `contextBar` | slot `#context-bar` | Shown above the composer, for example the page the agent works on. |
+| `signIn` | slot `#sign-in` | Shown instead of the chat while the agent needs a sign-in. |
+| `placeholder` | prop `placeholder` | The composer's placeholder. |
+| `partRenderers` | prop `part-renderers` | Views for parts that modules add. See [Views for parts](#views-for-parts). |
+| `agentColor` | prop `agent-color` | A colour for the middle plate of the agent's avatar. |
+| `avatar` | slot `#avatar` | Replaces the agent's avatar in the empty chat, for example with your own logo. |
+| `className` | `class` | More classes for the panel's root element. |
+
+Both packages also export the panel's pieces (`ChatHeader`, `Composer`, `TurnView`, `PartView`, `Markdown`,
+`AgentAvatar`, `Icon`), the view of each part (`ToolCallView`, `ApprovalView`, `MarkdownView`, ...), and
+`useViewModel`: a hook in React, a composable in Vue that returns the view model as a ref which changes with it.
+
+## Before a message goes
+
+Your application may need to do something before each message is sent: check that the user may still send, take
+the context its tools read, or attach a file. Do it in `beforeSend`, so it runs for every message, from the
+composer, a suggestion, Retry, or Edit and resend:
+
+```ts
+const chat = new AgentChatViewModel(agent, approvals, {
+  beforeSend: async (message, signal) => {
+    await session.assertStillSignedIn(signal);
+    activeFile = picker.current();
+    if (!activeFile) throw new Error("Select a file first.");
+    chat.attach({ title: activeFile.name, kind: "document", content: await activeFile.read(signal) });
+  },
+  afterSend: () => {
+    activeFile = undefined;
+  },
+});
+```
+
+While `beforeSend` runs, the chat is busy and the composer shows Stop, which aborts `signal`. If it throws, nothing
+is sent: the text stays in the composer and `chat.error` shows the message. Attachments it adds go with this message.
+`afterSend` runs once after every send, however it ended: its turn finished, failed or was stopped, or `beforeSend`
+threw.
 
 ## View model options
 
@@ -108,8 +182,9 @@ Turns out of view are not laid out. An opened session shows its latest turns fir
 
 | Option | What it is |
 |---|---|
-| `strings` | Texts in another language, or in your own words. See below. |
+| `strings` | The panel's texts: a language from `stringsFor`, your own translation, or a few words changed. See [Languages](#languages). |
 | `locale` | The locale for dates and numbers. The browser's by default. |
+| `beforeSend`, `afterSend` | What your application does around each message. See [Before a message goes](#before-a-message-goes). |
 | `previewLength` | How many characters of a tool's input and output are shown. Default 4 000. |
 | `initialTurns` | How many turns an opened session shows at first. |
 | `pageSize` | How many older turns "Show earlier messages" adds. |
@@ -141,6 +216,46 @@ An implicit chip is one your application offers, like the current page. It stays
 switch it off and on. Change what it says with `page.update(title, subtitle)`, and remove it with
 `chat.removeAttachment(page)`. Other chips go with the next message and are then cleared.
 
+## Views for parts
+
+A module can add parts of its own to an answer, and your application can show any part its own way. A part renderer
+gets each part and the texts, and returns a view, or nothing to leave the part to the built-in views. It is asked
+again whenever the part changes. A renderer can keep the built-in view and add to it, for example search results above
+the tool line that found them:
+
+=== "React"
+
+    ```tsx
+    import { ToolCallPart } from "@fadenstack/ui";
+    import { ToolCallView, type PartRenderer } from "@fadenstack/ui-react";
+
+    const searchResults: PartRenderer = (part, strings) =>
+      part instanceof ToolCallPart && part.name === "search_files" && part.state === "succeeded"
+        ? <><SearchResults callId={part.callId} /><ToolCallView part={part} strings={strings} /></>
+        : null;
+
+    <ChatPanel chat={chat} partRenderers={[searchResults]} />
+    ```
+
+=== "Vue"
+
+    ```ts
+    import { h } from "vue";
+    import { ToolCallPart } from "@fadenstack/ui";
+    import { ToolCallView, type PartRenderer } from "@fadenstack/ui-vue";
+
+    const searchResults: PartRenderer = (part, strings) =>
+      part instanceof ToolCallPart && part.name === "search_files" && part.state === "succeeded"
+        ? [h(SearchResults, { callId: part.callId }), h(ToolCallView, { part, strings })]
+        : undefined;
+    ```
+
+    ```vue
+    <ChatPanel :chat="chat" :part-renderers="[searchResults]" />
+    ```
+
+Every built-in part view takes `part` and `strings`.
+
 ## Theming
 
 The panel's colours, corner radius and fonts are CSS variables on `.fdn-chat`:
@@ -156,11 +271,12 @@ The panel's colours, corner radius and fonts are CSS variables on `.fdn-chat`:
 | `--fdn-radius`, `--fdn-font`, `--fdn-mono` | Corner radius and fonts |
 | `--fdn-agent-plate`, `--fdn-agent-plate-side`, `--fdn-agent-thread`, `--fdn-agent-thread-side`, `--fdn-agent-hollow`, `--fdn-agent-eye`, `--fdn-agent-pupil` | The agent's avatar |
 
-The stylesheet sets the dark values with rules on `.fdn-chat[data-theme]`. To change a variable in every theme, give
-the panel a class and set the variable in a rule that loads after `styles.css`:
+The stylesheet is `@fadenstack/ui-web/styles.css`. (`@fadenstack/ui-react/styles.css` still works: it imports the
+same file.) It sets the dark values with rules on `.fdn-chat[data-theme]`. To change a variable in every theme, give
+the panel a class and set the variable in a rule that loads after the stylesheet:
 
 ```css
-/* <ChatPanel chat={chat} className="my-panel" /> */
+/* <ChatPanel chat={chat} className="my-panel" />, or in Vue <ChatPanel :chat="chat" class="my-panel" /> */
 .fdn-chat.my-panel {
   --fdn-accent: #4c6a92;
   --fdn-focus: #4c6a92;
@@ -173,39 +289,56 @@ the panel a class and set the variable in a rule that loads after `styles.css`:
 ```
 
 The second rule covers `theme="dark"`. With `theme="system"`, put the dark values in a
-`@media (prefers-color-scheme: dark)` rule for `.fdn-chat.my-panel[data-theme="system"]`. In Windows contrast themes,
-the stylesheet switches to the system's colours.
+`@media (prefers-color-scheme: dark)` rule for `.fdn-chat.my-panel[data-theme="system"]`. To follow the colours of
+the application around the panel, map its variables to the panel's in such a rule. In Windows contrast themes, the
+stylesheet switches to the system's colours.
 
-## Other languages
+## Languages
 
-Every text the panel shows is in `UiStrings`, English by default. Pass the texts you change as `strings`; the rest
-stay English:
+The panels show no text of their own: every text is in the chat's `strings` (`UiStrings`), English by default. The
+SDK ships English, German, French, Spanish and Simplified Chinese, in the console's words and its formal address.
+`stringsFor` picks one for a locale, from the most specific tag to the language alone, and English when none fits:
 
 ```ts
-import { AgentChatViewModel, englishStrings } from "@fadenstack/ui";
+import { AgentChatViewModel, stringsFor } from "@fadenstack/ui";
 
 const chat = new AgentChatViewModel(agent, approvals, {
-  locale: "de-DE",
-  strings: {
-    send: "Senden",
-    stop: "Stoppen",
-    newChat: "Neuer Chat",
-    composerPlaceholder: "Frag etwas",
-    toolRunning: (name) => `${name} läuft`,
-    toolRan: (name) => `${name} ausgeführt`,
-    noticeTitles: { prompt_blocked: "Deine Nachricht wurde nicht gesendet" },
-    modes: {
-      ...englishStrings.modes,
-      ask: { label: "Fragen", description: "Fragt, bevor sich etwas ändert." },
-    },
-  },
+  locale: "de-AT",
+  strings: stringsFor("de-AT"), // German; stringsFor() reads the browser's languages
 });
 ```
 
-The groups `toolClass`, `approvalClass`, `approvalWhy`, `noticeTitles` and `modes` are merged with the English ones
-key by key. `noticeTitles` takes single entries; the other groups have a fixed set of keys, so spread the English
-group and change what you need, as with `modes` above. `englishStrings` is the full English set to start a
-translation from.
+`stringsFor(["pt-BR", "fr-FR"])` takes the first locale it has texts for. `zh-CN` gets Simplified Chinese; `zh-TW` is
+Traditional, which is not shipped, and gets English unless you add it. `builtInStrings` lists the languages by tag,
+and each one is exported too: `englishStrings`, `germanStrings`, `frenchStrings`, `spanishStrings`,
+`chineseSimplifiedStrings`.
+
+To add a language, write a full `UiStrings`, with its `language` tag, and pass it, or give `stringsFor` your
+languages next to the built-in ones:
+
+```ts
+import { builtInStrings, stringsFor, type UiStrings } from "@fadenstack/ui";
+
+const italianStrings: UiStrings = { language: "it", direction: "ltr", send: "Invia", /* ... every text */ };
+const strings = stringsFor(userLocale, { ...builtInStrings, it: italianStrings });
+```
+
+To change a few words, pass only those. What you leave out comes from English, or from the language you name with
+`withStrings`:
+
+```ts
+import { germanStrings, withStrings } from "@fadenstack/ui";
+
+const strings = withStrings({ composerPlaceholder: "Fragen Sie zu dieser Datei" }, germanStrings);
+```
+
+The groups `toolClass`, `approvalClass`, `approvalWhy`, `noticeTitles` and `modes` are completed key by key, so you
+can change one mode's words and keep the others.
+
+The panel's root element carries the texts' `lang` and their `dir`. A language that runs right to left, such as
+Arabic or Hebrew, sets `direction: "rtl"`, and the whole panel mirrors: the stylesheet's directions are logical. The
+user's messages and the answers take their direction from their own text, so a Hebrew answer reads right to left in
+an English panel, and code always runs left to right. Dates and numbers follow `locale`.
 
 ## View models for other frameworks
 
@@ -215,9 +348,14 @@ reference. Each turn and each part is its own view model, so one change re-rende
 
 | View model | What it holds |
 |---|---|
-| `AgentChatViewModel` | The chat: `turns`, `input`, `attachments`, `sessions`, `toolModes`, `toolMode`, `greeting`, `suggestions`, `isBusy`, `signInRequired`, `error`, and the actions `send`, `stop`, `newChat`, `openSession`, `loadEarlier`, `selectToolMode`. |
+| `AgentChatViewModel` | The chat: `turns`, `input`, `attachments`, `sessions`, `toolModes`, `toolMode`, `greeting`, `suggestions`, `isBusy`, `signInRequired`, `error`, `strings`, and the actions `send`, `stop`, `newChat`, `openSession`, `loadEarlier`, `selectToolMode`. |
 | `TurnViewModel` | One exchange: `userText`, `parts`, `state`, `outcome`, `usageText`, `durationText`, and `copy`, `edit`, `retry`. |
 | `ResponsePart` | One part of an answer, with a `kind`: `markdown`, `reasoning`, `tool`, `approval`, `notice`, `citations`, and `card`, `table`, `progress` and `diff` for modules. |
 | `AttachmentViewModel` | One context chip. |
 
 A turn's `state` is `running`, `waiting_for_approval`, `completed`, `blocked`, `stopped` or `failed`.
+
+A new skin draws the classes of `@fadenstack/ui-web/styles.css` and takes the rest from `@fadenstack/ui-web`:
+`iconPaths` for the icons, `agentAvatar()` for the avatar as SVG data, `stickToBottom`, `dismissOnOutside`,
+`fitToContent` and `composerKey` for the behaviours, and `toolBadges`, `toolStatusIcon`, `noticeIcon` and the others
+for how parts look. The React and Vue skins are the examples.

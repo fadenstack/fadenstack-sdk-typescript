@@ -11,7 +11,7 @@ export function ChatHeader({ chat, extra }: { chat: AgentChatViewModel; extra?: 
   const s = chat.strings;
   return (
     <header className="fdn-header">
-      <div className="fdn-header-title" title={chat.title}>{chat.title}</div>
+      <div className="fdn-header-title" title={chat.title} dir="auto">{chat.title}</div>
       <ModeMenu chat={chat} />
       <HistoryMenu chat={chat} />
       <button type="button" className="fdn-icon-button" title={s.newChat} aria-label={s.newChat} disabled={!chat.isReady || chat.isBusy}
@@ -81,7 +81,7 @@ function HistoryMenu({ chat }: { chat: AgentChatViewModel }): ReactElement {
             <div key={session.id} className={`fdn-history-item${session.isCurrent ? " fdn-current" : ""}`}>
               <button type="button" role="menuitem" className="fdn-history-open" disabled={chat.isBusy}
                 onClick={() => void chat.openSession(session.id)}>
-                <span className="fdn-history-title">{session.title}</span>
+                <span className="fdn-history-title" dir="auto">{session.title}</span>
                 <span className="fdn-history-when">{session.whenText}</span>
               </button>
               <button type="button" className="fdn-icon-button fdn-small" title={s.deleteSession} aria-label={`${s.deleteSession}: ${session.title}`}

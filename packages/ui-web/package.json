@@ -1,0 +1,46 @@
+{
+  "name": "@fadenstack/ui-web",
+  "version": "0.2.0-rc.1",
+  "description": "The web look of the Fadenstack chat for any framework: the stylesheet, icons, the agent's avatar and the panel's browser behaviours",
+  "license": "Apache-2.0",
+  "author": "Emagin8 UG (haftungsbeschränkt)",
+  "homepage": "https://developers.fadenstack.com/sdk/typescript/",
+  "bugs": "https://github.com/fadenstack/fadenstack-sdk-typescript/issues",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/fadenstack/fadenstack-sdk-typescript.git",
+    "directory": "packages/ui-web"
+  },
+  "keywords": [
+    "fadenstack",
+    "ai",
+    "agents",
+    "chat",
+    "css"
+  ],
+  "type": "module",
+  "sideEffects": [
+    "*.css"
+  ],
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./styles.css": "./styles.css"
+  },
+  "files": [
+    "dist",
+    "src",
+    "styles.css",
+    "NOTICE"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
+  "dependencies": {
+    "@fadenstack/ui": "0.2.0-rc.1"
+  }
+}

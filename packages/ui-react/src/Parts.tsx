@@ -14,15 +14,17 @@ import {
   type ResponsePart,
   type UiStrings,
 } from "@fadenstack/ui";
+import { approvalIcon, diffMarker, noticeIcon, noticeRole, toolBadges, toolClassName, toolStatusIcon } from "@fadenstack/ui-web";
 
 import { useViewModel } from "./hooks.js";
 import { Icon, Spinner } from "./icons.js";
 import { Markdown } from "./Markdown.js";
 
-/** Views for parts modules add; tried before the built-in ones. Return null to pass. */
+/** Views for parts modules add; tried before the built-in ones, again whenever the part changes. Return null to pass. */
 export type PartRenderer = (part: ResponsePart, strings: UiStrings) => ReactElement | null;
 
 export function PartView({ part, strings, renderers }: { part: ResponsePart; strings: UiStrings; renderers?: readonly PartRenderer[] }): ReactElement | null {
+  useViewModel(part);
   for (const render of renderers ?? []) {
     const view = render(part, strings);
     if (view) return view;
@@ -40,7 +42,7 @@ export function PartView({ part, strings, renderers }: { part: ResponsePart; str
   return null;
 }
 
-function MarkdownView({ part, strings }: { part: MarkdownPart; strings: UiStrings }): ReactElement {
+export function MarkdownView({ part, strings }: { part: MarkdownPart; strings: UiStrings }): ReactElement {
   useViewModel(part);
   // Stable callbacks, so blocks that did not change are not rendered again while the answer streams.
   const copyCode = useCallback((code: string) => part.copyCode(code), [part]);
@@ -48,22 +50,16 @@ function MarkdownView({ part, strings }: { part: MarkdownPart; strings: UiString
   return <Markdown blocks={part.blocks} strings={strings} streaming={part.isStreaming} onCopyCode={copyCode} onCopyTable={copyTable} />;
 }
 
-function ToolCallView({ part, strings }: { part: ToolCallPart; strings: UiStrings }): ReactElement {
+export function ToolCallView({ part, strings }: { part: ToolCallPart; strings: UiStrings }): ReactElement {
   useViewModel(part);
-  const failed = part.state === "failed";
-  const denied = part.state === "denied" || part.state === "cancelled";
+  const status = toolStatusIcon(part);
   return (
-    <div className={`fdn-tool${failed ? " fdn-tool-failed" : ""}${denied ? " fdn-tool-denied" : ""}`}>
+    <div className={toolClassName(part)}>
       <button type="button" className="fdn-tool-line" aria-expanded={part.isExpanded} disabled={!part.hasDetails}
         onClick={() => part.toggle()}>
-        <span className="fdn-tool-status">
-          {part.isRunning ? <Spinner /> : <Icon name={failed ? "warning" : denied ? "close" : "check"} size={14} />}
-        </span>
+        <span className="fdn-tool-status">{status ? <Icon name={status} size={14} /> : <Spinner />}</span>
         <span className="fdn-tool-title">{part.title}</span>
-        {part.source !== "host" && <span className="fdn-badge">{part.source === "gateway" ? strings.serverTool : part.source}</span>}
-        {part.source === "host" && part.toolClass !== "read" && (
-          <span className={`fdn-badge fdn-class-${part.toolClass}`}>{part.classLabel}</span>
-        )}
+        {toolBadges(part, strings).map((badge) => <span key={badge.className} className={badge.className}>{badge.text}</span>)}
         <span className="fdn-tool-duration">{part.durationText}</span>
         {part.hasDetails && <span className={part.isExpanded ? "fdn-chevron fdn-open" : "fdn-chevron"}><Icon name="chevron" size={14} /></span>}
       </button>
@@ -72,13 +68,13 @@ function ToolCallView({ part, strings }: { part: ToolCallPart; strings: UiString
           {part.argumentsText && (
             <>
               <div className="fdn-label">{strings.arguments}</div>
-              <pre>{part.argumentsText}</pre>
+              <pre dir="auto">{part.argumentsText}</pre>
             </>
           )}
           {part.resultText && (
             <>
               <div className="fdn-label">{strings.result}</div>
-              <pre>{part.resultText}</pre>
+              <pre dir="auto">{part.resultText}</pre>
             </>
           )}
         </div>
@@ -87,17 +83,17 @@ function ToolCallView({ part, strings }: { part: ToolCallPart; strings: UiString
   );
 }
 
-function ApprovalView({ part, strings }: { part: ApprovalPart; strings: UiStrings }): ReactElement {
+export function ApprovalView({ part, strings }: { part: ApprovalPart; strings: UiStrings }): ReactElement {
   useViewModel(part);
   return (
     <div className={`fdn-approval${part.isDangerous ? " fdn-approval-danger" : ""}`} role="group" aria-label={part.title}>
       <div className="fdn-approval-head">
-        <Icon name={part.isDangerous ? "warning" : "shield"} />
+        <Icon name={approvalIcon(part)} />
         <strong>{part.title}</strong>
         <span className={`fdn-badge fdn-class-${part.request.toolClass}`}>{part.classLabel}</span>
       </div>
-      {part.reason && <p className="fdn-approval-reason">{part.reason}</p>}
-      {part.argumentsText && <pre className="fdn-approval-args">{part.argumentsText}</pre>}
+      {part.reason && <p className="fdn-approval-reason" dir="auto">{part.reason}</p>}
+      {part.argumentsText && <pre className="fdn-approval-args" dir="auto">{part.argumentsText}</pre>}
       {part.isPending ? (
         <div className="fdn-approval-actions">
           <button type="button" className="fdn-button fdn-primary" onClick={() => part.allow()}>{strings.allow}</button>
@@ -116,12 +112,11 @@ function ApprovalView({ part, strings }: { part: ApprovalPart; strings: UiString
   );
 }
 
-function NoticeView({ part }: { part: NoticePart }): ReactElement {
-  const icon = part.severity === "info" ? "info" : part.severity === "blocked" ? "shield" : "warning";
+export function NoticeView({ part }: { part: NoticePart; strings?: UiStrings }): ReactElement {
   return (
-    <div className={`fdn-notice fdn-notice-${part.severity}`} role={part.severity === "info" ? "note" : "alert"}>
-      <Icon name={icon} />
-      <div>
+    <div className={`fdn-notice fdn-notice-${part.severity}`} role={noticeRole(part.severity)}>
+      <Icon name={noticeIcon(part.severity)} />
+      <div dir="auto">
         <strong>{part.title}</strong>
         <div>{part.message}</div>
         {part.detail && <div className="fdn-notice-detail">{part.detail}</div>}
@@ -130,7 +125,7 @@ function NoticeView({ part }: { part: NoticePart }): ReactElement {
   );
 }
 
-function ReasoningView({ part }: { part: ReasoningPart }): ReactElement {
+export function ReasoningView({ part }: { part: ReasoningPart; strings?: UiStrings }): ReactElement {
   useViewModel(part);
   return (
     <div className="fdn-collapsible">
@@ -139,12 +134,12 @@ function ReasoningView({ part }: { part: ReasoningPart }): ReactElement {
         <span>{part.title}</span>
         <span className={part.isExpanded ? "fdn-chevron fdn-open" : "fdn-chevron"}><Icon name="chevron" size={14} /></span>
       </button>
-      {part.isExpanded && <div className="fdn-reasoning">{part.text}</div>}
+      {part.isExpanded && <div className="fdn-reasoning" dir="auto">{part.text}</div>}
     </div>
   );
 }
 
-function CitationsView({ part }: { part: CitationsPart }): ReactElement {
+export function CitationsView({ part }: { part: CitationsPart; strings?: UiStrings }): ReactElement {
   useViewModel(part);
   return (
     <div className="fdn-collapsible">
@@ -156,7 +151,7 @@ function CitationsView({ part }: { part: CitationsPart }): ReactElement {
       {part.isExpanded && (
         <ol className="fdn-citations">
           {part.citations.map((c, i) => (
-            <li key={i}>
+            <li key={i} dir="auto">
               {c.title}
               {c.detail && <span className="fdn-muted"> · {c.detail}</span>}
             </li>
@@ -167,9 +162,9 @@ function CitationsView({ part }: { part: CitationsPart }): ReactElement {
   );
 }
 
-function CardView({ part }: { part: CardPart }): ReactElement {
+export function CardView({ part }: { part: CardPart; strings?: UiStrings }): ReactElement {
   return (
-    <div className="fdn-card">
+    <div className="fdn-card" dir="auto">
       <strong>{part.title}</strong>
       {part.subtitle && <div className="fdn-muted">{part.subtitle}</div>}
       <dl>
@@ -181,11 +176,11 @@ function CardView({ part }: { part: CardPart }): ReactElement {
   );
 }
 
-function TableView({ part }: { part: TablePart }): ReactElement {
+export function TableView({ part }: { part: TablePart; strings?: UiStrings }): ReactElement {
   return (
     <div className="fdn-md-table">
       {part.title && <div className="fdn-label">{part.title}</div>}
-      <table>
+      <table dir="auto">
         <thead><tr>{part.headers.map((h, i) => <th key={i}>{h}</th>)}</tr></thead>
         <tbody>{part.rows.map((row, r) => <tr key={r}>{row.map((c, i) => <td key={i}>{c}</td>)}</tr>)}</tbody>
       </table>
@@ -193,7 +188,7 @@ function TableView({ part }: { part: TablePart }): ReactElement {
   );
 }
 
-function ProgressView({ part }: { part: ProgressPart }): ReactElement {
+export function ProgressView({ part }: { part: ProgressPart; strings?: UiStrings }): ReactElement {
   useViewModel(part);
   return (
     <div className="fdn-progress">
@@ -203,13 +198,13 @@ function ProgressView({ part }: { part: ProgressPart }): ReactElement {
   );
 }
 
-function DiffView({ part }: { part: DiffPart }): ReactElement {
+export function DiffView({ part }: { part: DiffPart; strings?: UiStrings }): ReactElement {
   return (
     <div className="fdn-diff">
       <div className="fdn-label">{part.title}</div>
       <pre>
         {part.lines.map((l, i) => (
-          <div key={i} className={`fdn-diff-${l.kind}`}>{l.kind === "added" ? "+ " : l.kind === "removed" ? "- " : "  "}{l.text}</div>
+          <div key={i} className={`fdn-diff-${l.kind}`}>{diffMarker(l.kind)}{l.text}</div>
         ))}
       </pre>
     </div>

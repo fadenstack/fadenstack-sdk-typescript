@@ -1,0 +1,51 @@
+{
+  "name": "@fadenstack/ui-vue",
+  "version": "0.2.0-rc.1",
+  "description": "The Vue skin for the Fadenstack chat view models: a Copilot-style chat panel",
+  "license": "Apache-2.0",
+  "author": "Emagin8 UG (haftungsbeschränkt)",
+  "homepage": "https://developers.fadenstack.com/sdk/typescript/",
+  "bugs": "https://github.com/fadenstack/fadenstack-sdk-typescript/issues",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/fadenstack/fadenstack-sdk-typescript.git",
+    "directory": "packages/ui-vue"
+  },
+  "keywords": [
+    "fadenstack",
+    "ai",
+    "agents",
+    "chat",
+    "vue"
+  ],
+  "type": "module",
+  "sideEffects": false,
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "src",
+    "NOTICE"
+  ],
+  "scripts": {
+    "build": "vite build && vue-tsc -p tsconfig.build.json"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "dependencies": {
+    "@fadenstack/agents": "0.2.0-rc.1",
+    "@fadenstack/client": "0.2.0-rc.1",
+    "@fadenstack/ui": "0.2.0-rc.1",
+    "@fadenstack/ui-web": "0.2.0-rc.1"
+  },
+  "peerDependencies": {
+    "vue": "^3.5.0"
+  }
+}

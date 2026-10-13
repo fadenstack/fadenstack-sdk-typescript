@@ -8,16 +8,18 @@
     "packages/client",
     "packages/agents",
     "packages/ui",
+    "packages/ui-web",
     "packages/ui-react",
+    "packages/ui-vue",
     "packages/testing"
   ],
   "engines": {
     "node": ">=24"
   },
   "scripts": {
-    "build": "tsc -b packages/client packages/agents packages/ui packages/ui-react packages/testing",
-    "clean": "tsc -b --clean packages/client packages/agents packages/ui packages/ui-react packages/testing",
-    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "build": "tsc -b packages/client packages/agents packages/ui packages/ui-web packages/ui-react packages/testing && npm run build --workspace @fadenstack/ui-vue",
+    "clean": "tsc -b --clean packages/client packages/agents packages/ui packages/ui-web packages/ui-react packages/testing",
+    "typecheck": "tsc -p tsconfig.json --noEmit && vue-tsc -p packages/ui-vue/tsconfig.json",
     "test": "vitest run",
     "test:watch": "vitest",
     "livecheck": "node samples/livecheck.mjs"
@@ -27,11 +29,16 @@
     "@types/node": "^24.0.0",
     "@types/react": "^19.3.0",
     "@types/react-dom": "^19.3.0",
+    "@vitejs/plugin-vue": "^6.0.10",
+    "@vue/test-utils": "^2.5.1",
     "fake-indexeddb": "^6.2.5",
     "jsdom": "^27.4.0",
     "react": "^19.3.0",
     "react-dom": "^19.3.0",
     "typescript": "~5.9.3",
-    "vitest": "^4.1.11"
+    "vite": "^8.3.4",
+    "vitest": "^4.1.11",
+    "vue": "^3.5.44",
+    "vue-tsc": "^3.3.13"
   }
 }

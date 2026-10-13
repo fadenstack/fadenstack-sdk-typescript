@@ -1,6 +1,7 @@
 import { memo, type ReactElement } from "react";
 
 import type { TurnViewModel, UiStrings } from "@fadenstack/ui";
+import { turnMeta } from "@fadenstack/ui-web";
 
 import { useViewModel } from "./hooks.js";
 import { Icon, Spinner } from "./icons.js";
@@ -17,14 +18,14 @@ export const TurnView = memo(function TurnView({ turn, strings, renderers }: {
   return (
     <article className="fdn-turn" aria-busy={turn.isRunning}>
       <div className={`fdn-user${turn.isPromptBlocked ? " fdn-user-blocked" : ""}`}>
-        <div className="fdn-user-bubble">
+        <div className="fdn-user-bubble" dir="auto">
           {turn.userText}
           {turn.attachments.length > 0 && (
             <div className="fdn-chips">
               {turn.attachments.map((a, i) => (
                 <span key={i} className="fdn-chip fdn-chip-static" title={a.subtitle}>
                   <Icon name="page" size={12} />
-                  <span className="fdn-chip-title">{a.title}</span>
+                  <span className="fdn-chip-title" dir="auto">{a.title}</span>
                 </span>
               ))}
             </div>
@@ -61,7 +62,7 @@ export const TurnView = memo(function TurnView({ turn, strings, renderers }: {
             <button type="button" className="fdn-icon-button fdn-small" title={strings.edit} aria-label={strings.edit} onClick={() => turn.edit()}>
               <Icon name="edit" size={14} />
             </button>
-            <span className="fdn-muted">{[turn.durationText, turn.usageText].filter(Boolean).join(" · ")}</span>
+            <span className="fdn-muted">{turnMeta(turn)}</span>
           </div>
         )}
       </div>

@@ -43,7 +43,8 @@
   "dependencies": {
     "@fadenstack/agents": "0.2.0-rc.1",
     "@fadenstack/client": "0.2.0-rc.1",
-    "@fadenstack/ui": "0.2.0-rc.1"
+    "@fadenstack/ui": "0.2.0-rc.1",
+    "@fadenstack/ui-web": "0.2.0-rc.1"
   },
   "peerDependencies": {
     "react": ">=18.2",

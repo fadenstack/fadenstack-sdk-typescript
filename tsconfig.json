@@ -7,9 +7,12 @@
       "@fadenstack/client": ["./packages/client/src/index.ts"],
       "@fadenstack/agents": ["./packages/agents/src/index.ts"],
       "@fadenstack/ui": ["./packages/ui/src/index.ts"],
+      "@fadenstack/ui-web": ["./packages/ui-web/src/index.ts"],
       "@fadenstack/ui-react": ["./packages/ui-react/src/index.ts"],
       "@fadenstack/testing": ["./packages/testing/src/index.ts"]
     }
   },
-  "include": ["packages/*/src", "packages/*/test", "samples", "vitest.config.ts"]
+  "include": ["packages/*/src", "packages/*/test", "samples", "vitest.config.ts"],
+  // The Vue skin is checked by vue-tsc (npm run typecheck), which reads .vue files.
+  "exclude": ["packages/ui-vue"]
 }
