@@ -1,10 +1,15 @@
 import type { ToolClass, ToolMode } from "@fadenstack/client";
 
 /**
- * Every text the chat shows, in one place: a host passes its own (another language, its own words) through
- * `AgentChatOptions.strings`. English by default.
+ * Every text the chat shows, in one place, so skins hard-code none: a host passes a language (`stringsFor`, or its
+ * own translation) or its own words through `AgentChatOptions.strings`. English by default.
  */
 export interface UiStrings {
+  // the language
+  /** The BCP 47 tag of these texts ("de", "zh-Hans"): skins set it as the panel's `lang`. */
+  language: string;
+  /** Which way these texts run: skins set it as the panel's `dir`. */
+  direction: "ltr" | "rtl";
   // the turn
   working: string;
   stopped: string;
@@ -49,6 +54,8 @@ export interface UiStrings {
   thoughtFor(seconds: number): string;
   usedReferences(count: number): string;
   part(number: number): string;
+  /** A reference without a name. */
+  source: string;
   // the chat
   greetingFallback(agent: string): string;
   newChat: string;
@@ -76,9 +83,13 @@ export interface UiStrings {
   includeAttachment: string;
   arguments: string;
   result: string;
+  /** In place of a picture in an answer, which is never loaded: "[image]" without its alt text. */
+  image: string;
 }
 
 export const englishStrings: UiStrings = {
+  language: "en",
+  direction: "ltr",
   working: "Working...",
   stopped: "Stopped",
   failed: "Something went wrong",
@@ -127,6 +138,7 @@ export const englishStrings: UiStrings = {
   thoughtFor: (seconds) => `Thought for ${seconds} s`,
   usedReferences: (count) => (count === 1 ? "Used 1 reference" : `Used ${count} references`),
   part: (n) => `Part ${n}`,
+  source: "Source",
   greetingFallback: (agent) => `Ask ${agent} anything.`,
   newChat: "New chat",
   yesterday: "Yesterday",
@@ -157,18 +169,22 @@ export const englishStrings: UiStrings = {
   includeAttachment: "Include in the next message",
   arguments: "Input",
   result: "Output",
+  image: "image",
 };
 
-/** The English strings with the host's changes on top. */
-export function withStrings(changes: Partial<UiStrings> | undefined): UiStrings {
-  if (!changes) return englishStrings;
+/**
+ * `base` (English by default) with the host's changes on top: what `changes` leaves out, `base` says. Groups
+ * (`modes`, `approvalWhy`, ...) are completed key by key, so a host can change one mode's words.
+ */
+export function withStrings(changes: Partial<UiStrings> | undefined, base: UiStrings = englishStrings): UiStrings {
+  if (!changes) return base;
   return {
-    ...englishStrings,
+    ...base,
     ...changes,
-    toolClass: { ...englishStrings.toolClass, ...changes.toolClass },
-    approvalClass: { ...englishStrings.approvalClass, ...changes.approvalClass },
-    approvalWhy: { ...englishStrings.approvalWhy, ...changes.approvalWhy },
-    noticeTitles: { ...englishStrings.noticeTitles, ...changes.noticeTitles },
-    modes: { ...englishStrings.modes, ...changes.modes },
+    toolClass: { ...base.toolClass, ...changes.toolClass },
+    approvalClass: { ...base.approvalClass, ...changes.approvalClass },
+    approvalWhy: { ...base.approvalWhy, ...changes.approvalWhy },
+    noticeTitles: { ...base.noticeTitles, ...changes.noticeTitles },
+    modes: { ...base.modes, ...changes.modes },
   };
 }

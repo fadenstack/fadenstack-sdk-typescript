@@ -22,7 +22,7 @@ export const citationsRenderer: AgentEventRenderer = {
     const citations: Citation[] = (Array.isArray(sources) ? sources : []).map((s: unknown) => {
       const source = obj(s) ?? {};
       const citation: Citation = {
-        title: String(source["source"] ?? source["document_id"] ?? "Source"),
+        title: String(source["source"] ?? source["document_id"] ?? context.strings.source),
       };
       if (typeof source["chunk"] === "number") citation.detail = context.strings.part(source["chunk"]);
       if (typeof source["score"] === "number") citation.score = source["score"];

@@ -31,11 +31,29 @@ export interface AgentChatOptions {
   scheduler?: UiScheduler;
   /** Renderers for gateway events, tried before the built-in ones. */
   renderers?: AgentEventRenderer[];
-  /** Texts in another language or the host's own words. */
+  /**
+   * The chat's texts: a language (`stringsFor(locale)`), the host's own translation, or a few words changed. What a
+   * partial set leaves out is English; `withStrings(changes, germanStrings)` changes words of another language.
+   */
   strings?: Partial<UiStrings>;
   /** For dates and numbers; the browser's by default. */
   locale?: string;
   now?: () => Date;
+  /**
+   * Runs before every message goes -- from the composer, a suggestion, Retry, or Edit and resend -- for what the
+   * host does first: check it may still send, take the context its tools read, add attachments (they go with this
+   * message). The chat is busy meanwhile and Stop aborts `signal`. When it throws, nothing is sent: the text stays
+   * in the composer and `error` says why.
+   */
+  beforeSend?: (message: OutgoingMessage, signal: AbortSignal) => void | Promise<void>;
+  /** Runs once after every send, however it ended: its turn finished, failed or was stopped, or `beforeSend` threw. */
+  afterSend?: (message: OutgoingMessage) => void;
+}
+
+/** A message on its way, for `beforeSend` and `afterSend`. */
+export interface OutgoingMessage {
+  /** What the user sent, trimmed. */
+  readonly text: string;
 }
 
 /** A mode in the picker, with what it means; above the ceiling it cannot be picked. */
@@ -72,6 +90,8 @@ export class AgentChatViewModel extends Observable implements TurnHost {
   readonly #pageSize: number;
   readonly #unsubscribe: () => void;
   readonly #focusListeners = new Set<() => void>();
+  readonly #beforeSend: AgentChatOptions["beforeSend"];
+  readonly #afterSend: AgentChatOptions["afterSend"];
   // Approvals arrive twice: as an event, in order with the turn's other events, and as the broker's request,
   // which carries the answer. Whichever comes second adds the card, so it sits where the event put it.
   readonly #waitingForEvent = new Map<string, PendingApproval>();
@@ -112,6 +132,8 @@ export class AgentChatViewModel extends Observable implements TurnHost {
       previewLength: options.previewLength ?? 4000,
       now: options.now ?? (() => new Date()),
     };
+    this.#beforeSend = options.beforeSend;
+    this.#afterSend = options.afterSend;
     this.#unsubscribe = approvals.onRequested((pending) => this.#onApprovalRequested(pending));
   }
 
@@ -173,7 +195,7 @@ export class AgentChatViewModel extends Observable implements TurnHost {
     return this.#ready;
   }
 
-  /** A turn is running. */
+  /** A message is on its way: the host's `beforeSend` or its turn is running. */
   get isBusy(): boolean {
     return this.#busy;
   }
@@ -248,28 +270,46 @@ export class AgentChatViewModel extends Observable implements TurnHost {
     this.notify();
   }
 
-  /** Sends a message (the composer's when none is given); settles when its turn has ended and been shown. */
+  /**
+   * Sends a message (the composer's when none is given), after the host's `beforeSend`; settles when its turn has
+   * ended and been shown. A new message clears the last `error`.
+   */
   async send(text: string = this.#input): Promise<void> {
     const message = text.trim();
     if (!message || !this.#ready || this.#busy) return;
-    if (message === this.#input.trim()) this.#input = "";
-    const attached = this.#attachments.filter((a) => a.sends);
-    this.#attachments = this.#attachments.filter((a) => a.implicit);
-    const turn = new TurnViewModel(this.#context, this, message, this.#context.now(),
-      attached.map((a) => ({ title: a.title, subtitle: a.subtitle })));
-    this.#turns = [...this.#turns, turn];
-    this.#current = turn;
-    this.#stop = new AbortController();
+    const outgoing: OutgoingMessage = { text: message };
+    const stop = new AbortController();
+    this.#stop = stop;
     this.#busy = true;
-    this.notify();
+    this.#error = undefined;
+    let turn: TurnViewModel | undefined;
     try {
-      await this.#runTurn(turn, message, attached, this.#mode, this.#stop.signal);
+      if (this.#beforeSend) {
+        this.notify();
+        try {
+          await this.#beforeSend(outgoing, stop.signal);
+          stop.signal.throwIfAborted();
+        } catch (error) {
+          if (!stop.signal.aborted) this.#error = error instanceof Error ? error.message : String(error);
+          return;
+        }
+      }
+      if (message === this.#input.trim()) this.#input = "";
+      const attached = this.#attachments.filter((a) => a.sends);
+      this.#attachments = this.#attachments.filter((a) => a.implicit);
+      turn = new TurnViewModel(this.#context, this, message, this.#context.now(),
+        attached.map((a) => ({ title: a.title, subtitle: a.subtitle })));
+      this.#turns = [...this.#turns, turn];
+      this.#current = turn;
+      this.notify();
+      await this.#runTurn(turn, message, attached, this.#mode, stop.signal);
       await this.#batcher.whenFlushed();
     } finally {
       this.#current = undefined;
       this.#stop = undefined;
       this.#busy = false;
-      this.#touchSession(message);
+      if (turn) this.#touchSession(message);
+      this.#runAfterSend(outgoing);
       this.notify();
     }
   }
@@ -537,6 +577,15 @@ export class AgentChatViewModel extends Observable implements TurnHost {
       return;
     }
     this.#batcher.enqueue(() => turn.addApproval(pending));
+  }
+
+  #runAfterSend(message: OutgoingMessage): void {
+    if (!this.#afterSend) return;
+    try {
+      this.#afterSend(message);
+    } catch (error) {
+      this.#error = error instanceof Error ? error.message : String(error);
+    }
   }
 
   #startMode(): ToolMode {

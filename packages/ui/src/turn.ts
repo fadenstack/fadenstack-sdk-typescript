@@ -3,7 +3,7 @@ import type { ChatOutcome, GovernanceNotice, ToolClass } from "@fadenstack/clien
 
 import type { PendingApproval } from "./approvalBroker.js";
 import type { AttachmentChip } from "./attachments.js";
-import { formatNumber } from "./format.js";
+import { formatDuration, formatNumber } from "./format.js";
 import { Observable } from "./observable.js";
 import {
   ApprovalPart,
@@ -286,7 +286,7 @@ export class TurnViewModel extends Observable {
     }
     for (const tool of this.#tools.values()) if (tool.isRunning) tool.setState("cancelled");
     const elapsed = this.#context.now().getTime() - this.timestamp.getTime();
-    this.#durationText = elapsed >= 1000 ? `${(elapsed / 1000).toFixed(1)} s` : "";
+    this.#durationText = elapsed >= 1000 ? formatDuration(elapsed, this.#context.locale) : "";
     this.#state = state;
     this.notify();
   }
