@@ -18,6 +18,8 @@ export interface FakeUser {
   developerMode?: boolean;
   /** Has `agents:create`: may create agents (`POST /api/agents`), which they then maintain. */
   createsAgents?: boolean;
+  /** The language the user picked for every client (`user.language` in the profile); `PATCH .../user` changes it. */
+  language?: string | null;
 }
 
 /** An agent the fake server serves. */
@@ -283,13 +285,14 @@ export class FakeGateway {
       if (!this.#logins.has(bearer(request) ?? "")) return openAiError(401, "The token is not valid.", "invalid_token", "authentication_error");
       return json(200, { object: "list", data: (this.#options.models ?? ["fake-model"]).map((id) => ({ id, object: "model" })) });
     }
-    const match = /^\/v1\/agents\/([^/]+)\/(profile|chat\/completions|events|manifest|approvals\/([^/]+))$/.exec(path);
+    const match = /^\/v1\/agents\/([^/]+)\/(profile|user|chat\/completions|events|manifest|approvals\/([^/]+))$/.exec(path);
     if (!match) return json(404, { detail: "Not Found" });
     const agent = decodeURIComponent(match[1]!);
     const auth = this.#authorize(request, agent);
     if (auth instanceof Response) return auth;
     const route = match[2]!;
     if (method === "GET" && route === "profile") return json(200, this.#profile(agent, auth));
+    if (method === "PATCH" && route === "user") return this.#userSettings(auth, body);
     if (method === "POST" && route === "chat/completions") return this.#chat(request, agent, body);
     if (method === "POST" && route === "events") return this.#events(body);
     if (method === "PUT" && route === "manifest") return this.#manifest(agent, body);
@@ -398,8 +401,27 @@ export class FakeGateway {
       local_mcp: { mode: agent.localMcpMode ?? "disable", developer_mode: user.developerMode ?? false },
       tool_modes: { default: "ask", ceiling: agent.ceiling ?? null, open_world_enforced: false },
       ui: agent.ui ?? {}, extensions: {}, required_client_modules: agent.requiredClientModules ?? [],
-      edition: "community", features: ["agents"],
+      edition: "community", features: ["agents"], user: { language: user.language ?? null },
     };
+  }
+
+  /** The language a user picked for every client, as the server keeps it. */
+  languageOf(email: string): string | null {
+    return this.#users.find((u) => u.email === email)?.language ?? null;
+  }
+
+  /** `PATCH /v1/agents/{agent}/user`: a language tag, or null to forget it; a body without it changes nothing. */
+  #userSettings(signIn: SignIn, body: unknown): Response {
+    const b = body !== null && typeof body === "object" && !Array.isArray(body) ? (body as Record<string, unknown>) : undefined;
+    const language = b?.["language"];
+    const tag = /^[A-Za-z]{2,3}(?:-[A-Za-z0-9]{1,8}){0,3}$/;
+    if (!b || Object.keys(b).some((k) => k !== "language") || (language !== undefined && language !== null &&
+        (typeof language !== "string" || !tag.test(language)))) {
+      return openAiError(400, "language must be a language tag such as de, de-AT or zh-Hans, or null.", "invalid_language", "invalid_request_error");
+    }
+    const user = this.#users.find((u) => u.id === signIn.userId)!;
+    if (language !== undefined) user.language = language as string | null;
+    return json(200, { object: "agent.user", language: user.language ?? null });
   }
 
   async #chat(request: Request, slug: string, body: unknown): Promise<Response> {

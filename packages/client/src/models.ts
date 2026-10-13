@@ -24,6 +24,14 @@ export interface AgentProfile {
   requiredClientModules: string[];
   edition: string;
   features: string[];
+  /** The signed-in user's own settings, shared by all their clients and the console. */
+  user: UserSettings;
+}
+
+/** What every client of a user shares (`user` in the profile; `AgentResource.setUserLanguage` changes it). */
+export interface UserSettings {
+  /** The language the user picked, in any client or the console (a BCP 47 tag); null: each client follows its host. */
+  language: string | null;
 }
 
 /** One tool of an agent's host tool contract. */
@@ -86,6 +94,7 @@ export function toAgentProfile(json: unknown): AgentProfile {
     requiredClientModules: strings(p["required_client_modules"]),
     edition: str(p["edition"]) ?? "community",
     features: strings(p["features"]),
+    user: { language: str(obj(p["user"])["language"]) || null },
   };
 }
 

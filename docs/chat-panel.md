@@ -302,7 +302,8 @@ German, French, Spanish and Simplified Chinese, in the console's words and its f
 
 **The user picks the language** in the panel's settings (the gear in the header): *Automatic*, or one of the
 languages, each listed in its own name (Deutsch, Français, 中文（简体）), so anyone finds their own. The whole panel
-changes at once, the conversation too, and the choice is remembered on the device. Your application only says what
+changes at once, the conversation too, and the choice is remembered on the device and for the user: the server keeps
+it, so their other agents, their other devices and the console follow it. Your application only says what
 *Automatic* means, the language it runs in:
 
 ```ts
@@ -326,6 +327,14 @@ is not shipped, and gets English unless you add it.
 
 `chat.setLanguage("fr")` and `chat.setLanguage("auto")` do from code what the settings do, and `chat.language`,
 `chat.languageOptions` and `chat.canChangeLanguage` say what they show.
+
+**The language follows the user.** The agent's profile carries the language the user picked anywhere
+(`agent.profile.user.language`, a tag such as `de` or `zh-Hans`), and the panel takes it over the device's when it
+starts, if it offers that language (`zh` is Simplified Chinese; a language it lacks changes nothing). A pick in the
+settings is sent back (`agent.setUserLanguage(tag)`, `PATCH /v1/agents/{agent}/user`); *Automatic* sends `null`,
+so each client follows its host again. A server that cannot keep it, or an older one without the route, leaves the
+pick on the device. A language your organisation locked is never sent, and a language from the server never
+overrides it.
 
 To add a language, write a full `UiStrings`, with its `language` tag and its name in itself, and offer it next to the
 built-in ones. To change a language's words, change only those; what you leave out comes from the language you name:

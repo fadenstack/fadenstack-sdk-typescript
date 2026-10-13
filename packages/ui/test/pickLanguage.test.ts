@@ -18,19 +18,24 @@ import {
 } from "@fadenstack/ui";
 import { FakeGateway, lastToolResults } from "@fadenstack/testing";
 
-async function chat(options: AgentChatOptions = {}) {
-  const gateway = new FakeGateway({
+async function chat(options: AgentChatOptions = {}, gateway = pageGateway(), fetch: FakeGateway["fetch"] = gateway.fetch) {
+  const { client, tokens } = FadenstackClient.forAgent({ serverUrl: gateway.serverUrl, agent: "page", fetch });
+  await tokens.signIn(await loginWithPassword({ apiUrl: gateway.serverUrl, email: "user@example.com", password: "secret", fetch }));
+  const approvals = new ApprovalBroker();
+  const agent = FadenstackAgent.createBuilder().useClient(client).useSessionStore(new MemorySessionStore()).useApprovals(approvals)
+    .addTools(defineTool({ name: "read_page", toolClass: "read", run: () => "The page text." })).build();
+  return new AgentChatViewModel(agent, approvals, { scheduler: immediateScheduler, preferences: new MemoryPreferenceStore(), ...options });
+}
+
+/** The user's language, as the server keeps it for all their clients. */
+function pageGateway(language?: string | null) {
+  return new FakeGateway({
+    users: [{ email: "user@example.com", password: "secret", language }],
     agents: [{ slug: "page", name: "Seitenhelfer", contract: [{ name: "read_page", risk: "read" }] }],
     model: (r) => lastToolResults(r).size
       ? { text: "Fertig.", events: [{ type: "CUSTOM", name: "faden.pii", value: { entities: { PERSON: 2 } } }] }
       : { toolCalls: [{ name: "read_page" }] },
   });
-  const { client, tokens } = FadenstackClient.forAgent({ serverUrl: gateway.serverUrl, agent: "page", fetch: gateway.fetch });
-  await tokens.signIn(await loginWithPassword({ apiUrl: gateway.serverUrl, email: "user@example.com", password: "secret", fetch: gateway.fetch }));
-  const approvals = new ApprovalBroker();
-  const agent = FadenstackAgent.createBuilder().useClient(client).useSessionStore(new MemorySessionStore()).useApprovals(approvals)
-    .addTools(defineTool({ name: "read_page", toolClass: "read", run: () => "The page text." })).build();
-  return new AgentChatViewModel(agent, approvals, { scheduler: immediateScheduler, preferences: new MemoryPreferenceStore(), ...options });
 }
 
 describe("the language the user picks in the panel", () => {
@@ -111,6 +116,58 @@ describe("the language the user picks in the panel", () => {
     await vm.setLanguage("klingon");
     await vm.setLanguage("toString");
     expect(vm.strings.language).toBe("en");
+  });
+
+  it("follows the language the user picked in another client or the console, and remembers it here", async () => {
+    const preferences = new MemoryPreferenceStore();
+    preferences.set("language", "fr");
+    const vm = await chat({ automaticLanguage: "en", preferences }, pageGateway("de-AT"));
+    expect(vm.strings.language).toBe("fr"); // this device's, until the server answers
+    await vm.initialize();
+    expect([vm.language, vm.strings.language, preferences.get("language")]).toEqual(["de", "de", "de"]);
+
+    const chinese = await chat({ automaticLanguage: "en" }, pageGateway("zh")); // as the console writes it
+    await chinese.initialize();
+    expect(chinese.language).toBe("zh-Hans");
+  });
+
+  it("keeps a pick for the user, so every client of theirs follows; Automatic forgets it", async () => {
+    const gateway = pageGateway();
+    const vm = await chat({ automaticLanguage: "en" }, gateway);
+    await vm.initialize();
+    await vm.setLanguage("es");
+    expect(gateway.languageOf("user@example.com")).toBe("es");
+    expect(vm.agent.profile.user.language).toBe("es");
+    await vm.setLanguage(AUTOMATIC_LANGUAGE);
+    expect(gateway.languageOf("user@example.com")).toBeNull();
+  });
+
+  it("leaves the language as it is for one it does not offer, one fixed, or a pick made while it started", async () => {
+    const italian = await chat({ automaticLanguage: "de" }, pageGateway("it"));
+    await italian.initialize();
+    expect([italian.language, italian.strings.language]).toEqual([AUTOMATIC_LANGUAGE, "de"]);
+
+    const gateway = pageGateway("fr");
+    const locked = await chat({ lockedLanguage: "de" }, gateway);
+    await locked.initialize();
+    await locked.setLanguage("es");
+    expect([locked.strings.language, gateway.languageOf("user@example.com")]).toEqual(["de", "fr"]);
+
+    const early = await chat({ automaticLanguage: "en" }, pageGateway("fr"));
+    await early.setLanguage("es");
+    await early.initialize();
+    expect(early.language).toBe("es");
+  });
+
+  it("still changes the language when the server cannot keep it", async () => {
+    const gateway = pageGateway();
+    let down = false;
+    const vm = await chat({ automaticLanguage: "en" }, gateway, async (input, init) =>
+      down ? new Response("down", { status: 503 }) : gateway.fetch(input, init));
+    await vm.initialize();
+    down = true;
+    await vm.setLanguage("de");
+    expect([vm.language, vm.strings.language, vm.error]).toEqual(["de", "de", undefined]);
   });
 
   it("offers the host's own languages beside the built-in ones", async () => {

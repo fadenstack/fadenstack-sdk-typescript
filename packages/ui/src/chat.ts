@@ -84,6 +84,7 @@ export interface LanguageOption {
 /** The settings' pick that follows the host's language. */
 export const AUTOMATIC_LANGUAGE = "auto";
 const LANGUAGE_PREFERENCE = "language";
+const primaryTag = (tag: string): string => tag.split("-")[0]!.toLowerCase();
 
 /** A mode in the picker, with what it means; above the ceiling it cannot be picked. */
 export interface ToolModeOption {
@@ -138,6 +139,7 @@ export class AgentChatViewModel extends Observable implements TurnHost {
   readonly #preferences: PreferenceStore;
   #language = AUTOMATIC_LANGUAGE;
   #languageLoaded = false;
+  #languagePicked = false;
   #settingsOpen = false;
   readonly #untitled = new Set<string>();
   #suggestions: readonly string[] = [];
@@ -340,6 +342,7 @@ export class AgentChatViewModel extends Observable implements TurnHost {
     try {
       await this.#agent.start();
       const profile = this.#agent.profile;
+      this.#adoptUserLanguage(profile.user?.language ?? null);
       this.#title = profile.name;
       const greeting = profile.ui["greeting"];
       this.#profileGreeting = typeof greeting === "string" && greeting ? greeting : undefined;
@@ -499,8 +502,9 @@ export class AgentChatViewModel extends Observable implements TurnHost {
   }
 
   /**
-   * Picks the panel's language (`"auto"` for the host's) and remembers it on this device. Everything on screen,
-   * the conversation too, is drawn again in it. Nothing changes when the language is fixed.
+   * Picks the panel's language (`"auto"` for the host's) and remembers it on this device and for the user, so all
+   * their clients and the console follow it. Everything on screen, the conversation too, is drawn again in it.
+   * Nothing changes when the language is fixed.
    */
   async setLanguage(id: string): Promise<void> {
     this.#settingsOpen = false;
@@ -509,12 +513,18 @@ export class AgentChatViewModel extends Observable implements TurnHost {
       return;
     }
     this.#languageLoaded = true; // the user's pick wins over one still being read
+    this.#languagePicked = true;
     this.#language = id;
     this.#applyLanguage();
     try {
       await this.#preferences.set(LANGUAGE_PREFERENCE, id === AUTOMATIC_LANGUAGE ? undefined : id);
     } catch {
       // not remembered: still this chat's language
+    }
+    try {
+      await this.#agent.setUserLanguage(id === AUTOMATIC_LANGUAGE ? null : id);
+    } catch {
+      // not kept for the user (an older server, no network): this device still remembers it
     }
   }
 
@@ -722,6 +732,25 @@ export class AgentChatViewModel extends Observable implements TurnHost {
     if (!saved || !this.canChangeLanguage || !Object.hasOwn(this.#languages, saved) || saved === this.#language) return;
     this.#language = saved;
     this.#applyLanguage();
+  }
+
+  /**
+   * The language the user picked in another client or the console wins over this device's, when the panel offers
+   * it (`de-AT` is German, `zh` Simplified Chinese; a language it lacks changes nothing). A pick made here since
+   * the panel opened stays.
+   */
+  #adoptUserLanguage(tag: string | null): void {
+    if (!tag || this.#languagePicked || !this.canChangeLanguage) return;
+    const key = this.#keyOf(stringsFor(tag, this.#languages));
+    if (!key || primaryTag(key) !== primaryTag(tag) || key === this.#language) return;
+    this.#languageLoaded = true;
+    this.#language = key;
+    this.#applyLanguage();
+    try {
+      void Promise.resolve(this.#preferences.set(LANGUAGE_PREFERENCE, key)).catch(() => undefined);
+    } catch {
+      // not remembered on this device: the profile says it again next time
+    }
   }
 
   /** Every text on screen in the language: the conversation's, the history's, the menus'. */

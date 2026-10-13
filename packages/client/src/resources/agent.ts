@@ -44,6 +44,16 @@ export class AgentResource {
     return { sha256: String(answer?.sha256 ?? ""), isNew: Boolean(answer?.new) };
   }
 
+  /**
+   * Keeps the language the user picked (a BCP 47 tag such as `de` or `zh-Hans`) for all their clients and the
+   * console; null forgets it, so each client follows its host. Returns the language kept. An older server, without
+   * the route, answers 404.
+   */
+  async setUserLanguage(language: string | null, signal?: AbortSignal): Promise<string | null> {
+    const answer = await this.#transport.patch<{ language?: unknown }>(this.#route("user"), { language }, signal);
+    return typeof answer?.language === "string" && answer.language ? answer.language : null;
+  }
+
   /** Approves or declines a gateway tool call waiting for the user (`faden.approval_required`). */
   async answerApproval(approvalId: string, approved: boolean, signal?: AbortSignal): Promise<void> {
     await this.#transport.post<unknown>(this.#route(`approvals/${encodeURIComponent(approvalId)}`), { approved }, signal);

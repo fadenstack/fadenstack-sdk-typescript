@@ -108,6 +108,16 @@ export class FadenstackAgent {
     return this.#starting;
   }
 
+  /**
+   * Keeps the language the user picked for all their clients and the console (null: each follows its host), and
+   * in this agent's profile. Returns the language kept.
+   */
+  async setUserLanguage(language: string | null, signal?: AbortSignal): Promise<string | null> {
+    const kept = await this.client.agent!.setUserLanguage(language, signal);
+    if (this.#profile) this.#profile = { ...this.#profile, user: { ...this.#profile.user, language: kept } };
+    return kept;
+  }
+
   /** Loads the profile again (after a new version was published) and settles the tools anew. */
   async restart(signal?: AbortSignal): Promise<void> {
     this.#profile = undefined;

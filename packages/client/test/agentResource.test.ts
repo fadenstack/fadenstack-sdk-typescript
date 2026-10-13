@@ -23,7 +23,19 @@ describe("AgentResource", () => {
       toolModes: { default: "ask", ceiling: "ask", openWorldEnforced: false },
       localMcp: { mode: "disable", developerMode: false },
       ui: { greeting: "Hi", suggestions: ["Sum it"] },
+      user: { language: null },
     });
+  });
+
+  it("keeps the user's language for all their clients, and forgets it", async () => {
+    const gateway = new FakeGateway({ agents: [{ slug: "excel" }] });
+    const c = await client(gateway);
+    await expect(c.agent!.setUserLanguage("de-AT")).resolves.toBe("de-AT");
+    expect((await c.agent!.getProfile()).user).toEqual({ language: "de-AT" });
+    expect(gateway.languageOf("user@example.com")).toBe("de-AT");
+    await expect(c.agent!.setUserLanguage(null)).resolves.toBeNull();
+    expect((await c.agent!.getProfile()).user.language).toBeNull();
+    await expect(c.agent!.setUserLanguage("Deutsch")).rejects.toThrow(/language tag/);
   });
 
   it("reports events in the fields the server accepts, and nothing else", async () => {
