@@ -1225,8 +1225,14 @@
   white-space: nowrap;
 }
 
+/* Short by intent (a site, a page count); a longer one is cut to one line, never wrapped out of the chip. */
 .fdn-chip-sub {
+  min-width: 0;
+  max-width: 50%;
+  overflow: hidden;
   color: var(--fdn-text-faint);
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .fdn-chip-remove {
