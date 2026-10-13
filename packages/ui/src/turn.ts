@@ -47,7 +47,7 @@ export class TurnViewModel extends Observable {
   #state: TurnState;
   #outcome: ChatOutcome | undefined;
   #error: string | undefined;
-  #usageText = "";
+  #tokens: number | undefined;
   #durationText = "";
 
   constructor(context: PartContext, host: TurnHost | undefined, userText: string, timestamp: Date,
@@ -106,7 +106,7 @@ export class TurnViewModel extends Observable {
   }
 
   get usageText(): string {
-    return this.#usageText;
+    return this.#tokens ? this.#context.strings.tokens(formatNumber(this.#tokens, this.#context.locale)) : "";
   }
 
   get durationText(): string {
@@ -225,16 +225,14 @@ export class TurnViewModel extends Observable {
   /** @internal */
   addNotice(notice: GovernanceNotice): void {
     if (notice.outcome === "prompt_blocked") this.#setState("blocked");
-    this.addPart(NoticePart.from(notice, this.#context.strings));
+    this.addPart(NoticePart.from(notice, this.#context));
   }
 
   /** @internal */
   complete(result: AgentResult): void {
     this.#id = result.turnId;
     this.#outcome = result.outcome;
-    if (result.usage && result.usage.totalTokens > 0) {
-      this.#usageText = this.#context.strings.tokens(formatNumber(result.usage.totalTokens, this.#context.locale));
-    }
+    if (result.usage && result.usage.totalTokens > 0) this.#tokens = result.usage.totalTokens;
     this.#finish(result.outcome === "prompt_blocked" ? "blocked" : "completed");
   }
 
@@ -250,10 +248,16 @@ export class TurnViewModel extends Observable {
   }
 
   /** @internal For a turn read back from the transcript. */
-  restore(state: TurnState, outcome: ChatOutcome | undefined, usageText: string): void {
+  restore(state: TurnState, outcome: ChatOutcome | undefined, tokens: number | undefined): void {
     this.#state = state;
     this.#outcome = outcome;
-    this.#usageText = usageText;
+    this.#tokens = tokens;
+  }
+
+  /** @internal The language changed: the turn and its parts draw their texts again. */
+  retext(): void {
+    for (const part of this.#parts) part.retext();
+    this.notify();
   }
 
   /** @internal */

@@ -45,8 +45,8 @@ export const piiRenderer: AgentEventRenderer = {
       .filter((f) => f.count > 0);
     if (found.length) {
       const total = found.reduce((n, f) => n + f.count, 0);
-      turn.addPart(new NoticePart("info", context.strings.piiTitle,
-        context.strings.piiMessage(total, found.map((f) => `${f.count} ${f.type}`).join(", "))));
+      const list = found.map((f) => `${f.count} ${f.type}`).join(", ");
+      turn.addPart(NoticePart.localized(context, "info", (s) => ({ title: s.piiTitle, message: s.piiMessage(total, list) })));
     }
     return true;
   },
@@ -60,7 +60,8 @@ export const fallbackRenderer: AgentEventRenderer = {
   render(event, turn, context) {
     if (HANDLED.has(eventKind(event)) || event.type !== "CUSTOM") return true;
     const message = obj(event.value)?.["message"];
-    turn.addPart(new NoticePart("info", context.strings.noticeFallback, typeof message === "string" ? message : eventKind(event)));
+    const text = typeof message === "string" ? message : eventKind(event);
+    turn.addPart(NoticePart.localized(context, "info", (s) => ({ title: s.noticeFallback, message: text })));
     return true;
   },
 };

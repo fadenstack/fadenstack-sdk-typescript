@@ -1,14 +1,18 @@
 <script setup lang="ts">
-/** The panel's top bar: the agent, the tool mode, the history, a new chat, and (the default slot) the host's own buttons. */
+/**
+ * The panel's top bar: the agent, the tool mode, the history, a new chat, (the default slot) the host's own buttons,
+ * and the settings: the language, and (the `settings` slot) the host's own items.
+ */
 import type { AgentChatViewModel } from "@fadenstack/ui";
 
 import { useViewModel } from "./composables.js";
 import HistoryMenu from "./HistoryMenu.vue";
 import Icon from "./Icon.vue";
 import ModeMenu from "./ModeMenu.vue";
+import SettingsMenu from "./SettingsMenu.vue";
 
 const props = defineProps<{ chat: AgentChatViewModel }>();
-defineSlots<{ default?(): unknown }>();
+const slots = defineSlots<{ default?(): unknown; settings?(): unknown }>();
 const chat = useViewModel(() => props.chat);
 </script>
 
@@ -28,5 +32,8 @@ const chat = useViewModel(() => props.chat);
       <Icon name="plus" />
     </button>
     <slot />
+    <SettingsMenu :chat="chat">
+      <template v-if="slots.settings" #default><slot name="settings" /></template>
+    </SettingsMenu>
   </header>
 </template>

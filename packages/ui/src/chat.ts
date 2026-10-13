@@ -10,6 +10,8 @@ import { Observable } from "./observable.js";
 import { NoticePart, type PartContext } from "./parts.js";
 import { citationsRenderer, fallbackRenderer, piiRenderer, type AgentEventRenderer } from "./renderers.js";
 import { browserClipboard, timeoutScheduler, writeClipboard, type Clipboard, type UiScheduler } from "./services.js";
+import { builtInStrings, stringsFor } from "./languages/index.js";
+import { browserPreferences, type PreferenceStore } from "./preferences.js";
 import { withStrings, type UiStrings } from "./strings.js";
 import { buildTurn, groupTurns } from "./transcriptTurns.js";
 import { TurnViewModel, type TurnHost } from "./turn.js";
@@ -32,8 +34,22 @@ export interface AgentChatOptions {
   /** Renderers for gateway events, tried before the built-in ones. */
   renderers?: AgentEventRenderer[];
   /**
-   * The chat's texts: a language (`stringsFor(locale)`), the host's own translation, or a few words changed. What a
-   * partial set leaves out is English; `withStrings(changes, germanStrings)` changes words of another language.
+   * The languages the user can pick in the panel's settings, by BCP 47 tag: `builtInStrings` by default. Add one, or
+   * change a language's words: `{ ...builtInStrings, it: italianStrings, de: withStrings({ allow: "Einmal zulassen" }, germanStrings) }`.
+   */
+  languages?: Readonly<Record<string, UiStrings>>;
+  /**
+   * What "Automatic" means: the host's language, best first (Office's, the Nextcloud user's); the browser's
+   * languages by default. The panel starts in it until the user picks another.
+   */
+  automaticLanguage?: string | readonly string[];
+  /** A language the organisation fixed (a policy): the panel uses it, and its settings show it without a choice. */
+  lockedLanguage?: string;
+  /** Where the user's pick is kept: the browser's localStorage by default (`browserPreferences()`), memory where there is none. */
+  preferences?: PreferenceStore;
+  /**
+   * Texts fixed by the host instead of a language the user picks: the panel then offers no choice. What a partial
+   * set leaves out is English. Most hosts leave it out and pass `automaticLanguage`.
    */
   strings?: Partial<UiStrings>;
   /** For dates and numbers; the browser's by default. */
@@ -55,6 +71,19 @@ export interface OutgoingMessage {
   /** What the user sent, trimmed. */
   readonly text: string;
 }
+
+/** A language in the panel's settings: `"auto"` (the host's) or a tag, named in itself ("Deutsch"). */
+export interface LanguageOption {
+  id: string;
+  label: string;
+  /** The language the label is written in, for the item's `lang`. */
+  lang: string;
+  selected: boolean;
+}
+
+/** The settings' pick that follows the host's language. */
+export const AUTOMATIC_LANGUAGE = "auto";
+const LANGUAGE_PREFERENCE = "language";
 
 /** A mode in the picker, with what it means; above the ceiling it cannot be picked. */
 export interface ToolModeOption {
@@ -80,7 +109,6 @@ export interface SessionItem {
  * stay light. .NET: `Fadenstack.UI.ViewModels.AgentChatViewModel`.
  */
 export class AgentChatViewModel extends Observable implements TurnHost {
-  readonly strings: UiStrings;
   readonly #agent: FadenstackAgent;
   readonly #approvals: ApprovalBroker;
   readonly #batcher: RenderBatcher;
@@ -102,7 +130,16 @@ export class AgentChatViewModel extends Observable implements TurnHost {
   #history: TranscriptEntry[][] = [];
   #loadedFrom = 0;
   #title = "";
-  #greeting = "";
+  #profileGreeting: string | undefined;
+  readonly #languages: Readonly<Record<string, UiStrings>>;
+  readonly #automatic: string | readonly string[] | undefined;
+  readonly #locked: string | undefined;
+  readonly #fixed: UiStrings | undefined;
+  readonly #preferences: PreferenceStore;
+  #language = AUTOMATIC_LANGUAGE;
+  #languageLoaded = false;
+  #settingsOpen = false;
+  readonly #untitled = new Set<string>();
   #suggestions: readonly string[] = [];
   #turns: readonly TurnViewModel[] = [];
   #attachments: readonly AttachmentViewModel[] = [];
@@ -120,13 +157,17 @@ export class AgentChatViewModel extends Observable implements TurnHost {
     super();
     this.#agent = agent;
     this.#approvals = approvals;
-    this.strings = withStrings(options.strings);
+    this.#languages = options.languages ?? builtInStrings;
+    this.#automatic = options.automaticLanguage;
+    this.#fixed = options.strings ? withStrings(options.strings) : undefined;
+    this.#locked = options.lockedLanguage === undefined ? undefined : this.#keyOf(stringsFor(options.lockedLanguage, this.#languages));
+    this.#preferences = options.preferences ?? browserPreferences();
     this.#batcher = new RenderBatcher(options.scheduler ?? timeoutScheduler, options.renderIntervalMs ?? 33);
     this.#renderers = [...(options.renderers ?? []), citationsRenderer, piiRenderer, fallbackRenderer];
     this.#initialTurns = options.initialTurns ?? 30;
     this.#pageSize = options.pageSize ?? 30;
     this.#context = {
-      strings: this.strings,
+      strings: this.#resolve(),
       clipboard: options.clipboard ?? browserClipboard,
       locale: options.locale,
       previewLength: options.previewLength ?? 4000,
@@ -135,6 +176,13 @@ export class AgentChatViewModel extends Observable implements TurnHost {
     this.#beforeSend = options.beforeSend;
     this.#afterSend = options.afterSend;
     this.#unsubscribe = approvals.onRequested((pending) => this.#onApprovalRequested(pending));
+    // A store that answers at once (localStorage) gives the user's language from the first paint.
+    try {
+      const saved = this.#preferences.get(LANGUAGE_PREFERENCE);
+      if (!(saved instanceof Promise)) this.#adopt(saved);
+    } catch {
+      // the store failed: the automatic language
+    }
   }
 
   // -- state ----------------------------------------------------------------------------------------
@@ -147,9 +195,45 @@ export class AgentChatViewModel extends Observable implements TurnHost {
     return this.#title;
   }
 
+  /** The chat's texts, in the language the user picked (or the host's): skins take every label from them. */
+  get strings(): UiStrings {
+    return this.#context.strings;
+  }
+
   /** The agent's greeting for an empty chat (profile `ui.greeting`). */
   get greeting(): string {
-    return this.#greeting;
+    return this.#profileGreeting ?? (this.#title ? this.strings.greetingFallback(this.#title) : "");
+  }
+
+  /** The settings' language: `"auto"` (the host's language) or a tag of `languageOptions`. */
+  get language(): string {
+    return this.#locked ?? this.#language;
+  }
+
+  /** The languages to pick from, "Automatic" first; none when the host fixed the texts. */
+  get languageOptions(): readonly LanguageOption[] {
+    if (this.#fixed) return [];
+    const current = this.strings;
+    const chosen = this.language;
+    return [
+      { id: AUTOMATIC_LANGUAGE, label: current.languageAutomatic(stringsFor(this.#automatic, this.#languages).languageName),
+        lang: current.language, selected: chosen === AUTOMATIC_LANGUAGE },
+      ...Object.entries(this.#languages).map(([id, strings]) => ({ id, label: strings.languageName, lang: strings.language, selected: chosen === id })),
+    ];
+  }
+
+  /** The user can pick a language: the host did not fix the texts, nor the organisation the language. */
+  get canChangeLanguage(): boolean {
+    return !this.#fixed && this.#locked === undefined && Object.keys(this.#languages).length > 1;
+  }
+
+  /** The organisation fixed the language: the settings show it without a choice. */
+  get isLanguageLocked(): boolean {
+    return !this.#fixed && this.#locked !== undefined;
+  }
+
+  get isSettingsOpen(): boolean {
+    return this.#settingsOpen;
   }
 
   /** Prompts to start with (profile `ui.suggestions`). */
@@ -241,8 +325,15 @@ export class AgentChatViewModel extends Observable implements TurnHost {
 
   // -- actions --------------------------------------------------------------------------------------
 
-  /** Starts the agent (profile, tools) and reads the session list. */
+  /** Starts the agent (profile, tools) and reads the session list; first, the language the user picked before. */
   async initialize(): Promise<void> {
+    if (!this.#languageLoaded) {
+      try {
+        this.#adopt(await this.#preferences.get(LANGUAGE_PREFERENCE));
+      } catch {
+        // the store failed: the automatic language
+      }
+    }
     this.#error = undefined;
     this.#signInRequired = false;
     this.notify();
@@ -251,7 +342,7 @@ export class AgentChatViewModel extends Observable implements TurnHost {
       const profile = this.#agent.profile;
       this.#title = profile.name;
       const greeting = profile.ui["greeting"];
-      this.#greeting = typeof greeting === "string" && greeting ? greeting : this.strings.greetingFallback(profile.name);
+      this.#profileGreeting = typeof greeting === "string" && greeting ? greeting : undefined;
       const suggestions = profile.ui["suggestions"];
       this.#suggestions = Array.isArray(suggestions) ? suggestions.filter((s): s is string => typeof s === "string").slice(0, 6) : [];
       this.#mode = this.#startMode();
@@ -374,8 +465,10 @@ export class AgentChatViewModel extends Observable implements TurnHost {
   async refreshSessions(): Promise<void> {
     const now = this.#context.now();
     const sessions = await this.#agent.listSessions();
+    this.#untitled.clear();
     this.#sessions = sessions.map((s) => {
       const lastActivity = new Date(s.lastActivity);
+      if (!s.title) this.#untitled.add(s.id);
       return {
         id: s.id,
         title: s.title ?? this.strings.newChat,
@@ -397,6 +490,32 @@ export class AgentChatViewModel extends Observable implements TurnHost {
     if (this.#historyOpen === open) return;
     this.#historyOpen = open;
     this.notify();
+  }
+
+  setSettingsOpen(open: boolean): void {
+    if (this.#settingsOpen === open) return;
+    this.#settingsOpen = open;
+    this.notify();
+  }
+
+  /**
+   * Picks the panel's language (`"auto"` for the host's) and remembers it on this device. Everything on screen,
+   * the conversation too, is drawn again in it. Nothing changes when the language is fixed.
+   */
+  async setLanguage(id: string): Promise<void> {
+    this.#settingsOpen = false;
+    if (!this.canChangeLanguage || (id !== AUTOMATIC_LANGUAGE && !Object.hasOwn(this.#languages, id))) {
+      this.notify();
+      return;
+    }
+    this.#languageLoaded = true; // the user's pick wins over one still being read
+    this.#language = id;
+    this.#applyLanguage();
+    try {
+      await this.#preferences.set(LANGUAGE_PREFERENCE, id === AUTOMATIC_LANGUAGE ? undefined : id);
+    } catch {
+      // not remembered: still this chat's language
+    }
   }
 
   setModeMenuOpen(open: boolean): void {
@@ -492,8 +611,9 @@ export class AgentChatViewModel extends Observable implements TurnHost {
         } catch (error) {
           if (signal.aborted) throw error;
           const title = a.title;
-          this.#batcher.enqueue(() => turn.addPart(new NoticePart("warning", this.strings.notAttached(title),
-            error instanceof Error ? error.message : String(error))));
+          const message = error instanceof Error ? error.message : String(error);
+          this.#batcher.enqueue(() => turn.addPart(NoticePart.localized(this.#context, "warning",
+            (s) => ({ title: s.notAttached(title), message }))));
         }
       }
       if (!this.#session) {
@@ -586,6 +706,42 @@ export class AgentChatViewModel extends Observable implements TurnHost {
     } catch (error) {
       this.#error = error instanceof Error ? error.message : String(error);
     }
+  }
+
+  /** The texts for the language: the host's fixed ones, the organisation's, the user's pick, or the host's language. */
+  #resolve(): UiStrings {
+    if (this.#fixed) return this.#fixed;
+    const id = this.#locked ?? this.#language;
+    return (id !== AUTOMATIC_LANGUAGE ? this.#languages[id] : undefined) ?? stringsFor(this.#automatic, this.#languages);
+  }
+
+  /** A pick read back from the store, when it is still one the user can make. */
+  #adopt(saved: string | undefined): void {
+    if (this.#languageLoaded) return;
+    this.#languageLoaded = true;
+    if (!saved || !this.canChangeLanguage || !Object.hasOwn(this.#languages, saved) || saved === this.#language) return;
+    this.#language = saved;
+    this.#applyLanguage();
+  }
+
+  /** Every text on screen in the language: the conversation's, the history's, the menus'. */
+  #applyLanguage(): void {
+    const strings = this.#resolve();
+    if (this.#context && strings !== this.#context.strings) {
+      this.#context.strings = strings;
+      const now = this.#context.now();
+      this.#sessions = this.#sessions.map((s) => ({
+        ...s,
+        title: this.#untitled.has(s.id) ? strings.newChat : s.title,
+        whenText: formatWhen(s.lastActivity, now, strings.yesterday, this.#context.locale),
+      }));
+      for (const turn of this.#turns) turn.retext();
+    }
+    this.notify();
+  }
+
+  #keyOf(strings: UiStrings): string | undefined {
+    return Object.entries(this.#languages).find(([, s]) => s === strings)?.[0];
   }
 
   #startMode(): ToolMode {

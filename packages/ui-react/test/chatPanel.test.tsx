@@ -4,13 +4,13 @@ import { afterEach, describe, expect, it } from "vitest";
 
 import { FadenstackClient, loginWithPassword } from "@fadenstack/client";
 import { FadenstackAgent, MemorySessionStore, defineTool } from "@fadenstack/agents";
-import { AgentChatViewModel, ApprovalBroker, MemoryClipboard, immediateScheduler } from "@fadenstack/ui";
-import { ChatPanel } from "@fadenstack/ui-react";
+import { AgentChatViewModel, ApprovalBroker, MemoryClipboard, MemoryPreferenceStore, immediateScheduler, type AgentChatOptions } from "@fadenstack/ui";
+import { ChatPanel, type ChatPanelProps } from "@fadenstack/ui-react";
 import { FakeGateway, lastToolResults, type FakeModel } from "@fadenstack/testing";
 
 afterEach(cleanup);
 
-async function panel(model: FakeModel, risk: "write" | "destructive" = "write") {
+async function panel(model: FakeModel, risk: "write" | "destructive" = "write", options: AgentChatOptions = {}, panelProps: Partial<ChatPanelProps> = {}) {
   const gateway = new FakeGateway({
     agents: [{
       slug: "page", name: "Page assistant", ui: { greeting: "I read the page you are on.", suggestions: ["Summarise this page"] },
@@ -36,9 +36,9 @@ async function panel(model: FakeModel, risk: "write" | "destructive" = "write") 
     }))
     .build();
   const clipboard = new MemoryClipboard();
-  const chat = new AgentChatViewModel(agent, approvals, { scheduler: immediateScheduler, clipboard });
+  const chat = new AgentChatViewModel(agent, approvals, { scheduler: immediateScheduler, clipboard, preferences: new MemoryPreferenceStore(), ...options });
   await act(() => chat.initialize());
-  render(<ChatPanel chat={chat} />);
+  render(<ChatPanel chat={chat} {...panelProps} />);
   return { chat, filled, clipboard };
 }
 
@@ -141,5 +141,34 @@ describe("ChatPanel", () => {
       fireEvent.click(screen.getByRole("menuitem", { name: "Reset approvals" }));
     });
     expect(chat.isModeMenuOpen).toBe(false);
+  });
+});
+
+describe("ChatPanel's settings", () => {
+  it("lets the user pick a language, and the whole panel speaks it", async () => {
+    await panel(() => ({ text: "ok" }), "write", { automaticLanguage: "en-US" }, { settingsExtra: <button type="button">Sign out</button> });
+    fireEvent.click(screen.getByRole("button", { name: "Settings" }));
+    expect(screen.getAllByRole("menuitemradio").map((b) => b.textContent)).toEqual(
+      ["Automatic (English)", "English", "Deutsch", "Français", "Español", "中文（简体）"]);
+    expect(screen.getByRole("button", { name: "Sign out" })).toBeTruthy();
+    await act(async () => {
+      fireEvent.click(screen.getByRole("menuitemradio", { name: "Deutsch" }));
+    });
+    expect(screen.queryByRole("menu")).toBeNull();
+    expect(screen.getByRole("textbox").getAttribute("placeholder")).toBe("Stellen Sie eine Frage");
+    expect(screen.getByRole("button", { name: "Einstellungen" })).toBeTruthy();
+    expect(document.querySelector(".fdn-chat")!.getAttribute("lang")).toBe("de");
+  });
+
+  it("shows the language the organisation fixed, without a choice", async () => {
+    await panel(() => ({ text: "ok" }), "write", { lockedLanguage: "fr" });
+    fireEvent.click(screen.getByRole("button", { name: "Paramètres" }));
+    expect(screen.getByText("Défini par votre organisation")).toBeTruthy();
+    expect(screen.getAllByRole("menuitemradio").every((b) => (b as HTMLButtonElement).disabled)).toBe(true);
+  });
+
+  it("has no settings button when there is nothing to set", async () => {
+    await panel(() => ({ text: "ok" }), "write", { strings: { send: "Go" } });
+    expect(screen.queryByRole("button", { name: "Settings" })).toBeNull();
   });
 });

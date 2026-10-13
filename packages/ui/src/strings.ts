@@ -10,6 +10,8 @@ export interface UiStrings {
   language: string;
   /** Which way these texts run: skins set it as the panel's `dir`. */
   direction: "ltr" | "rtl";
+  /** The language's name in itself ("Deutsch"): the settings list each language by it, so anyone finds their own. */
+  languageName: string;
   // the turn
   working: string;
   stopped: string;
@@ -62,6 +64,14 @@ export interface UiStrings {
   yesterday: string;
   modes: Record<ToolMode, { label: string; description: string }>;
   limitedTo(description: string, mode: string): string;
+  // the settings menu
+  settings: string;
+  /** The heading of the languages in the settings. */
+  languageMenu: string;
+  /** "Automatic (English)": follow the host's language, named in it. */
+  languageAutomatic(name: string): string;
+  /** Under the languages when the organisation fixed one. */
+  languageLocked: string;
   // the skin's controls
   send: string;
   stop: string;
@@ -90,6 +100,7 @@ export interface UiStrings {
 export const englishStrings: UiStrings = {
   language: "en",
   direction: "ltr",
+  languageName: "English",
   working: "Working...",
   stopped: "Stopped",
   failed: "Something went wrong",
@@ -149,6 +160,10 @@ export const englishStrings: UiStrings = {
     auto: { label: "Auto", description: "Runs tools that change things; still asks before anything that cannot be undone." },
   },
   limitedTo: (description, mode) => `${description} Limited to ${mode} by your organisation.`,
+  settings: "Settings",
+  languageMenu: "Language",
+  languageAutomatic: (name) => `Automatic (${name})`,
+  languageLocked: "Set by your organisation",
   send: "Send",
   stop: "Stop",
   history: "Chat history",

@@ -11,14 +11,15 @@ npm install @fadenstack/client @fadenstack/agents @fadenstack/ui @fadenstack/ui-
 ```tsx
 import { createRoot } from "react-dom/client";
 import { FadenstackAgent } from "@fadenstack/agents";
-import { AgentChatViewModel, ApprovalBroker, stringsFor } from "@fadenstack/ui";
+import { AgentChatViewModel, ApprovalBroker } from "@fadenstack/ui";
 import { ChatPanel } from "@fadenstack/ui-react";
 import "@fadenstack/ui-web/styles.css"; // the stylesheet every web skin shares
 
 const approvals = new ApprovalBroker();
 const agent = FadenstackAgent.createBuilder().useClient(client).useApprovals(approvals).build();
 
-const chat = new AgentChatViewModel(agent, approvals, { locale: navigator.language, strings: stringsFor() });
+// The user picks the language in the panel's settings; it starts in the browser's.
+const chat = new AgentChatViewModel(agent, approvals, { automaticLanguage: navigator.languages, locale: navigator.language });
 await chat.initialize();
 createRoot(document.getElementById("chat")!).render(<ChatPanel chat={chat} />);
 ```

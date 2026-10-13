@@ -12,7 +12,7 @@ npm install @fadenstack/client @fadenstack/agents @fadenstack/ui @fadenstack/ui-
 ```ts
 import { createApp, h, markRaw } from "vue";
 import { FadenstackAgent } from "@fadenstack/agents";
-import { AgentChatViewModel, ApprovalBroker, stringsFor } from "@fadenstack/ui";
+import { AgentChatViewModel, ApprovalBroker } from "@fadenstack/ui";
 import { ChatPanel } from "@fadenstack/ui-vue";
 import "@fadenstack/ui-web/styles.css";
 
@@ -20,7 +20,8 @@ const approvals = new ApprovalBroker();
 const agent = FadenstackAgent.createBuilder().useClient(client).useApprovals(approvals).build();
 
 // The view model stays raw: Vue never wraps it in a proxy (keep it out of ref() and reactive()).
-const chat = markRaw(new AgentChatViewModel(agent, approvals, { locale: navigator.language, strings: stringsFor() }));
+// The user picks the language in the panel's settings; it starts in the browser's.
+const chat = markRaw(new AgentChatViewModel(agent, approvals, { automaticLanguage: navigator.languages, locale: navigator.language }));
 await chat.initialize();
 createApp({ render: () => h(ChatPanel, { chat }) }).mount("#chat");
 ```
@@ -29,7 +30,7 @@ In a template, the host's own controls go into slots:
 
 ```vue
 <ChatPanel :chat="chat" :part-renderers="renderers">
-  <template #header-extra><AccountMenu /></template>
+  <template #settings-extra><SignOut /></template>
   <template #context-bar><OpenFile /></template>
   <template #composer-accessory><SummariseButton /></template>
   <template #sign-in><SignIn /></template>

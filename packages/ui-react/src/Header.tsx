@@ -5,8 +5,11 @@ import type { AgentChatViewModel } from "@fadenstack/ui";
 import { useDismiss, useViewModel } from "./hooks.js";
 import { Icon } from "./icons.js";
 
-/** The panel's top bar: the agent, the tool mode, the history, a new chat, and the host's own buttons. */
-export function ChatHeader({ chat, extra }: { chat: AgentChatViewModel; extra?: ReactNode }): ReactElement {
+/**
+ * The panel's top bar: the agent, the tool mode, the history, a new chat, the host's own buttons, and the settings
+ * (the language, and the host's own items: `settingsExtra`).
+ */
+export function ChatHeader({ chat, extra, settingsExtra }: { chat: AgentChatViewModel; extra?: ReactNode; settingsExtra?: ReactNode }): ReactElement {
   useViewModel(chat);
   const s = chat.strings;
   return (
@@ -19,6 +22,7 @@ export function ChatHeader({ chat, extra }: { chat: AgentChatViewModel; extra?: 
         <Icon name="plus" />
       </button>
       {extra}
+      <SettingsMenu chat={chat} extra={settingsExtra} />
     </header>
   );
 }
@@ -57,6 +61,42 @@ function ModeMenu({ chat }: { chat: AgentChatViewModel }): ReactElement {
             <span className="fdn-menu-check" />
             <span className="fdn-menu-label">{chat.strings.resetApprovals}</span>
           </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** The settings: the language to pick (or the one the organisation fixed), then the host's own items. */
+function SettingsMenu({ chat, extra }: { chat: AgentChatViewModel; extra?: ReactNode }): ReactElement | null {
+  const ref = useRef<HTMLDivElement>(null);
+  const close = useCallback(() => chat.setSettingsOpen(false), [chat]);
+  useDismiss(chat.isSettingsOpen, close, ref);
+  const s = chat.strings;
+  const languages = chat.canChangeLanguage || chat.isLanguageLocked;
+  if (!languages && !extra) return null;
+  return (
+    <div className="fdn-menu-anchor" ref={ref}>
+      <button type="button" className="fdn-icon-button" title={s.settings} aria-label={s.settings} aria-haspopup="menu"
+        aria-expanded={chat.isSettingsOpen} onClick={() => chat.setSettingsOpen(!chat.isSettingsOpen)}>
+        <Icon name="settings" />
+      </button>
+      {chat.isSettingsOpen && (
+        <div className="fdn-menu fdn-settings" role="menu" aria-label={s.settings}>
+          {languages && (
+            <div role="group" aria-label={s.languageMenu}>
+              <div className="fdn-menu-heading">{s.languageMenu}</div>
+              {chat.languageOptions.map((o) => (
+                <button key={o.id} type="button" role="menuitemradio" aria-checked={o.selected} disabled={!chat.canChangeLanguage}
+                  className="fdn-menu-item" lang={o.lang} onClick={() => void chat.setLanguage(o.id)}>
+                  <span className="fdn-menu-check">{o.selected && <Icon name="check" size={14} />}</span>
+                  <span className="fdn-menu-label">{o.label}</span>
+                </button>
+              ))}
+              {chat.isLanguageLocked && <div className="fdn-menu-note">{s.languageLocked}</div>}
+            </div>
+          )}
+          {extra && <div className={languages ? "fdn-menu-extra" : undefined}>{extra}</div>}
         </div>
       )}
     </div>

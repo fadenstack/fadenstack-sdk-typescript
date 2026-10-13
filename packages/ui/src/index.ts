@@ -1,7 +1,9 @@
 export { Observable, type Listener } from "./observable.js";
 export {
   AgentChatViewModel,
+  AUTOMATIC_LANGUAGE,
   type AgentChatOptions,
+  type LanguageOption,
   type OutgoingMessage,
   type SessionItem,
   type ToolModeOption,
@@ -23,6 +25,7 @@ export {
   type ApprovalState,
   type Citation,
   type DiffLine,
+  type NoticeTexts,
   type NoticeSeverity,
   type PartContext,
   type ToolCallState,
@@ -43,6 +46,7 @@ export {
   type UiScheduler,
 } from "./services.js";
 export { englishStrings, withStrings, type UiStrings } from "./strings.js";
+export { MemoryPreferenceStore, browserPreferences, type PreferenceStore } from "./preferences.js";
 export {
   builtInStrings,
   chineseSimplifiedStrings,

@@ -4,6 +4,7 @@ import type { UiStrings } from "../strings.js";
 export const frenchStrings: UiStrings = {
   language: "fr",
   direction: "ltr",
+  languageName: "Français",
   working: "En cours…",
   stopped: "Arrêtée",
   failed: "Une erreur s'est produite",
@@ -67,6 +68,10 @@ export const frenchStrings: UiStrings = {
     },
   },
   limitedTo: (description, mode) => `${description} Limité à « ${mode} » par votre organisation.`,
+  settings: "Paramètres",
+  languageMenu: "Langue",
+  languageAutomatic: (name) => `Automatique (${name})`,
+  languageLocked: "Défini par votre organisation",
   send: "Envoyer",
   stop: "Arrêter",
   history: "Historique des conversations",

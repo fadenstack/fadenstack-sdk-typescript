@@ -4,6 +4,7 @@ import type { UiStrings } from "../strings.js";
 export const spanishStrings: UiStrings = {
   language: "es",
   direction: "ltr",
+  languageName: "Español",
   working: "Trabajando…",
   stopped: "Detenida",
   failed: "Algo salió mal",
@@ -66,6 +67,10 @@ export const spanishStrings: UiStrings = {
     },
   },
   limitedTo: (description, mode) => `${description} Su organización lo limita a «${mode}».`,
+  settings: "Configuración",
+  languageMenu: "Idioma",
+  languageAutomatic: (name) => `Automático (${name})`,
+  languageLocked: "Establecido por su organización",
   send: "Enviar",
   stop: "Detener",
   history: "Historial de chats",

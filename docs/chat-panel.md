@@ -39,7 +39,7 @@ The UI comes in layers, and the split is strict:
       .useApprovals(approvals)
       .build();
 
-    const chat = new AgentChatViewModel(agent, approvals, { locale: navigator.language, strings: stringsFor() });
+    const chat = new AgentChatViewModel(agent, approvals, { automaticLanguage: navigator.languages, locale: navigator.language });
     await chat.initialize();
     createRoot(document.getElementById("chat")!).render(<ChatPanel chat={chat} />);
     ```
@@ -67,7 +67,7 @@ The UI comes in layers, and the split is strict:
       .useApprovals(approvals)
       .build();
 
-    const chat = markRaw(new AgentChatViewModel(agent, approvals, { locale: navigator.language, strings: stringsFor() }));
+    const chat = markRaw(new AgentChatViewModel(agent, approvals, { automaticLanguage: navigator.languages, locale: navigator.language }));
     await chat.initialize();
     createApp({ render: () => h(ChatPanel, { chat }) }).mount("#chat");
     ```
@@ -137,7 +137,8 @@ React takes everything as props. Vue takes values as props and your own content 
 |---|---|---|
 | `chat` | prop `chat` | The `AgentChatViewModel`. Required. |
 | `theme` | prop `theme` | `system` (default) follows the browser's light or dark setting; `light` or `dark` fixes one. |
-| `headerExtra` | slot `#header-extra` | Your buttons in the header, for example settings or sign out. |
+| `headerExtra` | slot `#header-extra` | Your buttons in the header. |
+| `settingsExtra` | slot `#settings-extra` | Your items in the panel's settings, below the language. See [Settings](#settings). |
 | `composerAccessory` | slot `#composer-accessory` | Your controls in the composer, for example to attach the page or the selection. |
 | `contextBar` | slot `#context-bar` | Shown above the composer, for example the page the agent works on. |
 | `signIn` | slot `#sign-in` | Shown instead of the chat while the agent needs a sign-in. |
@@ -182,7 +183,8 @@ threw.
 
 | Option | What it is |
 |---|---|
-| `strings` | The panel's texts: a language from `stringsFor`, your own translation, or a few words changed. See [Languages](#languages). |
+| `automaticLanguage`, `languages`, `lockedLanguage`, `preferences` | The language the user picks in the settings, and where it is kept. See [Languages](#languages). |
+| `strings` | Texts you fix instead of a language the user picks. |
 | `locale` | The locale for dates and numbers. The browser's by default. |
 | `beforeSend`, `afterSend` | What your application does around each message. See [Before a message goes](#before-a-message-goes). |
 | `previewLength` | How many characters of a tool's input and output are shown. Default 4 000. |
@@ -295,50 +297,80 @@ stylesheet switches to the system's colours.
 
 ## Languages
 
-The panels show no text of their own: every text is in the chat's `strings` (`UiStrings`), English by default. The
-SDK ships English, German, French, Spanish and Simplified Chinese, in the console's words and its formal address.
-`stringsFor` picks one for a locale, from the most specific tag to the language alone, and English when none fits:
+The panels show no text of their own: every text is in the chat's `strings` (`UiStrings`). The SDK ships English,
+German, French, Spanish and Simplified Chinese, in the console's words and its formal address.
+
+**The user picks the language** in the panel's settings (the gear in the header): *Automatic*, or one of the
+languages, each listed in its own name (Deutsch, Français, 中文（简体）), so anyone finds their own. The whole panel
+changes at once, the conversation too, and the choice is remembered on the device. Your application only says what
+*Automatic* means, the language it runs in:
 
 ```ts
-import { AgentChatViewModel, stringsFor } from "@fadenstack/ui";
-
 const chat = new AgentChatViewModel(agent, approvals, {
-  locale: "de-AT",
-  strings: stringsFor("de-AT"), // German; stringsFor() reads the browser's languages
+  automaticLanguage: navigator.languages, // or Office's language, the Nextcloud user's: "de-DE"
+  locale: navigator.language,             // dates and numbers
 });
 ```
 
-`stringsFor(["pt-BR", "fr-FR"])` takes the first locale it has texts for. `zh-CN` gets Simplified Chinese; `zh-TW` is
-Traditional, which is not shipped, and gets English unless you add it. `builtInStrings` lists the languages by tag,
-and each one is exported too: `englishStrings`, `germanStrings`, `frenchStrings`, `spanishStrings`,
-`chineseSimplifiedStrings`.
+Without `automaticLanguage`, *Automatic* is the browser's languages. A locale finds the nearest language from the most
+specific tag to the language alone: `de-AT` gets German, `zh-CN` Simplified Chinese; `zh-TW` is Traditional, which
+is not shipped, and gets English unless you add it.
 
-To add a language, write a full `UiStrings`, with its `language` tag, and pass it, or give `stringsFor` your
-languages next to the built-in ones:
+| Option | What it is |
+|---|---|
+| `automaticLanguage` | What *Automatic* means: a locale, or several, best first. |
+| `languages` | The languages to pick from, by tag: `builtInStrings` by default. |
+| `lockedLanguage` | A language your organisation fixed, from its policy: the panel uses it, and the settings show it with *Set by your organisation* and no choice. |
+| `preferences` | Where the choice is kept (`PreferenceStore`). `browserPreferences()` by default: the browser's `localStorage`, so every panel of the site or extension shares it; memory where there is none. Pass your own for an extension's storage or your application's settings. |
+| `strings` | Texts you fix instead: the panel then offers no choice. |
+
+`chat.setLanguage("fr")` and `chat.setLanguage("auto")` do from code what the settings do, and `chat.language`,
+`chat.languageOptions` and `chat.canChangeLanguage` say what they show.
+
+To add a language, write a full `UiStrings`, with its `language` tag and its name in itself, and offer it next to the
+built-in ones. To change a language's words, change only those; what you leave out comes from the language you name:
 
 ```ts
-import { builtInStrings, stringsFor, type UiStrings } from "@fadenstack/ui";
+import { builtInStrings, germanStrings, withStrings, type UiStrings } from "@fadenstack/ui";
 
-const italianStrings: UiStrings = { language: "it", direction: "ltr", send: "Invia", /* ... every text */ };
-const strings = stringsFor(userLocale, { ...builtInStrings, it: italianStrings });
-```
-
-To change a few words, pass only those. What you leave out comes from English, or from the language you name with
-`withStrings`:
-
-```ts
-import { germanStrings, withStrings } from "@fadenstack/ui";
-
-const strings = withStrings({ composerPlaceholder: "Fragen Sie zu dieser Datei" }, germanStrings);
+const italianStrings: UiStrings = { language: "it", direction: "ltr", languageName: "Italiano", send: "Invia", /* ... every text */ };
+const chat = new AgentChatViewModel(agent, approvals, {
+  languages: {
+    ...builtInStrings,
+    it: italianStrings,
+    de: withStrings({ composerPlaceholder: "Fragen Sie zu dieser Datei" }, germanStrings),
+  },
+});
 ```
 
 The groups `toolClass`, `approvalClass`, `approvalWhy`, `noticeTitles` and `modes` are completed key by key, so you
-can change one mode's words and keep the others.
+can change one mode's words and keep the others. `stringsFor(locale)` picks a language's texts outside a chat.
 
 The panel's root element carries the texts' `lang` and their `dir`. A language that runs right to left, such as
 Arabic or Hebrew, sets `direction: "rtl"`, and the whole panel mirrors: the stylesheet's directions are logical. The
 user's messages and the answers take their direction from their own text, so a Hebrew answer reads right to left in
 an English panel, and code always runs left to right. Dates and numbers follow `locale`.
+
+## Settings
+
+The gear in the header opens the panel's settings: the language, and below it what your application adds, such as
+sign out or its own options, so they all sit in one place:
+
+=== "React"
+
+    ```tsx
+    <ChatPanel chat={chat} settingsExtra={<button type="button" className="fdn-menu-item" onClick={signOut}>Sign out</button>} />
+    ```
+
+=== "Vue"
+
+    ```vue
+    <ChatPanel :chat="chat">
+      <template #settings-extra><button type="button" class="fdn-menu-item" @click="signOut">Sign out</button></template>
+    </ChatPanel>
+    ```
+
+The gear only shows when there is something to set: a choice of languages, a fixed one to show, or your items.
 
 ## View models for other frameworks
 

@@ -4,6 +4,7 @@ import type { UiStrings } from "../strings.js";
 export const chineseSimplifiedStrings: UiStrings = {
   language: "zh-Hans",
   direction: "ltr",
+  languageName: "中文（简体）",
   working: "处理中…",
   stopped: "已停止",
   failed: "出了点问题",
@@ -63,6 +64,10 @@ export const chineseSimplifiedStrings: UiStrings = {
     auto: { label: "自动", description: "运行会做更改的工具；对无法撤销的操作仍会先询问。" },
   },
   limitedTo: (description, mode) => `${description} 您的组织将其限制为“${mode}”。`,
+  settings: "设置",
+  languageMenu: "语言",
+  languageAutomatic: (name) => `自动（${name}）`,
+  languageLocked: "由您的组织设置",
   send: "发送",
   stop: "停止",
   history: "聊天记录",

@@ -1,6 +1,6 @@
 import { FadenstackClient, loginWithPassword } from "@fadenstack/client";
 import { FadenstackAgent, MemorySessionStore, defineTool } from "@fadenstack/agents";
-import { AgentChatViewModel, ApprovalBroker, MemoryClipboard, immediateScheduler, type AgentChatOptions } from "@fadenstack/ui";
+import { AgentChatViewModel, ApprovalBroker, MemoryClipboard, MemoryPreferenceStore, immediateScheduler, type AgentChatOptions } from "@fadenstack/ui";
 import { FakeGateway, lastToolResults, type FakeModel } from "@fadenstack/testing";
 
 /** A chat (signed in unless `signIn` is false) with "Page assistant": read_page (read) and fill_field (write, or destructive). */
@@ -33,7 +33,7 @@ export async function chatWith(model: FakeModel, options: AgentChatOptions = {},
     )
     .build();
   const clipboard = new MemoryClipboard();
-  const chat = new AgentChatViewModel(agent, approvals, { scheduler: immediateScheduler, clipboard, locale: "en-GB", ...options });
+  const chat = new AgentChatViewModel(agent, approvals, { scheduler: immediateScheduler, clipboard, locale: "en-GB", preferences: new MemoryPreferenceStore(), ...options });
   await chat.initialize();
   return { chat, filled, clipboard, gateway };
 }

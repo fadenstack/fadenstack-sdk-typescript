@@ -1,7 +1,6 @@
 import { EntryTypes, TurnStatus, type ApprovalRequest, type TranscriptEntry } from "@fadenstack/agents";
 import { parseToolClass, type ChatOutcome } from "@fadenstack/client";
 
-import { formatNumber } from "./format.js";
 import { ApprovalPart, NoticePart, type ApprovalState, type PartContext } from "./parts.js";
 import { TurnViewModel, type TurnHost, type TurnState } from "./turn.js";
 
@@ -39,7 +38,7 @@ export function buildTurn(entries: readonly TranscriptEntry[], context: PartCont
   turn.setId(entries[0]!.turnId!);
   let state: TurnState = "stopped"; // a turn without an end was interrupted
   let outcome: ChatOutcome | undefined;
-  let usage = "";
+  let tokens: number | undefined;
   for (const entry of entries) {
     const d = entry.data;
     switch (entry.type) {
@@ -76,7 +75,7 @@ export function buildTurn(entries: readonly TranscriptEntry[], context: PartCont
         const notice = { outcome: str(d, "outcome") ?? "", message: str(d, "message") ?? "" } as Parameters<typeof NoticePart.from>[0];
         const decisionId = str(d, "decision_id");
         if (decisionId) notice.decisionId = decisionId;
-        turn.addRestoredPart(NoticePart.from(notice, context.strings));
+        turn.addRestoredPart(NoticePart.from(notice, context));
         break;
       }
       case EntryTypes.turnEnd: {
@@ -84,11 +83,11 @@ export function buildTurn(entries: readonly TranscriptEntry[], context: PartCont
           : entry.status === TurnStatus.cancelled ? "stopped" : "completed";
         outcome = (str(d, "outcome") as ChatOutcome | undefined) ?? undefined;
         const total = (d["usage"] as Data | null)?.["total_tokens"];
-        if (typeof total === "number" && total > 0) usage = context.strings.tokens(formatNumber(total, context.locale));
+        if (typeof total === "number" && total > 0) tokens = total;
         break;
       }
     }
   }
-  turn.restore(state, outcome, usage);
+  turn.restore(state, outcome, tokens);
   return turn;
 }

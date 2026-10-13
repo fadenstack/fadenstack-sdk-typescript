@@ -24,8 +24,10 @@ const props = withDefaults(defineProps<{
 }>(), { theme: "system", placeholder: undefined, partRenderers: undefined, agentColor: undefined });
 
 const slots = defineSlots<{
-  /** The host's buttons in the header (settings, sign out). */
+  /** The host's buttons in the header. */
   "header-extra"?(): unknown;
+  /** The host's own items in the panel's settings, below the language (sign out, its own options). */
+  "settings-extra"?(): unknown;
   /** The host's controls in the composer (attach the page, the selection). */
   "composer-accessory"?(): unknown;
   /** Shown above the composer (e.g. the file the agent works on). */
@@ -40,7 +42,10 @@ const chat = useViewModel(() => props.chat);
 
 <template>
   <div class="fdn-chat" :data-theme="theme" :lang="chat.strings.language" :dir="chat.strings.direction">
-    <ChatHeader :chat="chat"><slot name="header-extra" /></ChatHeader>
+    <ChatHeader :chat="chat">
+      <slot name="header-extra" />
+      <template v-if="slots['settings-extra']" #settings><slot name="settings-extra" /></template>
+    </ChatHeader>
     <div v-if="chat.signInRequired && slots['sign-in']" class="fdn-body fdn-body-center"><slot name="sign-in" /></div>
     <template v-else>
       <Conversation :chat="chat" :part-renderers="partRenderers" :agent-color="agentColor">

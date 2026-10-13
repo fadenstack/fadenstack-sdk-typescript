@@ -307,6 +307,27 @@
   padding: 6px 10px;
 }
 
+/* The settings: a heading over each group (the languages), the host's own items below a line. */
+.fdn-menu-heading {
+  display: block;
+  padding-block: 6px 2px;
+  padding-inline: 10px;
+  color: var(--fdn-text-faint);
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.fdn-menu-extra {
+  margin-block-start: 4px;
+  padding-block-start: 4px;
+  border-block-start: 1px solid var(--fdn-hairline);
+}
+
+.fdn-settings {
+  max-height: min(480px, 75vh);
+  overflow-y: auto;
+}
+
 .fdn-history {
   max-height: min(420px, 70vh);
   overflow-y: auto;

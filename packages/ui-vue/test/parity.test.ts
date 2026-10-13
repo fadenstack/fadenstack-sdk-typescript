@@ -92,6 +92,23 @@ describe("the Vue panel draws what the React panel draws", () => {
   });
 });
 
+describe("the settings draw the same in both panels", () => {
+  it("with a choice of languages, and with the language the organisation fixed", async () => {
+    const { chat } = await chatWith(() => ({ text: "ok" }), { automaticLanguage: "de-DE" });
+    const panels = both(chat);
+    chat.setSettingsOpen(true);
+    await panels.same();
+    await chat.setLanguage("zh-Hans");
+    chat.setSettingsOpen(true);
+    await panels.same();
+
+    const locked = await chatWith(() => ({ text: "ok" }), { lockedLanguage: "es" });
+    const lockedPanels = both(locked.chat);
+    locked.chat.setSettingsOpen(true);
+    await lockedPanels.same();
+  });
+});
+
 describe("the Vue avatar draws what the React avatar draws", () => {
   it.each([
     [{}], [{ size: 24 }], [{ variant: "mono" as const }], [{ variant: "mono" as const, size: 24 }], [{ color: "#0E9F9A" }],

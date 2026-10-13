@@ -18,8 +18,10 @@ export interface ChatPanelProps {
    * part of the browser.
    */
   theme?: ChatTheme;
-  /** The host's buttons in the header (settings, sign out). */
+  /** The host's buttons in the header. */
   headerExtra?: ReactNode;
+  /** The host's own items in the panel's settings, below the language (sign out, its own options). */
+  settingsExtra?: ReactNode;
   /** The host's controls in the composer (attach the page, the selection). */
   composerAccessory?: ReactNode;
   /** Shown above the composer (e.g. the page the agent works on). */
@@ -47,7 +49,7 @@ export function ChatPanel(props: ChatPanelProps): ReactElement {
   return (
     <div className={`fdn-chat${props.className ? ` ${props.className}` : ""}`} data-theme={theme} lang={chat.strings.language}
       dir={chat.strings.direction}>
-      <ChatHeader chat={chat} extra={props.headerExtra} />
+      <ChatHeader chat={chat} extra={props.headerExtra} settingsExtra={props.settingsExtra} />
       {chat.signInRequired && props.signIn ? (
         <div className="fdn-body fdn-body-center">{props.signIn}</div>
       ) : (

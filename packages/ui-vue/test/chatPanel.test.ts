@@ -236,3 +236,31 @@ describe("ChatPanel in a host component", () => {
     expect(wrapper.text()).toContain("Hello from the agent.");
   });
 });
+
+describe("ChatPanel's settings (Vue)", () => {
+  it("lets the user pick a language, and the whole panel speaks it; the host's items sit below", async () => {
+    const { wrapper, chat } = await panel(() => ({ text: "ok" }), { automaticLanguage: "en-US" }, "write",
+      { slots: { "settings-extra": () => h("button", { type: "button", class: "host-sign-out" }, "Sign out") } });
+    await button(wrapper, "Settings").trigger("click");
+    expect(wrapper.findAll("[role=menuitemradio]").map((b) => b.text())).toEqual(
+      ["Automatic (English)", "English", "Deutsch", "Français", "Español", "中文（简体）"]);
+    expect(wrapper.find(".fdn-settings .fdn-menu-extra .host-sign-out").exists()).toBe(true);
+    await wrapper.findAll("[role=menuitemradio]").find((b) => b.text() === "Deutsch")!.trigger("click");
+    await flushPromises();
+    expect(chat.isSettingsOpen).toBe(false);
+    expect(wrapper.find(".fdn-settings").exists()).toBe(false);
+    expect(wrapper.find("textarea").attributes("placeholder")).toBe("Stellen Sie eine Frage");
+    expect(button(wrapper, "Einstellungen").exists()).toBe(true);
+    expect(wrapper.attributes("lang")).toBe("de");
+  });
+
+  it("shows the language the organisation fixed, without a choice, and no button when there is nothing to set", async () => {
+    const locked = await panel(() => ({ text: "ok" }), { lockedLanguage: "fr" });
+    await button(locked.wrapper, "Paramètres").trigger("click");
+    expect(locked.wrapper.find(".fdn-menu-note").text()).toBe("Défini par votre organisation");
+    expect(locked.wrapper.findAll("[role=menuitemradio]").every((b) => (b.element as HTMLButtonElement).disabled)).toBe(true);
+
+    const fixed = await panel(() => ({ text: "ok" }), { strings: { send: "Go" } });
+    expect(fixed.wrapper.findAll("button").some((b) => b.attributes("aria-label") === "Settings")).toBe(false);
+  });
+});
