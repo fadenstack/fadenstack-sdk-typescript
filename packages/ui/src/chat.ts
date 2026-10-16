@@ -144,7 +144,7 @@ export class AgentChatViewModel extends Observable implements TurnHost {
   #history: TranscriptEntry[][] = [];
   #loadedFrom = 0;
   #title = "";
-  #profileGreeting: string | undefined;
+  #profileUi: Readonly<Record<string, unknown>> = {};
   readonly #languages: Readonly<Record<string, UiStrings>>;
   readonly #automatic: string | readonly string[] | undefined;
   readonly #locked: string | undefined;
@@ -155,7 +155,6 @@ export class AgentChatViewModel extends Observable implements TurnHost {
   #languagePicked = false;
   #settingsOpen = false;
   readonly #untitled = new Set<string>();
-  #suggestions: readonly string[] = [];
   #turns: readonly TurnViewModel[] = [];
   #attachments: readonly AttachmentViewModel[] = [];
   #skills: readonly SkillOption[] = [];
@@ -220,9 +219,13 @@ export class AgentChatViewModel extends Observable implements TurnHost {
     return this.#context.strings;
   }
 
-  /** The agent's greeting for an empty chat (profile `ui.greeting`). */
+  /**
+   * The agent's greeting for an empty chat (profile `ui.greeting`), in the panel's language when the definition has
+   * it (`ui.languages.<tag>.greeting`).
+   */
   get greeting(): string {
-    return this.#profileGreeting ?? (this.#title ? this.strings.greetingFallback(this.#title) : "");
+    const greeting = this.#ui("greeting");
+    return typeof greeting === "string" && greeting ? greeting : this.#title ? this.strings.greetingFallback(this.#title) : "";
   }
 
   /** The settings' language: `"auto"` (the host's language) or a tag of `languageOptions`. */
@@ -256,9 +259,10 @@ export class AgentChatViewModel extends Observable implements TurnHost {
     return this.#settingsOpen;
   }
 
-  /** Prompts to start with (profile `ui.suggestions`). */
+  /** Prompts to start with (profile `ui.suggestions`), in the panel's language when the definition has them. */
   get suggestions(): readonly string[] {
-    return this.#suggestions;
+    const suggestions = this.#ui("suggestions");
+    return Array.isArray(suggestions) ? suggestions.filter((s): s is string => typeof s === "string").slice(0, 6) : [];
   }
 
   get turns(): readonly TurnViewModel[] {
@@ -377,10 +381,7 @@ export class AgentChatViewModel extends Observable implements TurnHost {
       const profile = this.#agent.profile;
       this.#adoptUserLanguage(profile.user?.language ?? null);
       this.#title = profile.name;
-      const greeting = profile.ui["greeting"];
-      this.#profileGreeting = typeof greeting === "string" && greeting ? greeting : undefined;
-      const suggestions = profile.ui["suggestions"];
-      this.#suggestions = Array.isArray(suggestions) ? suggestions.filter((s): s is string => typeof s === "string").slice(0, 6) : [];
+      this.#profileUi = profile.ui;
       this.#mode = this.#startMode();
       await this.refreshSessions();
       this.#ready = true;
@@ -860,6 +861,23 @@ export class AgentChatViewModel extends Observable implements TurnHost {
       for (const turn of this.#turns) turn.retext();
     }
     this.notify();
+  }
+
+  /**
+   * A field of the agent's `ui` in the panel's language: `ui.languages` may carry the greeting and suggestions per
+   * language tag ("de", "zh-Hans"; "de" also serves "de-AT"), the definition's own are the rest's.
+   */
+  #ui(name: string): unknown {
+    const languages = this.#profileUi["languages"];
+    if (languages && typeof languages === "object" && !Array.isArray(languages)) {
+      const tag = this.strings.language;
+      const byTag = languages as Record<string, unknown>;
+      for (const key of [tag, primaryTag(tag)]) {
+        const own = byTag[key];
+        if (own && typeof own === "object" && name in own) return (own as Record<string, unknown>)[name];
+      }
+    }
+    return this.#profileUi[name];
   }
 
   #keyOf(strings: UiStrings): string | undefined {

@@ -129,6 +129,27 @@ describe("the skill picker", () => {
   });
 });
 
+describe("the agent's greeting and suggestions", () => {
+  it("are in the panel's language when the definition has it, and follow a change of language", async () => {
+    const { chat: vm } = await chat({
+      ui: {
+        greeting: "I read pages.",
+        suggestions: ["Summarise this page"],
+        languages: { de: { greeting: "Ich lese Seiten.", suggestions: ["Diese Seite zusammenfassen"] }, fr: { greeting: "Je lis les pages." } },
+      },
+    });
+    expect(vm.greeting).toBe("I read pages.");
+    await vm.setLanguage("de");
+    expect(vm.greeting).toBe("Ich lese Seiten.");
+    expect(vm.suggestions).toEqual(["Diese Seite zusammenfassen"]);
+    await vm.setLanguage("fr");
+    expect(vm.greeting).toBe("Je lis les pages.");
+    expect(vm.suggestions).toEqual(["Summarise this page"]); // French has no suggestions of its own
+    await vm.setLanguage("es");
+    expect(vm.greeting).toBe("I read pages.");
+  });
+});
+
 describe("pictures", () => {
   it("go with the message as an image part, for a model that sees pictures", async () => {
     const { chat: vm, gateway } = await chat({ vision: true });
