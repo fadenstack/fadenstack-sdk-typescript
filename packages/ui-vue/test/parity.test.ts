@@ -64,6 +64,27 @@ describe("the Vue panel draws what the React panel draws", () => {
     await panels.same();
   });
 
+  it("for the skill picker, a picked skill and a picture, in the composer and in the sent message", async () => {
+    const skills = [
+      { slug: "reply", name: "Reply in our style", description: "Answers a mail the way we write" },
+      { slug: "check", name: "Contract check" },
+    ];
+    const { chat } = await chatWith(() => ({ text: "ok" }), {}, "write", true, { skills, vision: true });
+    const panels = both(chat);
+    chat.setInput("Answer $");
+    await waitUntil(() => chat.skillPicker.options.length === 2);
+    await panels.same();
+    chat.skillPicker.move(1);
+    chat.setInput("Answer $nothing-like-it");
+    await panels.same();
+    chat.setInput("Answer $rep");
+    chat.skillPicker.pick();
+    chat.attachPicture({ dataUrl: "data:image/jpeg;base64,/9j/", title: "Screenshot" });
+    await panels.same();
+    await chat.send();
+    await panels.same();
+  });
+
   it("for a refused message, a failed tool and history", async () => {
     let refuse = true;
     const { chat } = await chatWith(() => (refuse ? { refuse: { stage: "input", message: "Customer data stays here." } }

@@ -9,6 +9,12 @@ export interface AgentProfile {
   /** A maintainer's draft, not the published version. */
   draft: boolean;
   model: string | null;
+  /** Whether the agent's model sees pictures; null: the server does not say (an older one). */
+  vision: boolean | null;
+  /** Whether the agent's tools can make pictures: an image model is set up. */
+  images: boolean;
+  /** Whether the user can pick skills for a message (`AgentResource.listSkills`): the server runs the skills module. */
+  skills: boolean;
   instructionsSha256: string | null;
   /** The tools the host application may offer; any other tool is refused. Empty: no restriction. */
   hostToolContract: ToolContractEntry[];
@@ -43,6 +49,39 @@ export interface ToolContractEntry {
   approval?: string;
 }
 
+/** A skill the user can pick for a message (`AgentResource.listSkills`); never its instructions. */
+export interface SkillOption {
+  id: string;
+  /** What a message names it by (`ChatOptions.skills`). */
+  slug: string;
+  name: string;
+  description: string;
+  /** `always` (in every chat anyway), `auto` (when the question matches), `manual` (only when picked). */
+  activation: string;
+}
+
+/** The skills a user can pick, and whether the server offers skills at all. */
+export interface SkillList {
+  available: boolean;
+  skills: SkillOption[];
+}
+
+/** `GET /v1/agents/{agent}/skills` from its snake_case JSON. */
+export function toSkillList(json: unknown): SkillList {
+  const p = obj(json);
+  const skills = (Array.isArray(p["data"]) ? (p["data"] as unknown[]) : []).map((e): SkillOption => {
+    const s = obj(e);
+    return {
+      id: str(s["id"]) ?? "",
+      slug: str(s["slug"]) ?? "",
+      name: str(s["name"]) ?? str(s["slug"]) ?? "",
+      description: str(s["description"]) ?? "",
+      activation: str(s["activation"]) ?? "auto",
+    };
+  }).filter((s) => s.slug);
+  return { available: p["available"] !== false, skills };
+}
+
 /** `GET /v1/features`: the server's edition and features. */
 export interface ServerFeatures {
   edition: string;
@@ -67,6 +106,9 @@ export function toAgentProfile(json: unknown): AgentProfile {
     version: typeof p["version"] === "number" ? (p["version"] as number) : null,
     draft: p["draft"] === true,
     model: str(p["model"]) ?? null,
+    vision: typeof p["vision"] === "boolean" ? (p["vision"] as boolean) : null,
+    images: p["images"] === true,
+    skills: p["skills"] === true,
     instructionsSha256: str(p["instructions_sha256"]) ?? null,
     hostToolContract: Array.isArray(p["host_tool_contract"])
       ? (p["host_tool_contract"] as unknown[]).map((e) => {

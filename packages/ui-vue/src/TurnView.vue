@@ -19,9 +19,12 @@ const turn = useViewModel(() => props.turn);
       <div class="fdn-user-bubble" dir="auto">{{ turn.userText }}<div v-if="turn.attachments.length > 0" class="fdn-chips"><span
         v-for="(a, i) in turn.attachments"
         :key="i"
-        class="fdn-chip fdn-chip-static"
+        :class="a.skill ? 'fdn-chip fdn-chip-static fdn-chip-skill' : 'fdn-chip fdn-chip-static'"
         :title="a.subtitle"
-      ><Icon name="page" :size="12" /><span class="fdn-chip-title" dir="auto">{{ a.title }}</span></span></div></div>
+      ><img v-if="a.image" class="fdn-chip-image" :src="a.image" alt="" /><Icon v-else :name="a.skill ? 'sparkle' : 'page'" :size="12" /><span
+        class="fdn-chip-title"
+        dir="auto"
+      >{{ a.title }}</span></span></div></div>
       <div v-if="turn.isPromptBlocked" class="fdn-user-note">
         <span>{{ strings.notSent }}</span>
         <button type="button" class="fdn-link" @click="turn.edit()">{{ strings.editAndResend }}</button>

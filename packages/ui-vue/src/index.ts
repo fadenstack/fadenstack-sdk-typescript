@@ -1,6 +1,7 @@
 export { default as ChatPanel } from "./ChatPanel.vue";
 export { default as ChatHeader } from "./ChatHeader.vue";
 export { default as Composer } from "./Composer.vue";
+export { default as SkillPicker } from "./SkillPicker.vue";
 export { default as TurnView } from "./TurnView.vue";
 export { default as PartView } from "./PartView.js";
 export { default as MarkdownView } from "./parts/MarkdownView.vue";

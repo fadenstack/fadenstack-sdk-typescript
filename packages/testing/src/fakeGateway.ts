@@ -36,6 +36,13 @@ export interface FakeAgent {
   /** A tool-mode ceiling, as an administrator's rules set it. */
   ceiling?: "off" | "read_only" | "ask" | "auto";
   requiredClientModules?: string[];
+  /** Whether its model sees pictures (`vision` in the profile); not said by default, as an older server. */
+  vision?: boolean;
+  /**
+   * The skills its users can pick (`GET .../skills`; the profile says `skills: true`). Without it the server has no
+   * skills module: the route answers `available: false`.
+   */
+  skills?: { slug: string; name?: string; description?: string; activation?: string }[];
 }
 
 /** One model call, as the fake model sees it. */
@@ -285,13 +292,14 @@ export class FakeGateway {
       if (!this.#logins.has(bearer(request) ?? "")) return openAiError(401, "The token is not valid.", "invalid_token", "authentication_error");
       return json(200, { object: "list", data: (this.#options.models ?? ["fake-model"]).map((id) => ({ id, object: "model" })) });
     }
-    const match = /^\/v1\/agents\/([^/]+)\/(profile|user|chat\/completions|events|manifest|approvals\/([^/]+))$/.exec(path);
+    const match = /^\/v1\/agents\/([^/]+)\/(profile|user|skills|chat\/completions|events|manifest|approvals\/([^/]+))$/.exec(path);
     if (!match) return json(404, { detail: "Not Found" });
     const agent = decodeURIComponent(match[1]!);
     const auth = this.#authorize(request, agent);
     if (auth instanceof Response) return auth;
     const route = match[2]!;
     if (method === "GET" && route === "profile") return json(200, this.#profile(agent, auth));
+    if (method === "GET" && route === "skills") return json(200, this.#skills(agent, url));
     if (method === "PATCH" && route === "user") return this.#userSettings(auth, body);
     if (method === "POST" && route === "chat/completions") return this.#chat(request, agent, body);
     if (method === "POST" && route === "events") return this.#events(body);
@@ -396,13 +404,27 @@ export class FakeGateway {
     const user = this.#users.find((u) => u.id === signIn.userId)!;
     return {
       object: "agent.profile", id: agent.id, slug: agent.slug, name: agent.name, version: agent.version, draft: false,
-      model: agent.model ?? "fake-model", instructions_sha256: "0".repeat(64),
+      model: agent.model ?? "fake-model", ...(agent.vision !== undefined ? { vision: agent.vision } : {}), images: false,
+      skills: agent.skills !== undefined, instructions_sha256: "0".repeat(64),
       host_tool_contract: agent.contract ?? [], server_tools: null, knowledge: [],
       local_mcp: { mode: agent.localMcpMode ?? "disable", developer_mode: user.developerMode ?? false },
       tool_modes: { default: "ask", ceiling: agent.ceiling ?? null, open_world_enforced: false },
       ui: agent.ui ?? {}, extensions: {}, required_client_modules: agent.requiredClientModules ?? [],
       edition: "community", features: ["agents"], user: { language: user.language ?? null },
     };
+  }
+
+  /** `GET /v1/agents/{agent}/skills`: the agent's skills, `q` matching name, slug or description; `limit` at most 100. */
+  #skills(slug: string, url: URL): Record<string, unknown> {
+    const skills = this.#agents.get(slug)!.skills;
+    if (skills === undefined) return { object: "list", available: false, data: [] };
+    const q = (url.searchParams.get("q") ?? "").toLowerCase();
+    const limit = Math.min(100, Math.max(1, Number(url.searchParams.get("limit") ?? 50) || 50));
+    const data = skills
+      .filter((s) => !q || [s.slug, s.name ?? "", s.description ?? ""].some((t) => t.toLowerCase().includes(q)))
+      .slice(0, limit)
+      .map((s) => ({ id: `skill-${s.slug}`, slug: s.slug, name: s.name ?? s.slug, description: s.description ?? "", activation: s.activation ?? "manual" }));
+    return { object: "list", available: true, data };
   }
 
   /** The language a user picked for every client, as the server keeps it. */

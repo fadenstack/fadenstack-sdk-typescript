@@ -1,4 +1,4 @@
-import type { MessageAttachment } from "@fadenstack/agents";
+import { isPicture, type MessageAttachment } from "@fadenstack/agents";
 
 import { Observable } from "./observable.js";
 
@@ -15,6 +15,8 @@ export interface AttachmentOptions {
   implicit?: boolean;
   /** For an implicit chip: whether it starts switched on. Default on. */
   included?: boolean;
+  /** A picture's `data:` URL: the chip shows it small. */
+  image?: string;
 }
 
 /**
@@ -24,6 +26,8 @@ export interface AttachmentOptions {
 export class AttachmentViewModel extends Observable {
   readonly key = `a${++counter}`;
   readonly implicit: boolean;
+  /** A picture's `data:` URL, shown small on the chip. */
+  readonly image: string | undefined;
   readonly #resolve: AttachmentOptions["resolve"];
   #title: string;
   #subtitle: string | undefined;
@@ -36,12 +40,14 @@ export class AttachmentViewModel extends Observable {
     this.#resolve = options.resolve;
     this.implicit = options.implicit ?? false;
     this.#included = options.included ?? true;
+    this.image = options.image;
   }
 
   /** An attachment whose content is already known. */
   static fromContent(attachment: MessageAttachment): AttachmentViewModel {
     const options: AttachmentOptions = { title: attachment.title, resolve: () => Promise.resolve(attachment) };
     if (attachment.kind) options.subtitle = attachment.kind;
+    if (isPicture(attachment)) options.image = attachment.content;
     return new AttachmentViewModel(options);
   }
 
@@ -87,4 +93,8 @@ let counter = 0;
 export interface AttachmentChip {
   title: string;
   subtitle: string | undefined;
+  /** A picture: its `data:` URL, shown small. */
+  image?: string;
+  /** A skill the user picked for the message (the chip shows its name). */
+  skill?: boolean;
 }

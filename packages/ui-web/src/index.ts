@@ -1,6 +1,17 @@
 export { iconPaths, type IconName } from "./icons.js";
 export { agentAvatar, type AgentAvatarOptions, type SvgNode } from "./avatar.js";
-export { COPIED_MS, composerKey, dismissOnOutside, fitToContent, focusAtEnd, stickToBottom } from "./dom.js";
+export {
+  COPIED_MS,
+  composerKey,
+  dismissOnOutside,
+  fitToContent,
+  focusAtEnd,
+  picturesIn,
+  readPicture,
+  stickToBottom,
+  type ComposerAction,
+  type ReadPicture,
+} from "./dom.js";
 export {
   approvalIcon,
   diffMarker,

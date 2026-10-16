@@ -52,6 +52,9 @@ export {
   type LocalMcpAttachedEvent,
   type ServerFeatures,
   type SessionStatsEvent,
+  type SkillList,
+  type SkillOption,
+  toSkillList,
   type ToolContractEntry,
   type ToolExecutedEvent,
 } from "./models.js";

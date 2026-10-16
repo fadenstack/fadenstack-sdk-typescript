@@ -19,12 +19,14 @@ const attachment = useViewModel(() => props.attachment);
       :title="strings.includeAttachment"
       @click="attachment.toggle()"
     >
-      <Icon name="page" :size="12" />
+      <img v-if="attachment.image" class="fdn-chip-image" :src="attachment.image" alt="" />
+      <Icon v-else name="page" :size="12" />
       <span class="fdn-chip-title" dir="auto">{{ attachment.title }}</span>
       <span v-if="attachment.subtitle" class="fdn-chip-sub">{{ attachment.subtitle }}</span>
     </button>
     <template v-else>
-      <Icon name="page" :size="12" />
+      <img v-if="attachment.image" class="fdn-chip-image" :src="attachment.image" alt="" />
+      <Icon v-else name="page" :size="12" />
       <span class="fdn-chip-title" dir="auto">{{ attachment.title }}</span>
       <span v-if="attachment.subtitle" class="fdn-chip-sub">{{ attachment.subtitle }}</span>
       <button type="button" class="fdn-chip-remove" :aria-label="`${strings.removeAttachment} ${attachment.title}`" @click="chat.removeAttachment(attachment)">

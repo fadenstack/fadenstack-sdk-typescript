@@ -23,8 +23,8 @@ export const TurnView = memo(function TurnView({ turn, strings, renderers }: {
           {turn.attachments.length > 0 && (
             <div className="fdn-chips">
               {turn.attachments.map((a, i) => (
-                <span key={i} className="fdn-chip fdn-chip-static" title={a.subtitle}>
-                  <Icon name="page" size={12} />
+                <span key={i} className={a.skill ? "fdn-chip fdn-chip-static fdn-chip-skill" : "fdn-chip fdn-chip-static"} title={a.subtitle}>
+                  {a.image ? <img className="fdn-chip-image" src={a.image} alt="" /> : <Icon name={a.skill ? "sparkle" : "page"} size={12} />}
                   <span className="fdn-chip-title" dir="auto">{a.title}</span>
                 </span>
               ))}

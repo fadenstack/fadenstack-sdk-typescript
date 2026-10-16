@@ -27,6 +27,43 @@ describe("AgentResource", () => {
     });
   });
 
+  it("says whether the model sees pictures and whether skills can be picked", async () => {
+    const gateway = new FakeGateway({ agents: [{ slug: "excel", vision: true, skills: [] }] });
+    expect(await (await client(gateway)).agent!.getProfile()).toMatchObject({ vision: true, images: false, skills: true });
+    const older = new FakeGateway({ agents: [{ slug: "excel" }] });
+    expect(await (await client(older)).agent!.getProfile()).toMatchObject({ vision: null, skills: false });
+  });
+
+  it("lists the skills the user can pick, narrowed on the server", async () => {
+    const gateway = new FakeGateway({
+      agents: [{ slug: "excel", skills: [{ slug: "pivot", name: "Pivot tables", description: "Builds one" }, { slug: "chart", description: "Draws a chart" }] }],
+    });
+    const c = await client(gateway);
+    expect(await c.agent!.listSkills()).toEqual({
+      available: true,
+      skills: [
+        { id: "skill-pivot", slug: "pivot", name: "Pivot tables", description: "Builds one", activation: "manual" },
+        { id: "skill-chart", slug: "chart", name: "chart", description: "Draws a chart", activation: "manual" },
+      ],
+    });
+    expect((await c.agent!.listSkills({ query: "  draws ", limit: 500 })).skills.map((s) => s.slug)).toEqual(["chart"]);
+    const request = gateway.requests.at(-1)!;
+    expect(request.path).toBe("/v1/agents/excel/skills");
+    expect((await c.agent!.listSkills({ limit: 0 })).skills.length).toBe(1);
+  });
+
+  it("offers no skills on a server without them, or one too old for the route", async () => {
+    const without = new FakeGateway({ agents: [{ slug: "excel" }] });
+    expect(await (await client(without)).agent!.listSkills()).toEqual({ available: false, skills: [] });
+    const old = new FakeGateway({ agents: [{ slug: "excel" }] });
+    const fetch404: typeof old.fetch = (input, init) => String(input instanceof Request ? input.url : input).includes("/skills")
+      ? Promise.resolve(new Response(JSON.stringify({ detail: "Not Found" }), { status: 404, headers: { "content-type": "application/json" } }))
+      : old.fetch(input, init);
+    const { client: oldClient, tokens } = FadenstackClient.forAgent({ serverUrl: old.serverUrl, agent: "excel", fetch: fetch404 });
+    await tokens.signIn(await loginWithPassword({ apiUrl: old.serverUrl, email: "user@example.com", password: "secret", fetch: old.fetch }));
+    expect(await oldClient.agent!.listSkills()).toEqual({ available: false, skills: [] });
+  });
+
   it("keeps the user's language for all their clients, and forgets it", async () => {
     const gateway = new FakeGateway({ agents: [{ slug: "excel" }] });
     const c = await client(gateway);

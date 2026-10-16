@@ -1,6 +1,7 @@
+import { FadenstackApiError } from "../errors.js";
 import type { FadenstackTransport } from "../http/transport.js";
 import { toWireManifest, type AppManifest } from "../manifest.js";
-import { toAgentProfile, toWireEvent, type AgentClientEvent, type AgentProfile } from "../models.js";
+import { toAgentProfile, toSkillList, toWireEvent, type AgentClientEvent, type AgentProfile, type SkillList } from "../models.js";
 
 /** The server takes at most this many events per report. */
 export const MAX_EVENTS_PER_REPORT = 100;
@@ -52,6 +53,25 @@ export class AgentResource {
   async setUserLanguage(language: string | null, signal?: AbortSignal): Promise<string | null> {
     const answer = await this.#transport.patch<{ language?: unknown }>(this.#route("user"), { language }, signal);
     return typeof answer?.language === "string" && answer.language ? answer.language : null;
+  }
+
+  /**
+   * The skills the signed-in user can pick for a message in this agent's chats (they go as `ChatOptions.skills`):
+   * the ones a chat could be given, `query` narrowing them by name or description. A server without skills, or an
+   * older one without the route, offers none (`available` false).
+   */
+  async listSkills(options: { query?: string; limit?: number; signal?: AbortSignal } = {}): Promise<SkillList> {
+    const url = this.#route("skills");
+    if (options.query?.trim()) url.searchParams.set("q", options.query.trim().slice(0, 200));
+    if (options.limit !== undefined) url.searchParams.set("limit", String(Math.max(1, Math.min(100, Math.floor(options.limit)))));
+    try {
+      return toSkillList(await this.#transport.get<unknown>(url, options.signal));
+    } catch (error) {
+      if (error instanceof FadenstackApiError && error.status === 404 && error.code !== "agent_not_found") {
+        return { available: false, skills: [] };
+      }
+      throw error;
+    }
   }
 
   /** Approves or declines a gateway tool call waiting for the user (`faden.approval_required`). */

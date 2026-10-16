@@ -5,9 +5,11 @@ export {
   type AgentChatOptions,
   type LanguageOption,
   type OutgoingMessage,
+  type PictureInput,
   type SessionItem,
   type ToolModeOption,
 } from "./chat.js";
+export { SkillPickerViewModel, matchSkills, skillToken } from "./skills.js";
 export { TurnViewModel, type TurnHost, type TurnState } from "./turn.js";
 export {
   ApprovalPart,

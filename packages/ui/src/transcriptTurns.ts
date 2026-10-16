@@ -1,6 +1,7 @@
 import { EntryTypes, TurnStatus, type ApprovalRequest, type TranscriptEntry } from "@fadenstack/agents";
 import { parseToolClass, type ChatOutcome } from "@fadenstack/client";
 
+import type { AttachmentChip } from "./attachments.js";
 import { ApprovalPart, NoticePart, type ApprovalState, type PartContext } from "./parts.js";
 import { TurnViewModel, type TurnHost, type TurnState } from "./turn.js";
 
@@ -30,11 +31,19 @@ export function groupTurns(entries: readonly TranscriptEntry[]): TranscriptEntry
 /** One turn read back from the transcript. */
 export function buildTurn(entries: readonly TranscriptEntry[], context: PartContext, host: TurnHost | undefined): TurnViewModel {
   const user = entries.find((e) => e.type === EntryTypes.userMessage);
-  const attachments = Array.isArray(user?.data["attachments"])
-    ? (user!.data["attachments"] as Data[]).map((a) => ({ title: str(a, "title") ?? "", subtitle: str(a, "kind") }))
+  const skills: AttachmentChip[] = Array.isArray(user?.data["skills"])
+    ? (user!.data["skills"] as Data[]).map((s) => ({ title: str(s, "name") ?? str(s, "slug") ?? "", subtitle: undefined, skill: true }))
+    : [];
+  const attachments: AttachmentChip[] = Array.isArray(user?.data["attachments"])
+    ? (user!.data["attachments"] as Data[]).map((a) => {
+        const chip: AttachmentChip = { title: str(a, "title") ?? "", subtitle: str(a, "kind") };
+        const content = str(a, "content");
+        if ((str(a, "media_type") ?? "").startsWith("image/") && content?.startsWith("data:image/")) chip.image = content;
+        return chip;
+      })
     : [];
   const turn = new TurnViewModel(context, host, str(user?.data, "text") ?? "", new Date((user ?? entries[0]!).timestamp),
-    attachments, "completed");
+    [...skills, ...attachments], "completed");
   turn.setId(entries[0]!.turnId!);
   let state: TurnState = "stopped"; // a turn without an end was interrupted
   let outcome: ChatOutcome | undefined;

@@ -95,6 +95,24 @@ export interface UiStrings {
   result: string;
   /** In place of a picture in an answer, which is never loaded: "[image]" without its alt text. */
   image: string;
+  // skills ($ or / in the composer)
+  /** The skill picker's name, and the second line of a picked skill's chip. */
+  skills: string;
+  skill: string;
+  skillsLoading: string;
+  noSkills: string;
+  noSkillMatches(query: string): string;
+  skillsFailed: string;
+  /** Under the picker: how to use it. */
+  skillPickerHint: string;
+  // pictures
+  /** The second line of a picture's chip. */
+  picture: string;
+  /** A pasted picture's name. */
+  pastedPicture: string;
+  /** Said when a picture is added for an agent whose model does not see pictures. */
+  picturesNotSeen: string;
+  pictureNotRead(name: string): string;
 }
 
 export const englishStrings: UiStrings = {
@@ -185,6 +203,17 @@ export const englishStrings: UiStrings = {
   arguments: "Input",
   result: "Output",
   image: "image",
+  skills: "Skills",
+  skill: "Skill",
+  skillsLoading: "Loading skills...",
+  noSkills: "No skills are available to you.",
+  noSkillMatches: (query) => `No skill matches "${query}".`,
+  skillsFailed: "The skills could not be loaded.",
+  skillPickerHint: "Enter picks the skill, Esc closes the list.",
+  picture: "Picture",
+  pastedPicture: "Pasted picture",
+  picturesNotSeen: "This agent's model does not see pictures.",
+  pictureNotRead: (name) => `${name} could not be read as a picture.`,
 };
 
 /**

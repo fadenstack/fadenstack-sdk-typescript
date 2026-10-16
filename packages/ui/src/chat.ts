@@ -1,8 +1,8 @@
 import type { AgentEvent, AgentSession, FadenstackAgent, MessageAttachment, TranscriptEntry } from "@fadenstack/agents";
-import { FadenstackSignInRequiredError, TOOL_MODES, narrowestMode, type ToolMode } from "@fadenstack/client";
+import { FadenstackSignInRequiredError, TOOL_MODES, narrowestMode, type SkillOption, type ToolMode } from "@fadenstack/client";
 
 import type { ApprovalBroker, PendingApproval } from "./approvalBroker.js";
-import { AttachmentViewModel } from "./attachments.js";
+import { AttachmentViewModel, type AttachmentChip } from "./attachments.js";
 import { RenderBatcher } from "./batcher.js";
 import { formatWhen } from "./format.js";
 import { markdownToHtml } from "./markdown/serialize.js";
@@ -12,6 +12,7 @@ import { citationsRenderer, fallbackRenderer, piiRenderer, type AgentEventRender
 import { browserClipboard, timeoutScheduler, writeClipboard, type Clipboard, type UiScheduler } from "./services.js";
 import { builtInStrings, stringsFor } from "./languages/index.js";
 import { browserPreferences, type PreferenceStore } from "./preferences.js";
+import { SkillPickerViewModel, skillToken } from "./skills.js";
 import { withStrings, type UiStrings } from "./strings.js";
 import { buildTurn, groupTurns } from "./transcriptTurns.js";
 import { TurnViewModel, type TurnHost } from "./turn.js";
@@ -72,6 +73,16 @@ export interface OutgoingMessage {
   readonly text: string;
 }
 
+/** A picture for the next message (`attachPicture`): pasted, dropped, or taken by the host (a screenshot). */
+export interface PictureInput {
+  /** The picture as a `data:image/...` URL, already as small as it should go (`@fadenstack/ui-web` `readPicture`). */
+  dataUrl: string;
+  /** Its name on the chip; "Pasted picture" by default. */
+  title?: string;
+  /** Where it comes from, for the model (`screenshot`, `file`); `picture` by default. */
+  kind?: string;
+}
+
 /** A language in the panel's settings: `"auto"` (the host's) or a tag, named in itself ("Deutsch"). */
 export interface LanguageOption {
   id: string;
@@ -110,6 +121,8 @@ export interface SessionItem {
  * stay light. .NET: `Fadenstack.UI.ViewModels.AgentChatViewModel`.
  */
 export class AgentChatViewModel extends Observable implements TurnHost {
+  /** The skills list the composer opens on `$` (or `/` at the start); skins draw it while it is open. */
+  readonly skillPicker: SkillPickerViewModel;
   readonly #agent: FadenstackAgent;
   readonly #approvals: ApprovalBroker;
   readonly #batcher: RenderBatcher;
@@ -145,6 +158,7 @@ export class AgentChatViewModel extends Observable implements TurnHost {
   #suggestions: readonly string[] = [];
   #turns: readonly TurnViewModel[] = [];
   #attachments: readonly AttachmentViewModel[] = [];
+  #skills: readonly SkillOption[] = [];
   #sessions: readonly SessionItem[] = [];
   #input = "";
   #ready = false;
@@ -177,6 +191,10 @@ export class AgentChatViewModel extends Observable implements TurnHost {
     };
     this.#beforeSend = options.beforeSend;
     this.#afterSend = options.afterSend;
+    this.skillPicker = new SkillPickerViewModel({
+      load: (signal) => agent.listSkills(undefined, signal),
+      onPick: (skill) => this.#pickSkill(skill),
+    });
     this.#unsubscribe = approvals.onRequested((pending) => this.#onApprovalRequested(pending));
     // A store that answers at once (localStorage) gives the user's language from the first paint.
     try {
@@ -250,6 +268,21 @@ export class AgentChatViewModel extends Observable implements TurnHost {
   /** Context that goes with the next message (chips in the composer). */
   get attachments(): readonly AttachmentViewModel[] {
     return this.#attachments;
+  }
+
+  /** The skills picked for the next message (chips in the composer). */
+  get pickedSkills(): readonly SkillOption[] {
+    return this.#skills;
+  }
+
+  /** The server offers skills: typing `$` in the composer lists them. */
+  get canPickSkills(): boolean {
+    return this.#agent.isStarted && this.#agent.profile.skills;
+  }
+
+  /** The agent's model sees pictures: a picture can go with a message (`attachPicture`). */
+  get canAttachPictures(): boolean {
+    return this.#agent.isStarted && this.#agent.profile.vision === true;
   }
 
   get isEmpty(): boolean {
@@ -358,9 +391,13 @@ export class AgentChatViewModel extends Observable implements TurnHost {
     this.notify();
   }
 
+  /** The composer's text; a `$` at its end (or `/` as the whole of it) opens the skill picker, narrowed by what follows. */
   setInput(text: string): void {
     if (this.#input === text) return;
     this.#input = text;
+    const token = this.canPickSkills ? skillToken(text) : undefined;
+    if (token) this.skillPicker.show(token.query);
+    else this.skillPicker.close();
     this.notify();
   }
 
@@ -389,14 +426,20 @@ export class AgentChatViewModel extends Observable implements TurnHost {
         }
       }
       if (message === this.#input.trim()) this.#input = "";
+      this.skillPicker.close();
       const attached = this.#attachments.filter((a) => a.sends);
       this.#attachments = this.#attachments.filter((a) => a.implicit);
-      turn = new TurnViewModel(this.#context, this, message, this.#context.now(),
-        attached.map((a) => ({ title: a.title, subtitle: a.subtitle })));
+      const skills = this.#skills;
+      this.#skills = [];
+      const chips: AttachmentChip[] = [
+        ...skills.map((s): AttachmentChip => ({ title: s.name, subtitle: undefined, skill: true })),
+        ...attached.map((a): AttachmentChip => (a.image ? { title: a.title, subtitle: a.subtitle, image: a.image } : { title: a.title, subtitle: a.subtitle })),
+      ];
+      turn = new TurnViewModel(this.#context, this, message, this.#context.now(), chips);
       this.#turns = [...this.#turns, turn];
       this.#current = turn;
       this.notify();
-      await this.#runTurn(turn, message, attached, this.#mode, stop.signal);
+      await this.#runTurn(turn, message, attached, skills, this.#mode, stop.signal);
       await this.#batcher.whenFlushed();
     } finally {
       this.#current = undefined;
@@ -421,6 +464,7 @@ export class AgentChatViewModel extends Observable implements TurnHost {
     this.#loadedFrom = 0;
     this.#turns = [];
     this.#attachments = this.#attachments.filter((a) => a.implicit);
+    this.#skills = [];
     this.#mode = this.#startMode();
     this.#sessions = this.#sessions.map((s) => ({ ...s, isCurrent: false }));
     this.notify();
@@ -574,6 +618,54 @@ export class AgentChatViewModel extends Observable implements TurnHost {
     this.notify();
   }
 
+  /**
+   * A picture for the next message, as a chip. Only for a model that sees pictures: otherwise nothing is added,
+   * `error` says why, and it returns false.
+   */
+  attachPicture(picture: PictureInput): boolean {
+    if (!this.canAttachPictures) {
+      this.#error = this.strings.picturesNotSeen;
+      this.notify();
+      return false;
+    }
+    const title = picture.title?.trim() || this.strings.pastedPicture;
+    const attachment: MessageAttachment = {
+      title,
+      content: picture.dataUrl,
+      kind: picture.kind ?? "picture",
+      mediaType: /^data:(image\/[\w.+-]+)[;,]/.exec(picture.dataUrl)?.[1] ?? "image/png",
+    };
+    this.addAttachment(new AttachmentViewModel({
+      title,
+      subtitle: this.strings.picture,
+      image: picture.dataUrl,
+      resolve: () => Promise.resolve(attachment),
+    }));
+    this.requestComposerFocus();
+    return true;
+  }
+
+  /** Says that a file the user added could not be read as a picture (`error`). */
+  pictureNotRead(name: string): void {
+    this.#error = this.strings.pictureNotRead(name);
+    this.notify();
+  }
+
+  /** Takes a picked skill off the next message. */
+  removeSkill(slug: string): void {
+    this.#skills = this.#skills.filter((s) => s.slug !== slug);
+    this.notify();
+  }
+
+  /** The picker's choice: the `$...` the user typed goes, the skill goes with the next message. */
+  #pickSkill(skill: SkillOption): void {
+    const token = skillToken(this.#input);
+    if (token) this.#input = this.#input.slice(0, token.start).replace(/\s+$/, (space) => (token.start > 0 ? space.slice(0, 1) : ""));
+    if (!this.#skills.some((s) => s.slug === skill.slug)) this.#skills = [...this.#skills, skill];
+    this.notify();
+    this.requestComposerFocus();
+  }
+
   /** Asks the skin to put the focus in the composer (e.g. after the host attached the selection). */
   requestComposerFocus(): void {
     for (const listener of [...this.#focusListeners]) listener();
@@ -610,8 +702,8 @@ export class AgentChatViewModel extends Observable implements TurnHost {
 
   // -- the turn -------------------------------------------------------------------------------------
 
-  async #runTurn(turn: TurnViewModel, text: string, attached: readonly AttachmentViewModel[], mode: ToolMode,
-    signal: AbortSignal): Promise<void> {
+  async #runTurn(turn: TurnViewModel, text: string, attached: readonly AttachmentViewModel[], skills: readonly SkillOption[],
+    mode: ToolMode, signal: AbortSignal): Promise<void> {
     try {
       const attachments: MessageAttachment[] = [];
       for (const a of attached) {
@@ -631,7 +723,8 @@ export class AgentChatViewModel extends Observable implements TurnHost {
         this.#batcher.enqueue(() => this.notify());
       }
       this.#session.toolMode = mode;
-      for await (const event of this.#session.stream(text, { attachments, signal })) this.#apply(turn, event);
+      const picked = skills.map((s) => ({ slug: s.slug, name: s.name }));
+      for await (const event of this.#session.stream(text, { attachments, skills: picked, signal })) this.#apply(turn, event);
     } catch (error) {
       if (signal.aborted) {
         this.#batcher.enqueue(() => turn.stop());

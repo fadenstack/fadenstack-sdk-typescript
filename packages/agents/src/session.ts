@@ -26,9 +26,17 @@ import type { ToolInvocation, ToolInvoker } from "./stages.js";
 import { checkArguments, type AgentTool } from "./tools.js";
 import { EntryTypes, TurnStatus, newId, type TranscriptEntry } from "./transcript.js";
 
+/** A skill the user picked for a message: its slug for the server, its name for the transcript. */
+export interface PickedSkill {
+  slug: string;
+  name?: string;
+}
+
 export interface SendOptions {
-  /** Context the user attached (a selection, the page). */
+  /** Context the user attached (a selection, the page, a picture). */
   attachments?: readonly MessageAttachment[];
+  /** Skills the user picked for this message: every model call of the turn gets them. */
+  skills?: readonly PickedSkill[];
   /** Stops the turn: it is recorded as cancelled and the stream throws the reason. */
   signal?: AbortSignal;
 }
@@ -147,7 +155,7 @@ export class AgentSession {
     };
     const turn = new Turn(this, newId(), (e) => queue.push(e), access);
     const run = turn
-      .run(message, options.attachments ?? [], stop.signal)
+      .run(message, options.attachments ?? [], options.skills ?? [], stop.signal)
       .then(() => queue.end(), (error: unknown) => queue.end(error ?? new Error("The turn failed.")))
       .finally(() => this.agent.reporter.flush());
     let finished = false;
@@ -235,6 +243,7 @@ class Turn {
   #blocked: GovernanceNotice | undefined;
   #toolDenied = false;
   #mode: ToolMode = "ask";
+  #skills: string[] = [];
 
   constructor(session: AgentSession, id: string, emit: (event: AgentEvent) => void, access: SessionAccess) {
     this.#session = session;
@@ -247,11 +256,13 @@ class Turn {
     return this.#session.agent;
   }
 
-  async run(message: string, attachments: readonly MessageAttachment[], signal: AbortSignal): Promise<void> {
+  async run(message: string, attachments: readonly MessageAttachment[], skills: readonly PickedSkill[], signal: AbortSignal): Promise<void> {
     await Promise.resolve(); // the caller gets the stream before the first request goes out
     this.#mode = this.#session.effectiveToolMode;
+    this.#skills = [...new Set(skills.map((s) => s.slug).filter(Boolean))];
     const user: Data = { text: message };
     if (attachments.length) user["attachments"] = attachments.map(attachmentData);
+    if (skills.length) user["skills"] = skills.map((s) => ({ slug: s.slug, name: s.name ?? s.slug }));
     await this.#access.append(EntryTypes.userMessage, this.#id, user);
     await this.#access.append(EntryTypes.turnStart, this.#id, {
       tool_mode: this.#session.toolMode,
@@ -302,6 +313,8 @@ class Turn {
     };
     const tools = this.#agent.offer(this.#mode);
     if (tools.length) options.tools = tools;
+    // On every call of the turn, not the first only: the gateway gives a request the skills it names.
+    if (this.#skills.length) options.skills = this.#skills;
     if (this.#agent.settings.reasoning) options.reasoningEffort = this.#agent.settings.reasoning;
     let text = "";
     const calls: ToolCall[] = [];

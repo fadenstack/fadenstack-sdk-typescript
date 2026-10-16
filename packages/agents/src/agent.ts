@@ -9,6 +9,7 @@ import {
   type AgentProfile,
   type AppManifest,
   type FadenstackClient,
+  type SkillOption,
   type ToolClass,
   type ToolDefinition,
   type ToolMode,
@@ -116,6 +117,18 @@ export class FadenstackAgent {
     const kept = await this.client.agent!.setUserLanguage(language, signal);
     if (this.#profile) this.#profile = { ...this.#profile, user: { ...this.#profile.user, language: kept } };
     return kept;
+  }
+
+  /**
+   * The skills the user can pick for a message (`SendOptions.skills`); none when the server offers no skills.
+   * `query` narrows them by name or description on the server.
+   */
+  async listSkills(query?: string, signal?: AbortSignal): Promise<SkillOption[]> {
+    if (this.#profile && !this.#profile.skills) return [];
+    const options: { query?: string; limit: number; signal?: AbortSignal } = { limit: 100 };
+    if (query) options.query = query;
+    if (signal) options.signal = signal;
+    return (await this.client.agent!.listSkills(options)).skills;
   }
 
   /** Loads the profile again (after a new version was published) and settles the tools anew. */

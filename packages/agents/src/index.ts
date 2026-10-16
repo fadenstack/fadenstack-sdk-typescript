@@ -1,6 +1,6 @@
 export { FadenstackAgent } from "./agent.js";
 export { AgentBuilder, type AgentSettings, type AppDescription } from "./builder.js";
-export { AgentSession, resultText, type SendOptions } from "./session.js";
+export { AgentSession, resultText, type PickedSkill, type SendOptions } from "./session.js";
 export {
   ApprovalDecision,
   approvalsFrom,
@@ -37,8 +37,8 @@ export {
   type ToolSource,
   type ToolStage,
 } from "./stages.js";
-export { attachmentData, type MessageAttachment } from "./attachments.js";
-export { ContextBuilder, toMessage, withAttachments } from "./contextBuilder.js";
+export { attachmentData, isPicture, type MessageAttachment } from "./attachments.js";
+export { ContextBuilder, MAX_HISTORY_PICTURES, toMessage, withAttachments } from "./contextBuilder.js";
 export {
   EntryTypes,
   TurnStatus,

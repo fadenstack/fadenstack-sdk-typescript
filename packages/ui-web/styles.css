@@ -1090,6 +1090,7 @@
 }
 
 .fdn-composer {
+  position: relative; /* the skill picker opens above it */
   margin: 0 10px 10px;
   padding-block: 8px 6px; /* the send button sits 6 in from the 12 corner */
   padding-inline: 12px 6px;
@@ -1249,4 +1250,38 @@
 
 .fdn-chip-remove:hover {
   background: var(--fdn-surface-hover);
+}
+
+/* A picture on its chip: small, cut to a square. */
+.fdn-chip-image {
+  width: 16px;
+  height: 16px;
+  border-radius: 3px;
+  object-fit: cover;
+}
+
+.fdn-chip-skill .fdn-icon {
+  color: var(--fdn-accent);
+}
+
+/* The skills `$` lists: above the composer, as wide as it, the active one marked as the pointer marks one. */
+.fdn-skill-picker {
+  top: auto;
+  bottom: calc(100% + 4px);
+  inset-inline: 0;
+  min-width: 0;
+  max-width: none;
+}
+
+.fdn-skill-list {
+  max-height: min(320px, 50vh);
+  overflow-y: auto;
+}
+
+.fdn-skill-option[aria-selected="true"] {
+  background: var(--fdn-surface-hover);
+}
+
+.fdn-skill-hint {
+  padding-block-end: 2px;
 }

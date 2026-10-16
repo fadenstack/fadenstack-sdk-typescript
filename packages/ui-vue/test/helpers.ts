@@ -1,14 +1,16 @@
 import { FadenstackClient, loginWithPassword } from "@fadenstack/client";
 import { FadenstackAgent, MemorySessionStore, defineTool } from "@fadenstack/agents";
 import { AgentChatViewModel, ApprovalBroker, MemoryClipboard, MemoryPreferenceStore, immediateScheduler, type AgentChatOptions } from "@fadenstack/ui";
-import { FakeGateway, lastToolResults, type FakeModel } from "@fadenstack/testing";
+import { FakeGateway, lastToolResults, type FakeAgent, type FakeModel } from "@fadenstack/testing";
 
 /** A chat (signed in unless `signIn` is false) with "Page assistant": read_page (read) and fill_field (write, or destructive). */
-export async function chatWith(model: FakeModel, options: AgentChatOptions = {}, risk: "write" | "destructive" = "write", signIn = true) {
+export async function chatWith(model: FakeModel, options: AgentChatOptions = {}, risk: "write" | "destructive" = "write", signIn = true,
+  serverAgent: Partial<FakeAgent> = {}) {
   const gateway = new FakeGateway({
     agents: [{
       slug: "page", name: "Page assistant", ui: { greeting: "I read the page you are on.", suggestions: ["Summarise this page"] },
       contract: [{ name: "fill_field", risk }, { name: "read_page", risk: "read" }],
+      ...serverAgent,
     }],
     model,
   });
