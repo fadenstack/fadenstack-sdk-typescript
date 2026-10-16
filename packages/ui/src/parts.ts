@@ -281,14 +281,20 @@ export class ApprovalPart extends ResponsePart {
   }
 
   get classLabel(): string {
-    return this.request.source === "gateway" ? this.#context.strings.serverTool : this.#context.strings.approvalClass[this.request.toolClass];
+    if (this.request.source === "gateway") return this.#context.strings.serverTool;
+    // Reaching outside matters more than changing nothing here: a destructive one still says what it is.
+    if (this.request.openWorld && this.request.toolClass !== "destructive") return this.#context.strings.approvalOutside;
+    return this.#context.strings.approvalClass[this.request.toolClass];
   }
 
-  /** Why it asks: the admin's message for a gateway tool or a rule; for the agent's own tools, what its class means. */
+  /**
+   * Why it asks: the admin's message for a gateway tool or a rule; for the agent's own tools, that what it is given
+   * leaves the organisation (a web search) or what its class means.
+   */
   get reason(): string {
-    return this.request.source === "gateway" || this.request.requiredByRule
-      ? this.request.reason
-      : this.#context.strings.approvalWhy[this.request.toolClass];
+    if (this.request.source === "gateway" || this.request.requiredByRule) return this.request.reason;
+    if (this.request.openWorld && this.request.toolClass !== "destructive") return this.#context.strings.approvalOutsideWhy;
+    return this.#context.strings.approvalWhy[this.request.toolClass];
   }
 
   /** Whether the card offers "Allow for this chat". */

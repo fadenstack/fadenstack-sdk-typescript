@@ -20,6 +20,11 @@ export interface ApprovalRequest {
   canAllowAlways?: boolean;
   /** An admin's "Ask first" rule covers the call: `reason` is the admin's message. It asks every time. */
   requiredByRule?: boolean;
+  /**
+   * The tool reaches outside the organisation (a web search, opening a page): what it is given goes to another
+   * site. The card says so instead of what its class means.
+   */
+  openWorld?: boolean;
 }
 
 /** What the user decided. */

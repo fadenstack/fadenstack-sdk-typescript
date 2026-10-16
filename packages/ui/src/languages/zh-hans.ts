@@ -27,6 +27,8 @@ export const chineseSimplifiedStrings: UiStrings = {
     unknown: "没有人说明此工具的作用。",
   },
   serverTool: "服务器工具",
+  approvalOutside: "发送到外部",
+  approvalOutsideWhy: "它收到的内容会离开您的组织，发送到其他网站。",
   allow: "允许",
   allowForChat: "在此聊天中允许",
   allowAlways: "始终允许",

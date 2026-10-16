@@ -33,6 +33,9 @@ export interface UiStrings {
   /** Why a host tool asks, by its class (a gateway tool says why itself: the admin's message). */
   approvalWhy: Record<ToolClass, string>;
   serverTool: string;
+  /** The badge, and why it asks, for a tool that reaches outside the organisation (a web search, opening a page). */
+  approvalOutside: string;
+  approvalOutsideWhy: string;
   allow: string;
   allowForChat: string;
   allowAlways: string;
@@ -141,6 +144,8 @@ export const englishStrings: UiStrings = {
     unknown: "Nobody has said what this tool does.",
   },
   serverTool: "Server tool",
+  approvalOutside: "Goes outside",
+  approvalOutsideWhy: "What it is given leaves your organisation: it goes to another site.",
   allow: "Allow",
   allowForChat: "Allow for this chat",
   allowAlways: "Allow always",

@@ -27,6 +27,8 @@ export const frenchStrings: UiStrings = {
     unknown: "Personne n'a indiqué ce que fait cet outil.",
   },
   serverTool: "Outil du serveur",
+  approvalOutside: "Sort de l'organisation",
+  approvalOutsideWhy: "Ce qu'il reçoit quitte votre organisation : il part vers un autre site.",
   allow: "Autoriser",
   allowForChat: "Autoriser pour cette conversation",
   allowAlways: "Toujours autoriser",

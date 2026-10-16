@@ -522,6 +522,7 @@ class Turn {
           : toolClass === "unknown" ? "Nobody has said what this tool does."
           : `'${tool.name}' is ${toolClass}; the tool mode is ${this.#mode}.`,
         arguments: args,
+        ...(tool.openWorld ? { openWorld: true } : {}),
       }, rule, undefined, signal);
       waited = settled.waitedMs ?? 0;
       if (!settled.approved) {

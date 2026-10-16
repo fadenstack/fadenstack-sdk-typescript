@@ -27,6 +27,8 @@ export const germanStrings: UiStrings = {
     unknown: "Niemand hat angegeben, was dieses Tool tut.",
   },
   serverTool: "Server-Tool",
+  approvalOutside: "Geht nach außen",
+  approvalOutsideWhy: "Was es bekommt, verlässt Ihre Organisation: Es geht an eine andere Website.",
   allow: "Zulassen",
   allowForChat: "Für diesen Chat zulassen",
   allowAlways: "Immer zulassen",

@@ -1,17 +1,18 @@
 import { describe, expect, it } from "vitest";
 
 import { FadenstackClient, loginWithPassword } from "@fadenstack/client";
-import { FadenstackAgent, MemorySessionStore } from "@fadenstack/agents";
+import { FadenstackAgent, MemorySessionStore, defineTool } from "@fadenstack/agents";
 import {
   AgentChatViewModel,
   ApprovalBroker,
+  ApprovalPart,
   MemoryClipboard,
   MemoryPreferenceStore,
   immediateScheduler,
   matchSkills,
   skillToken,
 } from "@fadenstack/ui";
-import { FakeGateway, type FakeAgent } from "@fadenstack/testing";
+import { FakeGateway, lastUserText as lastUserTextOf, type FakeAgent } from "@fadenstack/testing";
 
 const SKILLS = [
   { slug: "reply-in-house-style", name: "Reply in our style", description: "Answers a customer mail the way we write" },
@@ -147,6 +148,36 @@ describe("the agent's greeting and suggestions", () => {
     expect(vm.suggestions).toEqual(["Summarise this page"]); // French has no suggestions of its own
     await vm.setLanguage("es");
     expect(vm.greeting).toBe("I read pages.");
+  });
+});
+
+describe("an approval for a tool that reaches outside", () => {
+  it("says that what it is given leaves the organisation, not what its class means", async () => {
+    const gateway = new FakeGateway({
+      agents: [{ slug: "page", contract: [{ name: "search_web", risk: "write" }, { name: "fill_field", risk: "write" }] }],
+      model: (r) => (r.messages.at(-1)!.role === "tool" ? { text: "done" } : { toolCalls: [{ name: lastUserTextOf(r), arguments: { query: "pumps" } }] }),
+    });
+    const { client, tokens } = FadenstackClient.forAgent({ serverUrl: gateway.serverUrl, agent: "page", fetch: gateway.fetch });
+    await tokens.signIn(await loginWithPassword({ apiUrl: gateway.serverUrl, email: "user@example.com", password: "secret", fetch: gateway.fetch }));
+    const approvals = new ApprovalBroker();
+    const built = FadenstackAgent.createBuilder().useClient(client).useSessionStore(new MemorySessionStore()).useApprovals(approvals)
+      .addTools(
+        defineTool({ name: "search_web", toolClass: "write", openWorld: true, parameters: { type: "object", properties: { query: { type: "string" } } }, run: () => "results" }),
+        defineTool({ name: "fill_field", toolClass: "write", parameters: { type: "object", properties: { query: { type: "string" } } }, run: () => "filled" }),
+      ).build();
+    const vm = new AgentChatViewModel(built, approvals, { scheduler: immediateScheduler, clipboard: new MemoryClipboard(), preferences: new MemoryPreferenceStore() });
+    await vm.initialize();
+    const card = async (tool: string) => {
+      const sending = vm.send(tool);
+      await until(() => vm.turns.at(-1)!.parts.some((p) => p instanceof ApprovalPart));
+      const part = vm.turns.at(-1)!.parts.find((p) => p instanceof ApprovalPart) as ApprovalPart;
+      const seen = { label: part.classLabel, reason: part.reason };
+      part.allow();
+      await sending;
+      return seen;
+    };
+    expect(await card("search_web")).toEqual({ label: "Goes outside", reason: "What it is given leaves your organisation: it goes to another site." });
+    expect(await card("fill_field")).toEqual({ label: "Changes data", reason: "It changes something, which can be changed back." });
   });
 });
 
