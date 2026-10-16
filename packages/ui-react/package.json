@@ -1,6 +1,6 @@
 {
   "name": "@fadenstack/ui-react",
-  "version": "0.2.0-rc.2",
+  "version": "0.2.0-rc.3",
   "description": "The React skin for the Fadenstack chat view models: a Copilot-style chat panel",
   "license": "Apache-2.0",
   "author": "Emagin8 UG (haftungsbeschränkt)",
@@ -41,10 +41,10 @@
     "access": "public"
   },
   "dependencies": {
-    "@fadenstack/agents": "0.2.0-rc.2",
-    "@fadenstack/client": "0.2.0-rc.2",
-    "@fadenstack/ui": "0.2.0-rc.2",
-    "@fadenstack/ui-web": "0.2.0-rc.2"
+    "@fadenstack/agents": "0.2.0-rc.3",
+    "@fadenstack/client": "0.2.0-rc.3",
+    "@fadenstack/ui": "0.2.0-rc.3",
+    "@fadenstack/ui-web": "0.2.0-rc.3"
   },
   "peerDependencies": {
     "react": ">=18.2",
