@@ -77,6 +77,17 @@ describe("pictures in the history", () => {
     });
   });
 
+  it("are left out with a turn the app closed on (no end), unless it is the one running", () => {
+    const cut = [
+      entry(EntryTypes.userMessage, "t1", { text: "compare", attachments: [{ title: "P", content: picture(1), media_type: "image/png" }] }),
+      entry(EntryTypes.assistantMessage, "t1", { text: "", tool_calls: [{ id: "c1", name: "read_context", arguments: "{}" }], origin: "model" }),
+    ];
+    const running = new ContextBuilder().build(cut);
+    expect(running.map((m) => m.role)).toEqual(["user", "assistant"]);
+    const later = new ContextBuilder().build([...cut, entry(EntryTypes.userMessage, "t2", { text: "again" })]);
+    expect(later).toEqual([{ role: "user", content: "again" }]);
+  });
+
   it("are left out of a message whose turn failed, with the rest of it", () => {
     const entries = [
       entry(EntryTypes.userMessage, "t1", { text: "broken", attachments: [{ title: "P", content: picture(1), media_type: "image/png" }] }),
