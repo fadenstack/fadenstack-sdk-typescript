@@ -27,6 +27,7 @@ export async function chatWith(model: FakeModel, options: AgentChatOptions = {},
       defineTool<{ value: string }>({
         name: "fill_field", toolClass: "write",
         parameters: { type: "object", properties: { value: { type: "string" } }, required: ["value"] },
+        describe: () => 'textbox "Name" on example.com',
         run: ({ value }) => {
           filled.push(value);
           return "filled";

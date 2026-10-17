@@ -25,6 +25,11 @@ export interface ApprovalRequest {
    * site. The card says so instead of what its class means.
    */
   openWorld?: boolean;
+  /**
+   * What the call acts on, as the tool describes it (`button "Send" on mail.example.com`): the card shows it, so the
+   * user sees what they allow, not only the arguments. None for a tool that does not say.
+   */
+  target?: string;
 }
 
 /** What the user decided. */

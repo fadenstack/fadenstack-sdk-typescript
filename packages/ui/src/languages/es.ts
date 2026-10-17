@@ -89,6 +89,7 @@ export const spanishStrings: UiStrings = {
   retry: "Reintentar",
   notSent: "No enviado",
   composerPlaceholder: "Pregunte lo que quiera",
+  aiNotice: "Las respuestas las genera una IA y pueden contener errores. Compruebe lo importante.",
   removeAttachment: "Quitar",
   includeAttachment: "Incluir en el próximo mensaje",
   arguments: "Entrada",

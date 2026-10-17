@@ -89,6 +89,7 @@ export const germanStrings: UiStrings = {
   retry: "Erneut versuchen",
   notSent: "Nicht gesendet",
   composerPlaceholder: "Stellen Sie eine Frage",
+  aiNotice: "Antworten werden von einer KI erzeugt und können falsch sein. Prüfen Sie Wichtiges.",
   removeAttachment: "Entfernen",
   includeAttachment: "Mit der nächsten Nachricht senden",
   arguments: "Eingabe",

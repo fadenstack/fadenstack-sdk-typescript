@@ -275,6 +275,11 @@ export class ApprovalPart extends ResponsePart {
     return this.#context.strings.approvalTitle(this.request.toolName);
   }
 
+  /** What the call acts on, as the tool describes it (`button "Send" on mail.example.com`), or "". */
+  get target(): string {
+    return this.request.target ?? "";
+  }
+
   /** Destructive or unclassified: the card says so plainly. */
   get isDangerous(): boolean {
     return this.request.toolClass === "destructive" || this.request.toolClass === "unknown";

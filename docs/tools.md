@@ -32,6 +32,7 @@ const readPage = defineTool<{ page: number }>({
 | `parameters` | The arguments, as a JSON Schema object. Without it, the tool takes no arguments. |
 | `toolClass` | `read`, `write`, `destructive` or `unknown`. Without it, the class is `unknown`, and the tool asks before it runs in every mode that offers it. |
 | `openWorld` | The tool reaches outside the organisation. It is recorded and shown; no tool mode acts on it yet. |
+| `describe(args, signal)` | What a call acts on, in the user's words (`button "Send" on mail.example.com`), for the approval card. Called only when the user is asked; may return a promise. A failure, nothing, or no answer within 3 seconds leaves the card with the arguments. |
 | `run(args, context)` | The tool's body. Required. |
 
 The type parameter (`{ page: number }` above) types the arguments `run` receives. It is not checked at run time
@@ -174,6 +175,8 @@ The handler gets an `ApprovalRequest`:
 | `canAllowForSession` | Whether to offer "Allow for this chat". |
 | `canAllowAlways` | Whether to offer "Allow always". |
 | `requiredByRule` | An administrator's "Ask first" rule covers the call. |
+| `openWorld` | The tool reaches outside the organisation: what it is given goes to another site. |
+| `target` | What the call acts on, as the tool's `describe` says it, one line of at most 300 characters. Show it: the arguments alone (`ref: e12`) seldom tell the user what they allow. |
 
 It returns an `ApprovalDecision`:
 

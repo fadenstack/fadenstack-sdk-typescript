@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { ApprovalDecision, EntryTypes, MemoryApprovalStore, type AgentSession } from "@fadenstack/agents";
+import { ApprovalDecision, EntryTypes, MemoryApprovalStore, defineTool, type AgentSession } from "@fadenstack/agents";
 import { lastToolResults, type FakeModel, type FakeReply } from "@fadenstack/testing";
 
 import { PAGE_CONTRACT, setup } from "./helpers.js";
@@ -239,6 +239,72 @@ describe("the gateway's own tools", () => {
     await session.send("edit again");
     expect(s.asked).toHaveLength(2);
     expect(s.asked[0]).toMatchObject({ toolClass: "unknown", canAllowForSession: false, requiredByRule: true });
+  });
+});
+
+describe("what a call acts on", () => {
+  const CONTRACT = [...PAGE_CONTRACT, { name: "press", risk: "destructive" as const }, { name: "type_in", risk: "write" as const }];
+  const press = (describe: (ref: string) => string | undefined | Promise<string | undefined>, ran: string[] = []) => defineTool<{ ref: string }>({
+    name: "press",
+    toolClass: "destructive",
+    parameters: { type: "object", properties: { ref: { type: "string" } }, required: ["ref"] },
+    describe: ({ ref }) => describe(ref),
+    run: ({ ref }) => {
+      ran.push(ref);
+      return `pressed ${ref}`;
+    },
+  });
+
+  it("is on the card as the tool says it, read when the user is asked", async () => {
+    const ran: string[] = [];
+    const s = await setup({ agents: [{ slug: "docs", contract: CONTRACT }], model: once({ name: "press", arguments: { ref: "e5" } }) },
+      () => ApprovalDecision.approve(), (b) => b.addTools(press((ref) => `button "Send"\n on mail.example.com (${ref})`, ran)));
+    const session = await s.agent.startSession();
+    await session.send("send it");
+    expect(s.asked).toHaveLength(1);
+    expect(s.asked[0]).toMatchObject({ toolName: "press", target: 'button "Send" on mail.example.com (e5)', arguments: { ref: "e5" } });
+    expect(ran).toEqual(["e5"]);
+  });
+
+  it("a tool that fails to say, or says nothing, leaves the card with the arguments, and the call still asks", async () => {
+    for (const describe of [() => { throw new Error("gone"); }, () => undefined, () => "  "]) {
+      const s = await setup({ agents: [{ slug: "docs", contract: CONTRACT }], model: once({ name: "press", arguments: { ref: "e5" } }) },
+        () => ApprovalDecision.approve(), (b) => b.addTools(press(describe)));
+      const session = await s.agent.startSession();
+      await session.send("send it");
+      expect(s.asked).toHaveLength(1);
+      expect(s.asked[0]!.target).toBeUndefined();
+    }
+  });
+
+  it("is clipped to one line of 300 characters", async () => {
+    const s = await setup({ agents: [{ slug: "docs", contract: CONTRACT }], model: once({ name: "press", arguments: { ref: "e5" } }) },
+      () => ApprovalDecision.approve(), (b) => b.addTools(press(() => "x".repeat(500))));
+    const session = await s.agent.startSession();
+    await session.send("send it");
+    expect(s.asked[0]!.target).toHaveLength(300);
+    expect(s.asked[0]!.target!.endsWith("…")).toBe(true);
+  });
+
+  it("is not asked for when nobody is asked: a call allowed for this chat runs without it", async () => {
+    let described = 0;
+    const typeIn = defineTool<{ ref: string }>({
+      name: "type_in",
+      toolClass: "write",
+      parameters: { type: "object", properties: { ref: { type: "string" } }, required: ["ref"] },
+      describe: ({ ref }) => {
+        described++;
+        return `field ${ref}`;
+      },
+      run: ({ ref }) => `typed into ${ref}`,
+    });
+    const s = await setup({ agents: [{ slug: "docs", contract: CONTRACT }], model: once({ name: "type_in", arguments: { ref: "e2" } }) },
+      () => ApprovalDecision.approveForSession(), (b) => b.addTools(typeIn));
+    const session = await s.agent.startSession();
+    await session.send("type");
+    await session.send("type again");
+    expect(s.asked).toHaveLength(1);
+    expect(described).toBe(1);
   });
 });
 

@@ -845,6 +845,12 @@
   color: var(--fdn-text-muted);
 }
 
+.fdn-approval-target {
+  margin: 8px 0 0;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
 .fdn-approval-args {
   margin-top: 8px;
   padding: 8px 10px;
@@ -1097,6 +1103,15 @@
   border: 1px solid var(--fdn-border);
   border-radius: var(--fdn-radius);
   background: var(--fdn-bg);
+}
+
+/* Under the composer: answers come from an AI and can be wrong. Quiet, but always there. */
+.fdn-ai-notice {
+  margin: -4px 12px 8px;
+  color: var(--fdn-text-faint);
+  font-size: 11.5px;
+  line-height: 1.4;
+  text-align: center;
 }
 
 .fdn-composer:focus-within {

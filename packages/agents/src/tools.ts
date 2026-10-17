@@ -24,6 +24,12 @@ export interface AgentTool {
   readonly server?: string;
   /** Reaches outside the organisation (recorded and shown; no mode acts on it yet). */
   readonly openWorld?: boolean;
+  /**
+   * What a call acts on, in the user's words, for the approval card (`button "Send" on mail.example.com`): read
+   * when the SDK asks, so the user sees what the call will touch, not only its arguments. Undefined or a failure
+   * shows the arguments alone.
+   */
+  describe?(args: Record<string, unknown>, signal: AbortSignal): string | undefined | Promise<string | undefined>;
   /** Runs the tool. A string goes to the model as it is; anything else as JSON. */
   invoke(args: Record<string, unknown>, context: ToolCallContext): unknown;
 }
@@ -34,6 +40,8 @@ export interface ToolSpec<A extends Record<string, unknown>> {
   parameters?: JsonSchema;
   toolClass?: ToolClass;
   openWorld?: boolean;
+  /** What a call acts on, for the approval card (see `AgentTool.describe`). */
+  describe?(args: A, signal: AbortSignal): string | undefined | Promise<string | undefined>;
   run(args: A, context: ToolCallContext): unknown;
 }
 
@@ -53,10 +61,12 @@ export function defineTool<A extends Record<string, unknown> = Record<string, un
     source: "host",
     invoke: (args, context) => spec.run(args as A, context),
   };
+  const describe = spec.describe;
   return {
     ...tool,
     ...(spec.description !== undefined ? { description: spec.description } : {}),
     ...(spec.openWorld !== undefined ? { openWorld: spec.openWorld } : {}),
+    ...(describe ? { describe: (args: Record<string, unknown>, signal: AbortSignal) => describe(args as A, signal) } : {}),
   };
 }
 
@@ -77,6 +87,7 @@ export function withToolClass(tool: AgentTool, toolClass: ToolClass): AgentTool 
     ...(tool.description !== undefined ? { description: tool.description } : {}),
     ...(tool.server !== undefined ? { server: tool.server } : {}),
     ...(tool.openWorld !== undefined ? { openWorld: tool.openWorld } : {}),
+    ...(tool.describe ? { describe: (args: Record<string, unknown>, signal: AbortSignal) => tool.describe!(args, signal) } : {}),
     invoke: (args, context) => tool.invoke(args, context),
   };
 }

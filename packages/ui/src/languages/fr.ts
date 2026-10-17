@@ -90,6 +90,7 @@ export const frenchStrings: UiStrings = {
   retry: "Réessayer",
   notSent: "Non envoyé",
   composerPlaceholder: "Posez une question",
+  aiNotice: "Les réponses sont générées par une IA et peuvent être erronées. Vérifiez l'essentiel.",
   removeAttachment: "Retirer",
   includeAttachment: "Joindre au prochain message",
   arguments: "Entrée",

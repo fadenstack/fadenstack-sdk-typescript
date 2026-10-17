@@ -523,7 +523,7 @@ class Turn {
           : `'${tool.name}' is ${toolClass}; the tool mode is ${this.#mode}.`,
         arguments: args,
         ...(tool.openWorld ? { openWorld: true } : {}),
-      }, rule, undefined, signal);
+      }, rule, undefined, signal, tool.describe ? () => describeTarget(tool, args, signal) : undefined);
       waited = settled.waitedMs ?? 0;
       if (!settled.approved) {
         this.#toolDenied = true;
@@ -561,9 +561,11 @@ class Turn {
    * Settles a call that needs approval, first that applies: an admin's rule asks (once only, even in bypass);
    * bypass mode approves; a destructive or unclassified tool asks (once only); what the user allowed always, then
    * what they allowed for this chat, approves; else the user is asked, and may allow once, for this chat or always.
-   * Every outcome goes in the transcript and the server's record, with what let the call through.
+   * Every outcome goes in the transcript and the server's record, with what let the call through. `target` is read
+   * only when the user is asked: what the call acts on, for the card.
    */
-  async #approve(base: ApprovalRequest, rule: boolean, timeoutMs: number | undefined, signal: AbortSignal): Promise<Settled> {
+  async #approve(base: ApprovalRequest, rule: boolean, timeoutMs: number | undefined, signal: AbortSignal,
+    target?: () => Promise<string | undefined>): Promise<Settled> {
     const { toolName: name, toolClass } = base;
     const open = !rule && !asksEveryTime(toolClass);
     const standing: ApprovalScope | undefined = rule ? undefined
@@ -576,7 +578,10 @@ class Turn {
       await this.#record(base, { approved: true, scope: standing, asked: false, rule, timedOut: false, waitedMs: undefined });
       return { approved: true, timedOut: false, waitedMs: undefined, reason: undefined };
     }
-    const request: ApprovalRequest = { ...base, canAllowForSession: open, canAllowAlways: open, ...(rule ? { requiredByRule: true } : {}) };
+    const described = target ? await target() : undefined;
+    const request: ApprovalRequest = {
+      ...base, canAllowForSession: open, canAllowAlways: open, ...(rule ? { requiredByRule: true } : {}), ...(described ? { target: described } : {}),
+    };
     this.#emit({ type: "approval_requested", turnId: this.#id, request });
     const limit = timeoutMs === undefined ? signal : AbortSignal.any([signal, AbortSignal.timeout(timeoutMs)]);
     const started = performance.now();
@@ -700,6 +705,29 @@ export function resultText(value: unknown): string {
 }
 
 /** `promise`, or the signal's reason once it aborts. */
+/** How long a tool may take to say what a call acts on before the card is shown without it. */
+const DESCRIBE_TIMEOUT_MS = 3_000;
+/** What the card shows of a target at most. */
+const MAX_TARGET_CHARS = 300;
+
+/**
+ * What the call acts on, as the tool says (one line, clipped), or undefined: a tool that fails or takes too long only
+ * leaves the card with the arguments. A stopped turn stops here too.
+ */
+async function describeTarget(tool: AgentTool, args: Record<string, unknown>, signal: AbortSignal): Promise<string | undefined> {
+  const limit = AbortSignal.any([signal, AbortSignal.timeout(DESCRIBE_TIMEOUT_MS)]);
+  let text: string | undefined;
+  try {
+    text = await untilAborted(Promise.resolve().then(() => tool.describe!({ ...args }, limit)), limit);
+  } catch (error) {
+    if (signal.aborted) throw signal.reason ?? error;
+    return undefined;
+  }
+  const line = typeof text === "string" ? text.replace(/\s+/g, " ").trim() : "";
+  if (!line) return undefined;
+  return line.length > MAX_TARGET_CHARS ? `${line.slice(0, MAX_TARGET_CHARS - 1)}…` : line;
+}
+
 function untilAborted<T>(promise: Promise<T>, signal: AbortSignal): Promise<T> {
   if (signal.aborted) return Promise.reject(signal.reason);
   return new Promise<T>((resolve, reject) => {

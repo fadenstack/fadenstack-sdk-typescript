@@ -86,6 +86,7 @@ export const chineseSimplifiedStrings: UiStrings = {
   retry: "重试",
   notSent: "未发送",
   composerPlaceholder: "有问题尽管问",
+  aiNotice: "回答由人工智能生成，可能有误。请核实重要信息。",
   removeAttachment: "移除",
   includeAttachment: "随下一条消息发送",
   arguments: "输入",

@@ -18,6 +18,7 @@ const part = useViewModel(() => props.part);
       <span :class="`fdn-badge fdn-class-${part.request.toolClass}`">{{ part.classLabel }}</span>
     </div>
     <p v-if="part.reason" class="fdn-approval-reason" dir="auto">{{ part.reason }}</p>
+    <p v-if="part.target" class="fdn-approval-target" dir="auto">{{ part.target }}</p>
     <pre v-if="part.argumentsText" class="fdn-approval-args" dir="auto">{{ part.argumentsText }}</pre>
     <div v-if="part.isPending" class="fdn-approval-actions">
       <button type="button" class="fdn-button fdn-primary" @click="part.allow()">{{ strings.allow }}</button>

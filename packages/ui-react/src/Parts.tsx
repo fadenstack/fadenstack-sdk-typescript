@@ -93,6 +93,7 @@ export function ApprovalView({ part, strings }: { part: ApprovalPart; strings: U
         <span className={`fdn-badge fdn-class-${part.request.toolClass}`}>{part.classLabel}</span>
       </div>
       {part.reason && <p className="fdn-approval-reason" dir="auto">{part.reason}</p>}
+      {part.target && <p className="fdn-approval-target" dir="auto">{part.target}</p>}
       {part.argumentsText && <pre className="fdn-approval-args" dir="auto">{part.argumentsText}</pre>}
       {part.isPending ? (
         <div className="fdn-approval-actions">

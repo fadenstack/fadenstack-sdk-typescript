@@ -54,6 +54,7 @@ const chat = useViewModel(() => props.chat);
       <div v-if="chat.error && !chat.signInRequired" class="fdn-banner" role="alert">{{ chat.error }}</div>
       <slot name="context-bar" />
       <Composer :chat="chat" :placeholder="placeholder"><slot name="composer-accessory" /></Composer>
+      <p v-if="chat.strings.aiNotice" class="fdn-ai-notice" dir="auto">{{ chat.strings.aiNotice }}</p>
     </template>
   </div>
 </template>

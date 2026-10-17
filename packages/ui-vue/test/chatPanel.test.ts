@@ -84,6 +84,7 @@ describe("ChatPanel (Vue)", () => {
     await button(wrapper, "Send").trigger("click");
     await waitUntil(() => wrapper.find(".fdn-approval").exists());
     expect(wrapper.find(".fdn-approval strong").text()).toBe("Run fill_field?");
+    expect(wrapper.find(".fdn-approval-target").text()).toBe('textbox "Name" on example.com');
     expect(wrapper.find(".fdn-approval-args").text()).toBe("value: Jane");
     await button(wrapper, "Allow").trigger("click");
     await settle(chat);
