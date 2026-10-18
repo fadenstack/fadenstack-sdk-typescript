@@ -16,6 +16,7 @@ export default defineConfig({
       "@fadenstack/ui-react": src("ui-react"),
       "@fadenstack/ui-vue": src("ui-vue"),
       "@fadenstack/testing": src("testing"),
+      "@fadenstack/provenance": src("provenance"),
     },
   },
   test: {

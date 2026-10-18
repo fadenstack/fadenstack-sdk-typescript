@@ -9,7 +9,8 @@
       "@fadenstack/ui": ["./packages/ui/src/index.ts"],
       "@fadenstack/ui-web": ["./packages/ui-web/src/index.ts"],
       "@fadenstack/ui-react": ["./packages/ui-react/src/index.ts"],
-      "@fadenstack/testing": ["./packages/testing/src/index.ts"]
+      "@fadenstack/testing": ["./packages/testing/src/index.ts"],
+      "@fadenstack/provenance": ["./packages/provenance/src/index.ts"]
     }
   },
   "include": ["packages/*/src", "packages/*/test", "samples", "vitest.config.ts"],

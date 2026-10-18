@@ -72,7 +72,10 @@ describe("the agent's provenance routes", () => {
     const report = {
       record_id: "3f2c8a8e-0000-4000-8000-000000000001", tool: "fill_field", sink_kind: "html.editor", media_type: "text/html",
       edit_kind: "generated" as const, length_class: "medium" as const,
-      layers: [{ layer: "metadata" as const, method: "html-title", applied: true }, { layer: "watermark" as const, method: "none", applied: false, reason: "runtime-without-watermark" as const }],
+      layers: [
+        { layer: "metadata" as const, method: "html-title", applied: true },
+        { layer: "watermark" as const, method: "none", applied: false, reason: "runtime-without-watermark" as const },
+      ],
     };
     await client.agent!.provenance.reportPlacement(report);
     expect(gateway.placements).toEqual([{ agent: "writer", report }]);

@@ -11,14 +11,15 @@
     "packages/ui-web",
     "packages/ui-react",
     "packages/ui-vue",
-    "packages/testing"
+    "packages/testing",
+    "packages/provenance"
   ],
   "engines": {
     "node": ">=24"
   },
   "scripts": {
-    "build": "tsc -b packages/client packages/agents packages/ui packages/ui-web packages/ui-react packages/testing && npm run build --workspace @fadenstack/ui-vue",
-    "clean": "tsc -b --clean packages/client packages/agents packages/ui packages/ui-web packages/ui-react packages/testing",
+    "build": "tsc -b packages/client packages/agents packages/ui packages/ui-web packages/ui-react packages/testing packages/provenance && npm run build --workspace @fadenstack/ui-vue",
+    "clean": "tsc -b --clean packages/client packages/agents packages/ui packages/ui-web packages/ui-react packages/testing packages/provenance",
     "typecheck": "tsc -p tsconfig.json --noEmit && vue-tsc -p packages/ui-vue/tsconfig.json",
     "test": "vitest run",
     "test:watch": "vitest",
