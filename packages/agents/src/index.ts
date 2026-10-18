@@ -19,12 +19,18 @@ export {
 } from "./approvalStore.js";
 export type { AgentEvent, AgentResult, ToolOutcome } from "./events.js";
 export {
+  NO_TOOL_SERVICES,
   checkArguments,
   defineTool,
+  outputEditKind,
   toDefinition,
+  toolServiceKey,
   withToolClass,
   type AgentTool,
   type ToolCallContext,
+  type ToolOutput,
+  type ToolServiceKey,
+  type ToolServices,
   type ToolSpec,
 } from "./tools.js";
 export {
@@ -34,6 +40,8 @@ export {
   type FadenstackModule,
   type ToolInvocation,
   type ToolInvoker,
+  type ToolServiceCall,
+  type ToolServiceFactory,
   type ToolSource,
   type ToolStage,
 } from "./stages.js";

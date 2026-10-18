@@ -1,4 +1,5 @@
 import type { JsonSchema } from "./chat/types.js";
+import type { EditKind } from "./provenance/contract.js";
 import type { ToolClass } from "./tools/toolModes.js";
 
 /** This SDK, as manifests name it. */
@@ -12,6 +13,11 @@ export interface ManifestTool {
   parameters?: JsonSchema;
   toolClass?: ToolClass;
   openWorld?: boolean;
+  /**
+   * What it writes for people to read: the argument, its media type and the edit kind (left out when the tool
+   * decides it per call). A write tool without one is one the server's admins may ask about.
+   */
+  output?: { argument: string; mediaType: string; editKind?: EditKind };
 }
 
 /** Something the app offers the agent to read, by its id (`page:document`). */
@@ -42,6 +48,13 @@ export function toWireManifest(manifest: AppManifest): Record<string, unknown> {
       if (tool.description !== undefined) out["description"] = tool.description;
       if (tool.parameters !== undefined) out["parameters"] = tool.parameters;
       if (tool.openWorld !== undefined) out["open_world"] = tool.openWorld;
+      if (tool.output !== undefined) {
+        out["output"] = {
+          argument: tool.output.argument,
+          media_type: tool.output.mediaType,
+          ...(tool.output.editKind !== undefined ? { edit_kind: tool.output.editKind } : {}),
+        };
+      }
       return out;
     }),
     context: manifest.context ?? [],

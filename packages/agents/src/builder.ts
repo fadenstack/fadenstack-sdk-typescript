@@ -21,8 +21,8 @@ import {
 import { IndexedDbApprovalStore, MemoryApprovalStore, type ApprovalStore } from "./approvalStore.js";
 import { IndexedDbSessionStore } from "./indexedDbSessionStore.js";
 import { MemorySessionStore, type SessionStore } from "./sessionStore.js";
-import type { ChatStage, FadenstackModule, ToolSource, ToolStage } from "./stages.js";
-import type { AgentTool } from "./tools.js";
+import type { ChatStage, FadenstackModule, ToolServiceFactory, ToolSource, ToolStage } from "./stages.js";
+import type { AgentTool, ToolServiceKey } from "./tools.js";
 
 /** What an agent was built with. */
 export interface AgentSettings {
@@ -33,6 +33,8 @@ export interface AgentSettings {
   readonly tools: readonly AgentTool[];
   readonly sources: readonly ToolSource[];
   readonly toolStages: readonly ToolStage[];
+  /** What modules give tools per call, by key. */
+  readonly toolServices: ReadonlyMap<ToolServiceKey<unknown>, ToolServiceFactory<unknown>>;
   readonly modules: readonly string[];
   readonly approvals: ApprovalHandler;
   readonly sessions: SessionStore;
@@ -71,6 +73,7 @@ export class AgentBuilder {
   readonly #sources: ToolSource[] = [];
   readonly #chatStages: { order: number; wrap: ChatStage }[] = [];
   readonly #toolStages: { order: number; stage: ToolStage }[] = [];
+  readonly #toolServices = new Map<ToolServiceKey<unknown>, ToolServiceFactory<unknown>>();
   readonly #modules: string[] = [];
   #client: FadenstackClient | undefined;
   #options: FadenstackClientOptions | undefined;
@@ -213,6 +216,16 @@ export class AgentBuilder {
     return this;
   }
 
+  /**
+   * A service tools get per call (`context.services.get(key)`), made by `factory` on the call's first use. One
+   * factory per key: a second throws.
+   */
+  addToolService<T>(key: ToolServiceKey<T>, factory: ToolServiceFactory<T>): this {
+    if (this.#toolServices.has(key)) throw new Error(`The tool service '${key.name}' is already added.`);
+    this.#toolServices.set(key, factory as ToolServiceFactory<unknown>);
+    return this;
+  }
+
   use(module: FadenstackModule): this {
     if (module.name) this.#modules.push(module.name);
     module.configure(this);
@@ -244,6 +257,7 @@ export class AgentBuilder {
       tools: [...this.#tools],
       sources: [...this.#sources],
       toolStages: [...this.#toolStages].sort((a, b) => a.order - b.order).map((s) => s.stage),
+      toolServices: new Map(this.#toolServices),
       modules: [...this.#modules],
       approvals: this.#approvals,
       sessions: this.#sessions ?? (globalThis.indexedDB ? new IndexedDbSessionStore() : new MemorySessionStore()),

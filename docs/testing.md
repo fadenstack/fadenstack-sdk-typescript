@@ -79,6 +79,7 @@ Without options, the gateway serves one agent, `test-agent`, to one user, `user@
 | `models` | The models `GET /v1/models` lists. Default `["fake-model"]`. |
 | `toolRules` | The administrator's tool rules: `[{ pattern, action, message }]`, `action` `deny` or `approval_required`, `*` in a pattern for any characters. As on the server, a denied tool is not offered and a call of it is refused; a call a rule asks about is marked, so the session asks every time. |
 | `now` | The clock, for tests of expiry. |
+| `provenance` | The provenance module: `{ enabled?, down?, receipts?, policy?, watermark? }`. On by default. `enabled: false` is a server without it (its routes answer 404); `down` is a module whose service is not running (503, and unsigned receipts). With `receipts`, a streamed answer ends with a `faden.provenance` event and a whole one names its receipt in `x-faden-provenance`; off by default, so a turn has only the events you script. `policy` is the server's marking policy, `watermark` what receipts say about the watermark (default: none, the runtime does not watermark). |
 
 An agent (`FakeAgent`):
 
@@ -91,6 +92,7 @@ An agent (`FakeAgent`):
 | `ceiling` | A limit on the tool modes, as the profile reports it. |
 | `requiredClientModules` | Modules the agent requires. |
 | `localMcpMode` | `disable` or `allow`. |
+| `provenancePolicy` | The agent's marking policy, over the server's. |
 
 A user (`FakeUser`):
 
@@ -130,6 +132,7 @@ A reply can hold:
 | `streamError` | `{ message, code? }`: the answer breaks off after the text. The turn throws a `FadenstackStreamError`. |
 | `usage` | `{ prompt, completion }` tokens. |
 | `delayMs` | A pause between streamed pieces. |
+| `receipt` | With `provenance.receipts` on: `false` sends no receipt for this answer, `{ unsigned: true }` one the server could not sign, `{ watermark }` what it says about the watermark. |
 
 The parts are sent in this order: events, the server tool, reasoning, text, tool calls.
 
@@ -148,13 +151,19 @@ The parts are sent in this order: events, the server tool, reasoning, text, tool
 | `POST /v1/agents/{agent}/events` | Event reports. |
 | `PUT /v1/agents/{agent}/manifest` | The app's manifest. |
 | `POST /v1/agents/{agent}/approvals/{id}` | The answer to a server tool's approval. |
+| `GET /v1/agents/{agent}/provenance/policy` | The agent's marking policy, with the contract's defaults. |
+| `POST /v1/agents/{agent}/provenance/records` | Signs a record of a placement, by the content's hash. The signature is a JWS nobody can check. |
+| `POST /v1/agents/{agent}/provenance/placements` | A placement report. |
+| `GET /v1/provenance/anchors`, `POST /v1/provenance/verify` | The anchors, and a detector that finds content by the records the fake signed. |
 
 Like the real server, it refuses:
 
 - a missing, unknown, expired or revoked access token (401), and a token for another agent (403);
 - event reports with an unknown event type or a field the type does not have (422), or with more than 100 events;
 - a manifest without an app name, with invalid or repeated tool names, or with an unknown tool class (400);
-- a chat request without `model` or `messages` (400).
+- a chat request without `model` or `messages` (400);
+- a record request or placement report with a field the contract does not have, a content hash that is not a
+  SHA-256, or an edit kind, layer or reason code the contract does not know (422).
 
 Tools outside a non-empty contract are held back: the model is not offered them, and the request still succeeds. The
 gateway lists them in `heldTools` and in the response header `x-faden-held-tools`.
@@ -171,9 +180,13 @@ gateway lists them in `heldTools` and in the response header `x-faden-held-tools
 | `heldTools` | Tools held back because the contract does not list them. |
 | `approvals` | The answers to server tool approvals. |
 | `createdAgents` | Agents created through the API. |
+| `provenanceRecords` | The records it signed: the agent, the request and the signed record. |
+| `placements` | The placement reports clients sent. |
+| `receipts` | The receipts chat answers carried. |
 | `signIns` | The devices signed in, and whether they were revoked. |
 | `revoke(deviceId?)` | Ends every sign-in, or one device's. |
 | `expireAccessTokens()` | Makes every access token expire, so the next request renews it. |
+| `setProvenanceDown(down)` | Stops or starts the provenance module's service. |
 | `handle(request)` | Answers one `Request`. `fetch` calls it. |
 
 ## Serve it over HTTP

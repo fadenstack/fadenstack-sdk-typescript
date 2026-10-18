@@ -1,4 +1,4 @@
-import type { JsonSchema, ToolClass, ToolDefinition } from "@fadenstack/client";
+import type { EditKind, JsonSchema, ToolClass, ToolDefinition } from "@fadenstack/client";
 
 /** What a running tool knows about its call. */
 export interface ToolCallContext {
@@ -7,6 +7,52 @@ export interface ToolCallContext {
   callId: string;
   sessionId: string;
   turnId: string;
+  /** What modules give tools for this call (`AgentBuilder.addToolService`): `context.services.get(Provenance)`. */
+  services: ToolServices;
+}
+
+/**
+ * A typed key for a service modules give tools per call: `const Provenance = toolServiceKey<Provenance>("provenance")`.
+ * Keys are compared by identity, so two modules cannot take each other's service by its name.
+ */
+export interface ToolServiceKey<T> {
+  /** For messages only. */
+  readonly name: string;
+  /** Carries the service's type for the compiler; never set. */
+  readonly __service?: T;
+}
+
+export function toolServiceKey<T>(name: string): ToolServiceKey<T> {
+  if (!name?.trim()) throw new TypeError("A tool service key needs a name.");
+  return Object.freeze({ name });
+}
+
+/** The services a call can use, by key. */
+export interface ToolServices {
+  /** The service for this call, made on first use, once per call; undefined when no module gives it. */
+  get<T>(key: ToolServiceKey<T>): T | undefined;
+}
+
+/** No services: for a tool run outside an agent's session. */
+export const NO_TOOL_SERVICES: ToolServices = Object.freeze({ get: () => undefined });
+
+/**
+ * What a tool writes for people to read: the argument that carries it, its media type, and what kind of edit it is
+ * (or a function of the call's arguments, for a tool that decides per call). Metadata only: the provenance module
+ * reads it to check that the content went through its `place()`, and the app manifest reports it.
+ */
+export interface ToolOutput<A = Record<string, unknown>> {
+  /** The argument with the content (`text`). */
+  argument: string;
+  /** Its media type: `text/markdown`, `text/html`, `text/plain`, `image/png`. */
+  mediaType: string;
+  /** `generated`, `rewritten`, `summarised` (marked); `translated`, `corrected`, `formatted`, `extracted` (exempt). */
+  edit: EditKind | ((args: A) => EditKind);
+}
+
+/** The edit kind a declared output stands for in a call: the declared one, or what its function says. */
+export function outputEditKind(output: ToolOutput, args: Record<string, unknown>): EditKind {
+  return typeof output.edit === "function" ? output.edit(args) : output.edit;
 }
 
 /** A tool the agent can run: what it is, what it does, where it runs, and its body. */
@@ -24,6 +70,8 @@ export interface AgentTool {
   readonly server?: string;
   /** Reaches outside the organisation (recorded and shown; no mode acts on it yet). */
   readonly openWorld?: boolean;
+  /** What it writes for people to read, if it writes such content (see `ToolOutput`). */
+  readonly output?: ToolOutput;
   /**
    * What a call acts on, in the user's words, for the approval card (`button "Send" on mail.example.com`): read
    * when the SDK asks, so the user sees what the call will touch, not only its arguments. Undefined or a failure
@@ -40,6 +88,8 @@ export interface ToolSpec<A extends Record<string, unknown>> {
   parameters?: JsonSchema;
   toolClass?: ToolClass;
   openWorld?: boolean;
+  /** What it writes for people to read (see `ToolOutput`); a tool that writes such content declares it. */
+  output?: ToolOutput<A>;
   /** What a call acts on, for the approval card (see `AgentTool.describe`). */
   describe?(args: A, signal: AbortSignal): string | undefined | Promise<string | undefined>;
   run(args: A, context: ToolCallContext): unknown;
@@ -66,8 +116,22 @@ export function defineTool<A extends Record<string, unknown> = Record<string, un
     ...tool,
     ...(spec.description !== undefined ? { description: spec.description } : {}),
     ...(spec.openWorld !== undefined ? { openWorld: spec.openWorld } : {}),
+    ...(spec.output !== undefined ? { output: toolOutput(spec.name, spec.output) } : {}),
     ...(describe ? { describe: (args: Record<string, unknown>, signal: AbortSignal) => describe(args as A, signal) } : {}),
   };
+}
+
+/** A declared output, checked and frozen; a function of the arguments gets them as the tool's own type. */
+function toolOutput<A>(tool: string, output: ToolOutput<A>): ToolOutput {
+  if (!output.argument?.trim()) throw new TypeError(`The output of '${tool}' names no argument.`);
+  if (!/^[\w.+-]+\/[\w.+-]+$/.test(output.mediaType ?? "")) throw new TypeError(`The output of '${tool}' has no media type.`);
+  const edit = output.edit;
+  if (edit === undefined) throw new TypeError(`The output of '${tool}' has no edit kind.`);
+  return Object.freeze({
+    argument: output.argument,
+    mediaType: output.mediaType,
+    edit: typeof edit === "function" ? (args: Record<string, unknown>) => edit(args as A) : edit,
+  });
 }
 
 /** The tool as the model is offered it. */
@@ -87,6 +151,7 @@ export function withToolClass(tool: AgentTool, toolClass: ToolClass): AgentTool 
     ...(tool.description !== undefined ? { description: tool.description } : {}),
     ...(tool.server !== undefined ? { server: tool.server } : {}),
     ...(tool.openWorld !== undefined ? { openWorld: tool.openWorld } : {}),
+    ...(tool.output !== undefined ? { output: tool.output } : {}),
     ...(tool.describe ? { describe: (args: Record<string, unknown>, signal: AbortSignal) => tool.describe!(args, signal) } : {}),
     invoke: (args, context) => tool.invoke(args, context),
   };

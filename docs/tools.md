@@ -32,6 +32,7 @@ const readPage = defineTool<{ page: number }>({
 | `parameters` | The arguments, as a JSON Schema object. Without it, the tool takes no arguments. |
 | `toolClass` | `read`, `write`, `destructive` or `unknown`. Without it, the class is `unknown`, and the tool asks before it runs in every mode that offers it. |
 | `openWorld` | The tool reaches outside the organisation. It is recorded and shown; no tool mode acts on it yet. |
+| `output` | What the tool writes for people to read: `{ argument, mediaType, edit }`. See [Content people read](#content-people-read). |
 | `describe(args, signal)` | What a call acts on, in the user's words (`button "Send" on mail.example.com`), for the approval card. Called only when the user is asked; may return a promise. A failure, nothing, or no answer within 3 seconds leaves the card with the arguments. |
 | `run(args, context)` | The tool's body. Required. |
 
@@ -50,6 +51,37 @@ The second argument, `context`, describes the call:
 | `callId` | The model's id for this call. |
 | `sessionId` | The session's id. |
 | `turnId` | The turn's id. |
+| `services` | What modules give tools for this call, by key: `context.services.get(Provenance)`. Undefined for a key no module gives. |
+
+## Content people read
+
+A tool that writes content people read -- a reply into a mail, a paragraph into a document, a picture into a slide --
+declares it with `output`: the argument that carries the content, its media type, and what kind of edit it is.
+
+```ts
+const insertReply = defineTool<{ text: string }>({
+  name: "insert_reply",
+  toolClass: "write",
+  parameters: { type: "object", properties: { text: { type: "string" } }, required: ["text"] },
+  output: { argument: "text", mediaType: "text/html", edit: "generated" },
+  run: ({ text }, context) => editor.insert(text),
+});
+```
+
+| Edit kind | Meaning | Marked as made with AI |
+|---|---|---|
+| `generated` | New content | Yes |
+| `rewritten` | Changes style, structure or meaning | Yes |
+| `summarised` | A summary of existing content | Yes |
+| `translated` | A translation | No |
+| `corrected` | Spelling, grammar, minor stylistic polish | No |
+| `formatted` | Layout, styles, format conversion | No |
+| `extracted` | Selected or structured existing content, unsummarised | No |
+
+`edit` may also be a function of the call's arguments, for a tool that decides per call:
+`edit: (args) => (args.mode === "polish" ? "corrected" : "rewritten")`. The declaration is metadata: it goes in the
+[app manifest](#the-app-manifest), and the provenance module (`@fadenstack/provenance`) checks that the content went
+through its `place()`, which marks it where it lands. See [Marking AI-generated content](provenance.md).
 
 ## Arguments are checked first
 
@@ -89,8 +121,9 @@ tells the session when the model calls the tool, and the call runs under the str
 
 ## The app manifest
 
-When the agent starts, it tells the server what your application brings: every host tool with the class you gave it,
-including tools the contract does not list yet. Administrators review new tools and take them into the agent's
+When the agent starts, it tells the server what your application brings: every host tool with the class you gave it
+and the content it declares it writes (`output`, with its edit kind when the kind is fixed), including tools the
+contract does not list yet. Administrators review new tools and take them into the agent's
 contract. Until they do, the server holds back the tools that a non-empty contract does not list.
 
 `describeApp` adds the application's name and version, the context it offers, and the greeting and suggestions it

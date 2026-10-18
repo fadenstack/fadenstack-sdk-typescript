@@ -9,6 +9,7 @@ import {
   type AgentProfile,
   type AppManifest,
   type FadenstackClient,
+  type ManifestTool,
   type SkillOption,
   type ToolClass,
   type ToolDefinition,
@@ -21,7 +22,7 @@ import { AgentBuilder, UNDESCRIBED_APP_NAME, type AgentSettings, type AppDescrip
 import { EventReporter } from "./reporter.js";
 import { AgentSession } from "./session.js";
 import type { AgentContext } from "./stages.js";
-import { toDefinition, withToolClass, type AgentTool } from "./tools.js";
+import { toDefinition, withToolClass, type AgentTool, type ToolOutput } from "./tools.js";
 import { newId, type SessionInfo } from "./transcript.js";
 
 /**
@@ -34,6 +35,7 @@ export class FadenstackAgent {
   /** @internal */
   readonly reporter: EventReporter;
   #profile: AgentProfile | undefined;
+  #context: AgentContext | undefined;
   #tools: readonly AgentTool[] = [];
   #starting: Promise<void> | undefined;
   #warned = false;
@@ -73,6 +75,12 @@ export class FadenstackAgent {
 
   get isStarted(): boolean {
     return this.#profile !== undefined;
+  }
+
+  /** @internal What tool sources and modules see of the agent, once `start` ran. */
+  get context(): AgentContext {
+    if (!this.#context) throw new Error("Call start() first.");
+    return this.#context;
   }
 
   /** `ask`, or `bypass` when the app set it (`usePermissionMode`). */
@@ -169,6 +177,7 @@ export class FadenstackAgent {
     }
     this.#tools = tools;
     this.#profile = profile;
+    this.#context = context;
     if (this.settings.permissionMode === "bypass" && !this.#warned) {
       this.#warned = true;
       console.warn(`The agent '${this.slug}' runs in bypass mode: tool calls that would ask are approved without asking, ` +
@@ -193,6 +202,7 @@ export class FadenstackAgent {
         toolClass: t.toolClass,
         ...(t.description !== undefined ? { description: t.description } : {}),
         ...(t.openWorld !== undefined ? { openWorld: t.openWorld } : {}),
+        ...(t.output !== undefined ? { output: manifestOutput(t.output) } : {}),
       })),
       ...(app.context ? { context: app.context } : {}),
       ...(app.ui ? { ui: app.ui } : {}),
@@ -254,4 +264,13 @@ export class FadenstackAgent {
   find(name: string): AgentTool | undefined {
     return this.#tools.find((t) => t.name === name);
   }
+}
+
+/** A declared output as the manifest names it: the edit kind only when it is fixed, not decided per call. */
+function manifestOutput(output: ToolOutput): NonNullable<ManifestTool["output"]> {
+  return {
+    argument: output.argument,
+    mediaType: output.mediaType,
+    ...(typeof output.edit === "string" ? { editKind: output.edit } : {}),
+  };
 }

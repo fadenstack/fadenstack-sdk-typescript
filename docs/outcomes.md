@@ -17,6 +17,7 @@ message. See [Outcomes](../../concepts/outcomes.md) for why refusals are outcome
 | `text` | The answer's text. For an answer the server stopped, what was shown before it stopped. |
 | `notices` | The notices to show, in order. |
 | `usage` | The tokens the turn used, summed over its model calls: `promptTokens`, `completionTokens`, `totalTokens`. Undefined when the server reported none. |
+| `receipts` | What the server said made the turn's answers, in order: a signed receipt per model call (`status: "signed"`), or `unsigned` with the reason when it could not sign one. Empty from a server that sends none. The transcript keeps each receipt's id with its answer. |
 
 ## Outcomes
 

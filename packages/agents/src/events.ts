@@ -1,4 +1,4 @@
-import type { ChatOutcome, FadenstackEvent, GovernanceNotice, ToolClass, ToolMode, Usage } from "@fadenstack/client";
+import type { ChatOutcome, FadenstackEvent, GovernanceNotice, ReceiptNote, ToolClass, ToolMode, Usage } from "@fadenstack/client";
 
 import type { ApprovalDecision, ApprovalRequest } from "./approvals.js";
 
@@ -50,4 +50,6 @@ export interface AgentResult {
   text: string;
   notices: readonly GovernanceNotice[];
   usage: Usage | undefined;
+  /** The receipts of the turn's answers, in order: what the server said made them (none from a server that sends none). */
+  receipts: readonly ReceiptNote[];
 }

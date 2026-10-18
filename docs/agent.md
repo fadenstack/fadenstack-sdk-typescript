@@ -172,7 +172,17 @@ const agent = FadenstackAgent.createBuilder()
 | `describeApp(app)` | The application the agent runs in, for the manifest. See [Tools and approvals](tools.md#the-app-manifest). |
 | `addChatStage(order, wrap)` | Wraps the chat, for example to mask what goes out. |
 | `addToolStage(order, stage)` | Wraps each tool call: sees the arguments before and the result after. |
+| `addToolService(key, factory)` | A service tools get per call by its key (`context.services.get(key)`), made by `factory` on the call's first use. One factory per key. |
 | `use(module)` | Adds a module, which configures the builder. |
+
+Stages sit at a `StageOrder` slot: `context` (100), `pii` (200), `provenance` (300) and `custom` (500). A lower number
+is further from the server: a tool call passes the PII stage before the provenance stage, so the provenance stage
+sees the arguments the tool gets.
+
+A tool service's factory gets the call (`ToolServiceCall`): the tool, its class, its arguments, the ids of the call,
+session and turn, the call's signal, the agent's client and profile, and `record(type, data)`, which adds an entry of
+the module's own type (`provenance.placed`) to the session's transcript. A module's entries hold ids, names and
+counts, never content; they are not sent to the model, and the SDK's own entry types are refused.
 
 `build()` throws when the agent or the client is missing, when the client is for another agent, and when two tools
 have the same name.

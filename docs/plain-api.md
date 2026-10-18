@@ -63,6 +63,7 @@ The `ChatResponse`:
 | `finishReason` | `stop`, `length`, `tool_calls`, `content_filter`, or another value the model gives. |
 | `usage` | `promptTokens`, `completionTokens`, `totalTokens`, and `cachedPromptTokens` when the server reports it. |
 | `events` | The gateway's events for the request. |
+| `receipts` | What the server said made the answer: the receipt ids its `x-faden-provenance` header names (`status: "reference"`), one per picture for an answer with pictures. Empty from a server that sends none. |
 | `refused` | Set when the gateway refused the prompt or stopped the answer: a notice with the `outcome` and the `message` to show. |
 | `id`, `model` | The response's id and the model that answered. |
 
@@ -92,6 +93,7 @@ for await (const update of client.chat.stream(messages, { temperature: 0.2 })) {
 | `event` | `event` | One of the gateway's events. |
 | `refused` | `notice` | The gateway refused the prompt or stopped the answer. |
 | `finish` | `reason`, `responseId`, `model` | The answer ended. |
+| `receipt` | `receipt` | What the server said made the answer, as the stream closes: the signed receipt (`status: "signed"`, from the `faden.provenance` event, which also comes as an `event`), or `unsigned` with the `reason`. |
 
 ## Request options
 

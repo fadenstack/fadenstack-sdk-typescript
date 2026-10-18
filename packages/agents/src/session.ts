@@ -5,11 +5,13 @@ import {
   narrowestMode,
   parseToolClass,
   parseToolMode,
+  receiptIdOf,
   type ChatMessage,
   type ChatOptions,
   type ChatOutcome,
   type FadenstackEvent,
   type GovernanceNotice,
+  type ReceiptNote,
   type ToolCall,
   type ToolClass,
   type ToolMode,
@@ -22,8 +24,8 @@ import { attachmentData, type MessageAttachment } from "./attachments.js";
 import { ContextBuilder } from "./contextBuilder.js";
 import { EventQueue } from "./eventQueue.js";
 import type { AgentEvent, AgentResult, ToolOutcome } from "./events.js";
-import type { ToolInvocation, ToolInvoker } from "./stages.js";
-import { checkArguments, type AgentTool } from "./tools.js";
+import type { ToolInvocation, ToolInvoker, ToolServiceCall } from "./stages.js";
+import { checkArguments, type AgentTool, type ToolServiceKey, type ToolServices } from "./tools.js";
 import { EntryTypes, TurnStatus, newId, type TranscriptEntry } from "./transcript.js";
 
 /** A skill the user picked for a message: its slug for the server, its name for the transcript. */
@@ -238,6 +240,7 @@ class Turn {
   readonly #notices: GovernanceNotice[] = [];
   readonly #deniedByGateway = new Set<string>();
   readonly #marks = new Map<string, GatewayMark>();
+  readonly #receipts: ReceiptNote[] = [];
   #text = "";
   #usage: Usage | undefined;
   #blocked: GovernanceNotice | undefined;
@@ -318,6 +321,7 @@ class Turn {
     if (this.#agent.settings.reasoning) options.reasoningEffort = this.#agent.settings.reasoning;
     let text = "";
     const calls: ToolCall[] = [];
+    const receipts: ReceiptNote[] = [];
     for await (const update of this.#agent.settings.chat.stream(this.#session.history, options)) {
       switch (update.type) {
         case "text":
@@ -339,6 +343,9 @@ class Turn {
         case "event":
           await this.#onGatewayEvent(update.event, signal);
           break;
+        case "receipt":
+          receipts.push(update.receipt);
+          break;
         case "finish":
           if (update.reason === "content_filter" && !this.#blocked) {
             this.#blocked = { outcome: "response_blocked", stage: "output", message: "The answer was stopped." };
@@ -348,11 +355,14 @@ class Turn {
     }
     if (this.#blocked) calls.length = 0; // a refused answer's tool calls never run
     this.#text += text;
+    this.#receipts.push(...receipts);
     if (text || calls.length) {
       await this.#access.append(EntryTypes.assistantMessage, this.#id, {
         text,
         tool_calls: calls.map((c) => ({ id: c.id, name: c.name, arguments: c.argumentsJson || "{}" })),
         origin: "model",
+        // What made the answer, by the receipts' ids: never more of them than that.
+        ...(receipts.length ? { receipts: receipts.map(receiptData) } : {}),
       });
     }
     if (this.#blocked) await this.#notice(this.#blocked);
@@ -532,13 +542,14 @@ class Turn {
       }
     }
     try {
+      const services = this.#services(tool, toolClass, call.id, args, signal);
       const invocation: ToolInvocation = {
         tool,
         arguments: { ...args },
         toolClass,
-        context: { signal, callId: call.id, sessionId: this.#session.id, turnId: this.#id },
+        context: { signal, callId: call.id, sessionId: this.#session.id, turnId: this.#id, services },
       };
-      const value = await this.#invoker()(invocation);
+      const value = await this.#invoker(services)(invocation);
       return { result: resultText(value), outcome: "ok", waited };
     } catch (error) {
       if (signal.aborted) throw signal.reason ?? error;
@@ -546,8 +557,27 @@ class Turn {
     }
   }
 
-  #invoker(): ToolInvoker {
-    let invoker: ToolInvoker = async (i) => i.tool.invoke(i.arguments, i.context);
+  /** The services modules give this call, each made on first use. */
+  #services(tool: AgentTool, toolClass: ToolClass, callId: string, args: Record<string, unknown>, signal: AbortSignal): CallServices {
+    const append = this.#access.append;
+    const turnId = this.#id;
+    return new CallServices(this.#agent.settings.toolServices, {
+      tool, toolClass, arguments: Object.freeze({ ...args }), callId, sessionId: this.#session.id, turnId, signal,
+      agent: this.#agent.context,
+      record: async (type, data) => {
+        if (CORE_ENTRY_TYPES.has(type) || !MODULE_ENTRY_TYPE.test(type)) {
+          throw new TypeError(`A module's transcript entry is its own type, such as 'provenance.placed': not '${type}'.`);
+        }
+        await append(type, turnId, data);
+      },
+    });
+  }
+
+  #invoker(services: CallServices): ToolInvoker {
+    let invoker: ToolInvoker = async (i) => {
+      services.ran(i.arguments); // the arguments the tool gets, after the stages that change them
+      return i.tool.invoke(i.arguments, i.context);
+    };
     const stages = this.#agent.settings.toolStages;
     for (let s = stages.length - 1; s >= 0; s--) {
       const stage = stages[s]!;
@@ -677,7 +707,9 @@ class Turn {
       this.#emit({
         type: "turn_completed",
         turnId: this.#id,
-        result: { turnId: this.#id, outcome, text: this.#text, notices: [...this.#notices], usage: this.#usage },
+        result: {
+          turnId: this.#id, outcome, text: this.#text, notices: [...this.#notices], usage: this.#usage, receipts: [...this.#receipts],
+        },
       });
     }
   }
@@ -692,6 +724,52 @@ class Turn {
       : { ...usage };
   }
 }
+
+/** The SDK's own entry types, which a module cannot write. */
+const CORE_ENTRY_TYPES: ReadonlySet<string> = new Set(Object.values(EntryTypes));
+/** A module's entry type: its name, a dot, what happened (`provenance.placed`). */
+const MODULE_ENTRY_TYPE = /^[a-z][a-z0-9_-]*(\.[a-z0-9_-]+)+$/;
+
+/** A receipt as the transcript keeps it: its id and whether it was signed, never the receipt. */
+function receiptData(note: ReceiptNote): Data {
+  return { receipt_id: receiptIdOf(note) ?? null, status: note.status, ...(note.status === "unsigned" ? { reason: note.reason } : {}) };
+}
+
+/** One call's services: each made by its module's factory on first use, then the same for the rest of the call. */
+class CallServices implements ToolServices {
+  readonly #factories: AgentSettingsFactories;
+  readonly #made = new Map<ToolServiceKey<unknown>, unknown>();
+  readonly #call: ToolServiceCall;
+  #arguments: Readonly<Record<string, unknown>>;
+
+  constructor(factories: AgentSettingsFactories, call: ToolServiceCall) {
+    this.#factories = factories;
+    this.#arguments = call.arguments;
+    const self = this;
+    this.#call = Object.freeze({
+      ...call,
+      get arguments() {
+        return self.#arguments;
+      },
+    });
+  }
+
+  get<T>(key: ToolServiceKey<T>): T | undefined {
+    if (this.#made.has(key)) return this.#made.get(key) as T;
+    const factory = this.#factories.get(key);
+    if (!factory) return undefined;
+    const service = factory(this.#call);
+    this.#made.set(key, service);
+    return service as T;
+  }
+
+  /** The tool is about to run with these arguments. */
+  ran(args: Record<string, unknown>): void {
+    this.#arguments = Object.freeze({ ...args });
+  }
+}
+
+type AgentSettingsFactories = FadenstackAgent["settings"]["toolServices"];
 
 /** A tool's result as the model gets it: a string as it is, anything else as JSON. */
 export function resultText(value: unknown): string {
