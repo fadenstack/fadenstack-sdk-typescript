@@ -8,6 +8,7 @@ nav = [
   { "Outcomes and errors" = "outcomes.md" },
   { "Sessions on the device" = "sessions.md" },
   { "The chat panel" = "chat-panel.md" },
+  { "Marking AI-generated content" = "provenance.md" },
   { "Testing without a server" = "testing.md" },
   { "Plain chat completions" = "plain-api.md" },
 ]

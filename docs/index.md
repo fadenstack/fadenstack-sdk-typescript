@@ -31,6 +31,7 @@ The SDK also powers Fadenstack's browser agent.
 | `@fadenstack/ui-react` | The React skin for those view models: a chat panel | `Fadenstack.UI.Wpf` |
 | `@fadenstack/ui-vue` | The Vue skin for the same view models: the same chat panel | `Fadenstack.UI.Wpf` |
 | `@fadenstack/testing` | A fake Fadenstack server for tests and demos | — |
+| `@fadenstack/provenance` | Marks content the agent's tools place as made with AI: `place()`, markers for the hosts, signed records and placement reports | `Fadenstack.Provenance` |
 
 The packages follow the [.NET SDK](../dotnet/index.md): the same concepts, the same tool classes and modes, and the
 same transcript format for sessions.
@@ -59,6 +60,7 @@ too, and allow it to this machine (`localhost`, `127.0.0.1`, `::1`).
 | `@fadenstack/ui-react` | The four packages above, with React and React DOM 18.2 or later as peer dependencies |
 | `@fadenstack/ui-vue` | `@fadenstack/ui`, `@fadenstack/ui-web` and the two below them, with Vue 3.5 or later as a peer dependency |
 | `@fadenstack/testing` | `@fadenstack/client` |
+| `@fadenstack/provenance` | `@fadenstack/agents`, `@fadenstack/client`, and `@fadenstack/ui` for its texts |
 
 ## Install
 

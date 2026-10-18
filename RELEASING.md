@@ -1,10 +1,10 @@
 # Releasing
 
 A tag publishes a release. `.github/workflows/release.yml` checks that the tag names the packages' version, runs
-the type check and the tests, builds, and publishes the seven `@fadenstack` packages to npm with trusted
+the type check and the tests, builds, and publishes the eight `@fadenstack` packages to npm with trusted
 publishing: no npm token is stored anywhere.
 
-1. Set the version in all seven packages and in `SDK_VERSION`, then update the lock file:
+1. Set the version in all eight packages and in `SDK_VERSION`, then update the lock file:
 
     ```bash
     node scripts/version.mjs 0.2.0
@@ -31,7 +31,7 @@ published by hand. A package added later (as `ui-web` and `ui-vue` were, after 0
 for itself before its first tagged release: publish it alone with `npm publish -w packages/<name> --access public`.
 
 1. Your npm account has two-factor authentication and may publish in the `fadenstack` organisation.
-2. Build and publish the seven packages from a clean checkout of the tag:
+2. Build and publish the eight packages from a clean checkout of the tag:
 
     ```bash
     npm ci
