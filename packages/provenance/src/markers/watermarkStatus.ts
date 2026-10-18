@@ -1,33 +1,39 @@
-import { isReasonCode } from "@fadenstack/client";
+import { isReasonCode, receiptIdOf, type ReceiptNote } from "@fadenstack/client";
 
-import { isImage } from "../content.js";
+import { bareType, isImage } from "../content.js";
 import type { ContentMarker, MarkOutcome, PlacedContent, ProvenanceRecord } from "../types.js";
-import { inspectImage } from "./imageGuard.js";
 
 /**
  * Whether the content carries a watermark, from what the server said made it: text is watermarked by the model as it
- * is written, a picture by the server before it leaves. Nothing on the device can watermark, so this only reports.
+ * is written (from `short_text_tokens` on), a picture by the server before it leaves. Nothing on the device can
+ * watermark or detect one, so this only reports, and never says `verified`. The methods: `vllm-<algorithm>` (a local
+ * model's runtime), `upstream-<vendor>` (a remote provider's own mark), the engine's algorithm, `trustmark` (a
+ * picture); `model` when the text carries none.
  */
-export function watermarkOf(
-  record: Pick<ProvenanceRecord, "receipt" | "receiptId">,
-  mediaType: string,
-  content: string | Uint8Array,
-): MarkOutcome {
+export function watermarkOf(receipt: ReceiptNote | undefined, mediaType: string, shortText: boolean): MarkOutcome {
   if (isImage(mediaType)) {
-    // The gateway refuses a picture it could not mark, so a picture with a receipt or its C2PA has its watermark.
-    const marked = record.receiptId !== undefined || (content instanceof Uint8Array && inspectImage(content).c2pa);
-    return marked ? { applied: true, method: "trustmark", verified: false } : { applied: false, method: "trustmark" };
+    // The gateway marks every picture it makes before it leaves, or refuses it: a picture with its receipt has one.
+    return receiptIdOf(receipt) !== undefined
+      ? { applied: true, method: "trustmark", detail: "picture with a receipt" }
+      : { applied: false, method: "trustmark", detail: "no receipt" };
   }
-  const note = record.receipt;
-  if (!note) return { applied: false, method: "none", reason: "server-unavailable" };
-  if (note.status === "unsigned") return { applied: false, method: "none", reason: isReasonCode(note.reason) ? note.reason : "server-unavailable" };
-  if (note.status === "reference") return { applied: false, method: "receipt" }; // only its id: it cannot be told
-  const watermark = note.receipt.watermark;
-  if (watermark.applied === "none") {
-    return { applied: false, method: "none", ...(isReasonCode(watermark.reason) ? { reason: watermark.reason } : {}) };
+  if (shortText) return { applied: false, method: "model", reason: "short-text" };
+  if (!receipt) return { applied: false, method: "model", detail: "no receipt" };
+  if (receipt.status === "unsigned") {
+    return { applied: false, method: "model", reason: isReasonCode(receipt.reason) ? receipt.reason : "server-unavailable", detail: "unsigned answer" };
   }
-  const method = watermark.applied === "upstream" ? `upstream:${watermark.vendor ?? "vendor"}` : watermark.algorithm ?? watermark.applied;
-  return { applied: true, method };
+  if (receipt.status === "reference") return { applied: false, method: "model", detail: "receipt without its details" };
+  const watermark = receipt.receipt.watermark;
+  switch (watermark.applied) {
+    case "model":
+      return { applied: true, method: `vllm-${watermark.algorithm ?? "gumbel"}` };
+    case "engine":
+      return { applied: true, method: watermark.algorithm ?? "engine" };
+    case "upstream":
+      return { applied: true, method: `upstream-${watermark.vendor ?? "vendor"}` };
+    default:
+      return { applied: false, method: "model", ...(isReasonCode(watermark.reason) ? { reason: watermark.reason } : {}) };
+  }
 }
 
 /** Records whether the content carries a watermark, from the receipt (`watermarkOf`); it never watermarks itself. */
@@ -36,11 +42,11 @@ export class WatermarkStatus implements ContentMarker {
   readonly layer = "watermark";
 
   supports(_sink: unknown, mediaType: string): boolean {
-    const type = mediaType.toLowerCase();
+    const type = bareType(mediaType);
     return isImage(type) || type.startsWith("text/") || type === "application/xhtml+xml";
   }
 
   attach(placed: PlacedContent, record: ProvenanceRecord): MarkOutcome {
-    return watermarkOf(record, placed.mediaType, placed.content);
+    return watermarkOf(record.receipt, placed.mediaType, placed.shortText);
   }
 }

@@ -45,6 +45,7 @@ export const chineseSimplifiedStrings: UiStrings = {
     tool_denied: "某个工具未获允许",
     rate_limited: "请求过多",
     round_limit: "已停止",
+    provenance_refused: "未写入：无法将其标记为人工智能生成的内容",
   },
   noticeFallback: "提示",
   tryAgainIn: (seconds) => `请在 ${seconds} 秒后重试。`,
@@ -115,5 +116,5 @@ export const chineseSimplifiedStrings: UiStrings = {
   picturesNotSeen: "此智能体的模型无法查看图片。",
   pictureNotRead: (name) => `无法将 ${name} 读取为图片。`,
   aiGenerated: "人工智能生成",
-  aiGeneratedTitle: (record) => `人工智能生成（记录 ${record}）`,
+  aiGeneratedTitle: (record) => `人工智能生成 ${record}`,
 };

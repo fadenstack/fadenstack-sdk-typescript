@@ -20,6 +20,7 @@ export {
   type EditClassifier,
   type EditDecision,
   type EnrichmentContext,
+  type ExemptReason,
   type ExtensionValue,
   type HttpHeaderSink,
   type KeyValueSink,
@@ -43,16 +44,26 @@ export { ProvenanceReader, type FoundMark, type ProvenanceReaderOptions } from "
 export { editSimilarity, similarityClassifier, suggestEditKind, type EditSimilarityOptions } from "./editKind.js";
 export { findPersonalData, type PersonalDataFinding } from "./personalData.js";
 export { type MarkStrings, type MarkStringsOption } from "./titles.js";
-export { ServerSignedMarker } from "./markers/serverSigned.js";
+export { isCode, isLabel, isRecordId, tokensOf } from "./content.js";
+export { SIGNED_RECORD_METHOD, ServerSignedMarker } from "./markers/serverSigned.js";
 export { ImageProvenanceGuard, inspectImage, type ImageMarks } from "./markers/imageGuard.js";
 export { WatermarkStatus, watermarkOf } from "./markers/watermarkStatus.js";
-export { AI_GENERATED_ATTRIBUTE, HtmlAttributeMarker, htmlRecordIds, type HtmlAttributeMarkerOptions } from "./markers/htmlAttribute.js";
+export { AI_GENERATED_ATTRIBUTE, HtmlAttributeMarker, htmlRecordIds, wrapHtml, type HtmlAttributeMarkerOptions } from "./markers/htmlAttribute.js";
 export { FRONT_MATTER_KEYS, MarkdownFrontMatterMarker, frontMatterMark, withFrontMatter } from "./markers/markdownFrontMatter.js";
-export { KEY_VALUE_KEY, KeyValueMarker, type KeyValueMarkerOptions } from "./markers/keyValue.js";
+export { KEY_VALUE_KEYS, KeyValueMarker } from "./markers/keyValue.js";
 export { SidecarMarker, sidecarDocument, sidecarName } from "./markers/sidecar.js";
-export { HttpHeaderMarker, PROVENANCE_HEADER } from "./markers/httpHeader.js";
-export { VisibleLabelMarker, type VisibleLabelMarkerOptions } from "./markers/visibleLabel.js";
+export { AI_GENERATED_HEADER, HttpHeaderMarker } from "./markers/httpHeader.js";
+export { AI_LABEL_ATTRIBUTE, VisibleLabelMarker, type VisibleLabelMarkerOptions } from "./markers/visibleLabel.js";
 export { UnicodeTextMarker, invisibleMark, invisibleRecordIds } from "./markers/unicodeText.js";
+export {
+  OfficeMarks,
+  isOfficeAnchor,
+  officeAnchorName,
+  officeCustomXmlPart,
+  officeDocumentPropertyValue,
+  readOfficeCustomXmlPart,
+  type OfficeRecord,
+} from "./office.js";
 export {
   FIXTURE,
   checkMarker,

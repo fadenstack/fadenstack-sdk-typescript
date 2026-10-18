@@ -6,7 +6,7 @@ import { FakeGateway, lastToolResults, type FakeAgent, type FakeGatewayOptions }
 /** About 235 tokens: long enough to be marked under the default threshold of 200. */
 export const LONG = "The delivery for order 4711 arrives on Friday, and the missing part comes with it. ".repeat(11).trim();
 
-/** A web editor that keeps everything inserted, or drops `data-` attributes as Gmail does. */
+/** A web editor (a container: its HTML carries metadata) that keeps everything inserted, or drops `data-` attributes as Gmail does. */
 export class Editor {
   html = "";
   readonly sink: SinkInfo;
@@ -14,7 +14,7 @@ export class Editor {
 
   constructor(dropsDataAttributes = false, carries: readonly string[] = ["html-attribute", "html-title"]) {
     this.#dropsDataAttributes = dropsDataAttributes;
-    this.sink = { kind: "html.editor", carries, readBack: () => this.html };
+    this.sink = { kind: "html.editor", container: true, carries, readBack: () => this.html };
   }
 
   insert(html: string): string {

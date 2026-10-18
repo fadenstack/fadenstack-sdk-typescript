@@ -1,30 +1,31 @@
 import { PROVENANCE_CONTRACT } from "@fadenstack/client";
 
-import { Carriers, type ContentMarker, type MarkOutcome, type PlacedContent, type ProvenanceRecord, type SinkInfo } from "../types.js";
+import { Carriers, type ContentMarker, type ExtensionValue, type MarkOutcome, type PlacedContent, type ProvenanceRecord, type SinkInfo } from "../types.js";
 
 /** The sidecar of `fileName`: `<fileName>.provenance.json`. */
 export function sidecarName(fileName: string): string {
   return `${fileName}.provenance.json`;
 }
 
-/** What a sidecar file holds: that the file is AI-generated, its record's id, and the record as the server signed it. */
+/**
+ * What a sidecar file holds, as compact JSON: the contract, the signed record as the server signed it (`record`,
+ * `signature`, `timestamp`), and the integrator's facts where there are any. The .NET SDK writes the same.
+ */
 export function sidecarDocument(record: ProvenanceRecord): Record<string, unknown> {
+  const facts: Record<string, ExtensionValue> = record.extensions;
   return {
     contract: PROVENANCE_CONTRACT,
-    ai_generated: true,
-    record_id: record.id,
-    edit_kind: record.editKind,
-    digital_source_type: record.digitalSourceType,
-    media_type: record.mediaType,
-    signed_record: record.signed ?? null,
-    extensions: record.extensions,
+    record: record.signed.record,
+    signature: record.signed.signature,
+    ...(record.signed.timestamp ? { timestamp: record.signed.timestamp } : {}),
+    ...(Object.keys(facts).length ? { facts } : {}),
   };
 }
 
 /**
  * For files the agent writes where nothing else fits (a text file, a format with no metadata of its own): the signed
- * record in `<file>.provenance.json` beside the file, written after the file and read back where the sink can be
- * read. The sidecar holds no content and no name but its own.
+ * record in `<file>.provenance.json` beside the file (`sidecarDocument`), written after the file and read back where
+ * the sink can be read. The sidecar holds no content and no name but its own.
  */
 export class SidecarMarker implements ContentMarker {
   readonly name = "sidecar";
@@ -38,14 +39,15 @@ export class SidecarMarker implements ContentMarker {
     const sink = placed.sink.sidecar!;
     if (!sink.fileName || /[\\/]/.test(sink.fileName)) throw new TypeError("A sidecar's fileName is a file's name, without a folder.");
     const name = sidecarName(sink.fileName);
-    await sink.write(name, `${JSON.stringify(sidecarDocument(record), null, 2)}\n`);
-    if (!sink.read) return { applied: true, method: "sidecar", verified: false };
+    await sink.write(name, JSON.stringify(sidecarDocument(record)));
+    if (!sink.read) return { applied: true, method: this.name, verified: false, detail: "not read back" };
     const back = await sink.read(name);
     try {
-      if (back && (JSON.parse(back) as Record<string, unknown>)["record_id"] === record.id) return { applied: true, method: "sidecar" };
+      const doc = back ? (JSON.parse(back) as { record?: { id?: unknown } }) : undefined;
+      if (doc?.record?.id === record.id) return { applied: true, method: this.name, verified: true };
     } catch {
       // not JSON any more: the host changed it
     }
-    return { applied: false, method: "sidecar", reason: "stripped-by-host" };
+    return { applied: false, method: this.name, reason: "stripped-by-host" };
   }
 }

@@ -1,44 +1,79 @@
-import type { LengthClass, ProvenancePolicy } from "@fadenstack/client";
+import { normalizeText, type LengthClass, type ProvenancePolicy } from "@fadenstack/client";
 
-/** A record id as marks carry it: the server's (a UUID), or this device's when the server could not sign. */
-export const RECORD_ID = /^(?:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}|unsigned-[0-9a-f]{32})$/i;
+/** A record id as the server issues them and marks carry them: a UUID. */
+export const RECORD_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 /** The same, inside other text. */
-export const RECORD_ID_IN_TEXT = /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}|unsigned-[0-9a-f]{32}/gi;
+export const RECORD_ID_IN_TEXT = /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/gi;
 
 export function isRecordId(value: unknown): value is string {
   return typeof value === "string" && RECORD_ID.test(value);
 }
 
-/** 32 hex characters. */
-export function localId(): string {
-  return globalThis.crypto.randomUUID().replace(/-/g, "");
+/** The media type without parameters, in lower case: `text/html; charset=utf-8` is `text/html`. */
+export function bareType(mediaType: string): string {
+  return mediaType.split(";")[0]!.trim().toLowerCase();
 }
 
 export function isImage(mediaType: string): boolean {
-  return mediaType.toLowerCase().startsWith("image/");
+  return bareType(mediaType).startsWith("image/");
+}
+
+const CODE_TYPES = new Set([
+  "application/json", "application/xml", "text/xml", "application/javascript", "text/javascript", "application/x-yaml",
+  "application/yaml", "text/yaml", "application/toml", "application/sql", "text/css", "application/x-sh", "application/x-powershell",
+]);
+
+/**
+ * Code and data formats (source code, scripts, JSON, XML, YAML, SQL, CSS): outside what must be marked, as the
+ * guidelines on Art. 50 say (para 68). Recorded as exempt. `text/x-*` (but `text/x-markdown`), `+json`, `+xml` (but
+ * XHTML), and the formats in `CODE_TYPES`; a picture never is (`image/svg+xml`).
+ */
+export function isCode(mediaType: string): boolean {
+  const type = bareType(mediaType);
+  if (type.startsWith("image/")) return false;
+  return (type.startsWith("text/x-") && type !== "text/x-markdown")
+    || type.endsWith("+json")
+    || (type.endsWith("+xml") && type !== "application/xhtml+xml")
+    || CODE_TYPES.has(type);
+}
+
+/** Hiragana and katakana, CJK ideographs (and extension A), Hangul syllables, compatibility ideographs. */
+export function isCjk(code: number): boolean {
+  return (code >= 0x3040 && code <= 0x30ff) || (code >= 0x3400 && code <= 0x4dbf) || (code >= 0x4e00 && code <= 0x9fff)
+    || (code >= 0xac00 && code <= 0xd7af) || (code >= 0xf900 && code <= 0xfaff);
 }
 
 /**
- * Code and data formats (source code, SQL, YAML, JSON, scripts): outside what must be marked, as the guidelines on
- * Art. 50 say (para 68). Recorded as exempt.
+ * About how many tokens a text is, as the gateway estimates: one per CJK character and one per four other
+ * characters (UTF-16 code units, rounded up); the integrator's tokenizer instead, when given.
  */
-export function isCode(mediaType: string): boolean {
-  const type = mediaType.toLowerCase().split(";")[0]!.trim();
-  return (/^(text|application)\/x-/.test(type) && type !== "application/x-www-form-urlencoded")
-    || /\+json$/.test(type)
-    || ["application/json", "application/javascript", "text/javascript", "application/sql", "application/yaml", "text/yaml",
-      "application/toml", "text/css"].includes(type);
+export function tokensOf(text: string, tokenizer?: (text: string) => number): number {
+  if (tokenizer) return tokenizer(text);
+  let cjk = 0;
+  for (let i = 0; i < text.length; i++) if (isCjk(text.charCodeAt(i))) cjk++;
+  return cjk + Math.ceil((text.length - cjk) / 4);
 }
 
-/** About how many tokens a text is: the integrator's tokenizer, or four characters a token (HTML without its tags). */
-export function tokensOf(text: string, mediaType: string, tokenizer?: (text: string) => number): number {
-  const plain = mediaType.toLowerCase().startsWith("text/html") ? text.replace(/<[^>]*>/g, " ").replace(/\s+/g, " ") : text;
-  return tokenizer ? tokenizer(plain) : Math.ceil(plain.trim().length / 4);
+const SENTENCE_MARKS = /[.!?;。！？]/;
+
+/**
+ * A label (guidelines para 68: single words, captions, UI and data labels), which needs no mark: after the
+ * normalisation of hashing (HTML without its tags), empty, or without any sentence mark (`. ! ? ; 。 ！ ？`) and at
+ * most three words and 40 characters -- at most 8 characters for text with CJK characters. "Approved", "Q3 revenue",
+ * `<b>Approved</b>`. Anything that reads as a sentence is marked.
+ */
+export function isLabel(text: string, mediaType = "text/plain"): boolean {
+  const type = bareType(mediaType);
+  const normal = normalizeText(type === "text/html" || type === "application/xhtml+xml" ? text.replace(/<[^>]*>/g, " ") : text);
+  if (normal.length === 0) return true;
+  if (SENTENCE_MARKS.test(normal)) return false;
+  for (let i = 0; i < normal.length; i++) if (isCjk(normal.charCodeAt(i))) return normal.length <= 8;
+  return normal.length <= 40 && normal.split(" ").length <= 3;
 }
 
-/** Short: under the policy's threshold; medium: under five times it; long: more. Bytes: under 1 KiB, 100 KiB, more. */
+/** Text: short under the policy's threshold, medium under five times it, long above. Bytes (pictures, files): long. */
 export function lengthClass(content: string | Uint8Array, tokens: number, policy: Required<ProvenancePolicy>): LengthClass {
-  if (typeof content !== "string") return content.length < 1024 ? "short" : content.length < 100 * 1024 ? "medium" : "long";
+  if (typeof content !== "string") return "long";
   const threshold = policy.short_text_tokens;
   return tokens < threshold ? "short" : tokens < 5 * threshold ? "medium" : "long";
 }
@@ -55,6 +90,7 @@ export function escapeHtml(text: string): string {
   return text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 }
 
+/** Text for an attribute's value in double quotes: `&`, `<`, `>` and `"` escaped, nothing else. */
 export function escapeAttribute(text: string): string {
   return escapeHtml(text).replace(/"/g, "&quot;");
 }
@@ -81,4 +117,9 @@ export function indexOfAscii(bytes: Uint8Array, needle: string, from = 0): numbe
     return i;
   }
   return -1;
+}
+
+/** The newline a text uses: CRLF when it has any, else LF. */
+export function newlineOf(text: string): string {
+  return text.includes("\r\n") ? "\r\n" : "\n";
 }

@@ -7,6 +7,7 @@ import {
   receiptIdOf,
   textSha256,
   type EditKind,
+  type GovernanceNotice,
   type LayerOutcome,
   type MarkLayer,
   type PlacementReport,
@@ -16,13 +17,15 @@ import {
   type SignedRecord,
 } from "@fadenstack/client";
 
-import { dataUrlBytes, isCode, isImage, lengthClass, localId, tokensOf } from "./content.js";
+import { dataUrlBytes, isCode, isImage, isLabel, isRecordId, lengthClass, tokensOf } from "./content.js";
 import { inspectImage } from "./markers/imageGuard.js";
+import { SIGNED_RECORD_METHOD } from "./markers/serverSigned.js";
 import { watermarkOf } from "./markers/watermarkStatus.js";
-import { findPersonalData } from "./personalData.js";
+import { findPersonalData, type PersonalDataFinding } from "./personalData.js";
 import type {
   ContentMarker,
   EditClassifier,
+  ExemptReason,
   ExtensionValue,
   MarkableContent,
   MarkOutcome,
@@ -65,14 +68,15 @@ export type Insert<T> = (marked: MarkableContent, signal: AbortSignal) => T | Pr
 
 /** What the pipeline is made of: the module's options, settled. */
 export interface PipelineSettings {
+  /** The markers, the built-ins first: a label marker among them is always used. */
   readonly markers: readonly ContentMarker[];
-  /** Label markers used only while the policy asks for a visible label. */
+  /** The label marker used while the policy asks for a visible label and `markers` has none. */
   readonly policyLabels: readonly ContentMarker[];
   readonly classifier: EditClassifier | undefined;
   readonly enrichers: readonly RecordEnricher[];
   readonly observers: readonly PlacementObserver[];
   readonly tokenizer: ((text: string) => number) | undefined;
-  /** A marker's error fails the placement (after it is recorded), rather than only being recorded. */
+  /** Declared content a tool did not place fails the call (`ProvenanceUnmarkedError`) rather than only being recorded. */
   readonly development: boolean;
 }
 
@@ -80,6 +84,8 @@ export interface PipelineSettings {
 export interface PlaceContext {
   readonly tool: string;
   readonly callId?: string;
+  /** The argument the tool's `output` declares. */
+  readonly argument?: string;
   /** The kind the tool's `output` declares for this call. */
   readonly declaredEditKind?: EditKind;
   /** The receipt of the answer that made the call. */
@@ -91,23 +97,54 @@ export interface PlaceContext {
   readonly backend: ProvenanceBackend;
   /** Writes the module's transcript entries. */
   record?(type: string, data: Record<string, unknown>): Promise<void>;
+  /** Raises a notice for the user. */
+  notice?(notice: GovernanceNotice): Promise<void>;
   /** A placement report that could not be sent. */
   reportFailed?(error: unknown): void;
 }
 
 const SIGN_TIMEOUT_MS = 15_000;
 const REPORT_TIMEOUT_MS = 10_000;
-const NAMESPACE = /^[a-z][a-z0-9-]*(\.[a-z0-9-]+)+$/;
+/** A reverse domain name of the integrator's own: `com.example`. */
+const NAMESPACE = /^[a-z0-9]+(-[a-z0-9]+)*(\.[a-z0-9]+(-[a-z0-9]+)*)+$/;
 /** Namespaces of the record's own vocabulary, which no enricher may write into. */
-const RESERVED_NAMESPACE = /^(c2pa|stds|org\.iptc|com\.fadenstack)(\.|$)/;
-const EXTENSION_KEY = /^[A-Za-z0-9_-]{1,64}$/;
+const RESERVED = ["c2pa", "stds", "iptc", "org.iptc", "com.fadenstack", "fadenstack", "provenance"];
+const FACT_NAME = /^[A-Za-z0-9_.-]{1,64}$/;
+
+/** The methods of the outcomes the pipeline reports itself. */
+const Methods = {
+  /** Exempt content: no record made. */
+  exempt: "record",
+  /** A container no host marker fits. */
+  host: "host",
+  label: "visible-label",
+  c2pa: "c2pa",
+} as const;
+
+/** A layer outcome with its detail, and whether it can count for its layer (the server's record is no mark in the content). */
+interface Outcome extends LayerOutcome {
+  detail?: string;
+  /** False for an outcome that cannot make its layer held: the server's record. */
+  counts: boolean;
+}
+
+interface Needs {
+  metadata: boolean;
+  watermark: boolean;
+  label: boolean;
+}
 
 /**
- * Places content and marks it (12 §6): exempt content (an exempt edit kind, code, short text) is put in as it is and
- * recorded as exempt. Other content gets a record the server signs by the content's hash, the markers that fit the
- * sink prepare it, the host inserts it, the markers attach their marks and say whether they held, and the placement
- * is recorded and reported -- which layers held, and why the others did not. With the policy's `on_missing: refuse`,
- * content a layer it needs is not possible for is not placed at all.
+ * Places content and marks it (12 §6), in this order: the policy; the edit kind (the request's, else the tool's
+ * declared output's, else `generated`, then the classifier); content exempt from marking (`internal-technical`, an
+ * exempt `edit-kind`, `code`, a `label`) is put in as it is, with no record, and recorded as exempt. Other content:
+ * the markers that fit the sink; the layers it needs (signed metadata in a container or for a picture, the watermark
+ * for text from the short-text threshold and for pictures, the label while the policy asks for one) are checked as
+ * far as they can be before anything is signed; the server signs a record by the content's hash; the markers prepare
+ * the content (only with a signed record: no mark carries an id the server does not know); the host inserts it; the
+ * markers attach their marks and say whether they held; the placement is recorded and reported -- which layers held,
+ * and why the others did not. With the policy's `on_missing: refuse`, content a needed layer is not possible for is
+ * not placed, nothing is signed or reported, and the refusal is recorded and told to the user.
  */
 export async function placeContent<T>(settings: PipelineSettings, request: PlaceRequest, insert: Insert<T>, ctx: PlaceContext): Promise<Placement<T>> {
   checkRequest(request);
@@ -120,159 +157,179 @@ export async function placeContent<T>(settings: PipelineSettings, request: Place
     if (!bytes) throw new TypeError("A picture is placed as its bytes, or a data: URL of them.");
     content = bytes;
   }
+  const text = typeof content === "string" ? content : undefined;
   const policy = await ctx.policy();
   const declared = request.editKind ?? ctx.declaredEditKind ?? "generated";
-  const { kind: editKind, reason: editReason } = await classify(settings.classifier, policy, {
+  const { kind: editKind, classified } = await classify(settings.classifier, policy, {
     tool: ctx.tool, declared, mediaType, content, original: request.original,
   });
-  const tokens = typeof content === "string" ? tokensOf(content, mediaType, settings.tokenizer) : 0;
-  const base: Omit<Done, "layers" | "missing" | "record" | "exempt" | "dropped" | "errors"> = {
-    tool: ctx.tool, sink, mediaType, editKind, declared, editReason, length: lengthClass(content, tokens, policy),
-  };
-  const required = requiredLayers(sink, mediaType, policy);
-
-  const exempt: ReasonCode | undefined =
-    policy.exempt_edit_kinds.includes(editKind) || isCode(mediaType) || policy.internal_technical ? "exempt-edit"
-    : typeof content === "string" && tokens < policy.short_text_tokens ? "short-text"
-    : undefined;
-  if (exempt) {
-    const result = await insert({ content, mediaType, sink }, signal);
-    const layers = required.filter((l) => l !== "label").map((layer): LayerOutcome => ({ layer, method: "none", applied: false, reason: exempt }));
-    return finish(settings, ctx, result, { ...base, layers, missing: [], record: undefined, exempt, dropped: [], errors: [] });
-  }
-
-  // What the content needs, checked before anything is signed or placed.
+  const tokens = text !== undefined ? tokensOf(text, settings.tokenizer) : 0;
+  const shortText = text !== undefined && tokens < policy.short_text_tokens;
   // A picture has its own receipt, from the answer that made it; the chat answer's receipt is the text's.
   const receipt: ReceiptNote | undefined = request.receiptId ? { status: "reference", receiptId: request.receiptId }
     : isImage(mediaType) ? undefined : ctx.receipt;
   const receiptId = receiptIdOf(receipt);
-  const markers = [...settings.markers, ...(policy.visible_label ? settings.policyLabels : [])]
-    .filter((m) => supports(m, sink, mediaType))
-    .sort((a, b) => MARK_LAYERS.indexOf(a.layer) - MARK_LAYERS.indexOf(b.layer));
-  const watermark = watermarkOf({ receipt, receiptId }, mediaType, content);
+  const { facts, dropped } = await enrich(settings.enrichers, { tool: ctx.tool, sinkKind: sink.kind, mediaType, editKind });
+  const base: Base = {
+    tool: ctx.tool, argument: ctx.argument, sink, mediaType, editKind, classified, length: lengthClass(content, tokens, policy),
+    receiptId, facts, dropped,
+  };
+
+  const exemptBecause = exemptReason(editKind, mediaType, text, policy);
+  if (exemptBecause) {
+    const result = await insert({ content, mediaType, sink }, signal);
+    const layers: Outcome[] = [{ layer: "metadata", method: Methods.exempt, applied: false, reason: "exempt-edit", detail: exemptBecause, counts: true }];
+    return finish(settings, ctx, result, { ...base, layers, missing: [], signed: undefined, exemptBecause });
+  }
+
+  const own = settings.markers.filter((m) => supports(m, sink, mediaType));
+  const labels = policy.visible_label && !own.some((m) => m.layer === "label")
+    ? settings.policyLabels.filter((m) => supports(m, sink, mediaType)) : [];
+  const markers = [...own, ...labels].sort((a, b) => MARK_LAYERS.indexOf(a.layer) - MARK_LAYERS.indexOf(b.layer));
+  const hostMarkers = markers.filter((m) => m.layer === "metadata" && m.carrier !== false);
+  const needs: Needs = {
+    metadata: isImage(mediaType) || sink.container === true,
+    watermark: isImage(mediaType) || (text !== undefined && !shortText),
+    label: policy.visible_label && text !== undefined,
+  };
+  const watermark = watermarkOf(receipt, mediaType, shortText);
+
+  // What the content needs, checked before anything is signed or placed.
   const before: MissingLayer[] = [];
-  if (required.includes("metadata")) {
-    if (isImage(mediaType)) {
-      if (!(content instanceof Uint8Array && inspectImage(content).c2pa)) before.push({ layer: "metadata", reason: "stripped-by-host" });
-    } else if (!markers.some((m) => m.layer === "metadata" && m.carrier !== false)) {
-      before.push({ layer: "metadata", reason: "sink-cannot-carry" });
+  if (needs.metadata) {
+    if (isImage(mediaType) && !(content instanceof Uint8Array && inspectImage(content).c2pa)) {
+      before.push({ layer: "metadata", method: Methods.c2pa, reason: "stripped-by-host" });
+    } else if (hostMarkers.length === 0) {
+      before.push({ layer: "metadata", method: Methods.host, reason: "sink-cannot-carry" });
     }
   }
-  if (required.includes("watermark") && !watermark.applied) before.push({ layer: "watermark", reason: watermark.reason });
-  if (required.includes("label") && !markers.some((m) => m.layer === "label")) before.push({ layer: "label", reason: "sink-cannot-carry" });
+  if (needs.watermark && !watermark.applied) before.push({ layer: "watermark", method: watermark.method, reason: watermark.reason });
+  if (needs.label && !markers.some((m) => m.layer === "label")) before.push({ layer: "label", method: Methods.label, reason: "sink-cannot-carry" });
   if (policy.on_missing === "refuse" && before.length) await refuse(ctx, base, before);
 
-  const sha = typeof content === "string" ? await textSha256(content) : await bytesSha256(content);
-  const model = receipt?.status === "signed" ? receipt.receipt.model.id : ctx.model;
-  let signed: SignedRecord | undefined;
-  try {
-    signed = await ctx.backend.signRecord({
-      content_sha256: sha, media_type: mediaType, edit_kind: editKind,
-      ...(receiptId !== undefined ? { receipt_id: receiptId } : {}),
-      ...(model ? { model } : {}),
-    }, AbortSignal.any([signal, AbortSignal.timeout(SIGN_TIMEOUT_MS)]));
-  } catch (error) {
-    if (signal.aborted) throw signal.reason ?? error;
+  const signed = await sign(ctx, content, mediaType, editKind, receipt, receiptId);
+  if (!signed) {
+    const unsigned: MissingLayer[] = [];
+    if (needs.metadata && !before.some((m) => m.layer === "metadata")) {
+      unsigned.push({ layer: "metadata", method: SIGNED_RECORD_METHOD, reason: "server-unavailable" });
+    }
+    if (needs.label && !before.some((m) => m.layer === "label")) unsigned.push({ layer: "label", method: Methods.label, reason: "server-unavailable" });
+    if (policy.on_missing === "refuse" && unsigned.length) await refuse(ctx, base, unsigned);
   }
-  if (!signed && !isImage(mediaType) && required.includes("metadata") && !before.some((m) => m.layer === "metadata")) {
-    before.push({ layer: "metadata", reason: "server-unavailable" });
-  }
-  if (policy.on_missing === "refuse" && before.length) await refuse(ctx, base, before);
 
-  const { extensions, dropped } = await enrich(settings.enrichers, { tool: ctx.tool, sinkKind: sink.kind, mediaType, editKind });
-  const record: ProvenanceRecord = Object.freeze({
-    id: signed?.record.id ?? `unsigned-${localId()}`,
+  const record: ProvenanceRecord | undefined = signed && Object.freeze({
+    id: signed.record.id,
     signed,
     editKind,
     digitalSourceType: digitalSourceType(editKind),
     mediaType,
-    createdAt: signed?.record.created_at ?? new Date().toISOString(),
-    model: signed?.record.model?.id ?? model,
+    createdAt: signed.record.created_at,
+    model: signed.record.model?.id ?? undefined,
     receipt,
     receiptId,
     watermark: receipt?.status === "signed" ? receipt.receipt.watermark : undefined,
-    extensions: Object.freeze(extensions),
+    extensions: Object.freeze({ ...facts }),
   });
 
-  const errors = new Map<ContentMarker, unknown>();
+  const failures = new Map<ContentMarker, string>();
   let marked: MarkableContent = { content, mediaType, sink };
-  for (const marker of markers) {
-    if (!marker.prepare) continue;
-    try {
-      marked = await marker.prepare(marked, record, signal);
-    } catch (error) {
-      if (signal.aborted) throw signal.reason ?? error;
-      errors.set(marker, error);
+  if (record) {
+    for (const marker of markers) {
+      if (!marker.prepare) continue;
+      try {
+        marked = await marker.prepare(marked, record, signal);
+      } catch (error) {
+        if (signal.aborted) throw signal.reason ?? error;
+        failures.set(marker, errorName(error));
+      }
     }
   }
   const result = await insert(marked, signal);
-  let readBack: Promise<string | Uint8Array | undefined> | undefined;
-  const placed: PlacedContent = { ...marked, result, readBack: () => (readBack ??= readSink(sink, signal)) };
-  const outcomes: { marker: ContentMarker; outcome: MarkOutcome }[] = [];
-  for (const marker of markers) {
-    let outcome: MarkOutcome | undefined;
-    if (errors.has(marker)) outcome = { applied: false, method: marker.name };
-    else if (marker.attach) {
-      try {
-        outcome = await marker.attach(placed, record, signal);
-      } catch (error) {
-        if (signal.aborted) throw signal.reason ?? error;
-        errors.set(marker, error);
-        outcome = { applied: false, method: marker.name };
+  const outcomes: Outcome[] = [];
+  if (record) {
+    let readBack: Promise<string | Uint8Array | undefined> | undefined;
+    const placed: PlacedContent = { ...marked, result, shortText, readBack: () => (readBack ??= readSink(sink, signal)) };
+    for (const marker of markers) {
+      const counts = !(marker.layer === "metadata" && marker.carrier === false);
+      const failed = (name: string): Outcome => ({ layer: marker.layer, method: marker.name, applied: false, detail: `failed: ${name}`, counts });
+      if (failures.has(marker)) {
+        outcomes.push(failed(failures.get(marker)!));
+      } else if (marker.attach) {
+        try {
+          outcomes.push(toOutcome(marker.layer, await marker.attach(placed, record, signal), counts));
+        } catch (error) {
+          if (signal.aborted) throw signal.reason ?? error;
+          outcomes.push(failed(errorName(error)));
+        }
+      } else if (marker.prepare) {
+        outcomes.push({ layer: marker.layer, method: marker.name, applied: true, verified: false, detail: "not read back", counts });
       }
-    } else if (marker.prepare) outcome = { applied: true, method: marker.name, verified: false };
-    if (outcome) outcomes.push({ marker, outcome });
+    }
   }
 
-  const layers: LayerOutcome[] = outcomes.map(({ marker, outcome }) => ({
-    layer: marker.layer,
-    method: outcome.verified === false ? `${outcome.method}:unverified` : outcome.method,
-    applied: outcome.applied,
-    ...(outcome.reason ? { reason: outcome.reason } : {}),
-  }));
-  const missing: MissingLayer[] = [];
-  for (const layer of required) {
-    const counted = outcomes.filter(({ marker }) => marker.layer === layer && (layer !== "metadata" || marker.carrier !== false));
-    // Metadata is signed metadata: a host mark of a record the server could not sign flags the content, and no more.
-    const unsigned = layer === "metadata" && !isImage(mediaType) && !signed;
-    const held = !unsigned
-      && (counted.some(({ outcome }) => outcome.applied) || (layer === "watermark" && counted.length === 0 && watermark.applied));
-    if (held) continue;
-    const reason = unsigned ? "server-unavailable"
-      : counted.find(({ outcome }) => outcome.reason)?.outcome.reason ?? before.find((m) => m.layer === layer)?.reason;
-    missing.push({ layer, reason });
-    if (counted.length === 0) layers.push({ layer, method: "none", applied: false, ...(reason ? { reason } : {}) });
+  // What the pipeline knows itself: no record, no host marker, the watermark when no marker said.
+  if (!record) {
+    outcomes.push({ layer: "metadata", method: SIGNED_RECORD_METHOD, applied: false, reason: "server-unavailable", counts: true });
+  } else if (hostMarkers.length === 0) {
+    outcomes.push({ layer: "metadata", method: Methods.host, applied: false, reason: "sink-cannot-carry", counts: true });
   }
-  const placement = await finish(settings, ctx, result, {
-    ...base, layers, missing, record, exempt: undefined, dropped, errors: [...errors.keys()].map((m) => m.name),
-  });
-  if (settings.development && errors.size) throw [...errors.values()][0];
-  return placement;
+  if ((text !== undefined || isImage(mediaType)) && !outcomes.some((o) => o.layer === "watermark")) {
+    outcomes.push(toOutcome("watermark", watermark, true));
+  }
+  for (const layer of ["metadata", "watermark", "label"] as const) {
+    const missing = before.find((m) => m.layer === layer);
+    if (needs[layer] && missing && !outcomes.some((o) => o.layer === layer && o.counts)) {
+      outcomes.push({ layer, method: missing.method, applied: false, ...(missing.reason ? { reason: missing.reason } : {}), counts: true });
+    }
+  }
+  if (!record && needs.label && !outcomes.some((o) => o.layer === "label")) {
+    outcomes.push({ layer: "label", method: Methods.label, applied: false, reason: "server-unavailable", counts: true });
+  }
+  const layers = sortByLayer(outcomes);
+
+  const missing: MissingLayer[] = [];
+  for (const layer of ["metadata", "watermark", "label"] as const) {
+    if (!needs[layer]) continue;
+    const ofLayer = layers.filter((o) => o.layer === layer && o.counts);
+    if (ofLayer.some((o) => o.applied)) continue;
+    const lost = ofLayer.find((o) => o.reason) ?? ofLayer[0];
+    const known = before.find((m) => m.layer === layer);
+    missing.push(lost ? { layer, method: lost.method, reason: lost.reason ?? undefined } : known ?? { layer, method: "none", reason: undefined });
+  }
+  return finish(settings, ctx, result, { ...base, layers, missing, signed, exemptBecause: undefined });
 }
 
-/** What a placement ends with, to record and report. */
-interface Done {
+/** What every placement knows before it is marked. */
+interface Base {
   tool: string;
+  argument: string | undefined;
   sink: SinkInfo;
   mediaType: string;
   editKind: EditKind;
-  declared: EditKind;
-  editReason: string | undefined;
+  classified: Classified | undefined;
   length: PlacementReport["length_class"];
-  layers: LayerOutcome[];
-  missing: MissingLayer[];
-  record: ProvenanceRecord | undefined;
-  exempt: ReasonCode | undefined;
+  receiptId: string | undefined;
+  facts: Record<string, ExtensionValue>;
   dropped: string[];
-  errors: string[];
+}
+
+/** What a placement ends with, to record and report. */
+interface Done extends Base {
+  layers: Outcome[];
+  missing: MissingLayer[];
+  signed: SignedRecord | undefined;
+  exemptBecause: ExemptReason | undefined;
 }
 
 /** Reports the placement, writes its transcript entry, tells the observers; a report that fails never fails it. */
 async function finish<T>(settings: PipelineSettings, ctx: PlaceContext, result: T, done: Done): Promise<Placement<T>> {
-  const recordId = done.record?.id ?? `exempt-${localId()}`;
+  const recordId = done.signed?.record.id;
+  const layers: LayerOutcome[] = done.layers.map(({ layer, method, applied, reason, verified }) => ({
+    layer, method, applied, ...(reason ? { reason } : {}), ...(verified !== undefined && verified !== null ? { verified } : {}),
+  }));
   const report: PlacementReport = {
-    record_id: recordId, tool: done.tool, sink_kind: done.sink.kind, media_type: done.mediaType, edit_kind: done.editKind,
-    length_class: done.length, layers: done.layers,
+    ...(recordId ? { record_id: recordId } : {}), tool: done.tool, sink_kind: done.sink.kind, media_type: done.mediaType,
+    edit_kind: done.editKind, length_class: done.length, layers: layers.slice(0, 32),
   };
   let reported = true;
   try {
@@ -284,25 +341,28 @@ async function finish<T>(settings: PipelineSettings, ctx: PlaceContext, result: 
   await ctx.record?.(ProvenanceEntryTypes.placed, {
     call_id: ctx.callId ?? null,
     tool: done.tool,
-    record_id: recordId,
-    signed: done.record?.signed !== undefined,
-    exempt: done.exempt !== undefined,
-    reason: done.exempt ?? null,
+    argument: done.argument ?? null,
+    record_id: recordId ?? null,
+    signed: done.signed !== undefined,
+    receipt_id: done.receiptId ?? null,
     sink_kind: done.sink.kind,
     media_type: done.mediaType,
     edit_kind: done.editKind,
-    ...(done.declared !== done.editKind ? { declared_edit_kind: done.declared, edit_reason: done.editReason ?? null } : {}),
     length_class: done.length,
-    receipt_id: done.record?.receiptId ?? null,
-    layers: done.layers.map((l) => ({ ...l, reason: l.reason ?? null })),
-    missing: done.missing.map((m) => ({ layer: m.layer, reason: m.reason ?? null })),
+    exempt: done.exemptBecause !== undefined,
+    exempt_because: done.exemptBecause ?? null,
+    classified: done.classified ?? null,
+    layers: done.layers.map((l) => ({
+      layer: l.layer, method: l.method, applied: l.applied, reason: l.reason ?? null, verified: l.verified ?? null, detail: l.detail ?? null,
+    })),
+    missing: done.missing.map((m) => ({ layer: m.layer, method: m.method, reason: m.reason ?? null })),
     reported,
-    ...(done.errors.length ? { marker_errors: done.errors } : {}),
-    ...(done.dropped.length ? { dropped_extensions: done.dropped } : {}),
+    facts: Object.keys(done.facts).length ? done.facts : null,
+    dropped_facts: done.dropped.length ? done.dropped : null,
   });
   const observed = Object.freeze({
-    report: Object.freeze(structuredClone(report)), callId: ctx.callId, signed: done.record?.signed !== undefined,
-    exempt: done.exempt !== undefined, missing: Object.freeze([...done.missing]),
+    report: Object.freeze(structuredClone(report)), callId: ctx.callId, signed: done.signed !== undefined,
+    exempt: done.exemptBecause !== undefined, exemptBecause: done.exemptBecause, missing: Object.freeze([...done.missing]),
   });
   for (const observer of settings.observers) {
     try {
@@ -312,90 +372,168 @@ async function finish<T>(settings: PipelineSettings, ctx: PlaceContext, result: 
     }
   }
   return Object.freeze({
-    result, recordId, signed: done.record?.signed !== undefined, exempt: done.exempt !== undefined, reason: done.exempt,
-    editKind: done.editKind, layers: Object.freeze([...done.layers]), missing: Object.freeze([...done.missing]),
+    result, recordId, signed: done.signed !== undefined, exempt: done.exemptBecause !== undefined,
+    reason: done.exemptBecause ? "exempt-edit" as const : undefined, exemptBecause: done.exemptBecause,
+    editKind: done.editKind, layers: Object.freeze(layers), missing: Object.freeze([...done.missing]),
   });
 }
 
-/** Records the refusal and throws it, with why in words the model can pass on. */
-async function refuse(ctx: PlaceContext, base: Pick<Done, "tool" | "sink" | "mediaType" | "editKind">, missing: MissingLayer[]): Promise<never> {
+/** Records the refusal, tells the user, and throws it with why in words the model can pass on. Nothing is reported. */
+async function refuse(ctx: PlaceContext, base: Base, missing: MissingLayer[]): Promise<never> {
+  const message = refusalMessage(missing);
   await ctx.record?.(ProvenanceEntryTypes.refused, {
-    call_id: ctx.callId ?? null, tool: base.tool, sink_kind: base.sink.kind, media_type: base.mediaType, edit_kind: base.editKind,
-    missing: missing.map((m) => ({ layer: m.layer, reason: m.reason ?? null })),
+    call_id: ctx.callId ?? null, tool: base.tool, argument: base.argument ?? null, sink_kind: base.sink.kind, media_type: base.mediaType,
+    edit_kind: base.editKind, length_class: base.length,
+    missing: missing.map((m) => ({ layer: m.layer, method: m.method, reason: m.reason ?? null })),
   });
-  throw new ProvenanceRefusedError(refusalMessage(missing), missing);
+  await ctx.notice?.({ outcome: "provenance_refused", stage: "tool", category: "provenance", message });
+  throw new ProvenanceRefusedError(message, missing);
 }
 
-/** Why content was not placed, for the model and the user. */
+/** Why content was not placed, for the model and the user (the .NET SDK says the same). */
 export function refusalMessage(missing: readonly MissingLayer[]): string {
-  const why = missing.map((m) => `its ${m.layer} layer (${REASONS[m.reason ?? "unknown"] ?? REASONS["unknown"]})`);
-  return `Not placed: this agent's policy places content made with AI only with every mark it needs, and ${why.join(" and ")} `
-    + "is not possible here. Nothing was written; tell the user why.";
+  const why = [...new Set(missing.map(reasonText))];
+  return `Not written: this agent only places content it can mark as AI-generated, and here ${why.join("; ")}.`;
 }
 
-const REASONS: Record<string, string> = {
-  "sink-cannot-carry": "this place cannot carry a mark",
-  "stripped-by-host": "the host removed the mark",
-  "server-unavailable": "the server could not sign the record",
-  "runtime-without-watermark": "the model's runtime does not watermark text",
-  "no-watermark-remote-model": "the remote model's text carries no watermark",
-  "no-watermark-greedy": "text written at temperature 0 carries no watermark",
-  unknown: "it could not be checked",
-};
+function reasonText(m: MissingLayer): string {
+  if (m.layer === "watermark") {
+    if (m.method === "trustmark") return "the picture carries no watermark of this installation";
+    switch (m.reason) {
+      case undefined: return "it is not known whether the text carries the model's watermark";
+      case "no-watermark-remote-model": return "the text comes from a remote model without a watermark";
+      case "no-watermark-greedy": return "the text was generated without a watermark (greedy decoding)";
+      case "runtime-without-watermark": return "the model's runtime does not watermark text";
+      case "server-unavailable": return "the answer's receipt could not be signed";
+      default: return "the text carries no watermark";
+    }
+  }
+  switch (m.reason) {
+    case "server-unavailable": return "the provenance service could not sign a record of it";
+    case "sink-cannot-carry": return m.layer === "label" ? "this place cannot show a visible label" : "this place cannot carry a machine-readable mark";
+    case "stripped-by-host": return "the picture lost its signed metadata before it was placed";
+    default: return "it could not be marked";
+  }
+}
 
-/** The layers content needs where it lands: a container or a picture two (metadata and watermark), free text the watermark. */
-function requiredLayers(sink: SinkInfo, mediaType: string, policy: Required<ProvenancePolicy>): MarkLayer[] {
-  const container = isImage(mediaType) || (sink.container ?? sink.carries.length > 0);
-  const layers: MarkLayer[] = container ? ["metadata", "watermark"] : ["watermark"];
-  if (policy.visible_label && !isImage(mediaType)) layers.push("label");
-  return layers;
+/** Why content needs no mark at all, in this order; undefined when it needs marking. */
+function exemptReason(editKind: EditKind, mediaType: string, text: string | undefined, policy: Required<ProvenancePolicy>): ExemptReason | undefined {
+  return policy.internal_technical ? "internal-technical"
+    : policy.exempt_edit_kinds.includes(editKind) ? "edit-kind"
+    : isCode(mediaType) ? "code"
+    : text !== undefined && isLabel(text, mediaType) ? "label"
+    : undefined;
+}
+
+/** The server's signed record of the placement, by the content's hash only; undefined when it did not sign one. */
+async function sign(
+  ctx: PlaceContext, content: string | Uint8Array, mediaType: string, editKind: EditKind, receipt: ReceiptNote | undefined,
+  receiptId: string | undefined,
+): Promise<SignedRecord | undefined> {
+  const sha = typeof content === "string" ? await textSha256(content) : await bytesSha256(content);
+  // The agent's model writes its text, not its pictures.
+  const model = receipt?.status === "signed" && receipt.receipt.model.id ? receipt.receipt.model.id : isImage(mediaType) ? undefined : ctx.model;
+  try {
+    const signed = await ctx.backend.signRecord({
+      content_sha256: sha, media_type: mediaType, edit_kind: editKind,
+      ...(receiptId !== undefined ? { receipt_id: receiptId } : {}),
+      ...(model ? { model } : {}),
+    }, AbortSignal.any([ctx.signal, AbortSignal.timeout(SIGN_TIMEOUT_MS)]));
+    // Marks carry the id: one that is not the server's kind of id is no record to carry.
+    return isRecordId(signed?.record?.id) ? signed : undefined;
+  } catch (error) {
+    if (ctx.signal.aborted) throw ctx.signal.reason ?? error;
+    return undefined;
+  }
+}
+
+/** The outcome as reported, with what only the transcript keeps. */
+function toOutcome(layer: MarkLayer, outcome: MarkOutcome, counts: boolean): Outcome {
+  return {
+    layer, method: outcome.method, applied: outcome.applied,
+    ...(!outcome.applied && outcome.reason ? { reason: outcome.reason } : {}),
+    ...(outcome.applied && outcome.verified !== undefined ? { verified: outcome.verified } : {}),
+    ...(outcome.detail ? { detail: outcome.detail } : {}),
+    counts,
+  };
+}
+
+function sortByLayer(outcomes: Outcome[]): Outcome[] {
+  return outcomes.map((o, i) => ({ o, i }))
+    .sort((a, b) => MARK_LAYERS.indexOf(a.o.layer) - MARK_LAYERS.indexOf(b.o.layer) || a.i - b.i)
+    .map(({ o }) => o);
+}
+
+/** The classifier's decision, as the transcript keeps it: on the device only. */
+interface Classified {
+  from: EditKind;
+  to: EditKind;
+  reason: string | null;
 }
 
 async function classify(
   classifier: EditClassifier | undefined,
   policy: Required<ProvenancePolicy>,
   input: { tool: string; declared: EditKind; mediaType: string; content: string | Uint8Array; original: string | undefined },
-): Promise<{ kind: EditKind; reason: string | undefined }> {
-  if (!classifier) return { kind: input.declared, reason: undefined };
-  const decision = await classifier.classify(input);
-  if (!decision || !isEditKind(decision.kind) || decision.kind === input.declared) return { kind: input.declared, reason: undefined };
-  const reason = decision.reason?.trim().slice(0, 200) || undefined;
+): Promise<{ kind: EditKind; classified: Classified | undefined }> {
+  const declared = input.declared;
+  if (!classifier || typeof input.content !== "string") return { kind: declared, classified: undefined };
+  let decision;
+  try {
+    decision = await classifier.classify(input);
+  } catch {
+    return { kind: declared, classified: { from: declared, to: declared, reason: "the classifier failed" } };
+  }
+  if (!decision || !isEditKind(decision.kind) || decision.kind === declared) return { kind: declared, classified: undefined };
+  const reason = decision.reason?.trim().slice(0, 200) || null;
   // Lowering to an exempt kind needs a reason; without one the tool's kind stands.
-  const lowers = policy.exempt_edit_kinds.includes(decision.kind) && !policy.exempt_edit_kinds.includes(input.declared);
-  return lowers && !reason ? { kind: input.declared, reason: undefined } : { kind: decision.kind, reason };
+  const lowers = policy.exempt_edit_kinds.includes(decision.kind) && !policy.exempt_edit_kinds.includes(declared);
+  if (lowers && !reason) return { kind: declared, classified: { from: declared, to: declared, reason: `${decision.kind} without a reason: not taken` } };
+  return { kind: decision.kind, classified: { from: declared, to: decision.kind, reason } };
 }
 
-/** The enrichers' facts under their namespaces; what is malformed or looks personal is dropped and named. */
+const PERSONAL: Record<PersonalDataFinding["kind"], string> = {
+  email: "e-mail address", phone: "phone number", iban: "IBAN", "ip-address": "IP address", known: "a known value",
+};
+
+/**
+ * The enrichers' facts under their namespaces (`com.example.matter`); what is outside, malformed, too long or looks
+ * personal is dropped and said why, as the .NET SDK says it.
+ */
 async function enrich(
   enrichers: readonly RecordEnricher[],
   context: { tool: string; sinkKind: string; mediaType: string; editKind: EditKind },
-): Promise<{ extensions: Record<string, ExtensionValue>; dropped: string[] }> {
-  const extensions: Record<string, ExtensionValue> = {};
+): Promise<{ facts: Record<string, ExtensionValue>; dropped: string[] }> {
+  const facts: Record<string, ExtensionValue> = {};
   const dropped: string[] = [];
   for (const enricher of enrichers) {
-    const namespace = enricher.namespace;
-    if (!NAMESPACE.test(namespace) || RESERVED_NAMESPACE.test(namespace)) {
-      dropped.push(`${namespace}.*`);
+    const space = enricher.namespace?.trim() ?? "";
+    if (!NAMESPACE.test(space) || RESERVED.some((r) => space === r || space.startsWith(`${r}.`))) {
+      dropped.push(`${space}: not a namespace of the integrator's own`);
       continue;
     }
-    let facts: Record<string, ExtensionValue> | undefined;
+    let given: Record<string, ExtensionValue> | undefined;
     try {
-      facts = await enricher.enrich(Object.freeze({ ...context }));
-    } catch {
-      dropped.push(`${namespace}.*`);
+      given = await enricher.enrich(Object.freeze({ ...context }));
+    } catch (error) {
+      dropped.push(`${space}: failed (${errorName(error)})`);
       continue;
     }
-    for (const [key, value] of Object.entries(facts ?? {})) {
-      const name = `${namespace}.${key}`;
+    for (const [key, value] of Object.entries(given ?? {})) {
+      const name = `${space}.${key}`;
       const scalar = typeof value === "string" || typeof value === "boolean" || (typeof value === "number" && Number.isFinite(value));
-      if (!EXTENSION_KEY.test(key) || !scalar || String(value).length > 200 || findPersonalData(String(value)).length) {
-        dropped.push(name);
-        continue;
-      }
-      extensions[name] = value;
+      const found = scalar ? findPersonalData(String(value))[0] : undefined;
+      if (!FACT_NAME.test(key)) dropped.push(`${name}: outside ${space}`);
+      else if (!scalar || String(value).length === 0 || String(value).length > 200) dropped.push(`${name}: empty or longer than 200 characters`);
+      else if (found) dropped.push(`${name}: looks like personal data (${PERSONAL[found.kind]})`);
+      else facts[name] = value;
     }
   }
-  return { extensions, dropped };
+  return { facts, dropped };
+}
+
+function errorName(error: unknown): string {
+  return error instanceof Error ? error.name : typeof error;
 }
 
 function supports(marker: ContentMarker, sink: SinkInfo, mediaType: string): boolean {

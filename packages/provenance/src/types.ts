@@ -16,9 +16,12 @@ import type {
  * may name its own (`crm-field`).
  */
 export const Carriers = {
-  /** A `data-ai-generated` attribute on an element (TinyMCE and CKEditor 5 keep it). */
+  /**
+   * HTML the content is wrapped in, with `data-ai-generated` (TinyMCE and CKEditor 5 keep it) and a `title` (Gmail
+   * keeps it, through to the recipient): `HtmlAttributeMarker` writes both on one element.
+   */
   htmlAttribute: "html-attribute",
-  /** A `title` attribute (Gmail keeps it, through to the recipient). */
+  /** The same, for a host known to keep only the `title`: `HtmlAttributeMarker` still writes both. */
   htmlTitle: "html-title",
   /** The YAML front matter of a whole Markdown file. */
   frontMatter: "front-matter",
@@ -30,14 +33,17 @@ export const Carriers = {
   httpHeader: "http-header",
   /** Invisible characters in plain text that the host keeps (opt-in: `UnicodeTextMarker`). */
   unicodeText: "unicode-text",
+  /** A picture's or file's bytes placed as they are, so their own metadata stays (`ImageProvenanceGuard`). */
+  bytes: "bytes",
 } as const;
 
-/** One place to keep a string for the content: a hidden CRM field, a ticket's custom field, an object's metadata. */
+/**
+ * A place to keep strings for the content: a hidden CRM field, a ticket's custom field, an object's metadata. A host
+ * with one field may keep whatever was written last (`KeyValueMarker` writes the record's id last).
+ */
 export interface KeyValueSink {
   write(key: string, value: string): void | Promise<void>;
   read(key: string): string | undefined | null | Promise<string | undefined | null>;
-  /** The longest value the host keeps. The signed record goes in only where it fits; the record's id otherwise. */
-  readonly maxLength?: number;
 }
 
 /** Files beside the file the content went into, for `SidecarMarker`. */
@@ -62,8 +68,9 @@ export interface SinkInfo {
   /** What the place is: `html.editor`, `crm.note`, `nextcloud.file`, `word.range`. */
   readonly kind: string;
   /**
-   * Whether the host holds structured content that carries metadata (a document, an editor's HTML, a file), so the
-   * content needs a mark of its own besides the watermark. Default: whether it carries anything.
+   * Whether the content lands inside structured content (a document, an editor's HTML, a file), so it needs signed
+   * metadata of its own besides the watermark. Free-form text (a chat message, a plain field) is not a container.
+   * Default false.
    */
   readonly container?: boolean;
   /** What it keeps besides the content: `Carriers` values, or your own markers' names for theirs. Empty: nothing. */
@@ -91,6 +98,8 @@ export interface PlacedContent extends MarkableContent {
   readonly result: unknown;
   /** What the host holds now (`SinkInfo.readBack`), read once per placement; undefined when it cannot be read. */
   readBack(): Promise<string | Uint8Array | undefined>;
+  /** Text under the policy's short-text threshold: no watermark is expected. */
+  readonly shortText: boolean;
 }
 
 /** What a marker says about its mark. */
@@ -101,10 +110,13 @@ export interface MarkOutcome {
   /** Why not, when it did not hold. */
   reason?: ReasonCode;
   /**
-   * False for a mark written but not seen afterwards, because the sink cannot be read: it is reported as
-   * `<method>:unverified`. A marker reports a mark as applied and verified only after reading it back.
+   * For an applied mark: true when it was read back from the host after the insert and is there, false when the host
+   * cannot be read back. Leave it out when there is nothing to read back (a mark kept by the server). A marker reports
+   * a mark as verified only after reading it back.
    */
   verified?: boolean;
+  /** For the transcript only, never content: which parts held (`title; data-ai-generated dropped`). */
+  detail?: string;
 }
 
 /**
@@ -131,13 +143,14 @@ export type ExtensionValue = string | number | boolean;
 /**
  * The record a placement's marks come from: one per placement, signed by the server. Marks carry its `id`; a marker
  * with room writes `signed`, the record as the server signed it, which checks against its signature. Nothing in it
- * names the user, the prompt or the document.
+ * names the user, the prompt or the document. Without a signed record no marker runs: no mark carries an id the
+ * server does not know.
  */
 export interface ProvenanceRecord {
-  /** The server's id for the record, or this device's (`unsigned-...`) when the server could not sign. */
+  /** The server's id for the record (a UUID). */
   readonly id: string;
-  /** The record and its JWS, as the server signed them; undefined when it could not. */
-  readonly signed: SignedRecord | undefined;
+  /** The record and its JWS, as the server signed them. */
+  readonly signed: SignedRecord;
   readonly editKind: EditKind;
   /** The IPTC digital source type: made by a model, or changed by one. */
   readonly digitalSourceType: string;
@@ -168,17 +181,26 @@ export interface PlaceRequest {
   receiptId?: string;
 }
 
+/**
+ * Why content needs no mark at all (no record, no marks): the policy marks the agent's output internal and technical,
+ * the edit kind is exempt, the media type is code or data, or the text is a label.
+ */
+export type ExemptReason = "internal-technical" | "edit-kind" | "code" | "label";
+
 /** Where `place()` put content, and which layers held. */
 export interface Placement<T> {
   /** What the host's insert returned. */
   readonly result: T;
-  /** The record's id (`exempt-...` for exempt content, which has no record). */
-  readonly recordId: string;
+  /** The signed record's id; undefined for exempt content and when the server could not sign. */
+  readonly recordId: string | undefined;
   /** Whether the server signed the record. */
   readonly signed: boolean;
+  /** Recorded as exempt (`exemptBecause`): nothing was marked. */
   readonly exempt: boolean;
-  /** Why it is exempt: `exempt-edit` or `short-text`. */
+  /** The reason code the report gives an exempt placement: `exempt-edit`. */
   readonly reason: ReasonCode | undefined;
+  /** Why it is exempt. */
+  readonly exemptBecause: ExemptReason | undefined;
   readonly editKind: EditKind;
   readonly layers: readonly LayerOutcome[];
   /** The layers the content needs that did not hold, and why. */
@@ -187,6 +209,8 @@ export interface Placement<T> {
 
 export interface MissingLayer {
   readonly layer: MarkLayer;
+  /** The method that did not hold (`html-attribute`, `model`), or what was missing (`host`, `signed-record`). */
+  readonly method: string;
   /** Undefined when it could not be told why. */
   readonly reason: ReasonCode | undefined;
 }
@@ -243,6 +267,7 @@ export interface ObservedPlacement {
   readonly callId: string | undefined;
   readonly signed: boolean;
   readonly exempt: boolean;
+  readonly exemptBecause: ExemptReason | undefined;
   readonly missing: readonly MissingLayer[];
 }
 

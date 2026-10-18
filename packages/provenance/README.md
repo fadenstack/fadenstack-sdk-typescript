@@ -16,6 +16,7 @@ import { provenanceModule, provenanceOf, type SinkInfo } from "@fadenstack/prove
 
 const editorSink: SinkInfo = {
   kind: "html.editor",
+  container: true, // the editor's HTML carries metadata: the content needs a mark of its own
   carries: ["html-attribute", "html-title"],
   readBack: () => editor.getHTML(), // so the marks are checked after the insert
 };
@@ -30,7 +31,7 @@ const insertReply = defineTool<{ text: string }>({
       { content: text, mediaType: "text/html", sink: editorSink },
       (marked) => editor.insertHTML(String(marked.content)),
     );
-    return `Inserted the reply (record ${placement.recordId}).`;
+    return placement.recordId ? `Inserted the reply (record ${placement.recordId}).` : "Inserted the reply.";
   },
 });
 
@@ -43,10 +44,12 @@ const agent = FadenstackAgent.createBuilder()
 
 `place()` asks the server to sign a record of the placement by the content's hash (never the content), lets the
 markers that fit the sink prepare the content (here: a `span` with `data-ai-generated` and a `title` saying
-"AI-generated" in the user's language), calls your insert, lets the markers check what landed, and reports the
-placement. Translations, corrections, formatting, extracts, code and text under 200 tokens are exempt: they are placed
-as they are and recorded as exempt. With the agent's policy set to `refuse`, content is not placed at all when a mark
-it needs is not possible, and the tool tells the model why.
+"AI-generated" in the user's language, a space and the record's id), calls your insert, lets the markers check what
+landed, and reports the placement. Translations, corrections, formatting, extracts, code and short labels are exempt:
+they are placed as they are, with no record, and recorded as exempt. Short text is marked like any other; only the
+model's watermark is not expected under 200 tokens. Without a signed record no mark is written. With the agent's
+policy set to `refuse`, content is not placed at all when a mark it needs is not possible, and the model and the user
+are told why. The .NET SDK (`Fadenstack.Provenance`) behaves the same and writes the same marks.
 
 ## How much your host does
 
@@ -56,7 +59,7 @@ signed record on the server, which the detector finds by the content's hash. Wha
 | Level | You | You get |
 |---|---|---|
 | **0** | Declare `output` on the tool and call `place()` with a sink that carries nothing (`carries: []`). | The watermark and the server's record; the placement records `sink-cannot-carry`, and the policy decides (`record` by default, `refuse` per agent). |
-| **1** | Give the SDK one place to keep a string: a `KeyValueSink` (a hidden CRM field, a ticket's custom field, an object's metadata). | `KeyValueMarker` writes the record's id there, reads it back, and records what held. |
+| **1** | Give the SDK a place to keep strings: a `KeyValueSink` (a hidden CRM field, a ticket's custom field, an object's metadata). | `KeyValueMarker` writes `ai-generated` = `true` and `ai-record-id` = the record's id there, reads the id back, and records what held. |
 | **2** | Say which format the host stores. | The built-in marker for it: `HtmlAttributeMarker`, `MarkdownFrontMatterMarker`, `SidecarMarker`, `HttpHeaderMarker`. |
 | **3** | Write a `ContentMarker` for a host nothing else fits. | Full control in `prepare` and `attach`; the test kit checks it. |
 
@@ -68,9 +71,8 @@ import type { KeyValueSink, SinkInfo } from "@fadenstack/provenance";
 const crmField: KeyValueSink = {
   write: (key, value) => crm.notes.setCustomField(noteId, key, value),
   read: (key) => crm.notes.getCustomField(noteId, key),
-  maxLength: 255, // the signed record goes in only where it fits; the record's id otherwise
 };
-const sink: SinkInfo = { kind: "crm.note", carries: ["key-value"], keyValue: crmField };
+const sink: SinkInfo = { kind: "crm.note", container: true, carries: ["key-value"], keyValue: crmField };
 
 await provenanceOf(context).place({ content: text, mediaType: "text/plain", sink }, (marked) =>
   crm.notes.update(noteId, String(marked.content)));
@@ -93,7 +95,7 @@ class CrmNoteMarker implements ContentMarker {
     await crm.notes.tag(noteId, `ai-generated:${record.id}`); // the record's id, never content or a name
     const tags = await crm.notes.tags(noteId);
     return tags.includes(`ai-generated:${record.id}`)
-      ? { applied: true, method: "crm-note" }
+      ? { applied: true, method: "crm-note", verified: true } // read back and there
       : { applied: false, method: "crm-note", reason: "stripped-by-host" };
   }
 }

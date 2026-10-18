@@ -7,7 +7,8 @@ watermark, IPTC metadata and a signed C2PA manifest) before they leave, ends eve
 signs a **record** of every placement, and runs the detector. `@fadenstack/provenance` is the device's part: tools
 place content through `place()`, **markers** put a mark in or beside it where the host can keep one, and every
 placement is recorded in the session and reported to the server -- which layers held, and why the others did not.
-Nothing of the content goes to the server: a record is signed by the content's hash.
+Nothing of the content goes to the server: a record is signed by the content's hash. The .NET SDK's
+`Fadenstack.Provenance` does the same, step for step and byte for byte ([below](#the-same-in-both-sdks)).
 
 ## Add the module
 
@@ -38,6 +39,7 @@ import { provenanceOf, type SinkInfo } from "@fadenstack/provenance";
 
 const editorSink: SinkInfo = {
   kind: "html.editor",
+  container: true, // the editor's HTML carries metadata: the content needs a mark of its own
   carries: ["html-attribute", "html-title"],
   readBack: () => editor.getHTML(),
 };
@@ -52,7 +54,7 @@ const insertReply = defineTool<{ text: string }>({
       { content: text, mediaType: "text/html", sink: editorSink },
       (marked) => editor.insertHTML(String(marked.content)),
     );
-    return `Inserted the reply (record ${placement.recordId}).`;
+    return placement.recordId ? `Inserted the reply (record ${placement.recordId}).` : "Inserted the reply.";
   },
 });
 ```
@@ -69,29 +71,40 @@ const insertReply = defineTool<{ text: string }>({
 | `request.receiptId` | The receipt of what made the content when it is not the turn's answer: a picture's own receipt (`x-faden-provenance` of the images answer). |
 | `insert(marked, signal)` | Your own insert, given the content as the markers prepared it. Its return value is the placement's `result`. |
 
-`place()` returns a `Placement`: the `result`, the `recordId`, whether the server `signed` the record, whether the
-content was `exempt` (and the `reason`), the `editKind`, the `layers` (each `{ layer, method, applied, reason? }`)
-and what is `missing`: the layers the content needs that did not hold, with why.
+`place()` returns a `Placement`: the `result`, the `recordId` (undefined for exempt content and when the server could
+not sign), whether the server `signed` the record, whether the content was `exempt` (`reason` `exempt-edit`, and
+`exemptBecause`: `internal-technical`, `edit-kind`, `code` or `label`), the `editKind`, the `layers` (each
+`{ layer, method, applied, reason?, verified? }`) and what is `missing`: the layers the content needs that did not
+hold, each `{ layer, method, reason }`.
 
 ## What `place()` does
 
-1. **Exempt or not.** Exempt edit kinds (by default `translated`, `corrected`, `formatted`, `extracted`), code and data
-   formats (JSON, YAML, SQL, scripts, `text/x-*`), and text under the policy's threshold (200 tokens; four characters
-   a token unless you give a `tokenizer`) are placed as they are and recorded as exempt (`exempt-edit`,
-   `short-text`). The rest goes on.
-2. **What it needs.** A container (a sink that carries something, or says `container: true`) and a picture need two
-   layers: signed metadata and a watermark. Free text in a host that carries nothing needs the watermark. A visible
-   label is needed too while the policy asks for one. With the policy's `on_missing: refuse`, content a needed layer
-   is not possible for -- no marker fits the sink, the text carries no watermark, the server cannot sign, a picture
-   lost its C2PA -- is not placed: `place()` throws a `ProvenanceRefusedError` whose message tells the model why.
-3. **The record.** The server signs a record of the placement, by the content's SHA-256 (`textSha256`: normalised
-   the way the server does it). If it cannot, the marks carry a local id (`unsigned-...`), which still says the
-   content is AI-generated, and the metadata layer is recorded as missing (`server-unavailable`).
-4. **Prepare, insert, attach.** The markers that fit the sink prepare the content in layer order (metadata, watermark,
+1. **The policy and the edit kind.** The server's policy, tightened by the module's; the edit kind from the request,
+   else the tool's `output`, else `generated`, then the classifier.
+2. **Exempt or not.** Content exempt from marking is placed as it is, with no record, and recorded as exempt: the
+   policy's `internal_technical`, an exempt edit kind (by default `translated`, `corrected`, `formatted`,
+   `extracted`), code and data (JSON, XML, YAML, SQL, scripts, `text/x-*`), and labels -- at most three words and 40
+   characters without a sentence mark, or 8 characters of CJK text ("Approved", "Q3 revenue"). **Short text is not
+   exempt**: it is recorded and marked like any other; only the model's watermark is not expected under the policy's
+   threshold (200 tokens), and the watermark layer says `short-text`.
+3. **What it needs.** Signed metadata in a container (a sink with `container: true`) and for every picture; the
+   watermark for text from the threshold on and for every picture; a visible label for text while the policy asks
+   for one. What can be known before anything is signed is checked here -- no marker fits a container, the receipt
+   says the text carries no watermark, a picture lost its C2PA. With the policy's `on_missing: refuse`, `place()`
+   refuses (below).
+4. **The record.** The server signs a record of the placement, by the content's SHA-256 (`textSha256`: normalised the
+   way the server does it). If it cannot, **no marker runs** -- no mark carries an id the server does not know -- the
+   content is inserted as it is, the metadata layer is reported `signed-record`, `server-unavailable`, and the
+   placement is still reported. With `refuse`, content that needs metadata is refused here.
+5. **Prepare, insert, attach.** The markers that fit the sink prepare the content in layer order (metadata, watermark,
    fingerprint, label), your insert puts it in, and the markers attach their marks and check what landed
-   (`sink.readBack`). A mark that could not be read back is reported as `<method>:unverified`.
-5. **Record and report.** A `provenance.placed` entry in the session's transcript, a placement report to the server,
+   (`sink.readBack`): `verified: true` for a mark read back, `false` where the host cannot be read back.
+6. **Record and report.** A `provenance.placed` entry in the session's transcript, a placement report to the server,
    and your observers. A report that fails never fails the placement.
+
+A refusal places, signs and reports nothing: `place()` throws a `ProvenanceRefusedError` whose message tells the
+model why ("Not written: this agent only places content it can mark as AI-generated, and here ..."), the transcript
+gets a `provenance.refused` entry, and the user a `provenance_refused` notice.
 
 ## Sinks
 
@@ -101,30 +114,34 @@ A sink describes once where content lands and what the host can keep besides the
 |---|---|
 | `kind` | What the place is: `html.editor`, `crm.note`, `nextcloud.file`. It is reported; never a document's, mailbox's or user's name. |
 | `carries` | What the host keeps: the `Carriers` below, or your own markers' names. `[]` for nothing. |
-| `container` | Whether the content needs metadata of its own besides the watermark. Default: whether it carries anything. |
+| `container` | Whether the content lands inside structured content (a document, an editor's HTML, a file) and so needs signed metadata of its own besides the watermark. Default false: free-form text (a chat message, a plain field). |
 | `readBack(signal)` | What the host holds after the insert (the editor's HTML, the file's text or bytes), so markers can check their marks. |
-| `keyValue` | For `key-value`: `{ write(key, value), read(key), maxLength? }`. |
+| `keyValue` | For `key-value`: `{ write(key, value), read(key) }`. |
 | `sidecar` | For `sidecar`: `{ fileName, write(name, text), read?(name) }`. |
 | `http` | For `http-header`: `{ setHeader(name, value), getHeader?(name) }`, as Node's `ServerResponse` has. |
 
+A sink no host marker fits reports its metadata layer as `host`, `sink-cannot-carry`; it is missing only where the
+content needs metadata (a container, a picture).
+
 ## The built-in markers
 
-| Marker | Layer | Carrier | What it does |
+| Marker (`name`) | Layer | Carrier | What it does |
 |---|---|---|---|
-| `ServerSignedMarker` | metadata | any | Says whether the server signed the record. No mark in the content itself. |
-| `ImageProvenanceGuard` | metadata | pictures | Checks that a picture still carries its C2PA manifest and XMP (a byte check: the JUMBF `c2pa` box, the XMP packet), as it is placed and after where the host can be read; records `stripped-by-host` otherwise. Never changes the bytes. |
-| `WatermarkStatus` | watermark | text, pictures | Records from the receipt whether the content carries a watermark, and why not. Never watermarks itself. |
-| `HtmlAttributeMarker` | metadata | `html-attribute`, `html-title` | Wraps HTML (or escaped plain text) in an element with `data-ai-generated` and the record's id (TinyMCE and CKEditor 5 keep it) and a `title` saying "AI-generated" with the record's id in the user's language (Gmail keeps it, through to the recipient). Reads back which held. |
-| `MarkdownFrontMatterMarker` | metadata | `front-matter` | `ai-generated: true` and `ai-generated-record: <id>` in the YAML front matter of a whole Markdown file, merged into front matter it has. |
-| `KeyValueMarker` | metadata | `key-value` | The record's id (the signed record, where it fits `maxLength`) under `ai-generated-record`, read back. |
-| `SidecarMarker` | metadata | `sidecar` | The signed record in `<file>.provenance.json` beside the file. |
-| `HttpHeaderMarker` | metadata | `http-header` | `X-Faden-Provenance` with the record's id, set before the response goes out. |
-| `VisibleLabelMarker` | label | text | A visible "AI-generated" line before the content, with an icon you choose for HTML. Used while the policy's `visible_label` is on. |
-| `UnicodeTextMarker` | metadata | `unicode-text` | Opt-in: the record's id as invisible characters (C2PA's variation selectors) at the end of plain text. Filters and editors often strip them; add it to `markers` and to the sink's `carries` only where they hold. |
+| `ServerSignedMarker` (`server-record`) | metadata | any | Says the server signed the record (`signed-record`). No mark in the content itself: it never makes the metadata layer hold. |
+| `ImageProvenanceGuard` (`image-guard`) | metadata | pictures | Checks that a picture still carries its C2PA manifest (a byte check: the JUMBF `c2pa` box; XMP too), as it is placed and after where the host can be read; records `stripped-by-host` otherwise. Never changes the bytes. Method `c2pa`. |
+| `WatermarkStatus` (`watermark-status`) | watermark | text, pictures | Records from the receipt whether the content carries a watermark (`vllm-<algorithm>`, `upstream-<vendor>`, `trustmark`), and why not (method `model`). Never watermarks itself. |
+| `HtmlAttributeMarker` (`html-attribute`) | metadata | `html-attribute`, `html-title` | Wraps HTML in one element with `data-ai-generated` and the record's id (TinyMCE and CKEditor 5 keep it) and a `title` -- "AI-generated" in the user's language, a space, the record's id (Gmail keeps it, through to the recipient). Reads back which held: `html-attribute`, or `html-title` when only the title did. HTML only: escape plain text into HTML first. |
+| `MarkdownFrontMatterMarker` (`front-matter`) | metadata | `front-matter` | `ai-generated: true` and `ai-record-id: "<id>"` in the YAML front matter of a whole Markdown file, merged into front matter it has. |
+| `KeyValueMarker` (`key-value`) | metadata | `key-value` | The same two keys: `ai-generated` = `true`, then `ai-record-id` = the record's id, read back. |
+| `SidecarMarker` (`sidecar`) | metadata | `sidecar` | The signed record in `<file>.provenance.json` beside the file. |
+| `HttpHeaderMarker` (`http-header`) | metadata | `http-header` | `X-AI-Generated` with the record's id, set before the response goes out. |
+| `VisibleLabelMarker` (`visible-label`) | label | text | A visible "AI-generated" line before the content, with an icon you choose for HTML. Used while the policy's `visible_label` is on, or always when you add it to `markers`. |
+| `UnicodeTextMarker` (`unicode-text`) | metadata | `unicode-text` | Opt-in: the record's id as invisible characters at the end of plain text or Markdown. Filters and editors often strip them; add it to `markers` and to the sink's `carries` only where they hold. |
 
-Texts people see -- the `title`, the label -- come from the UI catalogues of `@fadenstack/ui` in English, German,
-French, Spanish and Simplified Chinese: pass `strings` (`stringsFor(language)`, or a function that returns the
-current ones) to the module or the marker. Without them, the browser's language.
+Texts people see -- the `title`, the label -- come from the UI catalogues of `@fadenstack/ui` (`aiGenerated`,
+`aiGeneratedTitle`) in English, German, French, Spanish and Simplified Chinese: pass `strings`
+(`stringsFor(language)`, or a function that returns the current ones) to the module or the marker. Without them, the
+browser's language. Readers recognise the titles of every built-in language.
 
 ## The policy
 
@@ -134,45 +151,57 @@ says nothing:
 | Field | Default | What it does |
 |---|---|---|
 | `on_missing` | `record` | `record`: place the content and record the layers that were not possible. `refuse`: do not place it. |
-| `short_text_tokens` | 200 | Text shorter than this is exempt. |
-| `exempt_edit_kinds` | `translated`, `corrected`, `formatted`, `extracted` | Edit kinds placed without marks. |
+| `short_text_tokens` | 200 | Under this many tokens (a CJK character, or four other characters, unless you give a `tokenizer`) no watermark is expected; the text is still marked. |
+| `exempt_edit_kinds` | `translated`, `corrected`, `formatted`, `extracted` | Edit kinds placed without a record or marks. |
 | `internal_technical` | false | The agent's output is internal technical output; everything is exempt. Set only on the server. |
-| `visible_label` | false | Add a visible label. |
+| `visible_label` | false | Add a visible label, and count it as a needed layer. |
 | `output_log` | false | The server keeps fingerprints of outputs. |
 
 The module's `policy` option can only tighten it: `refuse` rather than `record`, a lower threshold, fewer exempt kinds,
 a label. What would loosen it is ignored, with a warning on the console. The policy is fetched once and kept for five
-minutes; a server without the module gets the defaults.
+minutes; while the server does not answer, the last one it gave, else the defaults.
 
 ## What is recorded
 
 | Transcript entry | When |
 |---|---|
-| `provenance.placed` | After every placement: the call, tool, record id, whether signed or exempt, sink kind, media type, edit kind (and the declared one with the classifier's reason, if it changed), length class, receipt id, layers, what is missing, whether the report went out. |
-| `provenance.refused` | `place()` refused, with the layers that were not possible. |
-| `provenance.unmarked` | A tool declared `output` and did not call `place()`. |
+| `provenance.placed` | After every placement: `call_id`, `tool`, `argument`, `record_id`, `signed`, `receipt_id`, `sink_kind`, `media_type`, `edit_kind`, `length_class`, `exempt`, `exempt_because`, `classified` (`{ from, to, reason }`, when the classifier changed or kept the kind with a reason), `layers` (`{ layer, method, applied, reason, verified, detail }`), `missing` (`{ layer, method, reason }`), `reported`, `facts`, `dropped_facts`. |
+| `provenance.refused` | `place()` refused: `call_id`, `tool`, `argument`, `sink_kind`, `media_type`, `edit_kind`, `length_class`, `missing`. |
+| `provenance.unmarked` | A tool declared `output` and did not call `place()`: `call_id`, `tool`, `argument`, `media_type`, `edit_kind`, `length_class`, `reported`. |
 
-The report to the server holds the record's id (`exempt-...` for exempt content, `unmarked-...` with sink kind
-`unmarked` for content that skipped `place()`), the tool, the sink kind, the media type, the edit kind, a length
-class (`short`, `medium`, `long`) and the layers. Never content. Reason codes: `sink-cannot-carry`, `stripped-by-host`,
-`short-text`, `exempt-edit`, `no-watermark-remote-model`, `no-watermark-greedy`, `runtime-without-watermark`,
-`server-unavailable`.
+The report to the server holds the record's id (none for exempt content, for a record the server could not sign, and
+for content that skipped `place()`, whose sink kind is `unmarked` and which has no layers), the tool, the sink kind,
+the media type, the edit kind, a length class (`short`, `medium`, `long`; bytes are `long`) and the layers. Never
+content. Reason codes: `sink-cannot-carry`, `stripped-by-host`, `short-text`, `exempt-edit`,
+`no-watermark-remote-model`, `no-watermark-greedy`, `runtime-without-watermark`, `server-unavailable`.
 
-A tool that declares `output` and does not place its content is recorded and reported; with `development: true` its
-call fails, so you notice while you build.
+A tool that declares `output` and does not place its content is recorded and reported, unless the content is exempt
+(an exempt edit kind, code, a label, the internal switch); with `development: true` its call fails, so you notice
+while you build. A marker that throws is recorded (`failed: <error>`) and the placement goes on, in development too.
 
 ## Receipts
 
 Every answer ends with the server's receipt: what model made it, when, and whether the text is watermarked. The
-session keeps them (`AgentResult.receipts`, and each answer's receipt id in the transcript), and `place()` attaches the
-receipt of the answer whose tool call it runs in. `provenanceOf(context).receipt` is that receipt.
+session keeps them -- `AgentResult.receipts`, and on each answer's transcript entry `receipts`
+(`{ receipt_id, status: "signed" | "reference" | "unsigned", reason? }`, never the receipt) -- and `place()` attaches
+the receipt of the answer whose tool call it runs in; a call from an answer without one gets none.
+`provenanceOf(context).receipt` is that receipt.
+
+## Checking content
+
+`client.provenance.verify({ text })` or `({ file, media_type })` (base64, never both) asks the server's detector
+whether content carries this installation's marks. An agent's client checks on its agent's route
+(`/v1/agents/{agent}/provenance/verify`, its agent token), as its other routes go; a client without an agent checks as
+the signed-in user (`/v1/provenance/verify`, which refuses an agent token with 403 `agent_token_not_allowed`).
+`client.agent.provenance.verify()` always takes the agent's route. Nothing submitted is kept.
 
 ## Edit kinds
 
-`suggestEditKind(original, revised)` says `corrected` (exempt) only for a small change -- similar words (a typo fix
-counts for less than a changed word), the same number of sentences, a length within a quarter -- and `rewritten`
-otherwise. `similarityClassifier()` applies it to placements declared `rewritten` that name the text they replace
-(`request.original`):
+`suggestEditKind(original, revised)` says `corrected` (exempt) only for a small change -- word similarity of 0.85 or
+more (a typo fix counts for less than a changed word; each CJK character is a word), the same number of sentences, a
+word count within 0.8 to 1.25 times -- and `rewritten` otherwise. `similarityClassifier()` applies it to placements
+declared `rewritten` or `corrected` that name the text they replace (`request.original`), and records its reason
+(`small change: 95 % of words kept, the same 2 sentence(s)`) on the device:
 
 ```ts
 builder.use(provenanceModule({ classifier: similarityClassifier() }));
@@ -182,21 +211,54 @@ builder.use(provenanceModule({ classifier: similarityClassifier() }));
 
 | Option | What you give | Guard rails |
 |---|---|---|
-| `markers` | `ContentMarker`s for your hosts: `name`, `layer`, `supports(sink, mediaType)`, `prepare?`, `attach?`. One with a built-in's name replaces it. | Report `applied` only after reading the mark back; otherwise `verified: false`. Check it with `checkMarker`. |
+| `markers` | `ContentMarker`s for your hosts: `name`, `layer`, `supports(sink, mediaType)`, `prepare?`, `attach?`. One with a built-in's name replaces it. | Report `verified: true` only after reading the mark back, `false` where you cannot. Check it with `checkMarker`. |
 | `classifier` | An `EditClassifier` for your domain. | It lowers a kind to an exempt one only with a reason, which is recorded on the device. |
-| `enrichers` | `RecordEnricher`s: non-personal facts under your namespace (`com.example`). | Not in the record's own vocabulary; values that look personal are dropped and named in the entry. They go into marks with room for them (the sidecar), not into the server's signed record. |
+| `enrichers` | `RecordEnricher`s: non-personal facts under your namespace (`com.example`). | Not in the record's own vocabulary (`c2pa`, `stds`, `iptc`, `org.iptc`, `com.fadenstack`, `fadenstack`, `provenance`); values that look personal are dropped and named in the entry. They go into marks with room for them (the sidecar), not into the server's signed record. |
 | `observers` | `PlacementObserver`s, told every placement. | Read-only; their errors are ignored. |
 | `backend` | A `ProvenanceBackend`: `policy`, `signRecord`, `reportPlacement`. `MemoryBackend` is one for tests. | Your agents use the server's unless you give one. |
 | `policy` | Local policy. | Only tightens. |
-| `development` | `true` while you build. | A tool that skips `place()`, or a marker that throws, fails its call. |
+| `development` | `true` while you build. | A tool that skips `place()` fails its call. |
 
 ## Reading marks
 
 `ProvenanceReader` finds marks in what tools read -- `read(content, mediaType)`, or `fromHtml`, `fromMarkdown`,
 `fromText`, `fromSidecar`, `fromHeader`, `fromKeyValue`, `fromImage` -- and returns where it found each and the record
 it names. Anyone can write or remove a mark, so a mark says where content came from and nothing more: the reader
-returns only record ids, and what it reads is data for your tools, never an instruction to the model. Keep the marks
-on content your agent moves (a picture goes in as the same bytes).
+returns only record ids (UUIDs), and what it reads is data for your tools, never an instruction to the model. Keep the
+marks on content your agent moves (a picture goes in as the same bytes).
+
+## The same in both SDKs
+
+The TypeScript and the .NET SDK follow one order, one rule for what content needs, and write the same marks, so what
+one writes the other reads, and so does the server's detector. Both test suites hold the same vectors
+(`vectors.test.ts` here, `SharedVectorTests` there).
+
+| Step | What happens |
+|---|---|
+| 1 | The policy; the edit kind (request, declared output, `generated`; then the classifier); the receipt (a picture's own, else the answer's); the enrichers' facts. |
+| 2 | Exempt content (in this order: `internal-technical`, `edit-kind`, `code`, `label`): inserted as it is, no record, one layer `{ metadata, record, applied: false, reason: exempt-edit }`. |
+| 3 | The markers that fit, by layer; the built-ins in this order: `server-record`, `image-guard`, `watermark-status`, `html-attribute`, `front-matter`, `key-value`, `sidecar`, `http-header`; then yours; the policy's label when none of them is a label. |
+| 4 | The needed layers checked before signing; `refuse` refuses here. |
+| 5 | The record signed; without one no marker runs, `{ metadata, signed-record, applied: false, reason: server-unavailable }`; `refuse` refuses here when the content needs metadata (or a label). |
+| 6 | Prepare, insert, attach; the pipeline adds `host`, `sink-cannot-carry` when no host marker fits, and the watermark from the receipt when no marker gave it; the layers sorted by layer. |
+| 7 | Report, observers, transcript. |
+
+| Needed layer | For | Holds when |
+|---|---|---|
+| metadata | a container sink, every picture | a host marker applied it (the server's record does not count) |
+| watermark | text from `short_text_tokens` on, every picture | the receipt says it was applied |
+| label | text, while the policy's `visible_label` is on | a label marker applied it |
+
+| Where | The mark |
+|---|---|
+| YAML front matter | `ai-generated: true` and `ai-record-id: "<id>"` after the fields of front matter the file has (an earlier mark replaced, the rest byte for byte), or new front matter followed by a blank line; the text's own line breaks (CRLF when it has any). |
+| Key-value | `ai-generated` = `true`, then `ai-record-id` = the id. |
+| HTTP or mail header | `X-AI-Generated: <id>`. (`X-Faden-Provenance` is the gateway's header with an answer's receipt ids, not a mark.) |
+| HTML | `<span data-ai-generated="<id>" title="<label> <id>">...</span>`, a `div` around block content (`p`, `div`, `ul`, `ol`, `li`, `table`, `h1`-`h6`, `blockquote`, `pre`, `section`, `article`, `header`, `footer`, `figure`, `hr`, `dl`); the label is `AI-generated`, `KI-generiert`, `Généré par IA`, `Generado por IA` or `人工智能生成`; attribute values escape `&`, `<`, `>` and `"` only. |
+| Visible label | Before HTML `<p data-ai-label="<id>">[icon]<label></p>`; before Markdown `*<label>*` and a blank line, after its front matter; before plain text `<label>` and a blank line. |
+| Sidecar | `<file>.provenance.json`, compact JSON: `{"contract":"provenance/v1","record":{...},"signature":"...","timestamp":"...","facts":{...}}`, the signed record as the server signed it; `timestamp` and `facts` only where there are some. |
+| Office | Anchor `_faden_ai_` and the first 24 hex digits of the id, dashes removed (`officeAnchorName`: a hidden Word bookmark, an Excel name); the custom XML part `<provenance xmlns="https://fadenstack.com/ns/provenance/1.0"><record id="<id>" anchor="<anchor>" timestamp="<token>">JWS</record>...</provenance>` -- no declaration, no white space between elements, `timestamp` only where there is one (`officeCustomXmlPart`); the document property `AI-Generated-Content`, `true` and the ids newest first in at most 255 characters (`officeDocumentPropertyValue`); the PowerPoint tag `FADEN_AI_RECORD`; for a mail `X-AI-Generated`. The server's detector reads the ids from `customXml/` parts with the namespace and from `docProps/custom.xml`. |
+| Invisible text (opt-in) | At the very end of the text: U+FEFF, then the bytes `46 44 4E 50 01` ("FDNP" and version 1) and the id's UTF-8 bytes, each byte one variation selector (0 to 15 as U+FE00 to U+FE0F, 16 to 255 as U+E0100 to U+E01EF): 42 code points for a UUID. For `5a0e2b5c-7f3e-4a51-9a40-6a1c55e1d3f1` it begins U+FEFF U+E0136 U+E0134 U+E013E U+E0140 U+FE01 U+E0125 U+E0151 U+E0120. The U+FEFF in front keeps an emoji's own variation selector from running into the mark. |
 
 ## Testing a marker
 
@@ -208,10 +270,11 @@ expect(result.problems).toEqual([]);
 ```
 
 `checkMarker` runs a marker through `place()` with a backend in memory and checks that it applied its mark, that the
-mark reads back with the record's id (by `ProvenanceReader` for a `memorySink`, or your `read`), and that nothing it
-wrote -- into the content, fields, files or headers -- holds personal data: mail addresses, phone numbers, IBANs, IP
-addresses, or the names and prompt of its fixture, a reply full of them. The fake gateway in `@fadenstack/testing`
-serves the provenance routes and, with `provenance: { receipts: true }`, ends answers with receipts. See
+mark reads back with the record's id (by `ProvenanceReader` for a `memorySink`, or your `read`), that it did not throw,
+and that nothing it wrote -- into the content, fields, files or headers -- holds personal data: mail addresses, phone
+numbers, IBANs, IP addresses, or the names and prompt of its fixture, a reply full of them. Give it content that
+needs a mark: a label is exempt. The fake gateway in `@fadenstack/testing` serves the provenance routes (both verify
+routes too) and, with `provenance: { receipts: true }`, ends answers with receipts. See
 [Testing without a server](testing.md).
 
 ## Your part

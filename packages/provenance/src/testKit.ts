@@ -19,8 +19,6 @@ export interface MemorySinkOptions {
   kind?: string;
   /** What it carries; every built-in carrier by default. */
   carries?: readonly string[];
-  /** The longest value its key-value field keeps. */
-  maxLength?: number;
   /** What the host holds after the insert; by default the content as it was given. */
   readBack?: (written: WrittenMarks) => string | Uint8Array | undefined;
 }
@@ -38,7 +36,6 @@ export function memorySink(options: MemorySinkOptions = {}): { sink: SinkInfo; w
     keyValue: {
       write: (key, value) => void written.keyValues.set(key, value),
       read: (key) => written.keyValues.get(key),
-      ...(options.maxLength !== undefined ? { maxLength: options.maxLength } : {}),
     },
     sidecar: { fileName: "Reply.md", write: (name, text) => void written.files.set(name, text), read: (name) => written.files.get(name) },
     http: { setHeader: (name, value) => written.headers.set(name.toLowerCase(), value), getHeader: (name) => written.headers.get(name.toLowerCase()) },
@@ -88,11 +85,14 @@ export interface MarkerCheckResult {
   readonly found: readonly FoundMark[];
 }
 
+/** The methods of the outcomes the pipeline reports itself, which are no marker's. */
+const PIPELINE_METHODS = new Set(["host", "signed-record", "record"]);
+
 /**
  * Runs a marker through `place()` with a backend in memory, and checks what it did: that it applied its mark, that the
  * mark reads back with the record's id (by `ProvenanceReader`, or `read` for a host only you can read), and that
- * nothing it wrote -- added to the content, into fields, files or headers -- holds personal data. A marker error
- * fails the check, as in development.
+ * nothing it wrote -- added to the content, into fields, files or headers -- holds personal data. A marker that
+ * throws fails the check.
  */
 export async function checkMarker(marker: ContentMarker, options: MarkerCheckOptions = {}): Promise<MarkerCheckResult> {
   const sink = options.sink ?? memorySink(options.carries ? { carries: options.carries } : {}).sink;
@@ -101,8 +101,10 @@ export async function checkMarker(marker: ContentMarker, options: MarkerCheckOpt
   const mediaType = options.mediaType ?? "text/html";
   const problems: string[] = [];
   if (!marker.supports(sink, mediaType)) problems.push(`'${marker.name}' does not support the sink '${sink.kind}' for ${mediaType}.`);
-  const backend = new MemoryBackend({ short_text_tokens: 0 });
+  // Every text is marked here, however short, and the label marker runs as it would with the policy's label on.
+  const backend = new MemoryBackend({ short_text_tokens: 0, ...(marker.layer === "label" ? { visible_label: true } : {}) });
   const records: string[] = [];
+  const entries: Record<string, unknown>[] = [];
   let placement: Placement<unknown> | undefined;
   try {
     placement = await placeContent({
@@ -120,17 +122,26 @@ export async function checkMarker(marker: ContentMarker, options: MarkerCheckOpt
       signal: AbortSignal.timeout(30_000),
       policy: () => backend.policy(),
       backend,
-      record: async (_type, data) => void records.push(JSON.stringify(data)),
+      record: async (_type, data) => {
+        records.push(JSON.stringify(data));
+        entries.push(data);
+      },
     });
   } catch (error) {
     problems.push(`place() failed: ${error instanceof Error ? error.message : String(error)}`);
   }
-  // The marker's own outcome comes first; layers the content lacked follow it.
-  const layer = placement?.layers.find((l) => l.layer === marker.layer);
-  const outcome: MarkOutcome | undefined = layer
-    ? { applied: layer.applied, method: layer.method, ...(layer.reason ? { reason: layer.reason } : {}) }
-    : undefined;
-  if (placement && !outcome) problems.push(`'${marker.name}' reported nothing.`);
+  // The marker's own outcome, not what the pipeline adds (the server's record, a host that carries nothing, the watermark).
+  const layers = (entries[0]?.["layers"] ?? []) as { layer: string; method: string; applied: boolean; reason: string | null; verified: boolean | null; detail: string | null }[];
+  const own = layers.find((l) => l.layer === marker.layer && !PIPELINE_METHODS.has(l.method)
+    && !(l.layer === "watermark" && marker.layer !== "watermark"));
+  const outcome: MarkOutcome | undefined = own ? {
+    applied: own.applied, method: own.method,
+    ...(own.reason ? { reason: own.reason as NonNullable<MarkOutcome["reason"]> } : {}),
+    ...(own.verified !== null ? { verified: own.verified } : {}),
+  } : undefined;
+  if (placement?.exempt) problems.push(`The content needs no mark (${placement.exemptBecause}): give the kit longer content.`);
+  else if (own?.detail?.startsWith("failed:")) problems.push(`'${marker.name}' ${own.detail}.`);
+  else if (placement && !outcome) problems.push(`'${marker.name}' reported nothing.`);
   else if (outcome && !outcome.applied) problems.push(`'${marker.name}' did not apply its mark (${outcome.reason ?? "no reason"}).`);
 
   const recordId = placement?.recordId;

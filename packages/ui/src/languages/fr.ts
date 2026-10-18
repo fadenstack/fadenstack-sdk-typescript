@@ -45,6 +45,7 @@ export const frenchStrings: UiStrings = {
     tool_denied: "Un outil n'a pas été autorisé",
     rate_limited: "Trop de requêtes",
     round_limit: "Arrêtée",
+    provenance_refused: "Non écrit : le contenu n'a pas pu être marqué comme généré par IA",
   },
   noticeFallback: "Remarque",
   tryAgainIn: (seconds) => `Réessayez dans ${seconds} s.`,
@@ -119,5 +120,5 @@ export const frenchStrings: UiStrings = {
   picturesNotSeen: "Le modèle de cet agent ne voit pas les images.",
   pictureNotRead: (name) => `${name} n'a pas pu être lu comme image.`,
   aiGenerated: "Généré par IA",
-  aiGeneratedTitle: (record) => `Généré par IA (enregistrement ${record})`,
+  aiGeneratedTitle: (record) => `Généré par IA ${record}`,
 };

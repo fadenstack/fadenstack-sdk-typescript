@@ -29,12 +29,12 @@ export function inspectImage(bytes: Uint8Array): ImageMarks {
 
 /**
  * Checks that a generated picture still carries its C2PA manifest (and XMP) as it is placed, and after, where the
- * host can be read: the server marks pictures as it makes them, and a host that re-encodes a picture (a canvas, an
- * editor's compression) drops them. Then it records `stripped-by-host`. It never changes the bytes: a picture is
- * placed as the same bytes, so the marks it came with stay.
+ * host gives the bytes back: the server marks pictures as it makes them, and a host that re-encodes a picture (a
+ * canvas, an editor's compression) drops them. Then it records `stripped-by-host`. It never changes the bytes: a
+ * picture is placed as the same bytes, so the marks it came with stay. Its method is `c2pa`.
  */
 export class ImageProvenanceGuard implements ContentMarker {
-  readonly name = "image-provenance-guard";
+  readonly name = "image-guard";
   readonly layer = "metadata";
 
   supports(_sink: unknown, mediaType: string): boolean {
@@ -42,12 +42,21 @@ export class ImageProvenanceGuard implements ContentMarker {
   }
 
   async attach(placed: PlacedContent): Promise<MarkOutcome> {
+    if (!(placed.content instanceof Uint8Array)) return { applied: false, method: "c2pa", detail: "no bytes" };
+    const given = inspectImage(placed.content);
+    if (!given.c2pa) {
+      return {
+        applied: false, method: "c2pa", reason: "stripped-by-host",
+        detail: given.xmp ? "no C2PA manifest before it was placed; XMP there" : "no C2PA manifest or XMP before it was placed",
+      };
+    }
     const back = await placed.readBack();
-    const bytes = back instanceof Uint8Array ? back : placed.content instanceof Uint8Array ? placed.content : undefined;
-    if (!bytes) return { applied: false, method: "c2pa" };
-    const marks = inspectImage(bytes);
-    const method = marks.c2pa && marks.xmp ? "c2pa+xmp" : marks.xmp ? "xmp" : "c2pa";
-    if (!marks.c2pa) return { applied: false, method, reason: "stripped-by-host" };
-    return { applied: true, method, verified: back instanceof Uint8Array };
+    if (!(back instanceof Uint8Array)) {
+      return { applied: true, method: "c2pa", verified: false, detail: given.xmp ? "c2pa, xmp; not read back" : "c2pa; not read back" };
+    }
+    const after = inspectImage(back);
+    return after.c2pa
+      ? { applied: true, method: "c2pa", verified: true, detail: after.xmp ? "c2pa, xmp" : "c2pa" }
+      : { applied: false, method: "c2pa", reason: "stripped-by-host", detail: after.xmp ? "the host kept XMP and dropped C2PA" : "the host re-encoded the picture" };
   }
 }

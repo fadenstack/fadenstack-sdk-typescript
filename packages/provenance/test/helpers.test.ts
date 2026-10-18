@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 
 import { DEFAULT_PROVENANCE_POLICY } from "@fadenstack/client";
-import { editSimilarity, findPersonalData, suggestEditKind, tightenPolicy } from "@fadenstack/provenance";
+import { editSimilarity, findPersonalData, similarityClassifier, suggestEditKind, tightenPolicy } from "@fadenstack/provenance";
 
 const policy = { ...DEFAULT_PROVENANCE_POLICY, exempt_edit_kinds: [...DEFAULT_PROVENANCE_POLICY.exempt_edit_kinds] };
 
@@ -24,6 +24,16 @@ describe("the edit-kind helper", () => {
     expect(editSimilarity("Hello,  World!", "hello world")).toBe(1);
     expect(editSimilarity("a b c d", "a x c d")).toBe(0.75);
     expect(editSimilarity("", "")).toBe(1);
+    expect(editSimilarity("会议在周五", "会议在周一")).toBe(0.8); // each CJK character a word
+  });
+
+  it("gives the reason the .NET SDK gives", () => {
+    const classify = similarityClassifier().classify;
+    const corrected = "Thank you for your message. The delivery arrives on Friday.";
+    expect(classify({ tool: "t", declared: "rewritten", mediaType: "text/plain", content: corrected, original: "Thank you for you message. The delivery arive on Friday." }))
+      .toEqual({ kind: "corrected", reason: "small change: 95 % of words kept, the same 2 sentence(s)" });
+    expect(classify({ tool: "t", declared: "corrected", mediaType: "text/plain", content: "Ships Friday.", original: corrected }))
+      .toEqual({ kind: "rewritten", reason: expect.stringMatching(/^\d+ % of words kept, 2 to 1 sentence\(s\)$/) });
   });
 });
 
@@ -49,10 +59,7 @@ describe("findPersonalData", () => {
     const kinds = findPersonalData("Mail erika@example.com, call +49 30 1234567, pay DE89 3704 0044 0532 0130 00 from 10.0.0.12.", ["Erika"])
       .map((f) => f.kind).sort();
     expect(kinds).toEqual(["email", "iban", "ip-address", "known", "phone"]);
-    const record = JSON.stringify({
-      id: "3f2c8a8e-1234-4567-8901-234567890123", created_at: "2026-10-18T09:30:00.123Z",
-      unsigned: "unsigned-12345678901234567890123456789012", v: 1,
-    });
+    const record = JSON.stringify({ id: "3f2c8a8e-1234-4567-8901-234567890123", created_at: "2026-10-18T09:30:00.123Z", v: 1 });
     expect(findPersonalData(record)).toEqual([]);
   });
 });

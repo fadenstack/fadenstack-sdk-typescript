@@ -18,7 +18,7 @@ import {
 } from "@fadenstack/agents";
 
 import { ServerBackend } from "./backend.js";
-import { isCode, lengthClass, localId, tokensOf } from "./content.js";
+import { isCode, isLabel, lengthClass, tokensOf } from "./content.js";
 import { HtmlAttributeMarker } from "./markers/htmlAttribute.js";
 import { HttpHeaderMarker } from "./markers/httpHeader.js";
 import { ImageProvenanceGuard } from "./markers/imageGuard.js";
@@ -68,7 +68,10 @@ export function provenanceOf(context: ToolCallContext): Provenance {
 }
 
 export interface ProvenanceOptions {
-  /** Markers for your hosts, after the built-in ones; one with a built-in's name replaces it. */
+  /**
+   * Markers for your hosts, after the built-in ones; one with a built-in's name replaces it. A label marker given here
+   * (`VisibleLabelMarker`) is always used; without one, the built-in label is used while the policy asks for a label.
+   */
   markers?: readonly ContentMarker[];
   /** Decides the edit kind for your domain (`similarityClassifier()`). */
   classifier?: EditClassifier;
@@ -81,8 +84,8 @@ export interface ProvenanceOptions {
   /** Local policy: it can only tighten the server's (refuse, a lower threshold, fewer exempt kinds, a label). */
   policy?: ProvenancePolicy;
   /**
-   * Development: a tool that declares content (`output`) and does not place it through `place()` fails, and so does a
-   * marker that throws. Otherwise both are recorded. Off by default.
+   * Development: a tool that declares content (`output`) and does not place it through `place()` fails, instead of
+   * only being recorded. Off by default. (A marker that throws is recorded, `failed: <error>`, in either mode.)
    */
   development?: boolean;
   /** Counts a text's tokens for the short-text threshold; four characters a token without one. */
@@ -92,20 +95,22 @@ export interface ProvenanceOptions {
 }
 
 /**
- * The markers every placement may use, in this order: the server's record, the picture guard, HTML, Markdown front
- * matter, key-value, sidecar, HTTP header, and the watermark status. Each applies only where the sink carries what
- * it needs. The visible label is not among them: it applies while the policy asks for one.
+ * The markers every placement may use, as both SDKs order them: the server's record (`server-record`), the picture
+ * guard (`image-guard`), the watermark status (`watermark-status`), HTML (`html-attribute`), Markdown front matter
+ * (`front-matter`), key-value, sidecar, HTTP header. Each applies only where the sink carries what it needs; a
+ * placement runs them by layer (metadata, watermark, fingerprint, label), in this order within a layer. The visible
+ * label is not among them: it applies while the policy asks for one.
  */
 export function builtInMarkers(options: { strings?: MarkStringsOption } = {}): ContentMarker[] {
   return [
     new ServerSignedMarker(),
     new ImageProvenanceGuard(),
+    new WatermarkStatus(),
     new HtmlAttributeMarker(options.strings ? { strings: options.strings } : {}),
     new MarkdownFrontMatterMarker(),
     new KeyValueMarker(),
     new SidecarMarker(),
     new HttpHeaderMarker(),
-    new WatermarkStatus(),
   ];
 }
 
@@ -146,14 +151,12 @@ class ModuleState {
   constructor(options: ProvenanceOptions) {
     this.options = options;
     const own = options.markers ?? [];
-    const label = own.find((m) => m.name === "visible-label")
-      ?? new VisibleLabelMarker(options.strings ? { strings: options.strings } : {});
     const builtIns = builtInMarkers(options.strings ? { strings: options.strings } : {})
       .map((m) => own.find((o) => o.name === m.name) ?? m);
-    const added = own.filter((m) => m.name !== "visible-label" && !builtIns.includes(m));
+    const added = own.filter((m) => !builtIns.includes(m));
     this.settings = {
       markers: [...builtIns, ...added],
-      policyLabels: [label],
+      policyLabels: [new VisibleLabelMarker(options.strings ? { strings: options.strings } : {})],
       classifier: options.classifier,
       enrichers: options.enrichers ?? [],
       observers: options.observers ?? [],
@@ -191,25 +194,26 @@ class ModuleState {
   }
 }
 
-/** The receipts of recent turns: per turn, and per tool call by the answer that made the call. */
+/**
+ * The receipts of recent turns, per tool call by the answer that made the call: a call from an answer without a
+ * receipt (tool calls only) gets none, never an earlier answer's.
+ */
 class TurnReceipts {
-  readonly #turns = new Map<string, { notes: ReceiptNote[]; byCall: Map<string, ReceiptNote> }>();
+  readonly #turns = new Map<string, Map<string, ReceiptNote | undefined>>();
 
   keep(turnId: string, notes: readonly ReceiptNote[], callIds: readonly string[]): void {
     let turn = this.#turns.get(turnId);
     if (!turn) {
-      turn = { notes: [], byCall: new Map() };
+      turn = new Map();
       this.#turns.set(turnId, turn);
       while (this.#turns.size > KEPT_TURNS) this.#turns.delete(this.#turns.keys().next().value!);
     }
-    turn.notes.push(...notes);
-    const answer = [...notes].reverse().find((n) => n.status === "signed") ?? notes[notes.length - 1]!;
-    for (const id of callIds) turn.byCall.set(id, answer);
+    const answer = [...notes].reverse().find((n) => n.status === "signed") ?? notes[notes.length - 1];
+    for (const id of callIds) turn.set(id, answer);
   }
 
   forCall(turnId: string, callId: string): ReceiptNote | undefined {
-    const turn = this.#turns.get(turnId);
-    return turn?.byCall.get(callId) ?? turn?.notes[turn.notes.length - 1];
+    return this.#turns.get(turnId)?.get(callId);
   }
 }
 
@@ -226,7 +230,7 @@ function receiptStage(inner: ChatStreamer, receipts: TurnReceipts): ChatStreamer
           yield update;
         }
       } finally {
-        if (options?.turnId && notes.length) receipts.keep(options.turnId, notes, calls);
+        if (options?.turnId && calls.length) receipts.keep(options.turnId, notes, calls);
       }
     },
   };
@@ -240,7 +244,9 @@ function checkingStage(): ToolStage {
       const output = invocation.tool.output;
       if (!output) return result;
       const value = invocation.arguments[output.argument];
-      if (value === undefined || value === null || value === "") return result;
+      const empty = value === undefined || value === null || (typeof value === "string" && value.trim() === "")
+        || (Array.isArray(value) && value.length === 0);
+      if (empty) return result;
       const provenance = invocation.context.services.get(Provenance);
       if (provenance instanceof CallProvenance && provenance.placements === 0) await provenance.unmarked(output, invocation.arguments);
       return result;
@@ -276,29 +282,35 @@ class CallProvenance implements Provenance {
     return placeContent<Awaited<T>>(this.#state.settings, request, insert as Insert<Awaited<T>>, {
       tool: call.tool.name,
       callId: call.callId,
-      ...(output ? { declaredEditKind: outputEditKind(output, call.arguments) } : {}),
+      ...(output ? { argument: output.argument, declaredEditKind: outputEditKind(output, call.arguments) } : {}),
       ...(receipt ? { receipt } : {}),
       ...(model ? { model } : {}),
       signal: call.signal,
       policy: () => this.policy(),
       backend: this.#state.backend(call),
       record: (type, data) => call.record(type, data),
+      notice: (notice) => call.notice(notice),
       reportFailed: (error) => {
         this.#state.lastReportError = error;
       },
     });
   }
 
-  /** Records (and reports, without a record) declared content that did not go through `place()`; in development, fails. */
+  /**
+   * Records declared content that did not go through `place()` and reports it without a record (`sink_kind`
+   * `unmarked`, no layers); in development, fails. Content exempt from marking (the policy's internal switch, an exempt
+   * edit kind, code, a label) is left alone.
+   */
   async unmarked(output: ToolOutput, args: Readonly<Record<string, unknown>>): Promise<void> {
     const policy = await this.policy();
     const editKind = outputEditKind(output, args as Record<string, unknown>);
-    if (policy.exempt_edit_kinds.includes(editKind) || isCode(output.mediaType)) return;
     const value = args[output.argument];
     const text = typeof value === "string" ? value : JSON.stringify(value) ?? "";
+    if (policy.internal_technical || policy.exempt_edit_kinds.includes(editKind) || isCode(output.mediaType)
+      || (typeof value === "string" && isLabel(value, output.mediaType))) return;
     const report: PlacementReport = {
-      record_id: `unmarked-${localId()}`, tool: this.#call.tool.name, sink_kind: "unmarked", media_type: output.mediaType,
-      edit_kind: editKind, length_class: lengthClass(text, tokensOf(text, output.mediaType, this.#state.options.tokenizer), policy), layers: [],
+      tool: this.#call.tool.name, sink_kind: "unmarked", media_type: output.mediaType, edit_kind: editKind,
+      length_class: lengthClass(text, tokensOf(text, this.#state.options.tokenizer), policy), layers: [],
     };
     let reported = true;
     try {

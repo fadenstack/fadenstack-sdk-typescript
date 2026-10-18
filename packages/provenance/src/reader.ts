@@ -9,7 +9,10 @@ import { titleTemplates, type TitleTemplate } from "./titles.js";
 
 /** A mark found in content: where it was, and the record it names (undefined for a mark that names none). */
 export interface FoundMark {
-  /** `html-attribute`, `html-title`, `front-matter`, `sidecar`, `http-header`, `key-value`, `unicode-text`, `c2pa`, `xmp`. */
+  /**
+   * `html-attribute`, `html-title`, `visible-label`, `front-matter`, `sidecar`, `http-header`, `key-value`,
+   * `unicode-text`, `c2pa`, `xmp` (the .NET SDK's `FoundMark.Method` names the same).
+   */
   readonly carrier: string;
   readonly recordId: string | undefined;
 }
@@ -44,12 +47,13 @@ export class ProvenanceReader {
     return this.fromText(content);
   }
 
-  /** `data-ai-generated` attributes and titles of ours. */
+  /** `data-ai-generated` attributes, titles of ours, and visible labels (`data-ai-label`). */
   fromHtml(html: string): FoundMark[] {
-    const { attribute, title } = htmlRecordIds(html, this.#templates);
+    const { attribute, title, label } = htmlRecordIds(html, this.#templates);
     return [
       ...[...attribute].map((recordId) => ({ carrier: "html-attribute", recordId })),
       ...[...title].map((recordId) => ({ carrier: "html-title", recordId })),
+      ...[...label].map((recordId) => ({ carrier: "visible-label", recordId })),
     ];
   }
 
@@ -64,7 +68,7 @@ export class ProvenanceReader {
     return invisibleRecordIds(text).map((recordId) => ({ carrier: "unicode-text", recordId }));
   }
 
-  /** A sidecar file's JSON (`<file>.provenance.json`). */
+  /** A sidecar file's JSON (`<file>.provenance.json`): the signed record's id. */
   fromSidecar(json: string): FoundMark[] {
     let doc: unknown;
     try {
@@ -72,28 +76,20 @@ export class ProvenanceReader {
     } catch {
       return [];
     }
-    const d = doc as Record<string, unknown> | null;
-    if (!d || typeof d !== "object" || d["ai_generated"] !== true) return [];
-    return [{ carrier: "sidecar", recordId: validId(d["record_id"]) ?? validId((d["signed_record"] as { record?: { id?: unknown } } | null)?.record?.id) }];
+    const d = doc as { record?: { id?: unknown }; signature?: unknown } | null;
+    if (!d || typeof d !== "object" || !d.record || typeof d.record !== "object") return [];
+    return [{ carrier: "sidecar", recordId: validId(d.record.id) }];
   }
 
-  /** An `X-Faden-Provenance` header's value: one id, or several comma-separated. */
+  /** An `X-AI-Generated` header's value: one id, or several comma-separated. */
   fromHeader(value: string | null | undefined): FoundMark[] {
     return (value ?? "").split(",").map((v) => v.trim()).filter((v) => RECORD_ID.test(v)).map((recordId) => ({ carrier: "http-header", recordId }));
   }
 
-  /** What a key-value sink holds: a record's id, or the signed record. */
+  /** What a key-value sink holds under `ai-record-id`: a record's id. */
   fromKeyValue(value: string | null | undefined): FoundMark[] {
-    if (!value) return [];
-    const id = validId(value.trim());
-    if (id) return [{ carrier: "key-value", recordId: id }];
-    try {
-      const signed = JSON.parse(value) as { record?: { id?: unknown }; signature?: unknown };
-      const recordId = typeof signed?.signature === "string" ? validId(signed.record?.id) : undefined;
-      return recordId ? [{ carrier: "key-value", recordId }] : [];
-    } catch {
-      return [];
-    }
+    const id = validId(value?.trim());
+    return id ? [{ carrier: "key-value", recordId: id }] : [];
   }
 
   /** Whether a picture carries a C2PA manifest or XMP: names no record (the detector reads the manifest). */

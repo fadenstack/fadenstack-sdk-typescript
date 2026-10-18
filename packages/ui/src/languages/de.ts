@@ -45,6 +45,7 @@ export const germanStrings: UiStrings = {
     tool_denied: "Ein Tool wurde nicht zugelassen",
     rate_limited: "Zu viele Anfragen",
     round_limit: "Angehalten",
+    provenance_refused: "Nicht geschrieben: Es konnte nicht als KI-generiert gekennzeichnet werden",
   },
   noticeFallback: "Hinweis",
   tryAgainIn: (seconds) => `Versuchen Sie es in ${seconds} s erneut.`,
@@ -118,5 +119,5 @@ export const germanStrings: UiStrings = {
   picturesNotSeen: "Das Modell dieses Agenten sieht keine Bilder.",
   pictureNotRead: (name) => `${name} konnte nicht als Bild gelesen werden.`,
   aiGenerated: "KI-generiert",
-  aiGeneratedTitle: (record) => `KI-generiert (Datensatz ${record})`,
+  aiGeneratedTitle: (record) => `KI-generiert ${record}`,
 };

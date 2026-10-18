@@ -45,6 +45,7 @@ export const spanishStrings: UiStrings = {
     tool_denied: "No se permitió una herramienta",
     rate_limited: "Demasiadas solicitudes",
     round_limit: "Detenida",
+    provenance_refused: "No se escribió: no se pudo marcar como generado por IA",
   },
   noticeFallback: "Aviso",
   tryAgainIn: (seconds) => `Vuelva a intentarlo en ${seconds} s.`,
@@ -118,5 +119,5 @@ export const spanishStrings: UiStrings = {
   picturesNotSeen: "El modelo de este agente no ve imágenes.",
   pictureNotRead: (name) => `${name} no se pudo leer como imagen.`,
   aiGenerated: "Generado por IA",
-  aiGeneratedTitle: (record) => `Generado por IA (registro ${record})`,
+  aiGeneratedTitle: (record) => `Generado por IA ${record}`,
 };

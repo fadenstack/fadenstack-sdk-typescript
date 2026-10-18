@@ -144,7 +144,10 @@ export interface UiStrings {
   // content made with AI, where an agent places it (@fadenstack/provenance)
   /** A visible label on content made with AI, where the organisation asks for one. */
   aiGenerated: string;
-  /** The tooltip (`title`) on content made with AI that an agent put into a page or a mail, with its record's id. */
+  /**
+   * The tooltip (`title`) on content made with AI that an agent put into a page or a mail: `aiGenerated`, a space, the
+   * record's id, in every language (the .NET SDK and the host agents write the same, and readers find the id so).
+   */
   aiGeneratedTitle(record: string): string;
 }
 
@@ -192,6 +195,7 @@ export const englishStrings: UiStrings = {
     tool_denied: "A tool was not allowed",
     rate_limited: "Too many requests",
     round_limit: "Stopped",
+    provenance_refused: "Not written: it could not be marked as AI-generated",
   },
   noticeFallback: "Notice",
   tryAgainIn: (seconds) => `Try again in ${seconds} s.`,
@@ -262,7 +266,7 @@ export const englishStrings: UiStrings = {
   picturesNotSeen: "This agent's model does not see pictures.",
   pictureNotRead: (name) => `${name} could not be read as a picture.`,
   aiGenerated: "AI-generated",
-  aiGeneratedTitle: (record) => `AI-generated (record ${record})`,
+  aiGeneratedTitle: (record) => `AI-generated ${record}`,
 };
 
 /**

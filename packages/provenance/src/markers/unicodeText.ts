@@ -1,4 +1,4 @@
-import { RECORD_ID } from "../content.js";
+import { RECORD_ID, bareType } from "../content.js";
 import { Carriers, type ContentMarker, type MarkableContent, type MarkOutcome, type PlacedContent, type ProvenanceRecord, type SinkInfo } from "../types.js";
 
 /** Starts the invisible mark, as C2PA's text wrapper does (A.8): U+FEFF, zero width no-break space. */
@@ -17,13 +17,17 @@ function byteOf(codePoint: number): number | undefined {
   return undefined;
 }
 
-/** The record's id as invisible characters: U+FEFF, then our magic and the id's bytes as variation selectors. */
+/**
+ * The record's id as invisible characters, the format both SDKs write: U+FEFF, then the bytes `46 44 4E 50 01`
+ * ("FDNP" and version 1) and the id's UTF-8 bytes, each byte as one variation selector -- 0 to 15 as U+FE00 to
+ * U+FE0F, 16 to 255 as U+E0100 to U+E01EF. For a UUID: 1 + 5 + 36 = 42 code points.
+ */
 export function invisibleMark(recordId: string): string {
   const bytes = [...MAGIC, ...new TextEncoder().encode(recordId)];
   return String.fromCharCode(START) + bytes.map(selector).join("");
 }
 
-/** The record ids invisible marks of ours in `text` name, in order. */
+/** The record ids invisible marks of ours in `text` name, in order: a U+FEFF followed by our bytes and a valid id. */
 export function invisibleRecordIds(text: string): string[] {
   const ids: string[] = [];
   const points = [...text].map((c) => c.codePointAt(0)!);
@@ -42,17 +46,17 @@ export function invisibleRecordIds(text: string): string[] {
 }
 
 /**
- * Opt-in only: the record's id as invisible characters at the end of plain text or Markdown, using the variation
- * selectors of C2PA's text embedding (A.8) with a payload of our own. Security filters and model guardrails flag or
- * strip such characters, and some editors drop them on save, so it is never on by default; the placement records
- * whether they held. The sink carries `unicode-text`.
+ * Opt-in only: the record's id as invisible characters (`invisibleMark`) at the very end of plain text or Markdown,
+ * using the variation selectors of C2PA's text embedding (A.8) with a payload of our own. Security filters and model
+ * guardrails flag or strip such characters, and some editors drop them on save (Gmail's draft save does), so it is
+ * never on by default; the placement records whether they held. The sink carries `unicode-text`.
  */
 export class UnicodeTextMarker implements ContentMarker {
   readonly name = "unicode-text";
   readonly layer = "metadata";
 
   supports(sink: SinkInfo, mediaType: string): boolean {
-    const type = mediaType.toLowerCase();
+    const type = bareType(mediaType);
     return sink.carries.includes(Carriers.unicodeText) && (type === "text/plain" || type === "text/markdown");
   }
 
@@ -64,9 +68,9 @@ export class UnicodeTextMarker implements ContentMarker {
   async attach(placed: PlacedContent, record: ProvenanceRecord): Promise<MarkOutcome> {
     const back = await placed.readBack();
     const text = back instanceof Uint8Array ? new TextDecoder().decode(back) : back;
-    if (text === undefined) return { applied: true, method: "unicode-text", verified: false };
+    if (text === undefined) return { applied: true, method: this.name, verified: false, detail: "not read back" };
     return invisibleRecordIds(text).includes(record.id)
-      ? { applied: true, method: "unicode-text" }
-      : { applied: false, method: "unicode-text", reason: "stripped-by-host" };
+      ? { applied: true, method: this.name, verified: true }
+      : { applied: false, method: this.name, reason: "stripped-by-host", detail: "the invisible characters were dropped" };
   }
 }
