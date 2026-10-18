@@ -1,0 +1,37 @@
+[
+  {
+    "input": "\ufeffBOM stays\ufeff",
+    "normalized": "\ufeffBOM stays\ufeff",
+    "sha256": "9f8c0f9503235358133f2e131362a6c56c7a90121425f7ecd59eb6493de8a9f3"
+  },
+  {
+    "input": "Next\u0085line and\u001cfile\u001fseparators",
+    "normalized": "Next line and file separators",
+    "sha256": "e9660a2b963cea07b8ce8b0c6e8212f6ad8023256e0c8981db66fcd17676018a"
+  },
+  {
+    "input": "Ogham\u1680space, mongolian\u180evowel",
+    "normalized": "Ogham space, mongolian\u180evowel",
+    "sha256": "53e0e45f196142a1c6eb8f59831efcde62b9c82a68bc999a1098cb4e2bda8fba"
+  },
+  {
+    "input": "zero\u200bwidth stays",
+    "normalized": "zero\u200bwidth stays",
+    "sha256": "c503ac6258d0f62cb6aa9de856be5b855d6e480e42b520ce245eb1bf38e8c747"
+  },
+  {
+    "input": "tab\u000bvertical\ffeed",
+    "normalized": "tab vertical feed",
+    "sha256": "1b378dcd7f9a45968ea93503beb676f469edeecb732235188ccb0d585796b3ed"
+  },
+  {
+    "input": "\u2029paragraph\u2028line\u205fmath ",
+    "normalized": "paragraph line math",
+    "sha256": "bbfd72ead456405aa1f940121eca4f38be93e6889cbd5e62c64dd1578e0e1c5b"
+  },
+  {
+    "input": "Ae\u0308 o\u0308 \u212b",
+    "normalized": "A\u00eb \u00f6 \u00c5",
+    "sha256": "70a53a94fedf8d5356645531703d6a8a119ee850fc3c4713cb82e949f584cc8e"
+  }
+]
