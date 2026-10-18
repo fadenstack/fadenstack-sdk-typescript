@@ -1,4 +1,4 @@
-import type { AgentClientEvent, AgentProfile, ChatStreamer, FadenstackClient, ToolClass } from "@fadenstack/client";
+import type { AgentClientEvent, AgentProfile, ChatStreamer, FadenstackClient, GovernanceNotice, ToolClass } from "@fadenstack/client";
 
 import type { AgentTool, ToolCallContext } from "./tools.js";
 
@@ -62,6 +62,8 @@ export interface ToolServiceCall {
    * requests are built from.
    */
   record(type: string, data: Record<string, unknown>): Promise<void>;
+  /** Raises a notice on the turn, for the user (the provenance module's `provenance_refused`), as the gateway's are. */
+  notice(notice: GovernanceNotice): Promise<void>;
 }
 
 /** Makes a module's service for one call; called on the call's first `services.get(key)`. */

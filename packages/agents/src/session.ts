@@ -570,6 +570,7 @@ class Turn {
         }
         await append(type, turnId, data);
       },
+      notice: (notice) => this.#notice(notice),
     });
   }
 

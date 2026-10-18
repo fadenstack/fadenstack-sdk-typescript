@@ -182,7 +182,9 @@ sees the arguments the tool gets.
 A tool service's factory gets the call (`ToolServiceCall`): the tool, its class, its arguments, the ids of the call,
 session and turn, the call's signal, the agent's client and profile, and `record(type, data)`, which adds an entry of
 the module's own type (`provenance.placed`) to the session's transcript. A module's entries hold ids, names and
-counts, never content; they are not sent to the model, and the SDK's own entry types are refused.
+counts, never content; they are not sent to the model, and the SDK's own entry types are refused. `notice(notice)`
+raises a notice on the turn for the user (the provenance module's `provenance_refused`): it goes into the turn's
+notices and the transcript, as the .NET SDK's `ToolInvocation.NoticeAsync` does.
 
 `build()` throws when the agent or the client is missing, when the client is for another agent, and when two tools
 have the same name.
