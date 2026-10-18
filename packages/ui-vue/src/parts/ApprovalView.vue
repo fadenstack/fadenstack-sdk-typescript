@@ -21,10 +21,14 @@ const part = useViewModel(() => props.part);
     <p v-if="part.target" class="fdn-approval-target" dir="auto">{{ part.target }}</p>
     <pre v-if="part.argumentsText" class="fdn-approval-args" dir="auto">{{ part.argumentsText }}</pre>
     <div v-if="part.isPending" class="fdn-approval-actions">
-      <button type="button" class="fdn-button fdn-primary" @click="part.allow()">{{ strings.allow }}</button>
-      <button v-if="part.canAllowForSession" type="button" class="fdn-button" @click="part.allowForSession()">{{ strings.allowForChat }}</button>
-      <button v-if="part.canAllowAlways" type="button" class="fdn-button" @click="part.allowAlways()">{{ strings.allowAlways }}</button>
-      <button type="button" class="fdn-button fdn-quiet" @click="part.deny()">{{ strings.deny }}</button>
+      <div class="fdn-approval-pair">
+        <button type="button" class="fdn-button fdn-primary" @click="part.allow()">{{ strings.allow }}</button>
+        <button v-if="part.canAllowForSession" type="button" class="fdn-button" @click="part.allowForSession()">{{ strings.allowForChat }}</button>
+      </div>
+      <div class="fdn-approval-pair">
+        <button v-if="part.canAllowAlways" type="button" class="fdn-button" @click="part.allowAlways()">{{ strings.allowAlways }}</button>
+        <button type="button" class="fdn-button fdn-quiet" @click="part.deny()">{{ strings.deny }}</button>
+      </div>
     </div>
     <div v-else :class="`fdn-approval-state fdn-approval-${part.state}`">{{ part.stateText }}</div>
   </div>

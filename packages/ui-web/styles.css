@@ -22,7 +22,9 @@
   --fdn-surface-hover: rgba(31, 31, 31, 0.06);
   --fdn-text: #1f1f1f;
   --fdn-text-muted: #474747;
-  --fdn-text-faint: #757775;
+  /* Quiet text on the panel's background: 5.2:1 on white, 4.7:1 on the surface (a chip's subtitle). Text in a menu,
+     an approval card, a notice or a code block is muted, which keeps 4.5:1 on their hover and soft colours too. */
+  --fdn-text-faint: #6b6d6b;
   --fdn-border: #c7c7c7;
   --fdn-hairline: #e3e3e3;
   --fdn-accent: #0b57d0;
@@ -306,7 +308,7 @@
 .fdn-menu-description,
 .fdn-menu-note {
   display: block;
-  color: var(--fdn-text-faint);
+  color: var(--fdn-text-muted);
   font-size: 12px;
 }
 
@@ -315,7 +317,7 @@
 }
 
 /* The settings: a heading over each group (the languages), the host's own items below a line. A heading on a menu
-   (and About's title) is muted, not faint: faint text is under 4.5:1 on the menu's surface. */
+   (and About's title) is muted, as all text on a surface. */
 .fdn-menu-heading,
 .fdn-about-title {
   color: var(--fdn-text-muted);
@@ -338,6 +340,16 @@
 .fdn-settings {
   max-height: min(480px, 75vh);
   overflow-y: auto;
+}
+
+/* The settings name languages in their own scripts; the fonts for Chinese have no weight 500 and fall back to 400, so
+   every item here is 400 (as the host's own items are), and the picked one 600, which those fonts show as bold. */
+.fdn-settings .fdn-menu-label {
+  font-weight: 400;
+}
+
+.fdn-settings [aria-checked="true"] .fdn-menu-label {
+  font-weight: 600;
 }
 
 .fdn-history {
@@ -378,7 +390,7 @@
 }
 
 .fdn-history-when {
-  color: var(--fdn-text-faint);
+  color: var(--fdn-text-muted);
   font-size: 12px;
   white-space: nowrap;
 }
@@ -489,8 +501,8 @@
   align-items: center;
   gap: 2px;
   margin-inline-start: -4px;
+  color: var(--fdn-text-muted); /* quiet icons; not by opacity, which took the meta's text under 4.5:1 */
   font-size: 12px;
-  opacity: 0.85;
 }
 
 .fdn-turn-actions .fdn-muted {
@@ -636,7 +648,7 @@
   min-height: 30px;
   padding-block: 2px 0;
   padding-inline: 12px 4px;
-  color: var(--fdn-text-faint);
+  color: var(--fdn-text-muted);
   font-size: 12px;
 }
 
@@ -798,7 +810,7 @@
 }
 
 .fdn-label {
-  color: var(--fdn-text-faint);
+  color: var(--fdn-text-muted);
   font-size: 11.5px;
   font-weight: 500;
 }
@@ -870,16 +882,26 @@
   background: var(--fdn-bg);
 }
 
-.fdn-approval-actions {
+/* The answers in two pairs (Allow, Allow for this chat | Allow always, Deny): one row where they fit, else a pair a
+   row, never three and one. Narrower padding than other buttons, so all four fit in a 420 px task pane. */
+.fdn-approval-actions,
+.fdn-approval-pair {
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
+}
+
+.fdn-approval-actions {
   margin-top: 10px;
+}
+
+.fdn-chat .fdn-approval-actions .fdn-button {
+  padding-inline: 10px;
 }
 
 .fdn-approval-state {
   margin-top: 8px;
-  color: var(--fdn-text-faint);
+  color: var(--fdn-text-muted);
   font-size: 12px;
 }
 
@@ -958,7 +980,7 @@
 }
 
 .fdn-notice-detail {
-  color: var(--fdn-text-faint);
+  color: var(--fdn-text-muted);
   font-size: 11.5px;
 }
 
@@ -1132,6 +1154,13 @@
 .fdn-ai-notice,
 .fdn-footer-brand {
   margin: 0;
+}
+
+/* A notice that wraps does so in even lines, never one word alone on the last; where balance is not supported,
+   pretty keeps the last line from being one word, and older engines wrap as usual. */
+.fdn-ai-notice {
+  text-wrap: pretty;
+  text-wrap: balance;
 }
 
 /* Just enough to tell the link's line from a notice that wraps. */

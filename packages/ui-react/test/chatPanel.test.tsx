@@ -128,6 +128,9 @@ describe("ChatPanel", () => {
       fireEvent.click(screen.getByRole("button", { name: "Send" }));
     });
     expect(await screen.findByRole("button", { name: "Allow for this chat" })).toBeTruthy();
+    // In two pairs, so a narrow panel breaks them two and two, never three and one.
+    expect([...document.querySelectorAll(".fdn-approval-actions > .fdn-approval-pair")].map((p) => [...p.children].map((b) => b.textContent)))
+      .toEqual([["Allow", "Allow for this chat"], ["Allow always", "Deny"]]);
     const always = screen.getByRole("button", { name: "Allow always" });
     await act(async () => {
       fireEvent.click(always);
@@ -143,6 +146,7 @@ describe("ChatPanel", () => {
     });
     expect(await screen.findByRole("button", { name: "Allow" })).toBeTruthy();
     expect(screen.getByRole("button", { name: "Deny" })).toBeTruthy();
+    expect([...document.querySelectorAll(".fdn-approval-pair")].map((p) => p.textContent)).toEqual(["Allow", "Deny"]);
     expect(screen.queryByRole("button", { name: "Allow for this chat" })).toBeNull();
     expect(screen.queryByRole("button", { name: "Allow always" })).toBeNull();
     await act(async () => {
@@ -286,8 +290,8 @@ describe("ChatPanel's About and links", () => {
   it("speaks the panel's language, the brand name aside", async () => {
     await panel(() => ({ text: "ok" }), "write", { lockedLanguage: "de" });
     fireEvent.click(screen.getByRole("button", { name: "Einstellungen" }));
-    fireEvent.click(screen.getByRole("menuitem", { name: "Über" }));
-    const about = screen.getByRole("dialog", { name: "Über" });
+    fireEvent.click(screen.getByRole("menuitem", { name: "Info" }));
+    const about = screen.getByRole("dialog", { name: "Info" }); // as the .NET panel and Microsoft's German software say it
     expect([...about.querySelectorAll("a")].map((a) => a.getAttribute("aria-label"))).toEqual([
       "Hilfe (öffnet in einem neuen Tab)", "Fadenstack (öffnet in einem neuen Tab)", "Entwicklerdokumentation (öffnet in einem neuen Tab)",
     ]);

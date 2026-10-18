@@ -73,7 +73,7 @@ export const germanStrings: UiStrings = {
   languageMenu: "Sprache",
   languageAutomatic: (name) => `Automatisch (${name})`,
   languageLocked: "Von Ihrer Organisation festgelegt",
-  about: "Über",
+  about: "Info",
   aboutVersion: (version) => `Version ${version}`,
   aboutDraft: "Entwurf",
   aboutModel: (model) => `Modell: ${model}`,
