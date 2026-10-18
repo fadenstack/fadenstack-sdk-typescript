@@ -15,7 +15,8 @@ export interface ManifestTool {
   openWorld?: boolean;
   /**
    * What it writes for people to read: the argument, its media type and the edit kind (left out when the tool
-   * decides it per call). A write tool without one is one the server's admins may ask about.
+   * decides it per call). A write tool without one is one the server's admins may ask about. Sent as a list of one:
+   * `"outputs": [{ "argument", "media_type", "edit_kind"? }]`.
    */
   output?: { argument: string; mediaType: string; editKind?: EditKind };
 }
@@ -48,12 +49,13 @@ export function toWireManifest(manifest: AppManifest): Record<string, unknown> {
       if (tool.description !== undefined) out["description"] = tool.description;
       if (tool.parameters !== undefined) out["parameters"] = tool.parameters;
       if (tool.openWorld !== undefined) out["open_world"] = tool.openWorld;
+      // On the wire a list, as the .NET SDK sends it (a tool may write several arguments): `outputs`.
       if (tool.output !== undefined) {
-        out["output"] = {
+        out["outputs"] = [{
           argument: tool.output.argument,
           media_type: tool.output.mediaType,
           ...(tool.output.editKind !== undefined ? { edit_kind: tool.output.editKind } : {}),
-        };
+        }];
       }
       return out;
     }),

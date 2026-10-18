@@ -46,19 +46,18 @@ describe("output declarations", () => {
     expect(() => defineTool({ name: "c", output: { argument: "text", mediaType: "text/plain" } as never, run })).toThrow(TypeError);
   });
 
-  it("go in the app manifest, with the edit kind when it is fixed", async () => {
+  it("go in the app manifest as a list, with the edit kind when it is fixed (the .NET SDK sends the same)", async () => {
     const fixed = defineTool({ name: "write_note", toolClass: "write", output: { argument: "text", mediaType: "text/html", edit: "generated" }, run: () => "" });
-    const s = await setup({ agents: [{ slug: "docs" }] }, undefined, (b) => b.addTools(insertReply));
+    const s = await setup({ agents: [{ slug: "docs" }] }, undefined, (b) => b.addTools(insertReply, fixed));
     await s.agent.start();
     await until(() => s.gateway.manifests.length > 0);
-    const tools = (s.gateway.manifests[0]!.manifest["tools"] as Record<string, unknown>[]);
-    expect(tools.find((t) => t["name"] === "insert_reply")!["output"]).toEqual({ argument: "text", media_type: "text/markdown" });
-    expect(tools.find((t) => t["name"] === "read_page")!["output"]).toBeUndefined();
-    const other = await setup({ agents: [{ slug: "docs" }] }, undefined, (b) => b.addTools(fixed));
-    await other.agent.start();
-    await until(() => other.gateway.manifests.length > 0);
-    const manifest = other.gateway.manifests[0]!.manifest["tools"] as Record<string, unknown>[];
-    expect(manifest.find((t) => t["name"] === "write_note")!["output"]).toEqual({ argument: "text", media_type: "text/html", edit_kind: "generated" });
+    const body = s.gateway.requests.find((q) => q.path.endsWith("/manifest"))!.body as { tools: Record<string, unknown>[] };
+    const tool = (name: string) => body.tools.find((t) => t["name"] === name)!;
+    // The exact JSON: a per-call edit kind is left out, a fixed one sent.
+    expect(JSON.stringify(tool("insert_reply")["outputs"])).toBe('[{"argument":"text","media_type":"text/markdown"}]');
+    expect(JSON.stringify(tool("write_note")["outputs"])).toBe('[{"argument":"text","media_type":"text/html","edit_kind":"generated"}]');
+    expect(tool("insert_reply")["output"]).toBeUndefined();
+    expect(tool("read_page")["outputs"]).toBeUndefined();
   });
 });
 
