@@ -141,6 +141,11 @@ export interface UiStrings {
   /** Said when a picture is added for an agent whose model does not see pictures. */
   picturesNotSeen: string;
   pictureNotRead(name: string): string;
+  // content made with AI, where an agent places it (@fadenstack/provenance)
+  /** A visible label on content made with AI, where the organisation asks for one. */
+  aiGenerated: string;
+  /** The tooltip (`title`) on content made with AI that an agent put into a page or a mail, with its record's id. */
+  aiGeneratedTitle(record: string): string;
 }
 
 export const englishStrings: UiStrings = {
@@ -256,6 +261,8 @@ export const englishStrings: UiStrings = {
   pastedPicture: "Pasted picture",
   picturesNotSeen: "This agent's model does not see pictures.",
   pictureNotRead: (name) => `${name} could not be read as a picture.`,
+  aiGenerated: "AI-generated",
+  aiGeneratedTitle: (record) => `AI-generated (record ${record})`,
 };
 
 /**

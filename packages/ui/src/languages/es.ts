@@ -117,4 +117,6 @@ export const spanishStrings: UiStrings = {
   pastedPicture: "Imagen pegada",
   picturesNotSeen: "El modelo de este agente no ve imágenes.",
   pictureNotRead: (name) => `${name} no se pudo leer como imagen.`,
+  aiGenerated: "Generado por IA",
+  aiGeneratedTitle: (record) => `Generado por IA (registro ${record})`,
 };

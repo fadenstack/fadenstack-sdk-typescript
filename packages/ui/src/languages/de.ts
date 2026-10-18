@@ -117,4 +117,6 @@ export const germanStrings: UiStrings = {
   pastedPicture: "Eingefügtes Bild",
   picturesNotSeen: "Das Modell dieses Agenten sieht keine Bilder.",
   pictureNotRead: (name) => `${name} konnte nicht als Bild gelesen werden.`,
+  aiGenerated: "KI-generiert",
+  aiGeneratedTitle: (record) => `KI-generiert (Datensatz ${record})`,
 };

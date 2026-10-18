@@ -114,4 +114,6 @@ export const chineseSimplifiedStrings: UiStrings = {
   pastedPicture: "粘贴的图片",
   picturesNotSeen: "此智能体的模型无法查看图片。",
   pictureNotRead: (name) => `无法将 ${name} 读取为图片。`,
+  aiGenerated: "人工智能生成",
+  aiGeneratedTitle: (record) => `人工智能生成（记录 ${record}）`,
 };
