@@ -87,8 +87,8 @@ function SettingsMenu({ chat, extra }: { chat: AgentChatViewModel; extra?: React
   const languages = chat.canChangeLanguage || chat.isLanguageLocked;
   return (
     <div className="fdn-menu-anchor" ref={ref}>
-      <button ref={gear} type="button" className="fdn-icon-button" title={s.settings} aria-label={s.settings} aria-haspopup="menu"
-        aria-expanded={chat.isSettingsOpen} onClick={() => chat.setSettingsOpen(!chat.isSettingsOpen)}>
+      <button ref={gear} type="button" className={chat.isAboutOpen ? "fdn-icon-button fdn-open" : "fdn-icon-button"} title={s.settings}
+        aria-label={s.settings} aria-haspopup="menu" aria-expanded={chat.isSettingsOpen} onClick={() => chat.setSettingsOpen(!chat.isSettingsOpen)}>
         <Icon name="settings" />
       </button>
       {chat.isSettingsOpen && (

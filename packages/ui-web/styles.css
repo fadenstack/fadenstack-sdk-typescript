@@ -221,6 +221,13 @@
   color: var(--fdn-text);
 }
 
+/* A button whose menu is open looks pressed; the gear also while About, which its menu opened, is open. */
+.fdn-icon-button[aria-expanded="true"],
+.fdn-icon-button.fdn-open {
+  background: var(--fdn-surface-hover);
+  color: var(--fdn-text);
+}
+
 .fdn-icon-button:disabled {
   opacity: 0.38;
   cursor: default;
@@ -307,14 +314,19 @@
   padding: 6px 10px;
 }
 
-/* The settings: a heading over each group (the languages), the host's own items below a line. */
+/* The settings: a heading over each group (the languages), the host's own items below a line. A heading on a menu
+   (and About's title) is muted, not faint: faint text is under 4.5:1 on the menu's surface. */
+.fdn-menu-heading,
+.fdn-about-title {
+  color: var(--fdn-text-muted);
+  font-size: 12px;
+  font-weight: 500;
+}
+
 .fdn-menu-heading {
   display: block;
   padding-block: 6px 2px;
   padding-inline: 10px;
-  color: var(--fdn-text-faint);
-  font-size: 12px;
-  font-weight: 500;
 }
 
 .fdn-menu-extra {
@@ -876,7 +888,9 @@
   color: var(--fdn-success);
 }
 
-.fdn-button {
+/* Text buttons (approval cards, About). Under `.fdn-chat`, so their colour and weight outrank the reset that has
+   every button in the panel inherit its font and colour (`.fdn-chat button`). */
+.fdn-chat .fdn-button {
   height: 32px;
   padding: 0 14px;
   border: 1px solid var(--fdn-border);
@@ -887,27 +901,27 @@
   cursor: pointer;
 }
 
-.fdn-button:hover:not(:disabled) {
+.fdn-chat .fdn-button:hover:not(:disabled) {
   background: var(--fdn-surface-hover);
 }
 
-.fdn-button.fdn-primary {
+.fdn-chat .fdn-button.fdn-primary {
   border-color: var(--fdn-accent);
   background: var(--fdn-accent);
   color: var(--fdn-on-accent);
 }
 
-.fdn-button.fdn-primary:hover:not(:disabled) {
+.fdn-chat .fdn-button.fdn-primary:hover:not(:disabled) {
   background: var(--fdn-accent);
   filter: brightness(1.08);
 }
 
-.fdn-button.fdn-quiet {
+.fdn-chat .fdn-button.fdn-quiet {
   border-color: transparent;
   color: var(--fdn-text-muted);
 }
 
-.fdn-button:disabled {
+.fdn-chat .fdn-button:disabled {
   opacity: 0.45;
   cursor: default;
 }
@@ -1105,9 +1119,9 @@
   background: var(--fdn-bg);
 }
 
-/* Under the composer: answers come from an AI and can be wrong. Quiet, but always there. Then, as quiet, the
-   Fadenstack link (`branding: false` hides it). */
-.fdn-ai-notice {
+/* Under the composer: answers come from an AI and can be wrong. Quiet, but always there. Below it, on a line of
+   its own and as quiet, the Fadenstack link (`branding: false` hides it). */
+.fdn-footer {
   margin: -4px 12px 8px;
   color: var(--fdn-text-faint);
   font-size: 11.5px;
@@ -1115,8 +1129,14 @@
   text-align: center;
 }
 
-.fdn-ai-notice-separator {
-  margin-inline: 5px;
+.fdn-ai-notice,
+.fdn-footer-brand {
+  margin: 0;
+}
+
+/* Just enough to tell the link's line from a notice that wraps. */
+.fdn-ai-notice + .fdn-footer-brand {
+  margin-block-start: 2px;
 }
 
 /* Muted like the notice, underlined so it is not told apart by colour alone; no arrow on so small a line. */
@@ -1142,13 +1162,14 @@
   transform: scaleX(-1);
 }
 
-/* About: an overlay below the settings' gear, like the menus. */
+/* About: an overlay below the settings' gear, like the menus. Its text starts where the menu items' labels start
+   (6 the menu + 6 the item + 16 the check + 8 the gap), so it opens in place of the item that opened it. */
 .fdn-about {
   display: flex;
   flex-direction: column;
   gap: 10px;
   padding-block: 6px 12px;
-  padding-inline: 12px 6px;
+  padding-inline: 36px 6px;
 }
 
 .fdn-about-head {
@@ -1156,12 +1177,6 @@
   align-items: center;
   justify-content: space-between;
   gap: 8px;
-}
-
-.fdn-about-title {
-  color: var(--fdn-text-faint);
-  font-size: 12px;
-  font-weight: 500;
 }
 
 .fdn-about-agent,
@@ -1183,10 +1198,12 @@
   font-size: 12px;
 }
 
+/* One link per line: nothing wraps unevenly, whatever the language makes of their names. */
 .fdn-about-links {
   display: flex;
-  flex-wrap: wrap;
-  gap: 4px 14px;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
 }
 
 .fdn-about-link {

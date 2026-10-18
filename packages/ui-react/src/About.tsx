@@ -24,17 +24,23 @@ export function ExternalLink({ chat, link, className, iconSize = 12 }: { chat: A
   );
 }
 
-/** Under the composer: that the answers come from an AI, then the muted Fadenstack link (`branding`). */
+/**
+ * Under the composer: that the answers come from an AI, and below it, on a line of its own, the muted Fadenstack
+ * link (`branding`).
+ */
 export function NoticeLine({ chat }: { chat: AgentChatViewModel }): ReactElement | null {
   const notice = chat.strings.aiNotice;
   const link = chat.footerLink;
   if (!notice && !link) return null;
   return (
-    <p className="fdn-ai-notice">
-      {notice && <span dir="auto">{notice}</span>}
-      {notice && link && <span className="fdn-ai-notice-separator" aria-hidden="true">·</span>}
-      {link && <ExternalLink chat={chat} link={link} className="fdn-footer-link" iconSize={0} />}
-    </p>
+    <div className="fdn-footer">
+      {notice && <p className="fdn-ai-notice" dir="auto">{notice}</p>}
+      {link && (
+        <p className="fdn-footer-brand">
+          <ExternalLink chat={chat} link={link} className="fdn-footer-link" iconSize={0} />
+        </p>
+      )}
+    </div>
   );
 }
 

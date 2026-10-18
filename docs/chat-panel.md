@@ -380,8 +380,8 @@ server's address. Its links go to your organisation's Help on the agent's server
 fadenstack.com, and to the developer docs. *Copy details* copies all of it as text lines, for a support request.
 Escape, the close button or a press outside closes it.
 
-After the AI notice, under the message box, the panel shows a muted **Fadenstack** link to fadenstack.com.
-`branding: false` hides it. About stays.
+Under the AI notice, on a small line of its own, the panel shows a muted **Fadenstack** link to fadenstack.com.
+`branding: false` hides that line; the notice and About stay.
 
 ```ts
 const chat = new AgentChatViewModel(agent, approvals, {

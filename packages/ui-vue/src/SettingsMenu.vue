@@ -32,7 +32,7 @@ function closeAbout(returnFocus: boolean): void {
     <button
       ref="gear"
       type="button"
-      class="fdn-icon-button"
+      :class="chat.isAboutOpen ? 'fdn-icon-button fdn-open' : 'fdn-icon-button'"
       :title="chat.strings.settings"
       :aria-label="chat.strings.settings"
       aria-haspopup="menu"
