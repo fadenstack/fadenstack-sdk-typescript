@@ -357,7 +357,7 @@ export class FakeGateway {
       return json(200, { object: "list", data: (this.#options.models ?? ["fake-model"]).map((id) => ({ id, object: "model" })) });
     }
     if (path === "/v1/provenance/anchors" || path === "/v1/provenance/verify") return this.#provenanceRoute(request, path, body);
-    const match = /^\/v1\/agents\/([^/]+)\/(profile|user|skills|chat\/completions|events|manifest|approvals\/([^/]+)|provenance\/(policy|records|placements))$/
+    const match = /^\/v1\/agents\/([^/]+)\/(profile|user|skills|chat\/completions|events|manifest|approvals\/([^/]+)|provenance\/(policy|records|placements|verify))$/
       .exec(path);
     if (!match) return json(404, { detail: "Not Found" });
     const agent = decodeURIComponent(match[1]!);
@@ -394,6 +394,7 @@ export class FakeGateway {
       return json(200, { ...DEFAULT_PROVENANCE_POLICY, ...this.#options.provenance?.policy, ...this.#agents.get(agent)!.provenancePolicy });
     }
     if (method === "POST" && route === "records") return this.#signRecord(agent, body);
+    if (method === "POST" && route === "verify") return this.#verify(body);
     if (method === "POST" && route === "placements") {
       const problem = placementProblem(body);
       if (problem) return json(422, { detail: [{ msg: problem }] });
@@ -433,7 +434,10 @@ export class FakeGateway {
     return json(200, signed);
   }
 
-  /** `GET /v1/provenance/anchors` (anyone) and `POST /v1/provenance/verify` (a signed-in user or agent). */
+  /**
+   * `GET /v1/provenance/anchors` (anyone) and `POST /v1/provenance/verify` (a signed-in user; an agent token is
+   * refused there, as the gateway refuses it outside its agent's routes).
+   */
   async #provenanceRoute(request: Request, path: string, body: unknown): Promise<Response> {
     const unavailable = this.#provenanceUnavailable();
     if (unavailable) return unavailable;
@@ -445,13 +449,22 @@ export class FakeGateway {
     }
     if (path !== "/v1/provenance/verify" || request.method !== "POST") return json(405, { detail: "Method Not Allowed" });
     const token = bearer(request) ?? "";
-    if (!this.#logins.has(token) && !this.#signIns.some((s) => s.access === token && !s.revoked && s.accessExpires > this.#now())) {
-      return openAiError(401, "The token is not valid.", "invalid_token", "authentication_error");
+    if (this.#signIns.some((s) => s.access === token && !s.revoked && s.accessExpires > this.#now())) {
+      return openAiError(403, "Agent tokens are accepted only on their agent's routes (/v1/agents/{agent}/...).",
+        "agent_token_not_allowed", "permission_error");
     }
+    if (!this.#logins.has(token)) return openAiError(401, "The token is not valid.", "invalid_token", "authentication_error");
+    return this.#verify(body);
+  }
+
+  /** The detector, as both verify routes run it: the content's hash looked up among the records signed here. */
+  async #verify(body: unknown): Promise<Response> {
     const b = (body ?? {}) as Record<string, unknown>;
     const text = typeof b["text"] === "string" ? b["text"] : undefined;
     const file = typeof b["file"] === "string" ? Uint8Array.from(atob(b["file"]), (c) => c.charCodeAt(0)) : undefined;
-    if (text === undefined && file === undefined) return json(422, { detail: [{ msg: "text or file is required" }] });
+    if ((text === undefined) === (file === undefined)) {
+      return openAiError(400, "Send either text or file, not both and not neither.", "validation_error", "invalid_request_error");
+    }
     const sha = text !== undefined ? await textSha256(text) : await bytesSha256(file!);
     const hash = await keyedHash(sha);
     const found = this.provenanceRecords.find((r) => r.signed.record.content_hash === hash);
@@ -960,20 +973,28 @@ function placementProblem(body: unknown): string | undefined {
   const fields = ["record_id", "tool", "sink_kind", "media_type", "edit_kind", "length_class", "layers"];
   const extra = Object.keys(b).filter((k) => !fields.includes(k));
   if (extra.length) return `extra fields not permitted: ${extra.join(", ")}`;
-  const missing = fields.filter((k) => b[k] === undefined || b[k] === null);
+  // record_id is optional: exempt content, an unsigned record and unmarked content have none.
+  const missing = fields.filter((k) => k !== "record_id" && (b[k] === undefined || b[k] === null));
   if (missing.length) return `required: ${missing.join(", ")}`;
-  if (["record_id", "tool", "sink_kind", "media_type"].some((k) => typeof b[k] !== "string" || !b[k])) return "names are strings";
-  if (String(b["record_id"]).length > 64) return "record_id is 64 characters at most";
+  if (["tool", "sink_kind", "media_type"].some((k) => typeof b[k] !== "string" || !b[k])) return "names are strings";
+  const recordId = b["record_id"];
+  if (recordId !== undefined && recordId !== null && (typeof recordId !== "string" || recordId.length > 128)) {
+    return "record_id is a string of 128 characters at most";
+  }
   if (!isEditKind(b["edit_kind"])) return "edit_kind is not an edit kind";
   if (!["short", "medium", "long"].includes(b["length_class"] as string)) return "length_class is short, medium or long";
   if (!Array.isArray(b["layers"])) return "layers is a list";
+  if ((b["layers"] as unknown[]).length > 32) return "32 layers at most";
   for (const layer of b["layers"] as Record<string, unknown>[]) {
-    const extraLayer = Object.keys(layer ?? {}).filter((k) => !["layer", "method", "applied", "reason"].includes(k));
+    const extraLayer = Object.keys(layer ?? {}).filter((k) => !["layer", "method", "applied", "reason", "verified"].includes(k));
     if (extraLayer.length) return `extra fields not permitted in a layer: ${extraLayer.join(", ")}`;
     if (!(MARK_LAYERS as readonly unknown[]).includes(layer["layer"])) return "a layer is metadata, watermark, fingerprint or label";
     if (typeof layer["method"] !== "string" || typeof layer["applied"] !== "boolean") return "a layer has a method and applied";
+    if ((layer["method"] as string).length > 64) return "a layer's method is 64 characters at most";
     const reason = layer["reason"];
     if (reason !== undefined && reason !== null && !(REASON_CODES as readonly unknown[]).includes(reason)) return `not a reason code: ${String(reason)}`;
+    const verified = layer["verified"];
+    if (verified !== undefined && verified !== null && typeof verified !== "boolean") return "a layer's verified is true, false or absent";
   }
   return undefined;
 }

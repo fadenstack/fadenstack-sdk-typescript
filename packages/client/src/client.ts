@@ -45,7 +45,7 @@ export class FadenstackClient {
   readonly chat: FadenstackChatClient;
   /** The client's agent (profile, events, approvals); undefined without an agent. */
   readonly agent: AgentResource | undefined;
-  /** The server's provenance routes: the anchors that check its signatures, and its detector. */
+  /** The server's provenance routes: the anchors that check its signatures, and its detector (the agent's route, with an agent). */
   readonly provenance: ProvenanceResource;
 
   constructor(options: FadenstackClientOptions) {
@@ -65,7 +65,7 @@ export class FadenstackClient {
     if (options.model !== undefined) chat.model = options.model;
     this.chat = new FadenstackChatClient(this.transport, chat);
     this.agent = options.agent ? new AgentResource(this.transport, options.agent) : undefined;
-    this.provenance = new ProvenanceResource(this.transport);
+    this.provenance = new ProvenanceResource(this.transport, options.agent || undefined);
   }
 
   /** The server's edition and features (`GET /v1/features`). */

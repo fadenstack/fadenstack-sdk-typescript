@@ -36,8 +36,13 @@ type FieldMap<T> = { readonly [K in keyof T]-?: undefined extends T[K] ? "option
 /** Every member of a union, once: the compiler checks this against the type, the test against the schema's enum. */
 type Members<T extends string> = { readonly [K in T]: true };
 
-const LAYER_OUTCOME = { layer: "required", method: "required", applied: "required", reason: "optional" } satisfies FieldMap<LayerOutcome>;
-const WATERMARK = { applied: "required", algorithm: "optional", vendor: "optional", reason: "optional" } satisfies FieldMap<WatermarkStatus>;
+const LAYER_OUTCOME = {
+  layer: "required", method: "required", applied: "required", reason: "optional", verified: "optional",
+} satisfies FieldMap<LayerOutcome>;
+const WATERMARK = {
+  applied: "required", algorithm: "optional", vendor: "optional", reason: "optional", key_version: "optional",
+  context_width: "optional", tokenizer: "optional",
+} satisfies FieldMap<WatermarkStatus>;
 const MODEL = { id: "required", version: "optional" } satisfies FieldMap<ModelInfo>;
 const SYSTEM = { name: "required", version: "required" } satisfies FieldMap<SystemInfo>;
 const RECEIPT = {
@@ -55,7 +60,7 @@ const RECORD_REQUEST = {
   content_sha256: "required", media_type: "required", edit_kind: "required", receipt_id: "optional", model: "optional",
 } satisfies FieldMap<RecordRequest>;
 const PLACEMENT = {
-  record_id: "required", tool: "required", sink_kind: "required", media_type: "required", edit_kind: "required",
+  record_id: "optional", tool: "required", sink_kind: "required", media_type: "required", edit_kind: "required",
   length_class: "required", layers: "required",
 } satisfies FieldMap<PlacementReport>;
 const POLICY = {

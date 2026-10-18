@@ -25,6 +25,32 @@
       "title": "Applied",
       "type": "string"
     },
+    "context_width": {
+      "anyOf": [
+        {
+          "type": "integer"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "vLLM's context width, for model watermarks",
+      "title": "Context Width"
+    },
+    "key_version": {
+      "anyOf": [
+        {
+          "type": "integer"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "the watermark key's version, for model watermarks",
+      "title": "Key Version"
+    },
     "reason": {
       "anyOf": [
         {
@@ -46,6 +72,20 @@
       ],
       "default": null,
       "title": "Reason"
+    },
+    "tokenizer": {
+      "anyOf": [
+        {
+          "maxLength": 256,
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "the model repository whose tokenizer generation used, for model watermarks",
+      "title": "Tokenizer"
     },
     "vendor": {
       "anyOf": [

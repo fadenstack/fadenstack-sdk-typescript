@@ -55,14 +55,22 @@ export class AgentProvenanceResource {
   async reportPlacement(report: PlacementReport, signal?: AbortSignal): Promise<void> {
     await this.#transport.post<unknown>(this.#route("placements"), report, signal);
   }
+
+  /** Checks content for marks with the agent's token (`POST .../provenance/verify`). Nothing submitted is kept. */
+  verify(request: VerifyRequest, signal?: AbortSignal): Promise<VerifyResult> {
+    return verifyAt(this.#transport, this.#route("verify"), request, signal);
+  }
 }
 
 /** The server's provenance routes any client may use: the anchors that check signatures, and the detector. */
 export class ProvenanceResource {
   readonly #transport: FadenstackTransport;
+  readonly #agent: string | undefined;
 
-  constructor(transport: FadenstackTransport) {
+  /** `agent`: the client's agent, whose route `verify` takes (an agent token is refused on the user's route). */
+  constructor(transport: FadenstackTransport, agent?: string) {
     this.#transport = transport;
+    this.#agent = agent;
   }
 
   /** Every signing certificate chain the installation used and the CAs they end in (`GET /v1/provenance/anchors`). */
@@ -74,14 +82,28 @@ export class ProvenanceResource {
     return answer as unknown as Anchors;
   }
 
-  /** Checks content for marks (`POST /v1/provenance/verify`). Nothing submitted is kept. */
-  async verify(request: VerifyRequest, signal?: AbortSignal): Promise<VerifyResult> {
-    const answer = obj(await this.#transport.post<unknown>(this.#transport.gateway("v1/provenance/verify"), request, signal));
-    if (!answer || typeof answer["verdict"] !== "string" || !Array.isArray(answer["findings"])) {
-      throw new FadenstackError("The server's verify result is not in the provenance/v1 shape.");
-    }
-    return answer as unknown as VerifyResult;
+  /**
+   * Checks content for marks. Nothing submitted is kept. An agent's client checks on its agent's route
+   * (`POST /v1/agents/{agent}/provenance/verify`, its agent token), as its other routes go; a client without an agent
+   * on the signed-in user's (`POST /v1/provenance/verify`).
+   */
+  verify(request: VerifyRequest, signal?: AbortSignal): Promise<VerifyResult> {
+    const route = this.#agent !== undefined
+      ? `v1/agents/${encodeURIComponent(this.#agent)}/provenance/verify` : "v1/provenance/verify";
+    return verifyAt(this.#transport, this.#transport.gateway(route), request, signal);
   }
+}
+
+async function verifyAt(transport: FadenstackTransport, url: URL, request: VerifyRequest, signal?: AbortSignal): Promise<VerifyResult> {
+  if ((typeof request.text === "string") === (typeof request.file === "string")) {
+    throw new TypeError("Check either a text or a file (base64), not both and not neither.");
+  }
+  if (typeof request.file === "string" && !request.media_type) throw new TypeError("A file to check needs its media_type.");
+  const answer = obj(await transport.post<unknown>(url, request, signal));
+  if (!answer || typeof answer["verdict"] !== "string" || !Array.isArray(answer["findings"])) {
+    throw new FadenstackError("The server's verify result is not in the provenance/v1 shape.");
+  }
+  return answer as unknown as VerifyResult;
 }
 
 /** A policy from the server, completed with the contract's defaults; a field of the wrong type takes its default. */

@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   FadenstackApiError,
   FadenstackClient,
+  StaticTokenProvider,
   loginWithPassword,
   readReceiptEvent,
   readReceiptHeader,
@@ -100,14 +101,38 @@ describe("the server's provenance routes", () => {
     expect(anchors.signing_chains[0]).toContain("BEGIN CERTIFICATE");
   });
 
-  it("checks content against the records, keeping nothing", async () => {
-    const { client } = await signedIn();
+  it("checks content against the records, keeping nothing: an agent's client on its agent's route", async () => {
+    const { gateway, client } = await signedIn();
     const text = "The pump P-200 is due for a seal check next week.";
     const signed = await client.agent!.provenance.signRecord({ content_sha256: await textSha256(text), media_type: "text/plain", edit_kind: "generated" });
     const found = await client.provenance.verify({ text: `  ${text.replace(/ /g, "\n")} ` }); // reflowed: the same text
     expect(validate(contractSchema("verify-result"), found)).toEqual([]);
     expect(found).toMatchObject({ verdict: "ai-generated", findings: [{ found: true, record_id: signed.record.id }] });
-    expect((await client.provenance.verify({ text: "Something a person wrote." })).verdict).toBe("no-mark-found");
+    expect((await client.agent!.provenance.verify({ text: "Something a person wrote." })).verdict).toBe("no-mark-found");
+    expect(gateway.requests.filter((r) => r.path.endsWith("/verify")).map((r) => r.path))
+      .toEqual(["/v1/agents/writer/provenance/verify", "/v1/agents/writer/provenance/verify"]);
+  });
+
+  it("checks on the user's route for a client without an agent, which refuses an agent token", async () => {
+    const gateway = new FakeGateway({ agents: [{ slug: "writer" }] });
+    const login = await loginWithPassword({ apiUrl: gateway.serverUrl, email: "user@example.com", password: "secret", fetch: gateway.fetch });
+    const user = new FadenstackClient({ serverUrl: gateway.serverUrl, credentials: new StaticTokenProvider(login), fetch: gateway.fetch });
+    const file = btoa("not a picture of ours");
+    expect((await user.provenance.verify({ file, media_type: "image/png" })).verdict).toBe("no-mark-found");
+    expect(gateway.requests.at(-1)!.path).toBe("/v1/provenance/verify");
+    const { client: agent, tokens } = FadenstackClient.forAgent({ serverUrl: gateway.serverUrl, agent: "writer", fetch: gateway.fetch });
+    await tokens.signIn(login);
+    const withAgentToken = new FadenstackClient({ serverUrl: gateway.serverUrl, credentials: tokens, fetch: gateway.fetch });
+    await expect(withAgentToken.provenance.verify({ text: "x" })).rejects.toMatchObject({ status: 403, code: "agent_token_not_allowed" });
+    expect((await agent.provenance.verify({ text: "x" })).verdict).toBe("no-mark-found");
+  });
+
+  it("refuses a check of both a text and a file, or of a file without its media type, before it goes out", async () => {
+    const { gateway, client } = await signedIn();
+    await expect(client.provenance.verify({ text: "a", file: "Yg==" })).rejects.toThrow(TypeError);
+    await expect(client.provenance.verify({})).rejects.toThrow(TypeError);
+    await expect(client.provenance.verify({ file: "Yg==" })).rejects.toThrow(TypeError);
+    expect(gateway.requests.some((r) => r.path.endsWith("/verify"))).toBe(false);
   });
 });
 

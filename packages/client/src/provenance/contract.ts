@@ -69,6 +69,11 @@ export interface LayerOutcome {
   method: string;
   applied: boolean;
   reason?: ReasonCode | null;
+  /**
+   * For an applied layer: read back from the host after placing (true), or not readable there (false). Absent when
+   * nothing was read back to try (the server's record, a watermark).
+   */
+  verified?: boolean | null;
 }
 
 /** Whether a generation carries a watermark, whose, and if not, why. */
@@ -78,6 +83,12 @@ export interface WatermarkStatus {
   /** The remote provider whose own mark it is, for `upstream`. */
   vendor?: string | null;
   reason?: ReasonCode | null;
+  /** The watermark key's version, for a model's watermark. */
+  key_version?: number | null;
+  /** The runtime's context width, for a model's watermark. */
+  context_width?: number | null;
+  /** The model repository whose tokenizer generation used, for a model's watermark. */
+  tokenizer?: string | null;
 }
 
 /** The model that generated the content. */
@@ -154,8 +165,11 @@ export interface RecordRequest {
 
 /** What an SDK reports after placing content: where, how much, which layers held. Never the content. */
 export interface PlacementReport {
-  /** The signed record's id; an exempt placement, which has none, reports a local `exempt-...` id. */
-  record_id: string;
+  /**
+   * The signed record's id; absent (or null) for a placement without one: exempt content, a record the server could
+   * not sign, content a tool put in without `place()`.
+   */
+  record_id?: string | null;
   tool: string;
   /** `word.range`, `html.editor`, `nextcloud.file`, ... */
   sink_kind: string;
