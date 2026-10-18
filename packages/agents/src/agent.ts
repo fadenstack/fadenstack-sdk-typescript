@@ -17,7 +17,7 @@ import {
 
 import type { PermissionMode } from "./approvals.js";
 
-import { AgentBuilder, type AgentSettings } from "./builder.js";
+import { AgentBuilder, UNDESCRIBED_APP_NAME, type AgentSettings, type AppDescription } from "./builder.js";
 import { EventReporter } from "./reporter.js";
 import { AgentSession } from "./session.js";
 import type { AgentContext } from "./stages.js";
@@ -58,6 +58,11 @@ export class FadenstackAgent {
 
   get client(): FadenstackClient {
     return this.settings.client;
+  }
+
+  /** The app the agent runs in, as the host described it (`describeApp`); undefined when it did not. */
+  get app(): AppDescription | undefined {
+    return this.settings.app.name === UNDESCRIBED_APP_NAME ? undefined : this.settings.app;
   }
 
   /** The agent's profile, once `start` ran. */

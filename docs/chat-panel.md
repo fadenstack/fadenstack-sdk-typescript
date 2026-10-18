@@ -117,7 +117,9 @@ Call `chat.dispose()` when you remove the panel. It stops a running turn and sto
 - **The header** has the agent's name, the tool mode, the history (open or delete a chat), a new chat, and your
   own buttons. The tool-mode menu ends with Reset approvals, which forgets what was allowed for this chat and always
   (`chat.resetApprovals()`).
-- **The composer** has context chips, Enter to send, Shift+Enter for a new line, and Esc to stop.
+- **The settings** (the gear) have the language, your own items, and About last. See [Settings](#settings).
+- **The composer** has context chips, Enter to send, Shift+Enter for a new line, and Esc to stop. Under it are the AI
+  notice and a muted Fadenstack link. See [About and the Fadenstack link](#about-and-the-fadenstack-link).
 - **After an answer**: copy (the Markdown as text, and as HTML so it pastes formatted into mail and documents), retry
   for a turn that failed or was stopped, edit, and the turn's duration and tokens.
 - **An empty chat** shows the agent's avatar, its greeting, and its suggested prompts from the agent's profile.
@@ -187,6 +189,9 @@ threw.
 | `strings` | Texts you fix instead of a language the user picks. |
 | `locale` | The locale for dates and numbers. The browser's by default. |
 | `beforeSend`, `afterSend` | What your application does around each message. See [Before a message goes](#before-a-message-goes). |
+| `branding` | The muted Fadenstack link under the message box. On by default; `false` hides it. About stays. |
+| `refSource` | Your app's name in the links to fadenstack.com. `sdk` by default. See [About and the Fadenstack link](#about-and-the-fadenstack-link). |
+| `openLink` | How the panel opens its links. A new tab by default. |
 | `previewLength` | How many characters of a tool's input and output are shown. Default 4 000. |
 | `initialTurns` | How many turns an opened session shows at first. |
 | `pageSize` | How many older turns "Show earlier messages" adds. |
@@ -367,6 +372,42 @@ Under the message box the panel says, in the user's language, that the answers a
 the SDK act for a person on pages, documents and mails. Change its words like any other text; an empty `aiNotice`
 hides it, for an application that says the same in another place the user always sees.
 
+## About and the Fadenstack link
+
+The settings end with **About**. It opens over the panel, below the gear, and shows the agent (its name, `Version 3`
+or `Draft`, and its model), the app it runs in when you described it (`describeApp`), the SDK's version, and the
+server's address. Its links go to your organisation's Help on the agent's server (`<server>/help/`), to
+fadenstack.com, and to the developer docs. *Copy details* copies all of it as text lines, for a support request.
+Escape, the close button or a press outside closes it.
+
+After the AI notice, under the message box, the panel shows a muted **Fadenstack** link to fadenstack.com.
+`branding: false` hides it. About stays.
+
+```ts
+const chat = new AgentChatViewModel(agent, approvals, {
+  refSource: "my-crm",                            // ref=my-crm-panel and ref=my-crm-about
+  branding: false,                                // no Fadenstack link under the message box
+  openLink: (url) => chrome.tabs.create({ url }), // how your host opens a link (here an extension's tab)
+});
+```
+
+**What a link sends.** A link to fadenstack.com carries two values and nothing else: `ref`, where the click came from
+(`<refSource>-panel` or `<refSource>-about`), and `v`, the SDK's major.minor version. For example
+`https://fadenstack.com/?ref=sdk-panel&v=0.2`. Nothing about the user, the organisation, the server or the agent is in
+it. The link has `rel="noopener noreferrer"`, so the browser sends no Referer and internal addresses stay inside. The
+Help link goes to your own server and carries nothing. The server's address in About is only shown, never sent.
+
+`refSource` names your app: lower-case letters and digits, words joined by single hyphens, at most 20 characters
+(`my-crm`). Anything else falls back to `sdk`. Do not put a customer, tenant or host name in it.
+
+Links open in a new tab through `openLink`, by default `window.open(url, "_blank", "noopener,noreferrer")`. A host
+that opens links its own way, such as an Office add-in or a browser extension, passes its own. Screen readers hear that
+each link opens in a new tab.
+
+`chat.setAboutOpen(true)`, `chat.about` and `chat.copyAboutDetails()` do from code what About does. For a skin of
+your own, `@fadenstack/ui` exports the link helpers: `fadenstackLink`, `footerLink`, `helpLink`, `refSource` and
+`majorMinor`.
+
 ## Settings
 
 The gear in the header opens the panel's settings: the language, and below it what your application adds, such as
@@ -386,7 +427,8 @@ sign out or its own options, so they all sit in one place:
     </ChatPanel>
     ```
 
-The gear only shows when there is something to set: a choice of languages, a fixed one to show, or your items.
+The gear is always there: its last item is About, below your items. See
+[About and the Fadenstack link](#about-and-the-fadenstack-link).
 
 ## View models for other frameworks
 
@@ -396,7 +438,7 @@ reference. Each turn and each part is its own view model, so one change re-rende
 
 | View model | What it holds |
 |---|---|
-| `AgentChatViewModel` | The chat: `turns`, `input`, `attachments`, `sessions`, `toolModes`, `toolMode`, `greeting`, `suggestions`, `isBusy`, `signInRequired`, `error`, `strings`, and the actions `send`, `stop`, `newChat`, `openSession`, `loadEarlier`, `selectToolMode`. |
+| `AgentChatViewModel` | The chat: `turns`, `input`, `attachments`, `sessions`, `toolModes`, `toolMode`, `greeting`, `suggestions`, `isBusy`, `signInRequired`, `error`, `strings`, `about`, `footerLink`, and the actions `send`, `stop`, `newChat`, `openSession`, `loadEarlier`, `selectToolMode`, `setAboutOpen`, `openLink`. |
 | `TurnViewModel` | One exchange: `userText`, `parts`, `state`, `outcome`, `usageText`, `durationText`, and `copy`, `edit`, `retry`. |
 | `ResponsePart` | One part of an answer, with a `kind`: `markdown`, `reasoning`, `tool`, `approval`, `notice`, `citations`, and `card`, `table`, `progress` and `diff` for modules. |
 | `AttachmentViewModel` | One context chip. |

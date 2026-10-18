@@ -1,7 +1,7 @@
 <script setup lang="ts">
 /**
  * The panel's top bar: the agent, the tool mode, the history, a new chat, (the default slot) the host's own buttons,
- * and the settings: the language, and (the `settings` slot) the host's own items.
+ * and the settings: the language, (the `settings` slot) the host's own items, and About.
  */
 import type { AgentChatViewModel } from "@fadenstack/ui";
 

@@ -2,6 +2,7 @@ import type { ReactElement, ReactNode } from "react";
 
 import type { AgentChatViewModel } from "@fadenstack/ui";
 
+import { NoticeLine } from "./About.js";
 import { Composer } from "./Composer.js";
 import { ChatHeader } from "./Header.js";
 import { useStickToBottom, useViewModel } from "./hooks.js";
@@ -58,7 +59,7 @@ export function ChatPanel(props: ChatPanelProps): ReactElement {
           {chat.error && !chat.signInRequired && <div className="fdn-banner" role="alert">{chat.error}</div>}
           {props.contextBar}
           <Composer chat={chat} accessory={props.composerAccessory} placeholder={props.placeholder} />
-          {chat.strings.aiNotice && <p className="fdn-ai-notice" dir="auto">{chat.strings.aiNotice}</p>}
+          <NoticeLine chat={chat} />
         </>
       )}
     </div>

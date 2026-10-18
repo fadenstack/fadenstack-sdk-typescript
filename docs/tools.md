@@ -114,6 +114,9 @@ const agent = FadenstackAgent.createBuilder()
 The manifest only informs the server. Nothing in it changes what the agent may do. It is not sent when event
 reporting is off, and a manifest the server cannot take never fails the start.
 
+`agent.app` returns what you described (undefined without `describeApp`). The chat panel's About shows the name and
+version.
+
 ## Tool modes
 
 The user picks a tool mode for each session. By each tool's class, the mode decides which tools run, which ask first,

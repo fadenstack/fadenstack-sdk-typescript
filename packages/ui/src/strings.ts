@@ -75,6 +75,26 @@ export interface UiStrings {
   languageAutomatic(name: string): string;
   /** Under the languages when the organisation fixed one. */
   languageLocked: string;
+  // About (the settings' last item); the brand name is never a text here, it is not translated
+  /** The settings' last item, and the name of what it opens. */
+  about: string;
+  /** The agent's published version. */
+  aboutVersion(version: number): string;
+  /** An agent that is a maintainer's draft, not a published version. */
+  aboutDraft: string;
+  aboutModel(model: string): string;
+  /** The app the agent runs in, as the host described it: "Word add-in 1.4". */
+  aboutApp(app: string): string;
+  /** The server's address: shown, never sent. */
+  aboutServer(address: string): string;
+  /** The link to the organisation's own Help, on its server. */
+  help: string;
+  /** The link to the SDKs' documentation. */
+  developerDocs: string;
+  copyDetails: string;
+  /** After a link's name, for screen readers: the panel's links open in a new tab. */
+  opensInNewTab: string;
+  close: string;
   // the skin's controls
   send: string;
   stop: string;
@@ -192,6 +212,17 @@ export const englishStrings: UiStrings = {
   languageMenu: "Language",
   languageAutomatic: (name) => `Automatic (${name})`,
   languageLocked: "Set by your organisation",
+  about: "About",
+  aboutVersion: (version) => `Version ${version}`,
+  aboutDraft: "Draft",
+  aboutModel: (model) => `Model: ${model}`,
+  aboutApp: (app) => `Runs in ${app}`,
+  aboutServer: (address) => `Server: ${address}`,
+  help: "Help",
+  developerDocs: "Developer docs",
+  copyDetails: "Copy details",
+  opensInNewTab: "(opens in a new tab)",
+  close: "Close",
   send: "Send",
   stop: "Stop",
   history: "Chat history",

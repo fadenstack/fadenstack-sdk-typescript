@@ -48,6 +48,9 @@ export interface AgentSettings {
   readonly app: AppDescription;
 }
 
+/** The app's name when the host did not describe it (`describeApp`). */
+export const UNDESCRIBED_APP_NAME = "Fadenstack SDK app";
+
 /** The app an agent runs in: what its manifest says besides the tools. */
 export interface AppDescription {
   /** "Chrome extension", "Word add-in". */
@@ -81,7 +84,7 @@ export class AgentBuilder {
   #historyTokens = 24_000;
   #report = true;
   #reasoning: ReasoningEffort | undefined;
-  #app: AppDescription = { name: "Fadenstack SDK app" };
+  #app: AppDescription = { name: UNDESCRIBED_APP_NAME };
 
   /** The server, and how the agent signs in (usually an `AgentTokenProvider`). */
   useServer(serverUrl: string | URL, credentials: TokenProvider, options: Omit<FadenstackClientOptions, "serverUrl" | "credentials"> = {}): this {

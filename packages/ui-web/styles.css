@@ -1105,13 +1105,105 @@
   background: var(--fdn-bg);
 }
 
-/* Under the composer: answers come from an AI and can be wrong. Quiet, but always there. */
+/* Under the composer: answers come from an AI and can be wrong. Quiet, but always there. Then, as quiet, the
+   Fadenstack link (`branding: false` hides it). */
 .fdn-ai-notice {
   margin: -4px 12px 8px;
   color: var(--fdn-text-faint);
   font-size: 11.5px;
   line-height: 1.4;
   text-align: center;
+}
+
+.fdn-ai-notice-separator {
+  margin-inline: 5px;
+}
+
+.fdn-footer-link {
+  color: inherit;
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.fdn-footer-link:hover {
+  color: var(--fdn-text-muted);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+/* A link that opens in a new tab: a small arrow after its text, pointing the way the text runs. */
+.fdn-external .fdn-icon {
+  display: inline-block;
+  margin-inline-start: 2px;
+  vertical-align: -1px;
+}
+
+.fdn-external .fdn-icon:dir(rtl) {
+  transform: scaleX(-1);
+}
+
+/* About: an overlay below the settings' gear, like the menus. */
+.fdn-about {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding-block: 6px 12px;
+  padding-inline: 12px 6px;
+}
+
+.fdn-about-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.fdn-about-title {
+  color: var(--fdn-text-faint);
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.fdn-about-agent,
+.fdn-about-environment {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  padding-inline-end: 6px;
+  overflow-wrap: anywhere;
+}
+
+.fdn-about-name {
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.fdn-about-line {
+  color: var(--fdn-text-muted);
+  font-size: 12px;
+}
+
+.fdn-about-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 14px;
+}
+
+.fdn-about-link {
+  color: var(--fdn-accent);
+  text-decoration: none;
+}
+
+.fdn-about-link:hover {
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.fdn-about .fdn-button {
+  display: inline-flex;
+  align-items: center;
+  align-self: flex-start;
+  gap: 6px;
 }
 
 .fdn-composer:focus-within {

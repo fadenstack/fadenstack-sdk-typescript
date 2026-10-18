@@ -1,6 +1,7 @@
 import type { AgentEvent, AgentSession, FadenstackAgent, MessageAttachment, TranscriptEntry } from "@fadenstack/agents";
 import { FadenstackSignInRequiredError, TOOL_MODES, narrowestMode, type SkillOption, type ToolMode } from "@fadenstack/client";
 
+import { aboutView, footerLink, refSource, type AboutView, type PanelLink } from "./about.js";
 import type { ApprovalBroker, PendingApproval } from "./approvalBroker.js";
 import { AttachmentViewModel, type AttachmentChip } from "./attachments.js";
 import { RenderBatcher } from "./batcher.js";
@@ -65,6 +66,18 @@ export interface AgentChatOptions {
   beforeSend?: (message: OutgoingMessage, signal: AbortSignal) => void | Promise<void>;
   /** Runs once after every send, however it ended: its turn finished, failed or was stopped, or `beforeSend` threw. */
   afterSend?: (message: OutgoingMessage) => void;
+  /** The muted "Fadenstack" link on the line under the composer (default true). False hides it; About stays. */
+  branding?: boolean;
+  /**
+   * Your app in the links to fadenstack.com (`ref=<refSource>-panel`, `-about`): lower-case letters and digits in
+   * words joined by hyphens, at most 20 characters ("my-crm"). `sdk` by default, and for anything else.
+   */
+  refSource?: string;
+  /**
+   * Opens a link of the panel's (About, the footer). By default `window.open(url, "_blank", "noopener,noreferrer")`;
+   * a host that opens links its own way (Office's dialogs, an extension's tabs) passes its own.
+   */
+  openLink?: (url: string) => void;
 }
 
 /** A message on its way, for `beforeSend` and `afterSend`. */
@@ -134,6 +147,9 @@ export class AgentChatViewModel extends Observable implements TurnHost {
   readonly #focusListeners = new Set<() => void>();
   readonly #beforeSend: AgentChatOptions["beforeSend"];
   readonly #afterSend: AgentChatOptions["afterSend"];
+  readonly #refSource: string;
+  readonly #footerLink: PanelLink | undefined;
+  readonly #openLink: (url: string) => void;
   // Approvals arrive twice: as an event, in order with the turn's other events, and as the broker's request,
   // which carries the answer. Whichever comes second adds the card, so it sits where the event put it.
   readonly #waitingForEvent = new Map<string, PendingApproval>();
@@ -154,6 +170,7 @@ export class AgentChatViewModel extends Observable implements TurnHost {
   #languageLoaded = false;
   #languagePicked = false;
   #settingsOpen = false;
+  #aboutOpen = false;
   readonly #untitled = new Set<string>();
   #turns: readonly TurnViewModel[] = [];
   #attachments: readonly AttachmentViewModel[] = [];
@@ -190,6 +207,9 @@ export class AgentChatViewModel extends Observable implements TurnHost {
     };
     this.#beforeSend = options.beforeSend;
     this.#afterSend = options.afterSend;
+    this.#refSource = refSource(options.refSource);
+    this.#footerLink = options.branding === false ? undefined : footerLink(this.#refSource);
+    this.#openLink = options.openLink ?? openInNewTab;
     this.skillPicker = new SkillPickerViewModel({
       load: (signal) => agent.listSkills(undefined, signal),
       onPick: (skill) => this.#pickSkill(skill),
@@ -257,6 +277,28 @@ export class AgentChatViewModel extends Observable implements TurnHost {
 
   get isSettingsOpen(): boolean {
     return this.#settingsOpen;
+  }
+
+  /** About is open (the settings' last item): the agent, the app, the SDK, the server, and links. */
+  get isAboutOpen(): boolean {
+    return this.#aboutOpen;
+  }
+
+  /** What About shows, in the panel's language. Links to fadenstack.com carry only `ref` and the SDK's major.minor. */
+  get about(): AboutView {
+    const agent = this.#agent;
+    const profile = agent.isStarted ? agent.profile : undefined;
+    return aboutView({
+      agent: profile && { name: profile.name, version: profile.version, draft: profile.draft, model: profile.model },
+      app: agent.app,
+      server: agent.client.transport.serverUrl,
+      refSource: this.#refSource,
+    }, this.strings);
+  }
+
+  /** The muted "Fadenstack" link on the AI-notice line; undefined when the host turned `branding` off. */
+  get footerLink(): PanelLink | undefined {
+    return this.#footerLink;
   }
 
   /** Prompts to start with (profile `ui.suggestions`), in the panel's language when the definition has them. */
@@ -541,9 +583,33 @@ export class AgentChatViewModel extends Observable implements TurnHost {
   }
 
   setSettingsOpen(open: boolean): void {
-    if (this.#settingsOpen === open) return;
+    if (this.#settingsOpen === open && !(open && this.#aboutOpen)) return;
     this.#settingsOpen = open;
+    if (open) this.#aboutOpen = false;
     this.notify();
+  }
+
+  /** Opens or closes About; opening it closes the settings it is picked from. */
+  setAboutOpen(open: boolean): void {
+    if (this.#aboutOpen === open && !(open && this.#settingsOpen)) return;
+    this.#aboutOpen = open;
+    if (open) this.#settingsOpen = false;
+    this.notify();
+  }
+
+  /** Copies About as text lines (the agent, its version and model, the app, the SDK, the server); false when the clipboard refused. */
+  async copyAboutDetails(): Promise<boolean> {
+    try {
+      await this.#context.clipboard.setText(this.about.text);
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  /** Opens one of the panel's links (`openLink`, a new tab by default). */
+  openLink(url: string): void {
+    this.#openLink(url);
   }
 
   /**
@@ -923,6 +989,11 @@ function reasoningKey(turn: TurnViewModel): object {
 
 function approvalKey(request: { callId: string; toolName: string }): string {
   return `${request.callId}\u0001${request.toolName}`;
+}
+
+/** A link in a new tab, with no way back to the panel and no Referer (intranet addresses stay inside). */
+function openInNewTab(url: string): void {
+  globalThis.open?.(url, "_blank", "noopener,noreferrer");
 }
 
 function abortError(): Error {

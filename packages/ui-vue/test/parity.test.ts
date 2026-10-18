@@ -130,6 +130,27 @@ describe("the settings draw the same in both panels", () => {
   });
 });
 
+describe("About and the Fadenstack link draw the same in both panels", () => {
+  it("with About open, the footer link, a host's refSource, and without branding", async () => {
+    const { chat } = await chatWith(() => ({ text: "ok" }), { refSource: "office" });
+    const panels = both(chat);
+    await panels.same();
+    chat.setAboutOpen(true);
+    await panels.same();
+    expect(document.querySelectorAll(".fdn-about a[href*='ref=office-about']")).toHaveLength(4);
+
+    const plain = await chatWith(() => ({ text: "ok" }), { branding: false, strings: germanStrings });
+    const plainPanels = both(plain.chat);
+    plain.chat.setSettingsOpen(true);
+    await plainPanels.same();
+    plain.chat.setAboutOpen(true);
+    await plainPanels.same();
+
+    const alone = await chatWith(() => ({ text: "ok" }), { strings: { aiNotice: "" } });
+    await both(alone.chat).same();
+  });
+});
+
 describe("the Vue avatar draws what the React avatar draws", () => {
   it.each([
     [{}], [{ size: 24 }], [{ variant: "mono" as const }], [{ variant: "mono" as const, size: 24 }], [{ color: "#0E9F9A" }],

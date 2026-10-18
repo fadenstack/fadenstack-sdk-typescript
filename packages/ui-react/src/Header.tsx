@@ -2,12 +2,13 @@ import { useCallback, useRef, type ReactElement, type ReactNode } from "react";
 
 import type { AgentChatViewModel } from "@fadenstack/ui";
 
+import { AboutPanel } from "./About.js";
 import { useDismiss, useViewModel } from "./hooks.js";
 import { Icon } from "./icons.js";
 
 /**
  * The panel's top bar: the agent, the tool mode, the history, a new chat, the host's own buttons, and the settings
- * (the language, and the host's own items: `settingsExtra`).
+ * (the language, the host's own items: `settingsExtra`, and About).
  */
 export function ChatHeader({ chat, extra, settingsExtra }: { chat: AgentChatViewModel; extra?: ReactNode; settingsExtra?: ReactNode }): ReactElement {
   useViewModel(chat);
@@ -67,17 +68,26 @@ function ModeMenu({ chat }: { chat: AgentChatViewModel }): ReactElement {
   );
 }
 
-/** The settings: the language to pick (or the one the organisation fixed), then the host's own items. */
-function SettingsMenu({ chat, extra }: { chat: AgentChatViewModel; extra?: ReactNode }): ReactElement | null {
+/**
+ * The settings: the language to pick (or the one the organisation fixed), the host's own items, and last About,
+ * which opens below the same gear.
+ */
+function SettingsMenu({ chat, extra }: { chat: AgentChatViewModel; extra?: ReactNode }): ReactElement {
   const ref = useRef<HTMLDivElement>(null);
+  const gear = useRef<HTMLButtonElement>(null);
   const close = useCallback(() => chat.setSettingsOpen(false), [chat]);
+  const dismissAbout = useCallback(() => chat.setAboutOpen(false), [chat]);
+  const closeAbout = useCallback((returnFocus: boolean) => {
+    chat.setAboutOpen(false);
+    if (returnFocus) gear.current?.focus();
+  }, [chat]);
   useDismiss(chat.isSettingsOpen, close, ref);
+  useDismiss(chat.isAboutOpen, dismissAbout, ref);
   const s = chat.strings;
   const languages = chat.canChangeLanguage || chat.isLanguageLocked;
-  if (!languages && !extra) return null;
   return (
     <div className="fdn-menu-anchor" ref={ref}>
-      <button type="button" className="fdn-icon-button" title={s.settings} aria-label={s.settings} aria-haspopup="menu"
+      <button ref={gear} type="button" className="fdn-icon-button" title={s.settings} aria-label={s.settings} aria-haspopup="menu"
         aria-expanded={chat.isSettingsOpen} onClick={() => chat.setSettingsOpen(!chat.isSettingsOpen)}>
         <Icon name="settings" />
       </button>
@@ -97,8 +107,15 @@ function SettingsMenu({ chat, extra }: { chat: AgentChatViewModel; extra?: React
             </div>
           )}
           {extra && <div className={languages ? "fdn-menu-extra" : undefined}>{extra}</div>}
+          <div className={languages || extra ? "fdn-menu-extra" : undefined}>
+            <button type="button" role="menuitem" aria-haspopup="dialog" className="fdn-menu-item" onClick={() => chat.setAboutOpen(true)}>
+              <span className="fdn-menu-check" />
+              <span className="fdn-menu-label">{s.about}</span>
+            </button>
+          </div>
         </div>
       )}
+      {chat.isAboutOpen && <AboutPanel chat={chat} onClose={closeAbout} />}
     </div>
   );
 }

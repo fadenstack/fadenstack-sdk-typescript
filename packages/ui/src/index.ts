@@ -9,6 +9,23 @@ export {
   type SessionItem,
   type ToolModeOption,
 } from "./chat.js";
+export {
+  DEFAULT_REF_SOURCE,
+  FADENSTACK,
+  FADENSTACK_DEVELOPERS,
+  FADENSTACK_WEBSITE,
+  aboutView,
+  fadenstackLink,
+  footerLink,
+  helpLink,
+  majorMinor,
+  refSource,
+  sdkName,
+  serverAddress,
+  type AboutFacts,
+  type AboutView,
+  type PanelLink,
+} from "./about.js";
 export { SkillPickerViewModel, matchSkills, skillToken } from "./skills.js";
 export { TurnViewModel, type TurnHost, type TurnState } from "./turn.js";
 export {
