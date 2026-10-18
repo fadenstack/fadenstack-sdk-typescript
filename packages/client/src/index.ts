@@ -59,6 +59,7 @@ export {
   type ToolExecutedEvent,
 } from "./models.js";
 export { AgentResource, MAX_EVENTS_PER_REPORT } from "./resources/agent.js";
+export { AgentProvenanceResource, ProvenanceResource, toProvenancePolicy, toSignedRecord } from "./resources/provenance.js";
 export {
   COMPOSITE_WITH_TRAINED_ALGORITHMIC_MEDIA,
   DEFAULT_EXEMPT_EDIT_KINDS,
@@ -94,6 +95,14 @@ export {
   type WatermarkStatus,
 } from "./provenance/contract.js";
 export { bytesSha256, normalizeText, textSha256 } from "./provenance/hash.js";
+export {
+  RECEIPT_EVENT,
+  RECEIPT_HEADER,
+  readReceiptEvent,
+  readReceiptHeader,
+  receiptIdOf,
+  type ReceiptNote,
+} from "./provenance/receipts.js";
 export {
   createAgent,
   listModels,

@@ -3,6 +3,7 @@ import { FadenstackChatClient, type ChatClientSettings } from "./chat/chatClient
 import { FadenstackTransport, type FetchLike, type TransportOptions } from "./http/transport.js";
 import type { ServerFeatures } from "./models.js";
 import { AgentResource } from "./resources/agent.js";
+import { ProvenanceResource } from "./resources/provenance.js";
 import type { ToolMode } from "./tools/toolModes.js";
 
 /** How a `FadenstackClient` reaches its server, and as whom. */
@@ -44,6 +45,8 @@ export class FadenstackClient {
   readonly chat: FadenstackChatClient;
   /** The client's agent (profile, events, approvals); undefined without an agent. */
   readonly agent: AgentResource | undefined;
+  /** The server's provenance routes: the anchors that check its signatures, and its detector. */
+  readonly provenance: ProvenanceResource;
 
   constructor(options: FadenstackClientOptions) {
     this.options = { ...options };
@@ -62,6 +65,7 @@ export class FadenstackClient {
     if (options.model !== undefined) chat.model = options.model;
     this.chat = new FadenstackChatClient(this.transport, chat);
     this.agent = options.agent ? new AgentResource(this.transport, options.agent) : undefined;
+    this.provenance = new ProvenanceResource(this.transport);
   }
 
   /** The server's edition and features (`GET /v1/features`). */

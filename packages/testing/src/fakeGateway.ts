@@ -1,11 +1,27 @@
 import {
+  DEFAULT_PROVENANCE_POLICY,
+  MARK_LAYERS,
+  PROVENANCE_CONTRACT,
+  REASON_CODES,
+  RECEIPT_HEADER,
+  bytesSha256,
   decideTool,
+  digitalSourceType,
+  isEditKind,
   parseToolClass,
   parseToolMode,
+  textSha256,
   type ChatMessage,
+  type EditKind,
   type FetchLike,
+  type GenerationReceipt,
+  type PlacementReport,
+  type ProvenancePolicy,
+  type ProvenanceRecordPayload,
+  type SignedRecord,
   type ToolClass,
   type ToolDefinition,
+  type WatermarkStatus,
 } from "@fadenstack/client";
 
 /** A user the fake server knows. */
@@ -43,6 +59,28 @@ export interface FakeAgent {
    * skills module: the route answers `available: false`.
    */
   skills?: { slug: string; name?: string; description?: string; activation?: string }[];
+  /** Its marking policy, over the server's (`provenance.policy`): `GET .../provenance/policy` answers with both. */
+  provenancePolicy?: ProvenancePolicy;
+}
+
+/**
+ * The server's provenance module, as the agents' routes show it: the policy, signed records, placement reports, the
+ * anchors and the detector. On by default; receipts on chat answers only when `receipts` is on.
+ */
+export interface FakeProvenanceOptions {
+  /** False: a server without the module, whose provenance routes answer 404. */
+  enabled?: boolean;
+  /** The module's service is not running: its routes answer 503 and streamed answers end with an unsigned receipt. */
+  down?: boolean;
+  /**
+   * Chat answers carry receipts: a streamed one ends with a `faden.provenance` event, one that was not streamed
+   * names its receipt in `x-faden-provenance`. Off by default, so a turn's events are only the model's.
+   */
+  receipts?: boolean;
+  /** The server's policy; the contract's defaults where it says nothing. */
+  policy?: ProvenancePolicy;
+  /** What receipts say about the watermark (default: none, the runtime does not watermark). */
+  watermark?: WatermarkStatus;
 }
 
 /** One model call, as the fake model sees it. */
@@ -89,6 +127,11 @@ export interface FakeReply {
   rateLimit?: { retryAfterS?: number; code?: string; message?: string };
   /** Milliseconds between chunks. */
   delayMs?: number;
+  /**
+   * This answer's receipt, when the server sends receipts (`provenance.receipts`): false sends none, `unsigned` one
+   * the server could not sign, `watermark` what it says about the watermark.
+   */
+  receipt?: false | { unsigned?: boolean; watermark?: WatermarkStatus };
 }
 
 export type FakeModel = (request: FakeModelRequest) => FakeReply | Promise<FakeReply>;
@@ -119,6 +162,14 @@ export interface FakeGatewayOptions {
    * `rule: true`), and such a tool is not offered to a client that does not read events.
    */
   toolRules?: FakeToolRule[];
+  provenance?: FakeProvenanceOptions;
+}
+
+/** A record the fake server signed, with the agent and the request it was signed for. */
+export interface FakeSignedRecord {
+  agent: string;
+  request: Record<string, unknown>;
+  signed: SignedRecord;
 }
 
 /** A request the fake server got. */
@@ -175,6 +226,13 @@ export class FakeGateway {
   readonly createdAgents: { slug: string; by: string; body: Record<string, unknown> }[] = [];
   /** Answers to gateway approvals. */
   readonly approvals: { approvalId: string; approved: boolean }[] = [];
+  /** The records the server signed for placements, in order. */
+  readonly provenanceRecords: FakeSignedRecord[] = [];
+  /** The placement reports clients sent, as sent. */
+  readonly placements: { agent: string; report: PlacementReport }[] = [];
+  /** The receipts chat answers carried, in order. */
+  readonly receipts: GenerationReceipt[] = [];
+  #provenanceDown: boolean;
   readonly #agents: Map<string, Required<Pick<FakeAgent, "slug" | "name" | "id" | "version">> & FakeAgent>;
   readonly #users: (FakeUser & { id: string })[];
   readonly #signIns: SignIn[] = [];
@@ -191,11 +249,17 @@ export class FakeGateway {
     this.#agents = new Map(agents.map((a, i) => [a.slug, { name: a.slug, id: `agent-${i + 1}`, version: 1, ...a }]));
     this.#users = (options.users ?? [{ email: "user@example.com", password: "secret" }]).map((u, i) => ({ id: `user-${i + 1}`, ...u }));
     this.#model = options.model ?? (() => ({ text: "Hello from the fake gateway." }));
+    this.#provenanceDown = options.provenance?.down ?? false;
   }
 
   /** Replaces the model. */
   setModel(model: FakeModel): void {
     this.#model = model;
+  }
+
+  /** Stops or starts the provenance module's service (`provenance.down`). */
+  setProvenanceDown(down: boolean): void {
+    this.#provenanceDown = down;
   }
 
   /** Ends every sign-in (or one device's), as revoking a grant does. */
@@ -292,7 +356,9 @@ export class FakeGateway {
       if (!this.#logins.has(bearer(request) ?? "")) return openAiError(401, "The token is not valid.", "invalid_token", "authentication_error");
       return json(200, { object: "list", data: (this.#options.models ?? ["fake-model"]).map((id) => ({ id, object: "model" })) });
     }
-    const match = /^\/v1\/agents\/([^/]+)\/(profile|user|skills|chat\/completions|events|manifest|approvals\/([^/]+))$/.exec(path);
+    if (path === "/v1/provenance/anchors" || path === "/v1/provenance/verify") return this.#provenanceRoute(request, path, body);
+    const match = /^\/v1\/agents\/([^/]+)\/(profile|user|skills|chat\/completions|events|manifest|approvals\/([^/]+)|provenance\/(policy|records|placements))$/
+      .exec(path);
     if (!match) return json(404, { detail: "Not Found" });
     const agent = decodeURIComponent(match[1]!);
     const auth = this.#authorize(request, agent);
@@ -305,7 +371,119 @@ export class FakeGateway {
     if (method === "POST" && route === "events") return this.#events(body);
     if (method === "PUT" && route === "manifest") return this.#manifest(agent, body);
     if (method === "POST" && route.startsWith("approvals/")) return this.#approve(decodeURIComponent(match[3]!), body);
+    if (route.startsWith("provenance/")) return this.#agentProvenance(method, agent, match[4]!, body);
     return json(405, { detail: "Method Not Allowed" });
+  }
+
+  // -- provenance -----------------------------------------------------------------------------------
+
+  /** A provenance route's answer when the module is missing (404) or down (503), else undefined. */
+  #provenanceUnavailable(): Response | undefined {
+    if (this.#options.provenance?.enabled === false) return json(404, { detail: "Not Found" });
+    if (this.#provenanceDown) {
+      return openAiError(503, "The provenance service is not available.", "provenance_unavailable", "server_error");
+    }
+    return undefined;
+  }
+
+  /** `.../provenance/policy`, `records` and `placements`, checked as the gateway checks them (no extra fields). */
+  async #agentProvenance(method: string, agent: string, route: string, body: unknown): Promise<Response> {
+    const unavailable = this.#provenanceUnavailable();
+    if (unavailable) return unavailable;
+    if (method === "GET" && route === "policy") {
+      return json(200, { ...DEFAULT_PROVENANCE_POLICY, ...this.#options.provenance?.policy, ...this.#agents.get(agent)!.provenancePolicy });
+    }
+    if (method === "POST" && route === "records") return this.#signRecord(agent, body);
+    if (method === "POST" && route === "placements") {
+      const problem = placementProblem(body);
+      if (problem) return json(422, { detail: [{ msg: problem }] });
+      this.placements.push({ agent, report: body as PlacementReport });
+      return json(202, { stored: true });
+    }
+    return json(405, { detail: "Method Not Allowed" });
+  }
+
+  async #signRecord(agent: string, body: unknown): Promise<Response> {
+    const b = (body ?? {}) as Record<string, unknown>;
+    const allowed = ["content_sha256", "media_type", "edit_kind", "receipt_id", "model"];
+    const extra = Object.keys(b).filter((k) => !allowed.includes(k));
+    const problem = extra.length ? `extra fields not permitted: ${extra.join(", ")}`
+      : typeof b["content_sha256"] !== "string" || !/^[0-9a-f]{64}$/.test(b["content_sha256"]) ? "content_sha256 is a SHA-256 in hex"
+      : typeof b["media_type"] !== "string" || !b["media_type"] ? "media_type is required"
+      : !isEditKind(b["edit_kind"]) ? "edit_kind is not an edit kind"
+      : ["receipt_id", "model"].some((k) => b[k] !== undefined && b[k] !== null && typeof b[k] !== "string") ? "receipt_id and model are strings"
+      : undefined;
+    if (problem) return json(422, { detail: [{ msg: problem }] });
+    const record: ProvenanceRecordPayload = {
+      contract: PROVENANCE_CONTRACT,
+      id: globalThis.crypto.randomUUID(),
+      digital_source_type: digitalSourceType(b["edit_kind"] as EditKind),
+      edit_kind: b["edit_kind"] as EditKind,
+      system: { name: "Fadenstack", version: "fake" },
+      provider: "Example organisation",
+      model: typeof b["model"] === "string" ? { id: b["model"], version: null } : null,
+      created_at: new Date(this.#now()).toISOString(),
+      receipt_id: typeof b["receipt_id"] === "string" ? b["receipt_id"] : null,
+      media_type: b["media_type"] as string,
+      content_hash: await keyedHash(b["content_sha256"] as string),
+      hash_key_version: 1,
+    };
+    const signed: SignedRecord = { record, signature: fakeJws(record), timestamp: null };
+    this.provenanceRecords.push({ agent, request: b, signed });
+    return json(200, signed);
+  }
+
+  /** `GET /v1/provenance/anchors` (anyone) and `POST /v1/provenance/verify` (a signed-in user or agent). */
+  async #provenanceRoute(request: Request, path: string, body: unknown): Promise<Response> {
+    const unavailable = this.#provenanceUnavailable();
+    if (unavailable) return unavailable;
+    if (path === "/v1/provenance/anchors" && request.method === "GET") {
+      return json(200, {
+        contract: PROVENANCE_CONTRACT, signing_chains: [FAKE_CERTIFICATE], trust_anchors: [FAKE_CERTIFICATE],
+        detector: { id: "fadenstack-provenance/fake", methods: ["record"] },
+      });
+    }
+    if (path !== "/v1/provenance/verify" || request.method !== "POST") return json(405, { detail: "Method Not Allowed" });
+    const token = bearer(request) ?? "";
+    if (!this.#logins.has(token) && !this.#signIns.some((s) => s.access === token && !s.revoked && s.accessExpires > this.#now())) {
+      return openAiError(401, "The token is not valid.", "invalid_token", "authentication_error");
+    }
+    const b = (body ?? {}) as Record<string, unknown>;
+    const text = typeof b["text"] === "string" ? b["text"] : undefined;
+    const file = typeof b["file"] === "string" ? Uint8Array.from(atob(b["file"]), (c) => c.charCodeAt(0)) : undefined;
+    if (text === undefined && file === undefined) return json(422, { detail: [{ msg: "text or file is required" }] });
+    const sha = text !== undefined ? await textSha256(text) : await bytesSha256(file!);
+    const hash = await keyedHash(sha);
+    const found = this.provenanceRecords.find((r) => r.signed.record.content_hash === hash);
+    return json(200, {
+      contract: PROVENANCE_CONTRACT,
+      verdict: found ? "ai-generated" : "no-mark-found",
+      findings: [{
+        layer: "metadata", method: "record", found: found !== undefined,
+        detail: found ? "A signed record of this installation matches the content." : "No record matches the content.",
+        record_id: found?.signed.record.id ?? null, receipt_id: found?.signed.record.receipt_id ?? null, score: null,
+      }],
+      content_hash: sha, detector: "fadenstack-provenance/fake", checked_at: new Date(this.#now()).toISOString(), signature: null,
+    });
+  }
+
+  /**
+   * The receipt an answer ends with, when the server sends receipts: the event's value (`faden.provenance`), or
+   * undefined for none. A refused or broken-off answer gets none.
+   */
+  #receipt(reply: FakeReply, agent: FakeAgent): { value: Record<string, unknown>; id?: string } | undefined {
+    if (!this.#options.provenance?.receipts || this.#options.provenance.enabled === false || reply.receipt === false) return undefined;
+    if (reply.refuse || reply.streamError || (!reply.text && !reply.toolCalls?.length)) return undefined;
+    if (this.#provenanceDown || reply.receipt?.unsigned) return { value: { receipt: null, status: "unsigned", reason: "server-unavailable" } };
+    const id = globalThis.crypto.randomUUID();
+    const receipt: GenerationReceipt = {
+      contract: PROVENANCE_CONTRACT, id, kind: "text", model: { id: agent.model ?? "fake-model", version: null },
+      created_at: new Date(this.#now()).toISOString(),
+      watermark: reply.receipt?.watermark ?? this.#options.provenance.watermark ?? { applied: "none", reason: "runtime-without-watermark" },
+      output_hash: id.replace(/-/g, "").padEnd(64, "0"), hash_key_version: 1,
+    };
+    this.receipts.push(receipt);
+    return { value: { receipt, signature: fakeJws(receipt) }, id };
   }
 
   #login(body: unknown): Response {
@@ -490,8 +668,11 @@ export class FakeGateway {
         faden: { governance },
       });
     }
-    const response = modelRequest.stream ? this.#stream(reply, events, screen) : this.#whole(reply, events, screen);
+    const receipt = this.#receipt(reply, agent);
+    const response = modelRequest.stream ? this.#stream(reply, events, screen, receipt?.value) : this.#whole(reply, events, screen);
     if (held.length) response.headers.set("x-faden-held-tools", held.map((t) => t.name).sort().join(","));
+    // As the gateway does: an answer that was not streamed names its receipt in a header.
+    if (!modelRequest.stream && receipt?.id) response.headers.set(RECEIPT_HEADER, receipt.id);
     return response;
   }
 
@@ -581,7 +762,8 @@ export class FakeGateway {
     return json(200, out);
   }
 
-  #stream(reply: FakeReply, events: boolean, screen: (calls: WireCall[]) => Record<string, unknown>[]): Response {
+  #stream(reply: FakeReply, events: boolean, screen: (calls: WireCall[]) => Record<string, unknown>[],
+    receipt: Record<string, unknown> | undefined): Response {
     const id = `chatcmpl-${this.#next()}`;
     const chunkSize = this.#options.chunkSize ?? 6;
     const encoder = new TextEncoder();
@@ -632,6 +814,8 @@ export class FakeGateway {
             await send(chunk({}, calls.length ? "tool_calls" : "stop"));
           }
           await send(`data: ${JSON.stringify({ id, object: "chat.completion.chunk", model: "fake-model", choices: [], usage: usage(reply) })}\n\n`);
+          // The receipt comes last, as the stream closes, before [DONE].
+          if (receipt) await send(faden({ type: "CUSTOM", name: "faden.provenance", value: receipt }));
           await send("data: [DONE]\n\n");
           controller.close();
         } catch (error) {
@@ -769,6 +953,59 @@ type WireCall = { id: string; type: "function"; function: { name: string; argume
 function toolDenied(callId: string, name: string, message: string, decisionId: string): Record<string, unknown> {
   return { type: "CUSTOM", name: "faden.tool_denied", value: { toolCallId: callId, toolCallName: name, message, decisionId } };
 }
+
+/** What is wrong with a placement report for the server (it forbids extra fields), or undefined. */
+function placementProblem(body: unknown): string | undefined {
+  const b = (body ?? {}) as Record<string, unknown>;
+  const fields = ["record_id", "tool", "sink_kind", "media_type", "edit_kind", "length_class", "layers"];
+  const extra = Object.keys(b).filter((k) => !fields.includes(k));
+  if (extra.length) return `extra fields not permitted: ${extra.join(", ")}`;
+  const missing = fields.filter((k) => b[k] === undefined || b[k] === null);
+  if (missing.length) return `required: ${missing.join(", ")}`;
+  if (["record_id", "tool", "sink_kind", "media_type"].some((k) => typeof b[k] !== "string" || !b[k])) return "names are strings";
+  if (String(b["record_id"]).length > 64) return "record_id is 64 characters at most";
+  if (!isEditKind(b["edit_kind"])) return "edit_kind is not an edit kind";
+  if (!["short", "medium", "long"].includes(b["length_class"] as string)) return "length_class is short, medium or long";
+  if (!Array.isArray(b["layers"])) return "layers is a list";
+  for (const layer of b["layers"] as Record<string, unknown>[]) {
+    const extraLayer = Object.keys(layer ?? {}).filter((k) => !["layer", "method", "applied", "reason"].includes(k));
+    if (extraLayer.length) return `extra fields not permitted in a layer: ${extraLayer.join(", ")}`;
+    if (!(MARK_LAYERS as readonly unknown[]).includes(layer["layer"])) return "a layer is metadata, watermark, fingerprint or label";
+    if (typeof layer["method"] !== "string" || typeof layer["applied"] !== "boolean") return "a layer has a method and applied";
+    const reason = layer["reason"];
+    if (reason !== undefined && reason !== null && !(REASON_CODES as readonly unknown[]).includes(reason)) return `not a reason code: ${String(reason)}`;
+  }
+  return undefined;
+}
+
+/** The fake's keyed hash of a content hash: what the server keeps instead of the content's own hash. */
+async function keyedHash(contentSha256: string): Promise<string> {
+  return textSha256(`fake-hash-key:${contentSha256}`);
+}
+
+/** A JWS in the server's shape (ES256 header, the canonical JSON payload) with a signature nobody can check. */
+function fakeJws(payload: unknown): string {
+  const header = { alg: "ES256", typ: "faden-provenance+jws", kid: "fake-1" };
+  return [canonical(header), canonical(payload), "fake signature"].map(base64Url).join(".");
+}
+
+/** JSON with sorted keys and no spaces, as the server signs it. */
+function canonical(value: unknown): string {
+  if (Array.isArray(value)) return `[${value.map(canonical).join(",")}]`;
+  if (value !== null && typeof value === "object") {
+    const entries = Object.entries(value as Record<string, unknown>).filter(([, v]) => v !== undefined).sort(([a], [b]) => (a < b ? -1 : 1));
+    return `{${entries.map(([k, v]) => `${JSON.stringify(k)}:${canonical(v)}`).join(",")}}`;
+  }
+  return JSON.stringify(value);
+}
+
+function base64Url(text: string): string {
+  const bytes = new TextEncoder().encode(text);
+  return btoa(String.fromCharCode(...bytes)).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+}
+
+/** Not a certificate: what the fake's anchors list in place of one. */
+const FAKE_CERTIFICATE = "-----BEGIN CERTIFICATE-----\nZmFrZSBjZXJ0aWZpY2F0ZQ==\n-----END CERTIFICATE-----\n";
 
 /** A tool rule's pattern: `*` stands for any characters, everything else for itself (fnmatch, as the gateway). */
 function globMatch(pattern: string, name: string): boolean {

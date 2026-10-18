@@ -1,4 +1,5 @@
 import type { GovernanceNotice } from "../governance.js";
+import type { ReceiptNote } from "../provenance/receipts.js";
 import type { ToolMode } from "../tools/toolModes.js";
 
 /** A chat message in the OpenAI shape the gateway speaks. */
@@ -87,6 +88,11 @@ export type ChatUpdate =
   | { type: "event"; event: FadenstackEvent }
   /** The gateway refused the prompt (`prompt_blocked`) or stopped the answer (`response_blocked`). */
   | { type: "refused"; notice: GovernanceNotice }
+  /**
+   * The answer's receipt, which says what made it: the signed receipt from the stream's last event
+   * (`faden.provenance`, which also comes as an `event` update), or the ids the `x-faden-provenance` header names.
+   */
+  | { type: "receipt"; receipt: ReceiptNote }
   | { type: "finish"; reason: FinishReason; responseId?: string; model?: string };
 
 /** A whole answer. */
@@ -99,6 +105,8 @@ export interface ChatResponse {
   finishReason?: FinishReason;
   usage?: Usage;
   events: FadenstackEvent[];
+  /** The answer's receipts: the ids its `x-faden-provenance` header names, and a signed one its events carry. */
+  receipts: ReceiptNote[];
   /** Set when the gateway refused the prompt or the answer. */
   refused?: GovernanceNotice;
 }

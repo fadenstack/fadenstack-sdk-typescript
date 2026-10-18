@@ -7,7 +7,9 @@ export {
   type FakeGatewayOptions,
   type FakeModel,
   type FakeModelRequest,
+  type FakeProvenanceOptions,
   type FakeReply,
+  type FakeSignedRecord,
   type FakeToolRule,
   type FakeUser,
 } from "./fakeGateway.js";

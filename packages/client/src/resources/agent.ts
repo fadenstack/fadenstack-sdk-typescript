@@ -2,6 +2,7 @@ import { FadenstackApiError } from "../errors.js";
 import type { FadenstackTransport } from "../http/transport.js";
 import { toWireManifest, type AppManifest } from "../manifest.js";
 import { toAgentProfile, toSkillList, toWireEvent, type AgentClientEvent, type AgentProfile, type SkillList } from "../models.js";
+import { AgentProvenanceResource } from "./provenance.js";
 
 /** The server takes at most this many events per report. */
 export const MAX_EVENTS_PER_REPORT = 100;
@@ -9,11 +10,14 @@ export const MAX_EVENTS_PER_REPORT = 100;
 /** The client's agent: its profile, the events the SDK reports, and approvals the gateway waits for. */
 export class AgentResource {
   readonly agent: string;
+  /** The agent's provenance routes: its marking policy, signed records of placements, placement reports. */
+  readonly provenance: AgentProvenanceResource;
   readonly #transport: FadenstackTransport;
 
   constructor(transport: FadenstackTransport, agent: string) {
     this.#transport = transport;
     this.agent = agent;
+    this.provenance = new AgentProvenanceResource(transport, agent);
   }
 
   #route(rest: string): URL {

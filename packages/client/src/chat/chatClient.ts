@@ -2,8 +2,10 @@ import { FadenstackStreamError } from "../errors.js";
 import { readNotice, type GovernanceNotice } from "../governance.js";
 import { parseError, toApiError } from "../http/errorReader.js";
 import type { FadenstackTransport, RequestSpec } from "../http/transport.js";
+import { RECEIPT_EVENT, RECEIPT_HEADER, readReceiptEvent, readReceiptHeader } from "../provenance/receipts.js";
 import { TOOL_MODE_HEADER, type ToolMode } from "../tools/toolModes.js";
 import { readSse, type SseEvent } from "./sse.js";
+import type { ReceiptNote } from "../provenance/receipts.js";
 import type {
   ChatMessage,
   ChatOptions,
@@ -51,10 +53,12 @@ export class FadenstackChatClient implements ChatStreamer {
     const { response, text } = await this.#transport.request(() => this.#build(body, options), options.signal);
     if (!response.ok) {
       const refused = refusal(response, text);
-      if (refused) return { text: "", reasoning: "", toolCalls: [], events: [], refused, finishReason: "content_filter" };
+      if (refused) return { text: "", reasoning: "", toolCalls: [], events: [], receipts: [], refused, finishReason: "content_filter" };
       throw toApiError(response, text);
     }
-    return toResponse(JSON.parse(text) as Json);
+    const answer = toResponse(JSON.parse(text) as Json);
+    answer.receipts.unshift(...readReceiptHeader(response.headers.get(RECEIPT_HEADER)));
+    return answer;
   }
 
   /** The answer as it streams: text, reasoning, whole tool calls, the gateway's events, usage, the finish. */
@@ -70,6 +74,7 @@ export class FadenstackChatClient implements ChatStreamer {
       return;
     }
     if (!response.body) throw new FadenstackStreamError("The answer had no body.");
+    for (const receipt of readReceiptHeader(response.headers.get(RECEIPT_HEADER))) yield { type: "receipt", receipt };
     const assembler = new StreamAssembler();
     for await (const sse of readSse(response.body, options.signal)) {
       yield* assembler.read(sse);
@@ -166,6 +171,11 @@ export function toFadenstackEvent(raw: Json): FadenstackEvent {
   return event;
 }
 
+/** The receipt a `faden.provenance` event carries, or undefined for any other event. */
+function receiptOf(event: FadenstackEvent): ReceiptNote | undefined {
+  return event.type === "CUSTOM" && event.name === RECEIPT_EVENT ? readReceiptEvent(event.value) : undefined;
+}
+
 export function toolCall(id: string, name: string, argumentsJson: string): ToolCall {
   const call: ToolCall = { id, name, argumentsJson, arguments: undefined };
   if (argumentsJson.trim() === "") {
@@ -194,7 +204,7 @@ function usage(root: Json): Usage | undefined {
 }
 
 function toResponse(root: Json): ChatResponse {
-  const response: ChatResponse = { text: "", reasoning: "", toolCalls: [], events: [] };
+  const response: ChatResponse = { text: "", reasoning: "", toolCalls: [], events: [], receipts: [] };
   const id = str(root, "id");
   const model = str(root, "model");
   if (id) response.id = id;
@@ -202,6 +212,10 @@ function toResponse(root: Json): ChatResponse {
   const faden = root["faden"] as Json | undefined;
   if (faden && Array.isArray(faden["events"])) {
     response.events = (faden["events"] as Json[]).filter((e) => e && typeof e === "object").map(toFadenstackEvent);
+    for (const event of response.events) {
+      const receipt = receiptOf(event);
+      if (receipt) response.receipts.push(receipt);
+    }
   }
   const choice = Array.isArray(root["choices"]) ? (root["choices"] as Json[])[0] : undefined;
   if (choice) {
@@ -248,6 +262,8 @@ class StreamAssembler {
       if (event.type === "CUSTOM" && event.name === "faden.governance" && event.value) {
         yield { type: "refused", notice: readNotice(event.value) };
       }
+      const receipt = receiptOf(event);
+      if (receipt) yield { type: "receipt", receipt };
       return;
     }
     if (sse.data === "[DONE]") {
