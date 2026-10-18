@@ -204,7 +204,7 @@ describe("ChatPanel's About and links", () => {
     expect(link.getAttribute("href")).toBe(`https://fadenstack.com/?ref=office-panel&v=${sdkMinor}`);
     expect(link.getAttribute("target")).toBe("_blank");
     expect(link.getAttribute("rel")).toBe("noopener noreferrer");
-    expect(link.querySelector("svg")!.getAttribute("aria-hidden")).toBe("true");
+    expect(link.querySelector("svg")).toBeNull(); // no arrow on so small a line; underlined instead
     expect(fireEvent.click(link)).toBe(false); // the browser does not follow it: the host opens it
     expect(opened).toEqual([link.getAttribute("href")]);
   });

@@ -19,7 +19,7 @@ export function ExternalLink({ chat, link, className, iconSize = 12 }: { chat: A
         chat.openLink(link.href);
       }}>
       {link.label}
-      <Icon name="external" size={iconSize} />
+      {iconSize > 0 && <Icon name="external" size={iconSize} />}
     </a>
   );
 }
@@ -33,7 +33,7 @@ export function NoticeLine({ chat }: { chat: AgentChatViewModel }): ReactElement
     <p className="fdn-ai-notice">
       {notice && <span dir="auto">{notice}</span>}
       {notice && link && <span className="fdn-ai-notice-separator" aria-hidden="true">·</span>}
-      {link && <ExternalLink chat={chat} link={link} className="fdn-footer-link" iconSize={10} />}
+      {link && <ExternalLink chat={chat} link={link} className="fdn-footer-link" iconSize={0} />}
     </p>
   );
 }

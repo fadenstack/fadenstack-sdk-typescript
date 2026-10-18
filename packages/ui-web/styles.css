@@ -1119,16 +1119,16 @@
   margin-inline: 5px;
 }
 
+/* Muted like the notice, underlined so it is not told apart by colour alone; no arrow on so small a line. */
 .fdn-footer-link {
   color: inherit;
-  text-decoration: none;
+  text-decoration: underline;
+  text-underline-offset: 2px;
   white-space: nowrap;
 }
 
 .fdn-footer-link:hover {
   color: var(--fdn-text-muted);
-  text-decoration: underline;
-  text-underline-offset: 2px;
 }
 
 /* A link that opens in a new tab: a small arrow after its text, pointing the way the text runs. */

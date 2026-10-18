@@ -13,6 +13,6 @@ const chat = useViewModel(() => props.chat);
   <p v-if="chat.strings.aiNotice || chat.footerLink" class="fdn-ai-notice">
     <span v-if="chat.strings.aiNotice" dir="auto">{{ chat.strings.aiNotice }}</span>
     <span v-if="chat.strings.aiNotice && chat.footerLink" class="fdn-ai-notice-separator" aria-hidden="true">·</span>
-    <ExternalLink v-if="chat.footerLink" :chat="chat" :link="chat.footerLink" link-class="fdn-footer-link" :icon-size="10" />
+    <ExternalLink v-if="chat.footerLink" :chat="chat" :link="chat.footerLink" link-class="fdn-footer-link" :icon-size="0" />
   </p>
 </template>

@@ -25,5 +25,5 @@ function open(e: MouseEvent): void {
     rel="noopener noreferrer"
     :aria-label="`${link.label} ${chat.strings.opensInNewTab}`"
     @click="open"
-  >{{ link.label }}<Icon name="external" :size="iconSize" /></a>
+  >{{ link.label }}<Icon v-if="iconSize > 0" name="external" :size="iconSize" /></a>
 </template>
