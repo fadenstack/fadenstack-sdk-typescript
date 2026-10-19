@@ -104,7 +104,7 @@ function textOfHtml(html: string): string {
       continue;
     }
     flush(i);
-    const name = html.slice(nameAt, j).toLowerCase();
+    const name = asciiLower(html.slice(nameAt, j));
     i = text = close;
     if (!end && DROPPED.has(name) && html.charCodeAt(close - 2) !== 0x2f) {
       i = text = afterEndTag(html, name, close);
@@ -114,6 +114,11 @@ function textOfHtml(html: string): string {
   }
   flush(n);
   return out;
+}
+
+/** A tag name in lower case: ASCII letters only, so both SDKs agree on every name. */
+function asciiLower(name: string): string {
+  return name.replace(/[A-Z]/g, (c) => String.fromCharCode(c.charCodeAt(0) + 32));
 }
 
 function isAsciiLetter(c: number): boolean {
@@ -155,7 +160,7 @@ function tagEnd(html: string, from: number): number {
 function afterEndTag(html: string, name: string, from: number): number {
   for (let k = html.indexOf("</", from); k >= 0; k = html.indexOf("</", k + 2)) {
     const at = k + 2 + name.length;
-    if (html.slice(k + 2, at).toLowerCase() === name && (at >= html.length || endsTagName(html.charCodeAt(at)))) {
+    if (asciiLower(html.slice(k + 2, at)) === name && (at >= html.length || endsTagName(html.charCodeAt(at)))) {
       const gt = html.indexOf(">", at);
       return gt < 0 ? html.length : gt + 1;
     }
@@ -220,7 +225,7 @@ export function decodeHtmlEntities(text: string): string {
 const LINE_BREAK = /\r\n|\r|\n/;
 const BLANK = /^[ \t]*$/;
 const QUOTE = /^ {0,3}> ?/;
-const FENCE = /^[ \t]*(`{3,}|~{3,})(.*)$/;
+const FENCE = /^[ \t]*(`{3,}|~{3,})([\s\S]*)$/;
 const DEFINITION = /^ {0,3}\[([^\]^][^\]]*)\]:[ \t]*[^ \t]+(?:[ \t]+(?:"[^"]*"|'[^']*'|\([^)]*\)))?[ \t]*$/;
 const DELIMITER_ROW = /^[ \t]*\|?[ \t]*:?-+:?[ \t]*(?:\|[ \t]*:?-+:?[ \t]*)*\|?[ \t]*$/;
 const THEMATIC_BREAK = /^ {0,3}([-*_])(?:[ \t]*\1){2,}[ \t]*$/;
