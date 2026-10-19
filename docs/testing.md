@@ -130,6 +130,7 @@ A reply can hold:
 | `deniedTool` | `{ name, message, callId? }`: the server refuses a tool call. The outcome is `tool_denied`. |
 | `rateLimit` | `{ retryAfterS?, code?, message? }`: a 429 instead of an answer. The outcome is `rate_limited`, and the error carries `code`. |
 | `streamError` | `{ message, code? }`: the answer breaks off after the text. The turn throws a `FadenstackStreamError`. |
+| `finish` | The finish reason in place of `stop` or `tool_calls`, for example `length`: with no text and no tool call, the turn gets an `empty_answer` notice of category `length`. |
 | `usage` | `{ prompt, completion }` tokens. |
 | `delayMs` | A pause between streamed pieces. |
 | `receipt` | With `provenance.receipts` on: `false` sends no receipt for this answer, `{ unsigned: true }` one the server could not sign, `{ watermark }` what it says about the watermark. |

@@ -43,7 +43,7 @@ collected in `result.notices`:
 
 | Field | What it is |
 |---|---|
-| `outcome` | What it is about: `prompt_blocked`, `response_blocked`, `tool_denied`, `rate_limited`, `round_limit`, or another value the server sends. |
+| `outcome` | What it is about: `prompt_blocked`, `response_blocked`, `tool_denied`, `rate_limited`, `round_limit`, `empty_answer`, or another value the server sends. |
 | `message` | What to tell the user. For a policy, this is the administrator's message. |
 | `stage` | Where it happened: `input`, `output` or `tool`. Optional. |
 | `category` | The kind of rule, for example `mode` when the tool mode hid a tool. Optional. |
@@ -53,6 +53,11 @@ collected in `result.notices`:
 
 A `round_limit` notice means the agent stopped calling tools after the most model calls a turn may make
 (`useMaxRounds`). The turn's outcome is still `completed` or `tool_denied`.
+
+An `empty_answer` notice means a model call ended with no text and no tool call, and was not refused or stopped: the
+user would otherwise see nothing. Its `category` is `length` when the model used up its length first, often while
+thinking (finish reason `length`). The outcome stays what it was. The chat panel says so in the user's language and
+offers Retry, as for a failed turn.
 
 ```ts
 const result = await session.send("Delete pages 3 to 5.");

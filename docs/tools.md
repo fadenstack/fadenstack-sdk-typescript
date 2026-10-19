@@ -40,8 +40,10 @@ The type parameter (`{ page: number }` above) types the arguments `run` receives
 beyond the checks below, so keep it in line with `parameters`.
 
 `run` may be synchronous or return a promise. What it returns goes to the model: a string as it is, anything else as
-JSON, and nothing (`undefined` or `null`) as an empty string. If `run` throws, the turn goes on: the model gets
-`Error:` and the error's message as the result, and the tool's outcome is `error`.
+JSON (`[]` and `{}` too). For nothing (`undefined`, `null`, an empty or a blank string) the model gets
+`NO_TOOL_RESULT`, "The tool returned no result.": an empty tool message makes some models stop or guess. The
+transcript and the tool's card keep what `run` returned. If `run` throws, the turn goes on: the model gets `Error:`
+and the error's message as the result, and the tool's outcome is `error`.
 
 The second argument, `context`, describes the call:
 
