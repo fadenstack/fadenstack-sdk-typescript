@@ -15,6 +15,8 @@ export default defineConfig({
       "@fadenstack/ui-web": src("ui-web"),
       "@fadenstack/ui-react": src("ui-react"),
       "@fadenstack/ui-vue": src("ui-vue"),
+      // Before the package itself: an alias matches by prefix.
+      "@fadenstack/testing/provenance": fileURLToPath(new URL("./packages/testing/src/provenance.ts", import.meta.url)),
       "@fadenstack/testing": src("testing"),
       "@fadenstack/provenance": src("provenance"),
     },

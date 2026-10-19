@@ -216,3 +216,28 @@ const { client, tokens } = FadenstackClient.forAgent({
 
 The fake sends no CORS headers. A browser extension with host permission for the address can call it; a web page
 served from another origin cannot.
+
+## Run a tool by hand
+
+A tool's `invoke` (and a `defineTool` `run`) takes a `ToolCallContext`. `toolContext()` makes one for a test outside
+an agent's session -- a signal that never aborts, call, session and turn ids, and no services unless you give them:
+
+```ts
+import { toolContext, toolServices } from "@fadenstack/testing";
+import { PassThroughProvenance, provenanceServices } from "@fadenstack/testing/provenance";
+
+const provenance = new PassThroughProvenance();
+const result = await insertReply.invoke({ text: "<p>Hello</p>" }, toolContext({ services: provenanceServices(provenance) }));
+expect(provenance.requests[0]!.content).toBe("<p>Hello</p>");
+```
+
+| Helper | What it is |
+|---|---|
+| `toolContext(options?)` | A `ToolCallContext`: `services`, `signal`, `callId`, `sessionId`, `turnId` as you give them. |
+| `toolServices(...[key, service])` | The services of a hand-built call, by key (`toolServices([MyKey, myService])`). |
+| `PassThroughProvenance` | From `@fadenstack/testing/provenance`: a `Provenance` whose `place()` keeps the request (`requests`), calls your insert with the content unchanged and returns an unmarked placement -- no record, no layers. `policy()` answers with the contract's default, or the `policy` you give. |
+| `provenanceServices(provenance?)` | Services that give the call `provenance` (a new `PassThroughProvenance` by default), so `provenanceOf(context)` works. |
+
+`@fadenstack/testing/provenance` needs `@fadenstack/provenance` installed (an optional peer dependency). To test the
+marks themselves, run the tool in an agent with the provenance module against `FakeGateway`, or a marker with
+`checkMarker` (see [Marking AI-generated content](provenance.md#testing-a-marker)).

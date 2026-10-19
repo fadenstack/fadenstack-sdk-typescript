@@ -13,3 +13,4 @@ export {
   type FakeToolRule,
   type FakeUser,
 } from "./fakeGateway.js";
+export { toolContext, toolServices, type ToolContextOptions, type ToolServiceEntry } from "./tools.js";

@@ -10,6 +10,7 @@
       "@fadenstack/ui-web": ["./packages/ui-web/src/index.ts"],
       "@fadenstack/ui-react": ["./packages/ui-react/src/index.ts"],
       "@fadenstack/testing": ["./packages/testing/src/index.ts"],
+      "@fadenstack/testing/provenance": ["./packages/testing/src/provenance.ts"],
       "@fadenstack/provenance": ["./packages/provenance/src/index.ts"]
     }
   },

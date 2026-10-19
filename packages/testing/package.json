@@ -1,7 +1,7 @@
 {
   "name": "@fadenstack/testing",
   "version": "0.2.0-rc.3",
-  "description": "A scripted fake Fadenstack server for testing agents offline",
+  "description": "A scripted fake Fadenstack server for testing agents offline, and helpers for running tools by hand",
   "license": "Apache-2.0",
   "author": "Emagin8 UG (haftungsbeschränkt)",
   "homepage": "https://developers.fadenstack.com/sdk/typescript/",
@@ -26,6 +26,10 @@
     ".": {
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js"
+    },
+    "./provenance": {
+      "types": "./dist/provenance.d.ts",
+      "import": "./dist/provenance.js"
     }
   },
   "files": [
@@ -38,5 +42,17 @@
   },
   "dependencies": {
     "@fadenstack/client": "0.2.0-rc.3"
+  },
+  "peerDependencies": {
+    "@fadenstack/agents": "0.2.0-rc.3",
+    "@fadenstack/provenance": "0.2.0-rc.3"
+  },
+  "peerDependenciesMeta": {
+    "@fadenstack/agents": {
+      "optional": true
+    },
+    "@fadenstack/provenance": {
+      "optional": true
+    }
   }
 }

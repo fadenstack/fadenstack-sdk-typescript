@@ -24,6 +24,9 @@ const gateway = new FakeGateway({
 
 The gateway answers in the same process through its own `fetch`, or over HTTP with `listen()` in Node.
 
+To run a tool by hand, `toolContext()` makes its `ToolCallContext`; `@fadenstack/testing/provenance` adds a
+pass-through `Provenance` for tools that place content (`toolContext({ services: provenanceServices() })`).
+
 - Documentation: <https://developers.fadenstack.com/sdk/typescript/testing/>
 - Source and issues: <https://github.com/fadenstack/fadenstack-sdk-typescript>
 - Licence: Apache-2.0 (LICENSE and NOTICE are in the package)
