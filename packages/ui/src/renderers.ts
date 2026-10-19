@@ -1,4 +1,4 @@
-import { eventKind, type FadenstackEvent } from "@fadenstack/client";
+import { RECEIPT_EVENT, eventKind, type FadenstackEvent } from "@fadenstack/client";
 
 import { CitationsPart, NoticePart, type Citation, type PartContext } from "./parts.js";
 import type { TurnViewModel } from "./turn.js";
@@ -52,9 +52,12 @@ export const piiRenderer: AgentEventRenderer = {
   },
 };
 
-/** Events the chat shows elsewhere or not at all, and a generic notice for anything else. */
+/**
+ * Events the chat shows elsewhere or not at all, and a generic notice for anything else. An answer's receipt
+ * (`faden.provenance`) is kept with the turn by the session; it is no message for the user.
+ */
 const HANDLED = new Set(["TOOL_CALL_START", "TOOL_CALL_END", "faden.gateway_round", "faden.approval_required",
-  "faden.tool_denied", "faden.governance", "faden.tool_mode"]);
+  "faden.tool_denied", "faden.governance", "faden.tool_mode", RECEIPT_EVENT]);
 
 export const fallbackRenderer: AgentEventRenderer = {
   render(event, turn, context) {

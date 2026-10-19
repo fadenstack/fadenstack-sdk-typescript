@@ -116,6 +116,14 @@ describe("AgentChatViewModel", () => {
     expect(vm.input).toBe("Our customer list");
   });
 
+  it("keeps an answer's receipt out of the answer: no notice for it", async () => {
+    const { vm } = await chat({ model: () => ({ text: "The reply." }), provenance: { receipts: true } });
+    await vm.send("Write the reply.");
+    const turn = vm.turns[0]!;
+    expect(turn.state).toBe("completed");
+    expect(turn.parts.map((p) => p.kind)).toEqual(["markdown"]);
+  });
+
   it("stops a running turn", async () => {
     const { vm } = await chat({ model: () => ({ text: "a slow answer, word by word", delayMs: 15 }) });
     const sending = vm.send("Go");
