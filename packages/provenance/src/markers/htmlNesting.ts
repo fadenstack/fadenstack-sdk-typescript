@@ -18,7 +18,24 @@ import { AI_GENERATED_ATTRIBUTE, markOf, tagAttributes, type TagAttribute } from
  * `splitMarksInHtml` does this to HTML text, as the .NET SDK's `HtmlAttributeMarker.SplitMarksAt` does
  * (`mark-split-vectors.json` is the test); `splitMarksAt` does it to a page's DOM, and `unnestMarks` lifts a mark out
  * of another that an editor put it in all the same (Chrome puts what it inserts at the edge of an element inside it).
+ *
+ * Not in an editor that draws its DOM from a model of its own (`keepsOwnModel`): it redraws from the model, and what
+ * was done to its DOM is undone, or worse, the earlier mark goes (CKEditor 5 dropped it in a live run). There a write
+ * goes in through the editor, a mark may hold another, and a record's text is still read right: `recordText` leaves
+ * out what other records' elements inside hold.
  */
+
+/**
+ * Editors that draw their DOM from a model of their own: CKEditor 5, ProseMirror (and Tiptap, built on it), Quill,
+ * Lexical, Slate and Draft.js. The Chrome extension found them on the editors' demo pages (19 October 2026).
+ */
+export const MODEL_EDITOR_SELECTORS =
+  ".ck-editor__editable, .ProseMirror, .ql-editor, [data-lexical-editor], [data-slate-editor], .public-DraftEditor-content";
+
+/** Whether `el` is, or is inside, an editor with a model of its own: not one to split or unnest marks in. */
+export function keepsOwnModel(el: Element): boolean {
+  return el.closest(MODEL_EDITOR_SELECTORS) !== null;
+}
 
 const BOM = String.fromCharCode(0xfeff);
 
@@ -380,7 +397,8 @@ function domTree(doc: Document, templates: readonly TitleTemplate[]): Tree<Node>
  * Where to insert content into `root` (an editor) at `range`'s start without nesting marks: when the place is inside
  * an element of an earlier mark, that element is split there (see the module's notes) and the range returned lies
  * between the two halves, in no mark; elsewhere the editor's DOM stays as it is and the range returned is `range`'s
- * start. Either way a new, collapsed range; `range` itself is left alone.
+ * start. Either way a new, collapsed range; `range` itself is left alone. Not for an editor with a model of its own
+ * (`keepsOwnModel`).
  */
 export function splitMarksAt(range: Range, root: Node, templates: readonly TitleTemplate[] = titleTemplates()): Range {
   const doc = root.ownerDocument ?? (root as Document);
@@ -410,7 +428,8 @@ export function splitMarksAt(range: Range, root: Node, templates: readonly Title
 /**
  * Lifts every mark in `root` that is inside an element of another record's mark out of it: the other element is
  * split around it (see the module's notes), so each holds one record's text again. For an editor that put what it
- * inserted inside a mark although the place given was beside it. Returns how many marks were lifted.
+ * inserted inside a mark although the place given was beside it. Returns how many marks were lifted. Not for an
+ * editor with a model of its own (`keepsOwnModel`).
  */
 export function unnestMarks(root: Node, templates: readonly TitleTemplate[] = titleTemplates()): number {
   const doc = root.ownerDocument ?? (root as Document);

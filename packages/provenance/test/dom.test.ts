@@ -6,7 +6,7 @@ import { describe, expect, it } from "vitest";
 
 import { textSha256 } from "@fadenstack/client";
 import { englishStrings } from "@fadenstack/ui";
-import { ProvenanceReader, readerTextSha256, splitMarksAt, unnestMarks, wrapHtml } from "@fadenstack/provenance";
+import { ProvenanceReader, keepsOwnModel, readerTextSha256, splitMarksAt, unnestMarks, wrapHtml } from "@fadenstack/provenance";
 
 /**
  * The rule on a page's DOM, as a browser host (the Chrome extension) applies it to an editor: the same cases as the
@@ -94,6 +94,26 @@ describe("splitMarksAt: a place for a later write in an editor, in no mark", () 
     expect([place.startContainer, place.startOffset]).toEqual([range.startContainer, range.startOffset]);
     const elsewhere = document.createElement("div");
     expect(splitMarksAt(range, elsewhere).startContainer).toBe(range.startContainer);
+  });
+});
+
+describe("keepsOwnModel: the editors whose DOM is not to be split", () => {
+  it.each([
+    ["CKEditor 5", '<div class="ck ck-editor__editable ck-content" contenteditable="true"><p id="at">x</p></div>'],
+    ["ProseMirror", '<div class="ProseMirror" contenteditable="true"><p id="at">x</p></div>'],
+    ["Quill", '<div class="ql-editor" contenteditable="true"><p id="at">x</p></div>'],
+    ["Lexical", '<div data-lexical-editor="true" contenteditable="true"><p id="at">x</p></div>'],
+    ["Slate", '<div data-slate-editor="true" contenteditable="true"><p id="at">x</p></div>'],
+    ["Draft.js", '<div class="public-DraftEditor-content" contenteditable="true"><div id="at">x</div></div>'],
+  ])("%s draws its DOM from a model of its own", (_name, html) => {
+    document.body.innerHTML = html;
+    expect(keepsOwnModel(document.getElementById("at")!)).toBe(true);
+  });
+
+  it("a plain contenteditable, TinyMCE's body or a page's form does not", () => {
+    document.body.innerHTML = '<div contenteditable="true"><p id="plain">x</p></div><body-like id="tiny" class="mce-content-body"></body-like>';
+    expect(keepsOwnModel(document.getElementById("plain")!)).toBe(false);
+    expect(keepsOwnModel(document.getElementById("tiny")!)).toBe(false);
   });
 });
 
