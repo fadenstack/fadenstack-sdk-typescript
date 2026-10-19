@@ -5,6 +5,7 @@ import { describe, expect, it } from "vitest";
 import {
   EDIT_KINDS,
   MARK_LAYERS,
+  PLACEMENT_FAILURE,
   REASON_CODES,
   digitalSourceType,
   normalizeText,
@@ -62,7 +63,7 @@ const RECORD_REQUEST = {
 } satisfies FieldMap<RecordRequest>;
 const PLACEMENT = {
   record_id: "optional", tool: "required", sink_kind: "required", media_type: "required", edit_kind: "required",
-  length_class: "required", layers: "required",
+  length_class: "required", layers: "required", written: "optional", failure: "optional",
 } satisfies FieldMap<PlacementReport>;
 const POLICY = {
   on_missing: "optional", short_text_tokens: "optional", exempt_edit_kinds: "optional", internal_technical: "optional",
@@ -157,6 +158,12 @@ describe("the provenance/v1 contract", () => {
     expect(enumOf(contractSchema("provenance-policy"), "on_missing")).toEqual(sorted(Object.keys(missing)));
     const verdicts = { "ai-generated": true, "no-mark-found": true, inconclusive: true } satisfies Members<VerifyResult["verdict"]>;
     expect(enumOf(contractSchema("verify-result"), "verdict")).toEqual(sorted(Object.keys(verdicts)));
+  });
+
+  it("reports a placement as written by default, and a failure only as a short code", () => {
+    const properties = contractSchema("placement-report").properties!;
+    expect(properties["written"]).toMatchObject({ type: "boolean", default: true });
+    expect(properties["failure"]!.anyOf![0]).toMatchObject({ type: "string", pattern: PLACEMENT_FAILURE.source, maxLength: 64 });
   });
 
   it("gives generated content its own source type, and every other kind the composite one", () => {

@@ -79,7 +79,9 @@ that did not hold, each `{ layer, method, reason }`.
 
 **When the insert fails.** If your insert throws after the server signed the record, the placement is still reported
 and recorded -- the record's id, every layer `applied: false` (the transcript's `detail` says `insert failed: <error>`)
--- so the server's placements match its records; then `place()` throws your error on.
+-- so the server's placements match its records; then `place()` throws your error on. The report says it was not
+written (`written: false`) and names the error by a short code (`failure`: its `name`, other characters as `_`, at
+most 64), never by its message; the server marks the record "not written".
 
 **Arguments that are not content.** A tool that writes text for people in one call and picks an option or ticks a
 check box in another says so per call: its `edit` function returns `null` for a call whose argument is not content.
@@ -277,7 +279,7 @@ reader sees.
 | 3 | The markers that fit, by layer; the built-ins in this order: `server-record`, `image-guard`, `watermark-status`, `html-attribute`, `front-matter`, `key-value`, `sidecar`, `http-header`; then yours; the policy's label when none of them is a label. |
 | 4 | The needed layers checked before signing; `refuse` refuses here. |
 | 5 | The record signed; without one no marker runs, `{ metadata, signed-record, applied: false, reason: server-unavailable }`; `refuse` refuses here when the content needs metadata (or a label). |
-| 6 | Prepare, insert, attach; the pipeline adds `host`, `sink-cannot-carry` when no host marker fits, and the watermark from the receipt when no marker gave it; the layers sorted by layer. An insert that throws after signing: every layer `applied: false` (detail `insert failed: <error>`), reported, then thrown on. |
+| 6 | Prepare, insert, attach; the pipeline adds `host`, `sink-cannot-carry` when no host marker fits, and the watermark from the receipt when no marker gave it; the layers sorted by layer. An insert that throws after signing: every layer `applied: false` (detail `insert failed: <error>`), reported with `written: false` and `failure`, then thrown on. |
 | 7 | Report, observers, transcript. |
 
 | Needed layer | For | Holds when |

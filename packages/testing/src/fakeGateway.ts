@@ -1,6 +1,7 @@
 import {
   DEFAULT_PROVENANCE_POLICY,
   MARK_LAYERS,
+  PLACEMENT_FAILURE,
   PROVENANCE_CONTRACT,
   REASON_CODES,
   RECEIPT_HEADER,
@@ -978,11 +979,11 @@ function toolDenied(callId: string, name: string, message: string, decisionId: s
 /** What is wrong with a placement report for the server (it forbids extra fields), or undefined. */
 function placementProblem(body: unknown): string | undefined {
   const b = (body ?? {}) as Record<string, unknown>;
-  const fields = ["record_id", "tool", "sink_kind", "media_type", "edit_kind", "length_class", "layers"];
+  const fields = ["record_id", "tool", "sink_kind", "media_type", "edit_kind", "length_class", "layers", "written", "failure"];
   const extra = Object.keys(b).filter((k) => !fields.includes(k));
   if (extra.length) return `extra fields not permitted: ${extra.join(", ")}`;
-  // record_id is optional: exempt content, an unsigned record and unmarked content have none.
-  const missing = fields.filter((k) => k !== "record_id" && (b[k] === undefined || b[k] === null));
+  // record_id is optional: exempt content, an unsigned record and unmarked content have none; written is true by default.
+  const missing = fields.filter((k) => !["record_id", "written", "failure"].includes(k) && (b[k] === undefined || b[k] === null));
   if (missing.length) return `required: ${missing.join(", ")}`;
   if (["tool", "sink_kind", "media_type"].some((k) => typeof b[k] !== "string" || !b[k])) return "names are strings";
   const recordId = b["record_id"];
@@ -991,6 +992,11 @@ function placementProblem(body: unknown): string | undefined {
   }
   if (!isEditKind(b["edit_kind"])) return "edit_kind is not an edit kind";
   if (!["short", "medium", "long"].includes(b["length_class"] as string)) return "length_class is short, medium or long";
+  if (b["written"] !== undefined && typeof b["written"] !== "boolean") return "written is true or false";
+  if ((b["failure"] !== undefined) !== (b["written"] === false)) return "failure comes with written false, and only then";
+  if (b["failure"] !== undefined && (typeof b["failure"] !== "string" || !PLACEMENT_FAILURE.test(b["failure"]))) {
+    return "failure is a short code of letters, digits and _.:-";
+  }
   if (!Array.isArray(b["layers"])) return "layers is a list";
   if ((b["layers"] as unknown[]).length > 32) return "32 layers at most";
   for (const layer of b["layers"] as Record<string, unknown>[]) {

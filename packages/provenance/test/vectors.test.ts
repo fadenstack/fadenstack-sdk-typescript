@@ -2,7 +2,7 @@ import { readFileSync } from "node:fs";
 
 import { describe, expect, it } from "vitest";
 
-import { normalizeText } from "@fadenstack/client";
+import { PLACEMENT_FAILURE, normalizeText, placementFailure } from "@fadenstack/client";
 import { englishStrings, germanStrings } from "@fadenstack/ui";
 import {
   hasReaderText,
@@ -82,6 +82,24 @@ describe("shared vectors (the .NET SDK has the same)", () => {
     expect(isCode("application/xhtml+xml")).toBe(false);
     expect(tokensOf("abcdefghi")).toBe(3);
     expect(tokensOf("人工智能 abc")).toBe(5); // four CJK characters and four others
+  });
+
+  it("a failed placement's code: the error's name, `_` for each other UTF-16 unit, 64 at most, Error for none", () => {
+    const cases: [string | undefined, string][] = [
+      ["RangeError", "RangeError"],
+      ["InvalidOperationException", "InvalidOperationException"],
+      ["InsertFailedException`1", "InsertFailedException_1"],
+      ["Host error: field gone!", "Host_error:_field_gone_"],
+      ["Fehler.beim-Einfügen", "Fehler.beim-Einf_gen"],
+      ["📎Error", "__Error"],
+      ["A".repeat(70), "A".repeat(64)],
+      ["", "Error"],
+      [undefined, "Error"],
+    ];
+    for (const [name, code] of cases) {
+      expect(placementFailure(name)).toBe(code);
+      expect(PLACEMENT_FAILURE.test(code)).toBe(true);
+    }
   });
 });
 

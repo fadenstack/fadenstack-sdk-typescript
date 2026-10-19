@@ -184,6 +184,9 @@ describe("placing content", () => {
     const report = r.gateway.placements[0]!.report;
     expect(validate(placementSchema, report)).toEqual([]);
     expect(report.record_id).toBe(id);
+    // Not written: the engine marks the record so. The error's name only, never its message.
+    expect([report.written, report.failure]).toEqual([false, "RangeError"]);
+    expect(JSON.stringify(report)).not.toContain("gone");
     expect(report.layers).toEqual([
       { layer: "metadata", method: "signed-record", applied: false },
       { layer: "metadata", method: "html-attribute", applied: false },
@@ -193,6 +196,29 @@ describe("placing content", () => {
     expect(entry).toMatchObject({ record_id: id, reported: true });
     expect((entry["layers"] as { detail: string }[]).map((l) => l.detail)).toEqual(Array(3).fill("insert failed: RangeError"));
     expect(r.entries(ProvenanceEntryTypes.unmarked)).toEqual([]);
+  });
+
+  it("names a failed insert's error by a short code: `_` for other characters, Error for a throw that is no error", async () => {
+    const failing = (thrown: () => unknown) => defineTool<{ text: string }>({
+      name: "fill_field", toolClass: "write", output: { argument: "text", mediaType: "text/html", edit: "generated" },
+      run: async ({ text }, context) => {
+        await provenanceOf(context).place({ content: text, mediaType: "text/html", sink: new Editor().sink }, () => {
+          throw thrown();
+        });
+        return "inserted";
+      },
+    });
+    const named = Object.assign(new Error("Field 'Huber' is gone."), { name: "Host error: field gone!" });
+    const failures: unknown[] = [];
+    for (const thrown of [() => named, () => "the field is gone"]) {
+      const r = await run([failing(thrown)], { tool: "fill_field", args: { text: `<p>${LONG}</p>` } });
+      await r.session.send("Write it.");
+      const report = r.gateway.placements[0]!.report;
+      expect(validate(placementSchema, report)).toEqual([]);
+      expect(JSON.stringify(report)).not.toContain("Huber");
+      failures.push([report.written, report.failure]);
+    }
+    expect(failures).toEqual([[false, "Host_error:_field_gone_"], [false, "Error"]]);
   });
 });
 

@@ -4,6 +4,7 @@ import {
   bytesSha256,
   digitalSourceType,
   isEditKind,
+  placementFailure,
   receiptIdOf,
   textSha256,
   type EditKind,
@@ -146,9 +147,10 @@ interface Needs {
  * markers attach their marks and say whether they held; the placement is recorded and reported -- which layers held,
  * and why the others did not. With the policy's `on_missing: refuse`, content a needed layer is not possible for is
  * not placed, nothing is signed or reported, and the refusal is recorded and told to the user. An insert that fails
- * after the record was signed is reported with every layer not applied, so the server's placements match its
- * records, and its error is thrown on. A call whose declared output says it writes no content (`declaredEditKind`
- * `null`, no `editKind` in the request) is put in as it is: not marked, not reported.
+ * after the record was signed is reported as not written (`written: false`, its error's name as `failure`) with every
+ * layer not applied, so the server's placements match its records, and its error is thrown on. A call whose declared
+ * output says it writes no content (`declaredEditKind` `null`, no `editKind` in the request) is put in as it is: not
+ * marked, not reported.
  */
 export async function placeContent<T>(settings: PipelineSettings, request: PlaceRequest, insert: Insert<T>, ctx: PlaceContext): Promise<Placement<T>> {
   checkRequest(request);
@@ -256,13 +258,15 @@ export async function placeContent<T>(settings: PipelineSettings, request: Place
     }
   }
   let result: T | undefined;
-  let failedInsert: { error: unknown; detail: string } | undefined;
+  let failedInsert: { error: unknown; detail: string; failure: string } | undefined;
   try {
     result = await insert(marked, signal);
   } catch (error) {
     // Without a record nothing was signed to leave behind; with one, the placement is reported as nothing applied.
     if (!record) throw error;
-    failedInsert = { error, detail: `insert failed: ${errorName(error)}` };
+    failedInsert = {
+      error, detail: `insert failed: ${errorName(error)}`, failure: placementFailure(error instanceof Error ? error.name : undefined),
+    };
   }
   const outcomes: Outcome[] = [];
   if (record && failedInsert) {
@@ -327,7 +331,7 @@ export async function placeContent<T>(settings: PipelineSettings, request: Place
   const done: Done = { ...base, layers, missing, signed, exemptBecause: undefined };
   if (failedInsert) {
     try {
-      await finish(settings, ctx, undefined, done);
+      await finish(settings, ctx, undefined, { ...done, failure: failedInsert.failure });
     } catch {
       // the insert's error is the one to tell
     }
@@ -356,6 +360,8 @@ interface Done extends Base {
   missing: MissingLayer[];
   signed: SignedRecord | undefined;
   exemptBecause: ExemptReason | undefined;
+  /** The insert failed after the record was signed: its error's name (`PlacementReport.failure`). */
+  failure?: string;
 }
 
 /** Reports the placement, writes its transcript entry, tells the observers; a report that fails never fails it. */
@@ -367,6 +373,8 @@ async function finish<T>(settings: PipelineSettings, ctx: PlaceContext, result: 
   const report: PlacementReport = {
     ...(recordId ? { record_id: recordId } : {}), tool: done.tool, sink_kind: done.sink.kind, media_type: done.mediaType,
     edit_kind: done.editKind, length_class: done.length, layers: layers.slice(0, 32),
+    // Only then: a server that does not know the fields yet takes every other report as before.
+    ...(done.failure !== undefined ? { written: false, failure: done.failure } : {}),
   };
   let reported = true;
   try {

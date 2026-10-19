@@ -184,6 +184,24 @@ export interface PlacementReport {
   edit_kind: EditKind;
   length_class: LengthClass;
   layers: LayerOutcome[];
+  /**
+   * False only for an insert that failed after the record was signed: the server marks the record "not written". Left
+   * out otherwise (true, the default), so a server that does not know the field yet still takes the report.
+   */
+  written?: boolean;
+  /** Only with `written` false: the error's name as a short code (`placementFailure`), never its message or content. */
+  failure?: string;
+}
+
+/** What a `failure` may be: a name of letters, digits and `_.:-`, at most 64 of them. */
+export const PLACEMENT_FAILURE = /^[A-Za-z0-9_.:-]{1,64}$/;
+
+/**
+ * An error's name as a placement's `failure`: every other character as `_` (each UTF-16 unit, as .NET counts them), cut
+ * to 64, `Error` when nothing is left. A name says what failed without anything of what was written.
+ */
+export function placementFailure(name: string | undefined): string {
+  return (name ?? "").replace(/[^A-Za-z0-9_.:-]/g, "_").slice(0, 64) || "Error";
 }
 
 /** The marking policy in an agent's profile. Local options may only tighten it. */
