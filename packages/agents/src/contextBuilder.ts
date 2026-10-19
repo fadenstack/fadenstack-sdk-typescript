@@ -14,6 +14,22 @@ export const MAX_HISTORY_PICTURES = 4;
 const PICTURE_CHARACTERS = 4_000;
 
 /**
+ * What the model gets for a tool that returned nothing (`undefined`, `null`, an empty or a blank string): given an
+ * empty tool message, some models stop, guess or end the turn without a word. For the model only, so in English; the
+ * transcript and the tool card keep what the tool returned.
+ */
+export const NO_TOOL_RESULT = "The tool returned no result.";
+
+/**
+ * White space as .NET's `char.IsWhiteSpace` counts it, not as JavaScript's `\s` (which takes U+FEFF and leaves out
+ * U+0085), so both SDKs take the same text for blank.
+ */
+const BLANK = /^[\t-\r \u0085\u00a0\u1680\u2000-\u200a\u2028\u2029\u202f\u205f\u3000]*$/;
+
+/** Empty, or white space only. */
+const isBlank = (text: string): boolean => BLANK.test(text);
+
+/**
  * Builds a request's history from the transcript, with the session rule applied on the device: a
  * refused prompt, a failed or cancelled turn is left out whole; of a refused answer only the question stays;
  * consecutive user messages are merged; and the oldest turns go when the history passes the budget. Pictures go
@@ -149,8 +165,10 @@ export function toMessage(entry: TranscriptEntry, options: { pictures?: boolean 
       if (!text && calls.length === 0) return undefined;
       return calls.length ? { role: "assistant", content: text || null, tool_calls: calls } : { role: "assistant", content: text };
     }
-    case EntryTypes.toolComplete:
-      return { role: "tool", tool_call_id: str(data, "call_id") ?? "", content: str(data, "result") ?? "" };
+    case EntryTypes.toolComplete: {
+      const result = str(data, "result") ?? "";
+      return { role: "tool", tool_call_id: str(data, "call_id") ?? "", content: isBlank(result) ? NO_TOOL_RESULT : result };
+    }
     default:
       return undefined;
   }

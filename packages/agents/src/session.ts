@@ -772,7 +772,10 @@ class CallServices implements ToolServices {
 
 type AgentSettingsFactories = FadenstackAgent["settings"]["toolServices"];
 
-/** A tool's result as the model gets it: a string as it is, anything else as JSON. */
+/**
+ * A tool's result as the transcript and the tool card keep it: a string as it is, anything else as JSON, nothing as
+ * "". The model gets `NO_TOOL_RESULT` for nothing (`toMessage`).
+ */
 export function resultText(value: unknown): string {
   if (value === undefined || value === null) return "";
   if (typeof value === "string") return value;

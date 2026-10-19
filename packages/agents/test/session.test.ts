@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { FadenstackError } from "@fadenstack/client";
-import { ApprovalDecision, EntryTypes, TurnStatus } from "@fadenstack/agents";
+import { ApprovalDecision, EntryTypes, NO_TOOL_RESULT, TurnStatus, defineTool } from "@fadenstack/agents";
 import { lastToolResults, lastUserText, type FakeModel } from "@fadenstack/testing";
 
 import { collect, setup, types, until } from "./helpers.js";
@@ -170,6 +170,49 @@ describe("a turn", () => {
     const result = await session.send("loop");
     expect(s.gateway.modelCalls).toHaveLength(3);
     expect(result.notices[0]).toMatchObject({ outcome: "round_limit" });
+  });
+});
+
+describe("a tool that returns nothing", () => {
+  /** Tools that return these, each named for what it returns; `failing` throws an error without a message. */
+  const RETURNS: Record<string, unknown> = { undefined: undefined, null: null, empty: "", blank: " \n\t\u3000", list: [], object: {} };
+
+  async function nothingSetup() {
+    const tools = Object.entries(RETURNS).map(([name, value]) => defineTool({ name, toolClass: "read", run: () => value }));
+    const failing = defineTool({ name: "failing", toolClass: "read", run: () => { throw new Error(""); } });
+    const names = [...Object.keys(RETURNS), "failing"];
+    return setup(
+      {
+        agents: [{ slug: "docs", contract: names.map((name) => ({ name, risk: "read" as const })) }],
+        model: (r) => (lastToolResults(r).size ? { text: "Done." } : { toolCalls: names.map((name) => ({ id: name, name })) }),
+      },
+      undefined,
+      (b) => b.addTools(...tools, failing),
+    );
+  }
+
+  it("gives the model a sentence for nothing, and [], {} and an error as they are", async () => {
+    const s = await nothingSetup();
+    const session = await s.agent.startSession();
+    await session.send("Run them all.");
+    expect(Object.fromEntries(lastToolResults(s.gateway.modelCalls[1]!))).toEqual({
+      undefined: NO_TOOL_RESULT, null: NO_TOOL_RESULT, empty: NO_TOOL_RESULT, blank: NO_TOOL_RESULT, list: "[]", object: "{}", failing: "Error: ",
+    });
+    expect(NO_TOOL_RESULT).toBe("The tool returned no result.");
+    // The next turn's history is built from the transcript: the model reads the same there.
+    await session.send("Again.");
+    expect(s.gateway.modelCalls[2]!.messages.filter((m) => m.role === "tool").map((m) => m.content).slice(0, 4)).toEqual(Array(4).fill(NO_TOOL_RESULT));
+  });
+
+  it("keeps what the tool returned in the transcript and on the tool's card", async () => {
+    const s = await nothingSetup();
+    const session = await s.agent.startSession();
+    const events = await collect(session.stream("Run them all."));
+    const shown = events.filter((e) => e.type === "tool_completed").map((e) => (e as { result: string }).result);
+    const kept = session.transcript.filter((e) => e.type === EntryTypes.toolComplete).map((e) => e.data["result"]);
+    const returned = ["", "", "", " \n\t\u3000", "[]", "{}", "Error: "];
+    expect(shown).toEqual(returned);
+    expect(kept).toEqual(returned);
   });
 });
 

@@ -46,7 +46,7 @@ export {
   type ToolStage,
 } from "./stages.js";
 export { attachmentData, isPicture, type MessageAttachment } from "./attachments.js";
-export { ContextBuilder, MAX_HISTORY_PICTURES, toMessage, withAttachments } from "./contextBuilder.js";
+export { ContextBuilder, MAX_HISTORY_PICTURES, NO_TOOL_RESULT, toMessage, withAttachments } from "./contextBuilder.js";
 export {
   EntryTypes,
   TurnStatus,
