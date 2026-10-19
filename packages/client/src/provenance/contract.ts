@@ -142,6 +142,8 @@ export interface ProvenanceRecordPayload {
   /** HMAC-SHA-256 of the placed content, hex. */
   content_hash: string;
   hash_key_version: number;
+  /** For HTML and Markdown: HMAC-SHA-256 of the plain text a reader sees, under the same key version. */
+  text_hash?: string | null;
 }
 
 /** A provenance record with its JWS and, where a time-stamp authority answered, its token. */
@@ -157,6 +159,11 @@ export interface SignedRecord {
  */
 export interface RecordRequest {
   content_sha256: string;
+  /**
+   * For HTML and Markdown: SHA-256 of the plain text a reader sees, normalised as `content_sha256` is
+   * (`@fadenstack/provenance`'s `readerTextSha256`), so the words someone copies out of the host find the record.
+   */
+  text_sha256?: string | null;
   media_type: string;
   edit_kind: EditKind;
   receipt_id?: string | null;

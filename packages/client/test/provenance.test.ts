@@ -59,9 +59,27 @@ describe("the agent's provenance routes", () => {
     expect(signed.record).toMatchObject({ edit_kind: "generated", receipt_id: "r-1", digital_source_type: expect.stringContaining("trainedAlgorithmicMedia") });
   });
 
+  it("sends the hash of the text a reader sees beside the content's, and the record finds the copied words", async () => {
+    const { gateway, client } = await signedIn();
+    const html = "<p>Dear Ms <b>Huber</b>, the pump is due.</p>";
+    const plain = "Dear Ms Huber, the pump is due.";
+    const signed = await client.agent!.provenance.signRecord({
+      content_sha256: await textSha256(html), text_sha256: await textSha256(plain), media_type: "text/html", edit_kind: "generated",
+    });
+    const sent = gateway.requests.find((r) => r.path === "/v1/agents/writer/provenance/records")!;
+    expect(sent.body).toEqual({ content_sha256: await textSha256(html), text_sha256: await textSha256(plain), media_type: "text/html", edit_kind: "generated" });
+    expect(validate(agentRecordRequestSchema(), sent.body)).toEqual([]);
+    expect(validate(contractSchema("signed-record"), signed)).toEqual([]);
+    expect(signed.record.text_hash).toMatch(/^[0-9a-f]{64}$/);
+    const found = await client.agent!.provenance.verify({ text: plain });
+    expect([found.verdict, found.findings[0]!.record_id]).toEqual(["ai-generated", signed.record.id]);
+  });
+
   it("refuses a request that is not a hash or names no edit kind, before it goes out", async () => {
     const { gateway, client } = await signedIn();
     await expect(client.agent!.provenance.signRecord({ content_sha256: "the text itself", media_type: "text/plain", edit_kind: "generated" }))
+      .rejects.toThrow(TypeError);
+    await expect(client.agent!.provenance.signRecord({ content_sha256: "a".repeat(64), text_sha256: "the text", media_type: "text/html", edit_kind: "generated" }))
       .rejects.toThrow(TypeError);
     await expect(client.agent!.provenance.signRecord({ content_sha256: "a".repeat(64), media_type: "text/plain", edit_kind: "made-up" as "generated" }))
       .rejects.toThrow(TypeError);

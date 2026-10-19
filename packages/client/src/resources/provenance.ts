@@ -44,8 +44,10 @@ export class AgentProvenanceResource {
    */
   async signRecord(request: RecordRequest, signal?: AbortSignal): Promise<SignedRecord> {
     if (!SHA256.test(request.content_sha256)) throw new TypeError("content_sha256 is a SHA-256 in lowercase hex.");
+    if (request.text_sha256 && !SHA256.test(request.text_sha256)) throw new TypeError("text_sha256 is a SHA-256 in lowercase hex.");
     if (!isEditKind(request.edit_kind)) throw new TypeError(`Not an edit kind: '${String(request.edit_kind)}'.`);
     const body: Json = { content_sha256: request.content_sha256, media_type: request.media_type, edit_kind: request.edit_kind };
+    if (request.text_sha256) body["text_sha256"] = request.text_sha256;
     if (request.receipt_id) body["receipt_id"] = request.receipt_id;
     if (request.model) body["model"] = request.model;
     return toSignedRecord(await this.#transport.post<unknown>(this.#route("records"), body, signal));

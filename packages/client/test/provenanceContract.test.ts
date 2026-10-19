@@ -53,11 +53,12 @@ const SIGNED_RECEIPT = { receipt: "required", signature: "required", timestamp: 
 const RECORD = {
   contract: "optional", id: "required", digital_source_type: "required", edit_kind: "required", system: "required",
   provider: "required", model: "optional", created_at: "required", receipt_id: "optional", media_type: "required",
-  content_hash: "required", hash_key_version: "required",
+  content_hash: "required", hash_key_version: "required", text_hash: "optional",
 } satisfies FieldMap<ProvenanceRecordPayload>;
 const SIGNED_RECORD = { record: "required", signature: "required", timestamp: "optional" } satisfies FieldMap<SignedRecord>;
 const RECORD_REQUEST = {
-  content_sha256: "required", media_type: "required", edit_kind: "required", receipt_id: "optional", model: "optional",
+  content_sha256: "required", text_sha256: "optional", media_type: "required", edit_kind: "required", receipt_id: "optional",
+  model: "optional",
 } satisfies FieldMap<RecordRequest>;
 const PLACEMENT = {
   record_id: "optional", tool: "required", sink_kind: "required", media_type: "required", edit_kind: "required",

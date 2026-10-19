@@ -406,10 +406,12 @@ export class FakeGateway {
 
   async #signRecord(agent: string, body: unknown): Promise<Response> {
     const b = (body ?? {}) as Record<string, unknown>;
-    const allowed = ["content_sha256", "media_type", "edit_kind", "receipt_id", "model"];
+    const allowed = ["content_sha256", "text_sha256", "media_type", "edit_kind", "receipt_id", "model"];
     const extra = Object.keys(b).filter((k) => !allowed.includes(k));
     const problem = extra.length ? `extra fields not permitted: ${extra.join(", ")}`
       : typeof b["content_sha256"] !== "string" || !/^[0-9a-f]{64}$/.test(b["content_sha256"]) ? "content_sha256 is a SHA-256 in hex"
+      : b["text_sha256"] !== undefined && b["text_sha256"] !== null
+        && (typeof b["text_sha256"] !== "string" || !/^[0-9a-f]{64}$/.test(b["text_sha256"])) ? "text_sha256 is a SHA-256 in hex"
       : typeof b["media_type"] !== "string" || !b["media_type"] ? "media_type is required"
       : !isEditKind(b["edit_kind"]) ? "edit_kind is not an edit kind"
       : ["receipt_id", "model"].some((k) => b[k] !== undefined && b[k] !== null && typeof b[k] !== "string") ? "receipt_id and model are strings"
@@ -428,6 +430,7 @@ export class FakeGateway {
       media_type: b["media_type"] as string,
       content_hash: await keyedHash(b["content_sha256"] as string),
       hash_key_version: 1,
+      text_hash: typeof b["text_sha256"] === "string" ? await keyedHash(b["text_sha256"]) : null,
     };
     const signed: SignedRecord = { record, signature: fakeJws(record), timestamp: null };
     this.provenanceRecords.push({ agent, request: b, signed });
@@ -457,7 +460,10 @@ export class FakeGateway {
     return this.#verify(body);
   }
 
-  /** The detector, as both verify routes run it: the content's hash looked up among the records signed here. */
+  /**
+   * The detector, as both verify routes run it: the content's hash looked up among the records signed here, as the
+   * content's or as the text a reader sees of HTML and Markdown.
+   */
   async #verify(body: unknown): Promise<Response> {
     const b = (body ?? {}) as Record<string, unknown>;
     const text = typeof b["text"] === "string" ? b["text"] : undefined;
@@ -467,7 +473,7 @@ export class FakeGateway {
     }
     const sha = text !== undefined ? await textSha256(text) : await bytesSha256(file!);
     const hash = await keyedHash(sha);
-    const found = this.provenanceRecords.find((r) => r.signed.record.content_hash === hash);
+    const found = this.provenanceRecords.find((r) => r.signed.record.content_hash === hash || r.signed.record.text_hash === hash);
     return json(200, {
       contract: PROVENANCE_CONTRACT,
       verdict: found ? "ai-generated" : "no-mark-found",
