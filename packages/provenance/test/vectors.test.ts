@@ -5,16 +5,24 @@ import { describe, expect, it } from "vitest";
 import { PLACEMENT_FAILURE, normalizeText, placementFailure, textSha256 } from "@fadenstack/client";
 import { englishStrings, germanStrings } from "@fadenstack/ui";
 import {
+  OfficeMarks,
   hasReaderText,
   invisibleMark,
   invisibleRecordIds,
   isCode,
   isLabel,
   isOfficeAnchor,
+  officeAnchorBase,
   officeAnchorName,
+  officeAnchorPart,
   officeCustomXmlPart,
   officeDocumentPropertyValue,
+  officeRecordOfAnchor,
+  officeRecordSpans,
   readOfficeCustomXmlPart,
+  splitOfficeAnchors,
+  type OfficeAnchorSpan,
+  type OfficeSpan,
   readerText,
   readerTextSha256,
   recordText,
@@ -210,5 +218,92 @@ describe("marks split for a later write, and a record's text read back (mark-spl
   it.each(vectors.record_text.map((v) => [v.name, v] as const))("record text: %s", async (_, v) => {
     expect(normalizeText(recordText(v.html, v.record_id)) || null).toBe(v.text);
     expect((await recordTextSha256(v.html, v.record_id)) ?? null).toBe(v.text === null ? null : await textSha256(v.text));
+  });
+});
+
+/** A later write into a Word document's anchors: the story's text and its anchors after Word's insert, what was written. */
+interface AnchorSplitVector {
+  name: string;
+  text: string;
+  anchors: OfficeAnchorSpan[];
+  written: OfficeSpan[];
+  own: string;
+  taken: string[];
+  /** Every bookmark as it must be after the split. */
+  after: OfficeAnchorSpan[];
+  /** Each record's text read back from its anchors, exactly; null: none. */
+  records: Record<string, string | null>;
+}
+
+interface RecordSpansVector {
+  name: string;
+  text: string;
+  anchors: OfficeAnchorSpan[];
+  record: string;
+  record_text: string | null;
+}
+
+describe("Office anchors: names, parts, a later write's split, a record's text (office-anchor-vectors.json; the .NET SDK reads the same file)", () => {
+  const vectors = JSON.parse(readFileSync(new URL("fixtures/office-anchor-vectors.json", import.meta.url), "utf8")) as {
+    names: { name: string; anchor: string | null; base: string | null }[];
+    parts: { name: string; anchor: string; part: number; result: string | null }[];
+    split: AnchorSplitVector[];
+    record_spans: RecordSpansVector[];
+  };
+  const byName = (a: OfficeAnchorSpan, b: OfficeAnchorSpan) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0);
+  const textOf = (text: string, spans: readonly OfficeSpan[]) => (spans.length ? spans.map((s) => text.slice(s.start, s.end)).join("") : null);
+
+  it("has the cases", () => {
+    expect(vectors.names.length).toBeGreaterThanOrEqual(20);
+    expect(vectors.parts.length).toBeGreaterThanOrEqual(6);
+    expect(vectors.split.length).toBeGreaterThanOrEqual(14);
+    expect(vectors.record_spans.length).toBeGreaterThanOrEqual(10);
+  });
+
+  it.each(vectors.names.map((v) => [v.name, v] as const))("name: %s", (_, v) => {
+    expect(officeAnchorBase(v.anchor)).toBe(v.base);
+    expect(isOfficeAnchor(v.anchor)).toBe(v.base !== null);
+    if (v.base !== null) expect(v.anchor!.length).toBeLessThanOrEqual(OfficeMarks.anchorMaxLength);
+  });
+
+  it.each(vectors.parts.map((v) => [v.name, v] as const))("part: %s", (_, v) => {
+    if (v.result === null) expect(() => officeAnchorPart(v.anchor, v.part)).toThrow();
+    else expect(officeAnchorPart(v.anchor, v.part)).toBe(v.result);
+  });
+
+  it.each(vectors.split.map((v) => [v.name, v] as const))("split: %s", (_, v) => {
+    const { set, removed } = splitOfficeAnchors(v.anchors, v.written, v.own, v.taken);
+    const now = new Map(v.anchors.map((a) => [a.name, a]));
+    for (const name of removed) now.delete(name);
+    for (const a of set) now.set(a.name, a);
+    expect([...now.values()].map((a) => ({ name: a.name, start: a.start, end: a.end })).sort(byName)).toEqual([...v.after].sort(byName));
+    for (const [record, text] of Object.entries(v.records)) expect(textOf(v.text, officeRecordSpans([...now.values()], record))).toBe(text);
+    // Done again, nothing changes: what it left holds nothing written of another record's.
+    expect(splitOfficeAnchors([...now.values()], v.written, v.own, v.taken)).toEqual({ set: [], removed: [] });
+  });
+
+  it.each(vectors.record_spans.map((v) => [v.name, v] as const))("record spans: %s", (_, v) => {
+    expect(textOf(v.text, officeRecordSpans(v.anchors, v.record))).toBe(v.record_text);
+  });
+
+  it("every part number taken: the text after the write stays without an anchor", () => {
+    const r1 = officeAnchorName(ID);
+    const r2 = officeAnchorName("0b6f9a3e-1c2d-4e5f-8a9b-0c1d2e3f4a5b");
+    const taken = Array.from({ length: 98 }, (_, i) => officeAnchorPart(r1, i + 2));
+    const split = splitOfficeAnchors([{ name: r1, start: 0, end: 20 }, { name: r2, start: 5, end: 10 }], [{ start: 5, end: 10 }], r2, taken);
+    expect(split).toEqual({ set: [{ name: r1, start: 0, end: 5 }], removed: [] });
+  });
+
+  it("a part maps to its record in the custom XML part", () => {
+    const other = "0b6f9a3e-1c2d-4e5f-8a9b-0c1d2e3f4a5b";
+    const records = readOfficeCustomXmlPart(officeCustomXmlPart([
+      { recordId: ID, anchor: officeAnchorName(ID), signature: "eyJ.e30.a" },
+      { recordId: other, anchor: "", signature: "eyJ.e30.b" }, // no anchor written: the id's
+    ]));
+    expect(officeRecordOfAnchor(records, officeAnchorPart(officeAnchorName(ID), 7))?.recordId).toBe(ID);
+    expect(officeRecordOfAnchor(records, officeAnchorName(ID).toUpperCase().replace("_FADEN_AI_", "_faden_ai_"))?.recordId).toBe(ID);
+    expect(officeRecordOfAnchor(records, `${officeAnchorName(other)}_2`)?.recordId).toBe(other);
+    expect(officeRecordOfAnchor(records, "_faden_ai_7d1e8f203a4b4c5d9e6fa0b1")).toBeUndefined();
+    expect(officeRecordOfAnchor(records, "_Toc1")).toBeUndefined();
   });
 });

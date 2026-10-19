@@ -4,7 +4,8 @@ import { RECORD_ID } from "./content.js";
  * The names and formats of the marks in Office documents and mails, the same as the .NET SDK's `OfficeMarks`, for host
  * markers of Office files (ONLYOFFICE, a `.docx` written as a file) and anyone who reads them, so that every marker
  * and the server's detector agree:
- * - Word: a hidden bookmark around the inserted range (`officeAnchorName`), the signed records in a custom XML part
+ * - Word: a hidden bookmark around the inserted range (`officeAnchorName`; a later write inside it splits it into
+ *   parts, `splitOfficeAnchors`, read back with `officeRecordSpans`), the signed records in a custom XML part
  *   (`officeCustomXmlPart`, namespace `OfficeMarks.namespace`), and the custom document property
  *   `AI-Generated-Content` as the flag (`officeDocumentPropertyValue`, at most 255 characters).
  * - PowerPoint: the shape or slide tag `FADEN_AI_RECORD` with the record's id, and the custom XML part.
@@ -21,6 +22,10 @@ export const OfficeMarks = {
   documentPropertyMaxLength: 255,
   /** A hidden bookmark (Word) or hidden name (Excel) starts with this; an underscore hides it. */
   anchorPrefix: "_faden_ai_",
+  /** The longest anchor: a record's anchor (34 characters) and a part's `_99`. Word allows 40. */
+  anchorMaxLength: 37,
+  /** The last part of an anchor: a record's anchor is its first part, `<anchor>_2` to `<anchor>_99` the others. */
+  anchorMaxPart: 99,
   /** The PowerPoint shape and slide tag that holds the record's id. */
   shapeTag: "FADEN_AI_RECORD",
   /** The internet header a mail draft carries the record's id in. */
@@ -50,9 +55,159 @@ export function officeAnchorName(recordId: string): string {
   return OfficeMarks.anchorPrefix + hex;
 }
 
-/** Whether a bookmark or name is one of our anchors. */
+/** A record's anchor, then optionally a part's number: `_2` to `_99`, without leading zeros. */
+const ANCHOR = new RegExp(`^(${OfficeMarks.anchorPrefix}[0-9a-fA-F]{24})(?:_(?:[2-9]|[1-9][0-9]))?$`);
+
+/**
+ * Whether a bookmark or name is one of our anchors: a record's anchor (`officeAnchorName`), or a later part of it,
+ * `<anchor>_<n>` with n from 2 to 99, where a later write inside the record's text split its bookmark
+ * (`splitOfficeAnchors`).
+ */
 export function isOfficeAnchor(name: string | null | undefined): boolean {
-  return typeof name === "string" && new RegExp(`^${OfficeMarks.anchorPrefix}[0-9a-fA-F]{24}$`).test(name);
+  return officeAnchorBase(name) !== null;
+}
+
+/**
+ * The record's anchor a bookmark or name is part of: the name itself for a record's anchor, the name without its `_<n>`
+ * for a later part; null for a name that is no anchor of ours. Every part maps to the same record, as written.
+ */
+export function officeAnchorBase(name: string | null | undefined): string | null {
+  return typeof name === "string" ? (ANCHOR.exec(name)?.[1] ?? null) : null;
+}
+
+/** The name of part `part` (2 to 99) of an anchor, given the anchor or any part of it: `<anchor>_<part>`. */
+export function officeAnchorPart(anchor: string, part: number): string {
+  const base = officeAnchorBase(anchor);
+  if (base === null) throw new TypeError("A part's name needs an anchor of ours.");
+  if (!Number.isInteger(part) || part < 2 || part > OfficeMarks.anchorMaxPart) {
+    throw new RangeError(`An anchor's parts are numbered from 2 to ${OfficeMarks.anchorMaxPart}.`);
+  }
+  return `${base}_${part}`;
+}
+
+/**
+ * The record of a custom XML part's that an anchor or any part of it marks (its `anchor`, or the anchor of its id);
+ * undefined when none does. Anchors compare without regard to case, as Word's bookmark names do.
+ */
+export function officeRecordOfAnchor(records: readonly OfficeRecord[], name: string | null | undefined): OfficeRecord | undefined {
+  const base = officeAnchorBase(name)?.toLowerCase();
+  if (!base) return undefined;
+  return records.find((r) => officeAnchorBase(r.anchor)?.toLowerCase() === base || (RECORD_ID.test(r.recordId) && officeAnchorName(r.recordId) === base));
+}
+
+/** A stretch of a document's story by character positions, `start` in it and `end` not: Word's `Range.Start` and `End`. */
+export interface OfficeSpan {
+  readonly start: number;
+  readonly end: number;
+}
+
+/** A bookmark and where it is in its story. */
+export interface OfficeAnchorSpan extends OfficeSpan {
+  readonly name: string;
+}
+
+/** What a later write does to the anchors it landed in: the anchors to put (an existing name moves, a new one is added), the names to remove. */
+export interface OfficeAnchorSplit {
+  readonly set: OfficeAnchorSpan[];
+  readonly removed: string[];
+}
+
+/** The spans sorted, those with nothing in them left out, overlapping and touching ones joined. */
+function joined(spans: readonly OfficeSpan[]): OfficeSpan[] {
+  const sorted = spans.filter((s) => s.end > s.start).map((s) => ({ start: s.start, end: s.end })).sort((a, b) => a.start - b.start || a.end - b.end);
+  const out: { start: number; end: number }[] = [];
+  for (const s of sorted) {
+    const last = out[out.length - 1];
+    if (last && s.start <= last.end) last.end = Math.max(last.end, s.end);
+    else out.push(s);
+  }
+  return out;
+}
+
+/** What of `span` is outside `cuts` (sorted and joined), in order. */
+function outside(span: OfficeSpan, cuts: readonly OfficeSpan[]): OfficeSpan[] {
+  const pieces: OfficeSpan[] = [];
+  let from = span.start;
+  for (const cut of cuts) {
+    if (cut.end <= from) continue;
+    if (cut.start >= span.end) break;
+    if (cut.start > from) pieces.push({ start: from, end: cut.start });
+    from = cut.end;
+  }
+  if (from < span.end) pieces.push({ start: from, end: span.end });
+  return pieces;
+}
+
+const overlap = (a: OfficeSpan, b: OfficeSpan) => Math.max(a.start, b.start) < Math.min(a.end, b.end);
+
+/**
+ * Marks never nest, as in HTML: after a write, the anchors of earlier records hold only their own text. Word grows a
+ * bookmark around text written inside it or at its start; given the anchors of the story as they are after the write
+ * and the spans it wrote (its text, a paragraph mark it added, each replacement), this says how they must be. Each
+ * earlier anchor that holds written text loses it: the part before keeps the name, the part after becomes a new part
+ * `<anchor>_<n>` (the lowest n from 2 to 99 that no bookmark has), and a part with nothing in it goes -- so an anchor
+ * that starts where the write starts moves to just after it, keeping its name, and one the write covers is removed.
+ * `own` is the write's own anchor, which stays as it is; `taken` names the document's other bookmarks, whose names a
+ * new part does not take. Without a free number the text after the write stays without an anchor. Bookmarks that are
+ * not ours are never touched. The .NET SDK's `OfficeMarks.SplitAnchors` is the same.
+ */
+export function splitOfficeAnchors(
+  anchors: readonly OfficeAnchorSpan[],
+  written: readonly OfficeSpan[],
+  own?: string | null,
+  taken: readonly string[] = [],
+): OfficeAnchorSplit {
+  const cuts = joined(written);
+  const ownBase = own ? (officeAnchorBase(own) ?? own).toLowerCase() : null;
+  const used = new Set([...anchors.map((a) => a.name), ...taken].map((n) => n.toLowerCase()));
+  const set: OfficeAnchorSpan[] = [];
+  const removed: string[] = [];
+  for (const anchor of [...anchors].sort((a, b) => a.start - b.start || a.end - b.end)) {
+    const base = officeAnchorBase(anchor.name);
+    if (base === null || base.toLowerCase() === ownBase || !cuts.some((c) => overlap(anchor, c))) continue;
+    const [first, ...rest] = outside(anchor, cuts);
+    if (!first) {
+      removed.push(anchor.name);
+      continue;
+    }
+    set.push({ name: anchor.name, start: first.start, end: first.end });
+    for (const piece of rest) {
+      const name = freePart(base, used);
+      if (name) set.push({ name, start: piece.start, end: piece.end });
+    }
+  }
+  return { set, removed };
+}
+
+function freePart(base: string, used: Set<string>): string | null {
+  for (let n = 2; n <= OfficeMarks.anchorMaxPart; n++) {
+    const name = `${base}_${n}`;
+    if (!used.has(name.toLowerCase())) {
+      used.add(name.toLowerCase());
+      return name;
+    }
+  }
+  return null;
+}
+
+/**
+ * Where a record's text is in a story: the spans of its anchor and of every part of it, in document order, without
+ * what anchors of other records inside them hold (one around the very same text is not inside). The record's text is
+ * the text of these spans joined with nothing between: as it was placed, also after later writes split its anchor.
+ * `record` is the record's id or its anchor (or a part's name); no spans when it has no anchor in `anchors`. The .NET
+ * SDK's `OfficeMarks.RecordSpans` is the same.
+ */
+export function officeRecordSpans(anchors: readonly OfficeAnchorSpan[], record: string): OfficeSpan[] {
+  const wanted = (officeAnchorBase(record) ?? (RECORD_ID.test(record) ? officeAnchorName(record) : null))?.toLowerCase();
+  if (!wanted) return [];
+  const ours = (a: OfficeAnchorSpan) => officeAnchorBase(a.name)?.toLowerCase() === wanted;
+  const others = anchors.filter((a) => !ours(a) && officeAnchorBase(a.name) !== null && a.end > a.start);
+  const spans: OfficeSpan[] = [];
+  for (const part of anchors.filter((a) => ours(a) && a.end > a.start)) {
+    const inside = others.filter((o) => o.start >= part.start && o.end <= part.end && !(o.start === part.start && o.end === part.end));
+    spans.push(...outside(part, joined(inside)));
+  }
+  return joined(spans);
 }
 
 /**

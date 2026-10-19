@@ -61,11 +61,19 @@ export { UnicodeTextMarker, invisibleMark, invisibleRecordIds } from "./markers/
 export {
   OfficeMarks,
   isOfficeAnchor,
+  officeAnchorBase,
   officeAnchorName,
+  officeAnchorPart,
   officeCustomXmlPart,
   officeDocumentPropertyValue,
+  officeRecordOfAnchor,
+  officeRecordSpans,
   readOfficeCustomXmlPart,
+  splitOfficeAnchors,
+  type OfficeAnchorSpan,
+  type OfficeAnchorSplit,
   type OfficeRecord,
+  type OfficeSpan,
 } from "./office.js";
 export {
   FIXTURE,
