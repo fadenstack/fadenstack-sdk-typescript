@@ -49,6 +49,51 @@ describe("the edit-kind helper", () => {
   });
 });
 
+describe("the edit-kind helper judges only what changed (edit-kind-vectors.json has more, for both SDKs)", () => {
+  const kept = [
+    "Pump P-200 on line 3 was inspected on Monday after the operators reported water under the housing.",
+    "The technician will replace the seal MS-40 on Thursday morning, and line 3 runs on the standby pump in that time.",
+    "The worn seal goes to the manufacturer for analysis, so that the next inspection can look for the same wear.",
+    "If the leak gets worse before the visit, switch the pump off and call the service desk on the number in the contract.",
+  ];
+  const last = "Please let us know if Thursday does not suit you. We can arrange another visit within the week.";
+  const note = (...paragraphs: string[]) => paragraphs.join("\n\n");
+
+  it("a paragraph rewritten in an unchanged text is rewritten, though the whole kept most of its words and sentences", () => {
+    const original = note(...kept, last);
+    const revised = note(...kept, "If Thursday does not suit you, just tell us. We are glad to arrange another visit this week.");
+    expect(editSimilarity(original, revised)).toBeGreaterThan(0.85); // as a whole, a small change
+    expect(similarityClassifier().classify({ tool: "t", declared: "rewritten", mediaType: "text/plain", content: revised, original }))
+      .toEqual({ kind: "rewritten", reason: "38 % of words kept in the changed sentences (18 of 99 words), 2 to 2 sentence(s)" });
+  });
+
+  it("a typo fixed or a word swapped is corrected; a paragraph added, or a sentence split in two, is rewritten", () => {
+    const original = note(...kept, last);
+    expect(suggestEditKind(original.replace("inspected", "inspectd"), original)).toBe("corrected");
+    expect(suggestEditKind(original, original.replace("call the service desk", "phone the service desk"))).toBe("corrected");
+    expect(suggestEditKind(note(...kept), original)).toBe("rewritten");
+    expect(suggestEditKind(original, original.replace("morning, and line 3", "morning. Line 3"))).toBe("rewritten");
+  });
+
+  it("edits in several places are each judged on their own: unchanged sentences between them do not hide a rewrite", () => {
+    const original = note(...kept, last.replace("within", "whithin"));
+    const typos = note(...kept, last);
+    expect(similarityClassifier().classify({ tool: "t", declared: "rewritten", mediaType: "text/plain", content: typos, original: original.replace("inspected", "inspectd") }))
+      .toEqual({ kind: "corrected", reason: "small change in 2 places: 99 % of words kept in the changed sentences (25 of 99 words), the same 2 sentence(s)" });
+    const rewrite = typos.replace(kept[0]!, "On Monday our team looked at pump P-200, because water had collected under it.");
+    expect(editSimilarity(original, rewrite)).toBeGreaterThan(0.85); // as a whole, a small change
+    expect(similarityClassifier().classify({ tool: "t", declared: "rewritten", mediaType: "text/plain", content: rewrite, original }))
+      .toEqual({ kind: "rewritten", reason: "16 % of words kept in the changed sentences (place 1 of 2: 17 of 99 words), 1 to 1 sentence(s)" });
+  });
+
+  it("the same words throughout are compared as a whole, as before", () => {
+    const text = note(...kept);
+    expect(similarityClassifier().classify({ tool: "t", declared: "rewritten", mediaType: "text/html", content: `<p>${text.replace("MS-40", "<b>MS-40</b>")}</p>`, original: text }))
+      .toEqual({ kind: "corrected", reason: "small change: 100 % of words kept, the same 4 sentence(s)" });
+    expect(suggestEditKind(text, text.replace("Monday after", "Monday. After"))).toBe("rewritten"); // the same words, a sentence more
+  });
+});
+
 describe("tightenPolicy", () => {
   it("takes what is stricter and ignores what is looser, saying so", () => {
     const ignored = vi.fn();

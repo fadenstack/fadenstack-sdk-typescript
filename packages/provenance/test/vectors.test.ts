@@ -17,6 +17,8 @@ import {
   readOfficeCustomXmlPart,
   readerText,
   readerTextSha256,
+  similarityClassifier,
+  suggestEditKind,
   tokensOf,
   withFrontMatter,
   wrapHtml,
@@ -123,5 +125,29 @@ describe("the text a reader sees (reader-text-vectors.json; the .NET SDK reads t
     const text = hasReaderText(v.media_type) ? normalizeText(readerText(v.input, v.media_type)) : null;
     expect(text === "" ? null : text).toBe(v.text);
     expect((await readerTextSha256(v.input, v.media_type)) ?? null).toBe(v.sha256);
+  });
+});
+
+interface EditKindVector {
+  name: string;
+  media_type: string;
+  original: string;
+  revised: string;
+  kind: "corrected" | "rewritten";
+  /** The reason the classifier records, word for word. */
+  reason: string;
+}
+
+describe("the edit kind of a revision (edit-kind-vectors.json; the .NET SDK reads the same file)", () => {
+  const vectors = JSON.parse(readFileSync(new URL("fixtures/edit-kind-vectors.json", import.meta.url), "utf8")) as EditKindVector[];
+
+  it("has the cases", () => {
+    expect(vectors.length).toBeGreaterThanOrEqual(13);
+  });
+
+  it.each(vectors.map((v) => [v.name, v] as const))("%s", (_, v) => {
+    const decided = similarityClassifier().classify({ tool: "t", declared: "rewritten", mediaType: v.media_type, content: v.revised, original: v.original });
+    expect(decided).toEqual({ kind: v.kind, reason: v.reason });
+    expect(suggestEditKind(v.original, v.revised, { mediaType: v.media_type })).toBe(v.kind);
   });
 });

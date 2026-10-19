@@ -235,11 +235,15 @@ hash.
 
 `suggestEditKind(original, revised)` says `corrected` (exempt) only for a small change -- word similarity of 0.85 or
 more (a typo fix counts for less than a changed word; each CJK character is a word), the same number of sentences, a
-word count within 0.8 to 1.25 times -- and `rewritten` otherwise. HTML and Markdown are compared by the text a reader
-sees (`suggestEditKind(a, b, { mediaType: "text/html" })`), so markup an editor adds is no change of words.
-`similarityClassifier()` applies it to placements declared `rewritten` or `corrected` that name the text they replace
-(`request.original`), in the placement's media type, and records its reason
-(`small change: 95 % of words kept, the same 2 sentence(s)`) on the device:
+word count within 0.8 to 1.25 times -- and `rewritten` otherwise. Only what changed is judged: the words between the
+text's common start and end, widened to whole sentences, so a rewritten paragraph in an otherwise unchanged document
+is `rewritten` however much of the document stayed. Edits in several places, apart from each other by sentences that
+stayed word for word, are judged each on its own, and all of them must be small. HTML and Markdown are compared by the
+text a reader sees (`suggestEditKind(a, b, { mediaType: "text/html" })`), so markup an editor adds is no change of
+words. `similarityClassifier()` applies it to placements declared `rewritten` or `corrected` that name the text they
+replace (`request.original`), in the placement's media type, and records its reason on the device -- what was kept,
+and where when only part of the text changed (`small change: 94 % of words kept in the changed sentences (15 of 20
+words), the same 1 sentence(s)`):
 
 ```ts
 builder.use(provenanceModule({ classifier: similarityClassifier() }));
