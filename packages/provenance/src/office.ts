@@ -8,7 +8,8 @@ import { RECORD_ID } from "./content.js";
  *   parts, `splitOfficeAnchors`, read back with `officeRecordSpans`), the signed records in a custom XML part
  *   (`officeCustomXmlPart`, namespace `OfficeMarks.namespace`), and the custom document property
  *   `AI-Generated-Content` as the flag (`officeDocumentPropertyValue`, at most 255 characters).
- * - PowerPoint: the shape or slide tag `FADEN_AI_RECORD` with the record's id, and the custom XML part.
+ * - PowerPoint: the shape or slide tag `FADEN_AI_RECORD` with the newest record's id, `FADEN_AI_RECORDS` with every
+ *   record whose words are in it (`officeShapeRecords`), and the custom XML part.
  * - Excel: a hidden name per written range (`officeAnchorName`), and the custom XML part.
  * - Outlook: the internet header `X-AI-Generated` with the record's id.
  * The detector finds the record ids in any `customXml/` part with the namespace and in `docProps/custom.xml`.
@@ -26,8 +27,13 @@ export const OfficeMarks = {
   anchorMaxLength: 37,
   /** The last part of an anchor: a record's anchor is its first part, `<anchor>_2` to `<anchor>_99` the others. */
   anchorMaxPart: 99,
-  /** The PowerPoint shape and slide tag that holds the record's id. */
+  /** The PowerPoint shape and slide tag that holds the id of the newest record that wrote into it. */
   shapeTag: "FADEN_AI_RECORD",
+  /**
+   * The PowerPoint shape and slide tag that lists every record whose words are in it, oldest first, space-separated
+   * (`officeShapeRecords`, `officeShapeRecordsAfterWrite`).
+   */
+  shapeRecordsTag: "FADEN_AI_RECORDS",
   /** The internet header a mail draft carries the record's id in. */
   mailHeader: "X-AI-Generated",
   /**
@@ -208,6 +214,41 @@ export function officeRecordSpans(anchors: readonly OfficeAnchorSpan[], record: 
     spans.push(...outside(part, joined(inside)));
   }
   return joined(spans);
+}
+
+/**
+ * The records whose words a PowerPoint shape (or slide) holds, oldest first: the ids its `FADEN_AI_RECORDS` tag lists
+ * (`records`), then the one its `FADEN_AI_RECORD` tag holds (`record`) when the list misses it -- a shape tagged
+ * before the list, or by an add-in without it. Only record ids count, each once. A shape has no bookmarks, so a write
+ * into part of its text leaves it holding the words of more than one record. The .NET SDK's `OfficeMarks.ShapeRecords`
+ * is the same.
+ */
+export function officeShapeRecords(records: string | null | undefined, record: string | null | undefined): string[] {
+  const ids: string[] = [];
+  const add = (id: string) => {
+    if (RECORD_ID.test(id) && !ids.some((i) => i.toLowerCase() === id.toLowerCase())) ids.push(id);
+  };
+  for (const id of (records ?? "").split(/\s+/)) add(id);
+  add((record ?? "").trim());
+  return ids;
+}
+
+/**
+ * The `FADEN_AI_RECORDS` tag of a shape (or slide) after record `recordId` wrote into it, whose `FADEN_AI_RECORD`
+ * becomes `recordId` either way. A write into part of its text (`partial`: the rest of its words stay) puts the record
+ * after those already there (`officeShapeRecords`, so the list starts from `FADEN_AI_RECORD` when there is none); a
+ * write of its whole text, or a new shape, leaves the record alone. The .NET SDK's `OfficeMarks.ShapeRecordsAfterWrite`
+ * is the same.
+ */
+export function officeShapeRecordsAfterWrite(
+  records: string | null | undefined,
+  record: string | null | undefined,
+  recordId: string,
+  partial: boolean,
+): string {
+  if (!RECORD_ID.test(recordId)) throw new TypeError("A record id (a UUID) is needed for a shape's tags.");
+  if (!partial) return recordId;
+  return [...officeShapeRecords(records, record).filter((id) => id.toLowerCase() !== recordId.toLowerCase()), recordId].join(" ");
 }
 
 /**

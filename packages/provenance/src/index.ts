@@ -68,6 +68,8 @@ export {
   officeDocumentPropertyValue,
   officeRecordOfAnchor,
   officeRecordSpans,
+  officeShapeRecords,
+  officeShapeRecordsAfterWrite,
   readOfficeCustomXmlPart,
   splitOfficeAnchors,
   type OfficeAnchorSpan,

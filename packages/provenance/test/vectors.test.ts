@@ -19,6 +19,8 @@ import {
   officeDocumentPropertyValue,
   officeRecordOfAnchor,
   officeRecordSpans,
+  officeShapeRecords,
+  officeShapeRecordsAfterWrite,
   readOfficeCustomXmlPart,
   splitOfficeAnchors,
   type OfficeAnchorSpan,
@@ -305,5 +307,33 @@ describe("Office anchors: names, parts, a later write's split, a record's text (
     expect(officeRecordOfAnchor(records, `${officeAnchorName(other)}_2`)?.recordId).toBe(other);
     expect(officeRecordOfAnchor(records, "_faden_ai_7d1e8f203a4b4c5d9e6fa0b1")).toBeUndefined();
     expect(officeRecordOfAnchor(records, "_Toc1")).toBeUndefined();
+  });
+});
+
+describe("PowerPoint's shape tags: the records a shape holds, and its list after a write (office-shape-vectors.json; the .NET SDK reads the same file)", () => {
+  const vectors = JSON.parse(readFileSync(new URL("fixtures/office-shape-vectors.json", import.meta.url), "utf8")) as {
+    read: { name: string; records: string | null; record: string | null; ids: string[] }[];
+    after_write: { name: string; records: string | null; record: string | null; record_id: string; partial: boolean; value: string }[];
+  };
+
+  it("has the cases", () => {
+    expect(OfficeMarks.shapeRecordsTag).toBe("FADEN_AI_RECORDS");
+    expect(vectors.read.length).toBeGreaterThanOrEqual(8);
+    expect(vectors.after_write.length).toBeGreaterThanOrEqual(8);
+  });
+
+  it.each(vectors.read.map((v) => [v.name, v] as const))("read: %s", (_, v) => {
+    expect(officeShapeRecords(v.records, v.record)).toEqual(v.ids);
+  });
+
+  it.each(vectors.after_write.map((v) => [v.name, v] as const))("after a write: %s", (_, v) => {
+    const value = officeShapeRecordsAfterWrite(v.records, v.record, v.record_id, v.partial);
+    expect(value).toBe(v.value);
+    // Read back with FADEN_AI_RECORD set to the record: the list as written, the record last.
+    expect(officeShapeRecords(value, v.record_id)).toEqual(value.split(" "));
+  });
+
+  it("a write needs a record id", () => {
+    expect(() => officeShapeRecordsAfterWrite(null, null, "rec-1", true)).toThrow(TypeError);
   });
 });

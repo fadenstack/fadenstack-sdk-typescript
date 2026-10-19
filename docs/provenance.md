@@ -305,6 +305,14 @@ these joined with nothing between is the record's. `isOfficeAnchor` accepts the 
 record's anchor of a part, `officeRecordOfAnchor` finds its record in the custom XML part, which, like the document
 property, names only the record's anchor. The .NET SDK has the same (`OfficeMarks.SplitAnchors`, `RecordSpans`).
 
+PowerPoint has no bookmarks: a write into part of a shape's text leaves the shape holding the words of more than one
+record. `FADEN_AI_RECORD` holds the newest of them, and `FADEN_AI_RECORDS` lists them all, oldest first,
+space-separated. `officeShapeRecordsAfterWrite(records, record, recordId, partial)` is the list after a write: a write
+into part of the text puts the record after those already there (starting from `FADEN_AI_RECORD` when there is no
+list), a write of the whole text or a new shape leaves only the record. `officeShapeRecords(records, record)` is what
+readers use: the list, and the single tag's record when the list misses it. The .NET SDK has the same
+(`OfficeMarks.ShapeRecordsAfterWrite`, `ShapeRecords`).
+
 ## The same in both SDKs
 
 The TypeScript and the .NET SDK follow one order, one rule for what content needs, and write the same marks, so what
@@ -312,7 +320,7 @@ one writes the other reads, and so does the server's detector. Both test suites 
 (`vectors.test.ts` here, `SharedVectorTests` there), and read the same files: `reader-text-vectors.json` for the text
 a reader sees, `edit-kind-vectors.json` for the edit kind and its reason, `mark-split-vectors.json` for marks split by
 a later write and a record's text read back, `office-anchor-vectors.json` for Office anchors and their parts, split by
-a later write, and a record's text read back from them.
+a later write, and a record's text read back from them, `office-shape-vectors.json` for PowerPoint's shape tags.
 
 | Step | What happens |
 |---|---|
@@ -338,7 +346,7 @@ a later write, and a record's text read back from them.
 | HTML | `<span data-ai-generated="<id>" title="<label> <id>">...</span>`; content that is one `<p ...>` with inline content gets it inside: `<p ...><span ...>...</span></p>` (white space around kept); a `div` around other block content (`p`, `div`, `ul`, `ol`, `li`, `table`, `h1`-`h6`, `blockquote`, `pre`, `section`, `article`, `header`, `footer`, `figure`, `hr`, `dl`); the label is `AI-generated`, `KI-generiert`, `Généré par IA`, `Generado por IA` or `人工智能生成`; attribute values escape `&`, `<`, `>` and `"` only. A later write inside a mark splits it into two siblings with the same attributes (a `div` first becomes a `span` around each line); a record's text is that of all its elements in document order, without other records' elements inside them. |
 | Visible label | Before HTML `<p data-ai-label="<id>">[icon]<label></p>`; before Markdown `*<label>*` and a blank line, after its front matter; before plain text `<label>` and a blank line. |
 | Sidecar | `<file>.provenance.json`, compact JSON: `{"contract":"provenance/v1","record":{...},"signature":"...","timestamp":"...","facts":{...}}`, the signed record as the server signed it; `timestamp` and `facts` only where there are some. |
-| Office | Anchor `_faden_ai_` and the first 24 hex digits of the id, dashes removed (`officeAnchorName`: a hidden Word bookmark, an Excel name), and where a later write split a Word anchor, its later parts `<anchor>_2` to `<anchor>_99` (no leading zeros); the custom XML part `<provenance xmlns="https://fadenstack.com/ns/provenance/1.0"><record id="<id>" anchor="<anchor>" timestamp="<token>">JWS</record>...</provenance>` -- no declaration, no white space between elements, `timestamp` only where there is one (`officeCustomXmlPart`); the document property `AI-Generated-Content`, `true` and the ids newest first in at most 255 characters (`officeDocumentPropertyValue`); the PowerPoint tag `FADEN_AI_RECORD`; for a mail `X-AI-Generated`. The server's detector reads the ids from `customXml/` parts with the namespace and from `docProps/custom.xml`. |
+| Office | Anchor `_faden_ai_` and the first 24 hex digits of the id, dashes removed (`officeAnchorName`: a hidden Word bookmark, an Excel name), and where a later write split a Word anchor, its later parts `<anchor>_2` to `<anchor>_99` (no leading zeros); the custom XML part `<provenance xmlns="https://fadenstack.com/ns/provenance/1.0"><record id="<id>" anchor="<anchor>" timestamp="<token>">JWS</record>...</provenance>` -- no declaration, no white space between elements, `timestamp` only where there is one (`officeCustomXmlPart`); the document property `AI-Generated-Content`, `true` and the ids newest first in at most 255 characters (`officeDocumentPropertyValue`); the PowerPoint tags `FADEN_AI_RECORD` (the newest record) and `FADEN_AI_RECORDS` (every record whose words are in the shape, oldest first, space-separated); for a mail `X-AI-Generated`. The server's detector reads the ids from `customXml/` parts with the namespace and from `docProps/custom.xml`. |
 | Invisible text (opt-in) | At the very end of the text: U+FEFF, then the bytes `46 44 4E 50 01` ("FDNP" and version 1) and the id's UTF-8 bytes, each byte one variation selector (0 to 15 as U+FE00 to U+FE0F, 16 to 255 as U+E0100 to U+E01EF): 42 code points for a UUID. For `5a0e2b5c-7f3e-4a51-9a40-6a1c55e1d3f1` it begins U+FEFF U+E0136 U+E0134 U+E013E U+E0140 U+FE01 U+E0125 U+E0151 U+E0120. The U+FEFF in front keeps an emoji's own variation selector from running into the mark. |
 
 ## Testing a marker
