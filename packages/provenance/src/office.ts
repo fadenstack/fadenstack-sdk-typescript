@@ -25,6 +25,11 @@ export const OfficeMarks = {
   shapeTag: "FADEN_AI_RECORD",
   /** The internet header a mail draft carries the record's id in. */
   mailHeader: "X-AI-Generated",
+  /**
+   * The host value (`MarkableContent.hostValues`) a Word or Excel marker's `prepare` sets to the anchor's name
+   * (`officeAnchorName`), so the insert makes the bookmark or name together with the content, in one undo entry.
+   */
+  anchorValue: "office.anchor",
 } as const;
 
 /** One record in a document's custom XML part: its id, the anchor it marks, its signature (a JWS), its time-stamp. */

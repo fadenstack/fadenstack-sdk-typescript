@@ -46,12 +46,20 @@ export interface ToolOutput<A = Record<string, unknown>> {
   argument: string;
   /** Its media type: `text/markdown`, `text/html`, `text/plain`, `image/png`. */
   mediaType: string;
-  /** `generated`, `rewritten`, `summarised` (marked); `translated`, `corrected`, `formatted`, `extracted` (exempt). */
-  edit: EditKind | ((args: A) => EditKind);
+  /**
+   * `generated`, `rewritten`, `summarised` (marked); `translated`, `corrected`, `formatted`, `extracted` (exempt). A
+   * function decides per call; it returns `null` for a call whose argument is not content for people to read (an
+   * option picked in a drop-down, a check box ticked): that call's `place()` puts the value in unmarked and reports
+   * nothing, and a call that does not place it is not recorded as unmarked.
+   */
+  edit: EditKind | ((args: A) => EditKind | null);
 }
 
-/** The edit kind a declared output stands for in a call: the declared one, or what its function says. */
-export function outputEditKind(output: ToolOutput, args: Record<string, unknown>): EditKind {
+/**
+ * The edit kind a declared output stands for in a call: the declared one, or what its function says; `null` when the
+ * function says this call writes nothing for people to read.
+ */
+export function outputEditKind(output: ToolOutput, args: Record<string, unknown>): EditKind | null {
   return typeof output.edit === "function" ? output.edit(args) : output.edit;
 }
 

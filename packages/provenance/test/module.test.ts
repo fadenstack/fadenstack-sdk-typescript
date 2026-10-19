@@ -55,8 +55,8 @@ describe("placing content", () => {
     expect(placement).toMatchObject({ recordId: signed.signed.record.id, signed: true, exempt: false, editKind: "generated" });
     // The server got the content's hash, never the content.
     expect(signed.request).toEqual({
-      content_sha256: await textSha256(`<p>${LONG}</p>`), media_type: "text/html", edit_kind: "generated",
-      receipt_id: r.gateway.receipts[0]!.id, model: "fake-model",
+      content_sha256: await textSha256(`<p>${LONG}</p>`), text_sha256: await textSha256(LONG), media_type: "text/html",
+      edit_kind: "generated", receipt_id: r.gateway.receipts[0]!.id, model: "fake-model",
     });
     expect(validate(recordRequestSchema, signed.request)).toEqual([]);
     expect(JSON.stringify(r.gateway.requests.filter((q) => q.path.includes("/provenance/")).map((q) => q.body))).not.toContain("delivery");
@@ -65,7 +65,9 @@ describe("placing content", () => {
     expect(new ProvenanceReader().fromHtml(editor.html)).toEqual([
       { carrier: "html-attribute", recordId: id }, { carrier: "html-title", recordId: id },
     ]);
-    expect(editor.html.startsWith(`<div data-ai-generated="${id}" title="AI-generated ${id}"><p>The delivery`)).toBe(true);
+    // One paragraph is marked inside it.
+    expect(editor.html.startsWith(`<p><span data-ai-generated="${id}" title="AI-generated ${id}">The delivery`)).toBe(true);
+    expect(editor.html.endsWith("</span></p>")).toBe(true);
     expect(placement.layers).toEqual([
       { layer: "metadata", method: "signed-record", applied: true },
       { layer: "metadata", method: "html-attribute", applied: true, verified: true },
@@ -136,6 +138,118 @@ describe("placing content", () => {
     const receipts = r.gateway.provenanceRecords.map((s) => s.request["receipt_id"]);
     expect(receipts).toEqual([r.gateway.receipts[0]!.id, undefined]);
     expect(seen[1]!.layers).toContainEqual({ layer: "watermark", method: "model", applied: false });
+  });
+
+  it("finds a record of HTML or Markdown by the words a reader copies; plain text sends no text hash", async () => {
+    const html = `<p>Dear Ms <b>Huber</b>,</p><p>${LONG}</p>`;
+    const markdown = `# Reply\n\nDear Ms **Huber**,\n\n${LONG}`;
+    const copied = `Dear Ms Huber, ${LONG}`;
+    const write = (mediaType: string) => defineTool<{ text: string }>({
+      name: "write_text", toolClass: "write", output: { argument: "text", mediaType, edit: "generated" },
+      run: async ({ text }, context) => {
+        await provenanceOf(context).place({ content: text, mediaType, sink: { kind: "test.field", carries: [] } }, () => "ok");
+        return "ok";
+      },
+    });
+    const editor = new Editor();
+    const inEditor = await run([fillField(editor)], { tool: "fill_field", args: { text: html } });
+    await inEditor.session.send("Write it.");
+    expect(inEditor.gateway.provenanceRecords[0]!.request["text_sha256"]).toBe(await textSha256(copied));
+    const found = await inEditor.agent.client.agent!.provenance.verify({ text: copied });
+    expect([found.verdict, found.findings[0]!.record_id]).toEqual(["ai-generated", inEditor.gateway.provenanceRecords[0]!.signed.record.id]);
+
+    const md = await run([write("text/markdown")], { tool: "write_text", args: { text: markdown } });
+    await md.session.send("Write it.");
+    expect(md.gateway.provenanceRecords[0]!.request["text_sha256"]).toBe(await textSha256(`Reply ${copied}`));
+
+    const plain = await run([write("text/plain")], { tool: "write_text", args: { text: copied } });
+    await plain.session.send("Write it.");
+    expect(plain.gateway.provenanceRecords[0]!.request).not.toHaveProperty("text_sha256");
+  });
+
+  it("reports a placement whose insert failed after the record was signed, with no layer applied, and fails the call", async () => {
+    const tool = defineTool<{ text: string }>({
+      name: "fill_field", toolClass: "write", output: { argument: "text", mediaType: "text/html", edit: "generated" },
+      run: async ({ text }, context) => {
+        await provenanceOf(context).place({ content: text, mediaType: "text/html", sink: new Editor().sink }, () => {
+          throw new RangeError("The field is gone.");
+        });
+        return "inserted";
+      },
+    });
+    const r = await run([tool], { tool: "fill_field", args: { text: `<p>${LONG}</p>` } });
+    await r.session.send("Write it.");
+    expect(r.toolResult()).toMatch(/The field is gone/);
+    const id = r.gateway.provenanceRecords[0]!.signed.record.id;
+    const report = r.gateway.placements[0]!.report;
+    expect(validate(placementSchema, report)).toEqual([]);
+    expect(report.record_id).toBe(id);
+    expect(report.layers).toEqual([
+      { layer: "metadata", method: "signed-record", applied: false },
+      { layer: "metadata", method: "html-attribute", applied: false },
+      { layer: "watermark", method: "model", applied: false },
+    ]);
+    const entry = r.entries(ProvenanceEntryTypes.placed)[0]!.data;
+    expect(entry).toMatchObject({ record_id: id, reported: true });
+    expect((entry["layers"] as { detail: string }[]).map((l) => l.detail)).toEqual(Array(3).fill("insert failed: RangeError"));
+    expect(r.entries(ProvenanceEntryTypes.unmarked)).toEqual([]);
+  });
+});
+
+describe("arguments that are not content", () => {
+  /** A form tool: a text field's value is content, a drop-down option or a check box is not. */
+  const fillForm = (editor: Editor, seen: Placement<string>[] = []) => defineTool<{ value: string; kind: string }>({
+    name: "fill_form", toolClass: "write",
+    output: { argument: "value", mediaType: "text/html", edit: ({ kind }) => (kind === "text" ? "generated" : null) },
+    run: async ({ value }, context) => {
+      seen.push(await provenanceOf(context).place({ content: value, mediaType: "text/html", sink: editor.sink }, (m) => editor.insert(String(m.content))));
+      return "set";
+    },
+  });
+
+  it("puts a value the declaration says is no content in as it is: no record, no mark, no report", async () => {
+    const editor = new Editor();
+    const seen: Placement<string>[] = [];
+    const r = await run([fillForm(editor, seen)], { tool: "fill_form", args: { value: LONG, kind: "option" } }, { module: { development: true } });
+    await r.session.send("Pick it.");
+    expect(r.toolResult()).toBe("set");
+    expect(editor.html).toBe(LONG);
+    expect(seen[0]).toMatchObject({ exempt: true, exemptBecause: "not-content", signed: false, recordId: undefined, layers: [], missing: [] });
+    expect(r.gateway.provenanceRecords).toEqual([]);
+    expect(r.gateway.placements).toEqual([]);
+    expect([...r.entries(ProvenanceEntryTypes.placed), ...r.entries(ProvenanceEntryTypes.unmarked)]).toEqual([]);
+  });
+
+  it("marks the same tool's content, and a request's own edit kind still makes it content", async () => {
+    const editor = new Editor();
+    const text = await run([fillForm(editor)], { tool: "fill_form", args: { value: LONG, kind: "text" } });
+    await text.session.send("Fill it.");
+    expect(editor.html).toContain("data-ai-generated");
+    const said = new Editor();
+    const seen: Placement<string>[] = [];
+    const tool = defineTool<{ value: string; kind: string }>({
+      name: "fill_form", toolClass: "write", output: { argument: "value", mediaType: "text/html", edit: () => null },
+      run: async ({ value }, context) => {
+        seen.push(await provenanceOf(context).place({ content: value, mediaType: "text/html", sink: said.sink, editKind: "rewritten" }, (m) => said.insert(String(m.content))));
+        return "set";
+      },
+    });
+    const r = await run([tool], { tool: "fill_form", args: { value: LONG, kind: "option" } });
+    await r.session.send("Fill it.");
+    expect(seen[0]).toMatchObject({ signed: true, exempt: false, editKind: "rewritten" });
+  });
+
+  it("does not record a call as unmarked when its declaration says it writes no content", async () => {
+    const tool = defineTool<{ value: string; kind: string }>({
+      name: "tick", toolClass: "write",
+      output: { argument: "value", mediaType: "text/plain", edit: ({ kind }) => (kind === "checkbox" ? null : "generated") },
+      run: () => "ticked",
+    });
+    const r = await run([tool], { tool: "tick", args: { value: LONG, kind: "checkbox" } }, { module: { development: true } });
+    await r.session.send("Tick it.");
+    expect(r.toolResult()).toBe("ticked");
+    expect(r.entries(ProvenanceEntryTypes.unmarked)).toEqual([]);
+    expect(r.gateway.placements).toEqual([]);
   });
 });
 

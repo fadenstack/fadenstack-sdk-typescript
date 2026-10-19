@@ -39,6 +39,16 @@ describe("output declarations", () => {
     expect(stricter.output).toBe(insertReply.output);
   });
 
+  it("let a call say its argument is not content: the function returns null", () => {
+    const fill = defineTool<{ value: string; kind: string }>({
+      name: "fill_field", toolClass: "write",
+      output: { argument: "value", mediaType: "text/plain", edit: ({ kind }) => (kind === "select" ? null : "generated") },
+      run: () => "set",
+    });
+    expect(outputEditKind(fill.output!, { value: "DE", kind: "select" })).toBeNull();
+    expect(outputEditKind(fill.output!, { value: "Dear Ms Huber", kind: "text" })).toBe("generated");
+  });
+
   it("are refused without an argument, a media type or an edit kind", () => {
     const run = () => "";
     expect(() => defineTool({ name: "a", output: { argument: "", mediaType: "text/plain", edit: "generated" }, run })).toThrow(TypeError);

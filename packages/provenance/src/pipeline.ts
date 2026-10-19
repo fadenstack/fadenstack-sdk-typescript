@@ -18,8 +18,9 @@ import {
 } from "@fadenstack/client";
 
 import { dataUrlBytes, isCode, isImage, isLabel, isRecordId, lengthClass, tokensOf } from "./content.js";
+import { readerTextSha256 } from "./readerText.js";
 import { inspectImage } from "./markers/imageGuard.js";
-import { SIGNED_RECORD_METHOD } from "./markers/serverSigned.js";
+import { SIGNED_RECORD_METHOD, ServerSignedMarker } from "./markers/serverSigned.js";
 import { watermarkOf } from "./markers/watermarkStatus.js";
 import { findPersonalData, type PersonalDataFinding } from "./personalData.js";
 import type {
@@ -86,8 +87,8 @@ export interface PlaceContext {
   readonly callId?: string;
   /** The argument the tool's `output` declares. */
   readonly argument?: string;
-  /** The kind the tool's `output` declares for this call. */
-  readonly declaredEditKind?: EditKind;
+  /** The kind the tool's `output` declares for this call; `null`: the declaration says this call writes no content. */
+  readonly declaredEditKind?: EditKind | null;
   /** The receipt of the answer that made the call. */
   readonly receipt?: ReceiptNote;
   /** The agent's model, where no receipt names one. */
@@ -144,7 +145,10 @@ interface Needs {
  * the content (only with a signed record: no mark carries an id the server does not know); the host inserts it; the
  * markers attach their marks and say whether they held; the placement is recorded and reported -- which layers held,
  * and why the others did not. With the policy's `on_missing: refuse`, content a needed layer is not possible for is
- * not placed, nothing is signed or reported, and the refusal is recorded and told to the user.
+ * not placed, nothing is signed or reported, and the refusal is recorded and told to the user. An insert that fails
+ * after the record was signed is reported with every layer not applied, so the server's placements match its
+ * records, and its error is thrown on. A call whose declared output says it writes no content (`declaredEditKind`
+ * `null`, no `editKind` in the request) is put in as it is: not marked, not reported.
  */
 export async function placeContent<T>(settings: PipelineSettings, request: PlaceRequest, insert: Insert<T>, ctx: PlaceContext): Promise<Placement<T>> {
   checkRequest(request);
@@ -156,6 +160,13 @@ export async function placeContent<T>(settings: PipelineSettings, request: Place
     const bytes = dataUrlBytes(content);
     if (!bytes) throw new TypeError("A picture is placed as its bytes, or a data: URL of them.");
     content = bytes;
+  }
+  if (request.editKind === undefined && ctx.declaredEditKind === null) {
+    const result = await insert({ content, mediaType, sink }, signal);
+    return Object.freeze({
+      result, recordId: undefined, signed: false, exempt: true, reason: undefined, exemptBecause: "not-content" as const,
+      editKind: "generated" as const, layers: Object.freeze([]), missing: Object.freeze([]),
+    });
   }
   const text = typeof content === "string" ? content : undefined;
   const policy = await ctx.policy();
@@ -244,9 +255,24 @@ export async function placeContent<T>(settings: PipelineSettings, request: Place
       }
     }
   }
-  const result = await insert(marked, signal);
+  let result: T | undefined;
+  let failedInsert: { error: unknown; detail: string } | undefined;
+  try {
+    result = await insert(marked, signal);
+  } catch (error) {
+    // Without a record nothing was signed to leave behind; with one, the placement is reported as nothing applied.
+    if (!record) throw error;
+    failedInsert = { error, detail: `insert failed: ${errorName(error)}` };
+  }
   const outcomes: Outcome[] = [];
-  if (record) {
+  if (record && failedInsert) {
+    // Every marker's layer, not applied, by the method it reports; the watermark by its own method, as below.
+    for (const marker of markers.filter((m) => m.layer !== "watermark")) {
+      const counts = !(marker.layer === "metadata" && marker.carrier === false);
+      const method = marker instanceof ServerSignedMarker ? SIGNED_RECORD_METHOD : marker.name;
+      outcomes.push({ layer: marker.layer, method, applied: false, detail: failedInsert.detail, counts });
+    }
+  } else if (record) {
     let readBack: Promise<string | Uint8Array | undefined> | undefined;
     const placed: PlacedContent = { ...marked, result, shortText, readBack: () => (readBack ??= readSink(sink, signal)) };
     for (const marker of markers) {
@@ -274,7 +300,9 @@ export async function placeContent<T>(settings: PipelineSettings, request: Place
     outcomes.push({ layer: "metadata", method: Methods.host, applied: false, reason: "sink-cannot-carry", counts: true });
   }
   if ((text !== undefined || isImage(mediaType)) && !outcomes.some((o) => o.layer === "watermark")) {
-    outcomes.push(toOutcome("watermark", watermark, true));
+    outcomes.push(failedInsert
+      ? { layer: "watermark", method: watermark.method, applied: false, detail: failedInsert.detail, counts: true }
+      : toOutcome("watermark", watermark, true));
   }
   for (const layer of ["metadata", "watermark", "label"] as const) {
     const missing = before.find((m) => m.layer === layer);
@@ -296,7 +324,16 @@ export async function placeContent<T>(settings: PipelineSettings, request: Place
     const known = before.find((m) => m.layer === layer);
     missing.push(lost ? { layer, method: lost.method, reason: lost.reason ?? undefined } : known ?? { layer, method: "none", reason: undefined });
   }
-  return finish(settings, ctx, result, { ...base, layers, missing, signed, exemptBecause: undefined });
+  const done: Done = { ...base, layers, missing, signed, exemptBecause: undefined };
+  if (failedInsert) {
+    try {
+      await finish(settings, ctx, undefined, done);
+    } catch {
+      // the insert's error is the one to tell
+    }
+    throw failedInsert.error;
+  }
+  return finish(settings, ctx, result as T, done);
 }
 
 /** What every placement knows before it is marked. */
@@ -425,17 +462,21 @@ function exemptReason(editKind: EditKind, mediaType: string, text: string | unde
     : undefined;
 }
 
-/** The server's signed record of the placement, by the content's hash only; undefined when it did not sign one. */
+/**
+ * The server's signed record of the placement, by the content's hash only -- and for HTML and Markdown the hash of
+ * the text a reader sees, so the words copied out of the host find it; undefined when it did not sign one.
+ */
 async function sign(
   ctx: PlaceContext, content: string | Uint8Array, mediaType: string, editKind: EditKind, receipt: ReceiptNote | undefined,
   receiptId: string | undefined,
 ): Promise<SignedRecord | undefined> {
   const sha = typeof content === "string" ? await textSha256(content) : await bytesSha256(content);
+  const textSha = typeof content === "string" ? await readerTextSha256(content, mediaType) : undefined;
   // The agent's model writes its text, not its pictures.
   const model = receipt?.status === "signed" && receipt.receipt.model.id ? receipt.receipt.model.id : isImage(mediaType) ? undefined : ctx.model;
   try {
     const signed = await ctx.backend.signRecord({
-      content_sha256: sha, media_type: mediaType, edit_kind: editKind,
+      content_sha256: sha, ...(textSha ? { text_sha256: textSha } : {}), media_type: mediaType, edit_kind: editKind,
       ...(receiptId !== undefined ? { receipt_id: receiptId } : {}),
       ...(model ? { model } : {}),
     }, AbortSignal.any([ctx.signal, AbortSignal.timeout(SIGN_TIMEOUT_MS)]));

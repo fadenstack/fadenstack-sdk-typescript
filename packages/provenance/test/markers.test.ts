@@ -10,6 +10,7 @@ import {
   ImageProvenanceGuard,
   KeyValueMarker,
   MarkdownFrontMatterMarker,
+  OfficeMarks,
   ProvenanceReader,
   SidecarMarker,
   UnicodeTextMarker,
@@ -18,7 +19,9 @@ import {
   frontMatterMark,
   invisibleMark,
   memorySink,
+  officeAnchorName,
   withFrontMatter,
+  withHostValue,
   type ContentMarker,
 } from "@fadenstack/provenance";
 
@@ -184,5 +187,50 @@ describe("ProvenanceReader", () => {
     expect([...mark].length).toBe(1 + 5 + ID.length);
     expect(reader.fromText("plain text")).toEqual([]);
     expect(reader.fromText(`${FIXTURE.name}${mark} and more`)).toEqual([{ carrier: "unicode-text", recordId: ID }]);
+  });
+});
+
+describe("host values", () => {
+  /** Word, in miniature: the insert makes the bookmark with the text, in one undo entry, by the name the marker prepared. */
+  class WordDocument {
+    readonly undo: { text: string; bookmark: string | undefined }[] = [];
+    insert(text: string, bookmark: string | undefined): void {
+      this.undo.push({ text, bookmark });
+    }
+  }
+  it("hand what a marker prepared to the host's insert and to attach, for one placement", async () => {
+    const document = new WordDocument();
+    let prepared: string | undefined;
+    const marker: ContentMarker = {
+      name: "word-bookmark",
+      layer: "metadata",
+      supports: (sink) => sink.carries.includes("word-bookmark"),
+      prepare: (content, record) => {
+        prepared = record.id;
+        return withHostValue(content, OfficeMarks.anchorValue, officeAnchorName(record.id));
+      },
+      attach: (placed, record) => {
+        const name = placed.hostValues?.[OfficeMarks.anchorValue];
+        const held = name === officeAnchorName(record.id) && document.undo.some((u) => u.bookmark === name);
+        return held ? { applied: true, method: "word-bookmark", verified: true } : { applied: false, method: "word-bookmark", reason: "stripped-by-host" };
+      },
+    };
+    const result = await checkMarker(marker, {
+      carries: ["word-bookmark"], mediaType: "text/plain", content: "Dear Erika Mustermann, the part arrives on Friday.",
+      insert: (marked) => document.insert(String(marked.content), marked.hostValues?.[OfficeMarks.anchorValue]),
+      read: () => document.undo.filter((u) => prepared && u.bookmark === officeAnchorName(prepared))
+        .map(() => ({ carrier: "word-bookmark", recordId: prepared! })),
+    });
+    expect(result.problems).toEqual([]);
+    expect(document.undo).toEqual([{ text: "Dear Erika Mustermann, the part arrives on Friday.", bookmark: officeAnchorName(result.recordId!) }]);
+    expect(result.outcome).toEqual({ applied: true, method: "word-bookmark", verified: true });
+  });
+
+  it("are kept by the other markers' prepare, and need a key", () => {
+    const content = withHostValue({ content: "<p>x</p>", mediaType: "text/html", sink: memorySink().sink }, "a", "1");
+    expect(withHostValue(content, "b", "2").hostValues).toEqual({ a: "1", b: "2" });
+    const wrapped = new HtmlAttributeMarker().prepare(content, { id: ID } as never);
+    expect(wrapped.hostValues).toEqual({ a: "1" });
+    expect(() => withHostValue(content, " ", "x")).toThrow(TypeError);
   });
 });

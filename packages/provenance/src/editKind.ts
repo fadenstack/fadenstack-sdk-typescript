@@ -1,11 +1,17 @@
 import { normalizeText } from "@fadenstack/client";
 
 import { isCjk } from "./content.js";
+import { readerText } from "./readerText.js";
 import type { EditClassifier } from "./types.js";
 
 export interface EditSimilarityOptions {
   /** Similarity from which an edit counts as small (default 0.85: about one word in seven changed). */
   minSimilarity?: number;
+  /**
+   * For `suggestEditKind`: the texts' media type. HTML and Markdown are compared by the text a reader sees
+   * (`readerText`), so markup an editor adds or drops is no change of words. `text/plain` by default.
+   */
+  mediaType?: string;
 }
 
 /** Above this many word pairs the texts are not compared: `rewritten`. */
@@ -114,16 +120,19 @@ function judge(before: string, after: string, minimum: number): { kind: "correct
 /**
  * The edit kind for a revision of `original`: `corrected` (exempt: spelling, grammar, a light polish) only for a
  * small change -- word similarity at least `minSimilarity`, the same number of sentences, and a word count within
- * 0.8 to 1.25 times -- and `rewritten` (marked) otherwise. When in doubt, it marks.
+ * 0.8 to 1.25 times -- and `rewritten` (marked) otherwise. When in doubt, it marks. HTML and Markdown
+ * (`options.mediaType`) are compared by the text a reader sees.
  */
 export function suggestEditKind(original: string, revised: string, options: EditSimilarityOptions = {}): "corrected" | "rewritten" {
-  return judge(original, revised, options.minSimilarity ?? DEFAULT_MIN).kind;
+  const type = options.mediaType ?? "text/plain";
+  return judge(readerText(original, type), readerText(revised, type), options.minSimilarity ?? DEFAULT_MIN).kind;
 }
 
 /**
  * An edit classifier from `suggestEditKind`: for a placement declared `rewritten` or `corrected` that names the text
  * it replaces (`PlaceRequest.original`), `corrected` for a small change and `rewritten` otherwise, with the reason
- * recorded on the device. Anything else keeps its kind.
+ * recorded on the device. HTML and Markdown are compared by the text a reader sees of both, in the placement's media
+ * type. Anything else keeps its kind.
  */
 export function similarityClassifier(options: EditSimilarityOptions = {}): EditClassifier {
   return {
@@ -131,7 +140,7 @@ export function similarityClassifier(options: EditSimilarityOptions = {}): EditC
       if ((input.declared !== "rewritten" && input.declared !== "corrected") || input.original === undefined || typeof input.content !== "string") {
         return undefined;
       }
-      return judge(input.original, input.content, options.minSimilarity ?? DEFAULT_MIN);
+      return judge(readerText(input.original, input.mediaType), readerText(input.content, input.mediaType), options.minSimilarity ?? DEFAULT_MIN);
     },
   };
 }

@@ -90,6 +90,19 @@ export interface MarkableContent {
   readonly content: string | Uint8Array;
   readonly mediaType: string;
   readonly sink: SinkInfo;
+  /**
+   * What markers prepared for the host's insert of this one placement, by key: what the insert writes together with
+   * the content -- Word's bookmark name (`OfficeMarks.anchorValue`), so the bookmark is in the insert's own undo
+   * entry. A marker sets them in `prepare` (`withHostValue`); the insert and `attach` read them. Ids and names only,
+   * never content: they stay on the device.
+   */
+  readonly hostValues?: Readonly<Record<string, string>>;
+}
+
+/** `content` with one more value for the host's insert (see `MarkableContent.hostValues`): what a marker's `prepare` returns. */
+export function withHostValue(content: MarkableContent, key: string, value: string): MarkableContent {
+  if (!key?.trim()) throw new TypeError("A host value needs a key.");
+  return { ...content, hostValues: Object.freeze({ ...content.hostValues, [key]: value }) };
 }
 
 /** Content the host has taken. */
@@ -183,9 +196,11 @@ export interface PlaceRequest {
 
 /**
  * Why content needs no mark at all (no record, no marks): the policy marks the agent's output internal and technical,
- * the edit kind is exempt, the media type is code or data, or the text is a label.
+ * the edit kind is exempt, the media type is code or data, or the text is a label -- all recorded and reported as
+ * exempt. `not-content`: the tool's declared output says this call writes nothing for people to read (its `edit`
+ * function returned `null`); such a placement is neither recorded nor reported.
  */
-export type ExemptReason = "internal-technical" | "edit-kind" | "code" | "label";
+export type ExemptReason = "internal-technical" | "edit-kind" | "code" | "label" | "not-content";
 
 /** Where `place()` put content, and which layers held. */
 export interface Placement<T> {
@@ -197,10 +212,11 @@ export interface Placement<T> {
   readonly signed: boolean;
   /** Recorded as exempt (`exemptBecause`): nothing was marked. */
   readonly exempt: boolean;
-  /** The reason code the report gives an exempt placement: `exempt-edit`. */
+  /** The reason code the report gives an exempt placement: `exempt-edit` (none for `not-content`, which is not reported). */
   readonly reason: ReasonCode | undefined;
   /** Why it is exempt. */
   readonly exemptBecause: ExemptReason | undefined;
+  /** The placement's edit kind; `generated`, and of no meaning, for `not-content`. */
   readonly editKind: EditKind;
   readonly layers: readonly LayerOutcome[];
   /** The layers the content needs that did not hold, and why. */

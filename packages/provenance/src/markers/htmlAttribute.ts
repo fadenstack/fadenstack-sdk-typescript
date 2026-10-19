@@ -7,6 +7,9 @@ export const AI_GENERATED_ATTRIBUTE = "data-ai-generated";
 
 /** HTML with any of these is wrapped in a `div`; anything else in a `span`. */
 const BLOCK = /<(?:p|div|ul|ol|li|table|h[1-6]|blockquote|pre|section|article|header|footer|figure|hr|dl)\b/i;
+/** HTML that is one paragraph: `<p ...>`, its inline content, `</p>`, white space around it. */
+const ONE_PARAGRAPH = /^([ \t\r\n\f]*)<p((?:[ \t\r\n\f][^>]*)?)>([\s\S]*)<\/p>([ \t\r\n\f]*)$/i;
+const PARAGRAPH_END = /<\/p[ \t\r\n\f>]/i;
 const START_TAG = /<[a-zA-Z][^\s/>]*((?:\s+[^\s=/>]+(?:\s*=\s*(?:"[^"]*"|'[^']*'|[^\s"'=<>`]+))?)*)\s*\/?>/g;
 const ATTRIBUTE = /([^\s=/>]+)(?:\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s"'=<>`]+)))?/g;
 
@@ -37,12 +40,19 @@ export function htmlRecordIds(
 }
 
 /**
- * The element a mark wraps HTML in: `<span data-ai-generated="<id>" title="<label> <id>">` (a `div` around block
- * content), the attribute values escaped for `&`, `<`, `>` and `"` only. The .NET SDK writes the same.
+ * The element a mark wraps HTML in: `<span data-ai-generated="<id>" title="<label> <id>">`, the attribute values
+ * escaped for `&`, `<`, `>` and `"` only. Content that is one paragraph is marked inside it,
+ * `<p ...><span ...>...</span></p>` (the form the lab measured in real editors); a `div` goes around several
+ * blocks; inline content gets the `span`. The .NET SDK writes the same.
  */
 export function wrapHtml(html: string, recordId: string, title: string): string {
+  const attributes = `${AI_GENERATED_ATTRIBUTE}="${escapeAttribute(recordId)}" title="${escapeAttribute(title)}"`;
+  const paragraph = ONE_PARAGRAPH.exec(html);
+  if (paragraph && !BLOCK.test(paragraph[3]!) && !PARAGRAPH_END.test(paragraph[3]!)) {
+    return `${paragraph[1]}<p${paragraph[2]}><span ${attributes}>${paragraph[3]}</span></p>${paragraph[4]}`;
+  }
   const tag = BLOCK.test(html) ? "div" : "span";
-  return `<${tag} ${AI_GENERATED_ATTRIBUTE}="${escapeAttribute(recordId)}" title="${escapeAttribute(title)}">${html}</${tag}>`;
+  return `<${tag} ${attributes}>${html}</${tag}>`;
 }
 
 export interface HtmlAttributeMarkerOptions {

@@ -35,6 +35,18 @@ describe("the edit-kind helper", () => {
     expect(classify({ tool: "t", declared: "corrected", mediaType: "text/plain", content: "Ships Friday.", original: corrected }))
       .toEqual({ kind: "rewritten", reason: expect.stringMatching(/^\d+ % of words kept, 2 to 1 sentence\(s\)$/) });
   });
+
+  it("compares HTML and Markdown by the text a reader sees: an editor's markup is no rewrite (the .NET SDK says the same)", () => {
+    const before = "<p>Teh report is due on friday.</p>";
+    const after = '<p class="MsoNormal" style="margin:0"><span lang="de">The report is due on Friday.</span></p>';
+    expect(suggestEditKind(before, after, { mediaType: "text/html" })).toBe("corrected");
+    expect(suggestEditKind(before, after)).toBe("rewritten"); // as plain text, the tags are words
+    const classify = similarityClassifier().classify;
+    expect(classify({ tool: "t", declared: "rewritten", mediaType: "text/html; charset=utf-8", content: after, original: before }))
+      .toEqual({ kind: "corrected", reason: "small change: 89 % of words kept, the same 1 sentence(s)" });
+    expect(classify({ tool: "t", declared: "rewritten", mediaType: "text/markdown", content: "The report is due on **Friday**.", original: "**Teh** report is due on *friday*." }))
+      .toEqual({ kind: "corrected", reason: "small change: 89 % of words kept, the same 1 sentence(s)" });
+  });
 });
 
 describe("tightenPolicy", () => {

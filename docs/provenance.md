@@ -69,13 +69,34 @@ const insertReply = defineTool<{ text: string }>({
 | `request.editKind` | The edit kind, over the tool's declared one. |
 | `request.original` | The text this replaces, for an edit classifier. Read on the device, never sent. |
 | `request.receiptId` | The receipt of what made the content when it is not the turn's answer: a picture's own receipt (`x-faden-provenance` of the images answer). |
-| `insert(marked, signal)` | Your own insert, given the content as the markers prepared it. Its return value is the placement's `result`. |
+| `insert(marked, signal)` | Your own insert, given the content as the markers prepared it (`marked.content`, and `marked.hostValues`: what a marker prepared for this insert, below). Its return value is the placement's `result`. |
 
 `place()` returns a `Placement`: the `result`, the `recordId` (undefined for exempt content and when the server could
 not sign), whether the server `signed` the record, whether the content was `exempt` (`reason` `exempt-edit`, and
-`exemptBecause`: `internal-technical`, `edit-kind`, `code` or `label`), the `editKind`, the `layers` (each
-`{ layer, method, applied, reason?, verified? }`) and what is `missing`: the layers the content needs that did not
-hold, each `{ layer, method, reason }`.
+`exemptBecause`: `internal-technical`, `edit-kind`, `code`, `label`, or `not-content` below), the `editKind`, the
+`layers` (each `{ layer, method, applied, reason?, verified? }`) and what is `missing`: the layers the content needs
+that did not hold, each `{ layer, method, reason }`.
+
+**When the insert fails.** If your insert throws after the server signed the record, the placement is still reported
+and recorded -- the record's id, every layer `applied: false` (the transcript's `detail` says `insert failed: <error>`)
+-- so the server's placements match its records; then `place()` throws your error on.
+
+**Arguments that are not content.** A tool that writes text for people in one call and picks an option or ticks a
+check box in another says so per call: its `edit` function returns `null` for a call whose argument is not content.
+
+```ts
+output: { argument: "value", mediaType: "text/plain", edit: ({ kind }) => (kind === "text" ? "generated" : null) },
+```
+
+For such a call `place()` puts the value in as it is -- no record, no mark, no report, no transcript entry -- and
+returns a placement with `exempt: true` and `exemptBecause: "not-content"`; a call that does not use `place()` at all
+is not recorded as unmarked. An `editKind` in the request makes it content again.
+
+**Host values.** A marker that needs the host's insert to write something with the content -- Word's bookmark, inside
+the insert's own undo entry -- prepares it for this one placement: `withHostValue(content, key, value)` in `prepare`.
+The insert reads `marked.hostValues[key]` and `attach` reads `placed.hostValues[key]`. `OfficeMarks.anchorValue`
+(`office.anchor`) is the key for the anchor's name (`officeAnchorName`). Ids and names only: host values stay on the
+device.
 
 ## What `place()` does
 
@@ -93,7 +114,9 @@ hold, each `{ layer, method, reason }`.
    says the text carries no watermark, a picture lost its C2PA. With the policy's `on_missing: refuse`, `place()`
    refuses (below).
 4. **The record.** The server signs a record of the placement, by the content's SHA-256 (`textSha256`: normalised the
-   way the server does it). If it cannot, **no marker runs** -- no mark carries an id the server does not know -- the
+   way the server does it); for HTML and Markdown also by the SHA-256 of the text a reader sees (`text_sha256`,
+   below), so the words someone copies out of the editor find the record. If it cannot, **no marker runs** -- no mark
+   carries an id the server does not know -- the
    content is inserted as it is, the metadata layer is reported `signed-record`, `server-unavailable`, and the
    placement is still reported. With `refuse`, content that needs metadata is refused here.
 5. **Prepare, insert, attach.** The markers that fit the sink prepare the content in layer order (metadata, watermark,
@@ -130,7 +153,7 @@ content needs metadata (a container, a picture).
 | `ServerSignedMarker` (`server-record`) | metadata | any | Says the server signed the record (`signed-record`). No mark in the content itself: it never makes the metadata layer hold. |
 | `ImageProvenanceGuard` (`image-guard`) | metadata | pictures | Checks that a picture still carries its C2PA manifest (a byte check: the JUMBF `c2pa` box; XMP too), as it is placed and after where the host can be read; records `stripped-by-host` otherwise. Never changes the bytes. Method `c2pa`. |
 | `WatermarkStatus` (`watermark-status`) | watermark | text, pictures | Records from the receipt whether the content carries a watermark (`vllm-<algorithm>`, `upstream-<vendor>`, `trustmark`), and why not (method `model`). Never watermarks itself. |
-| `HtmlAttributeMarker` (`html-attribute`) | metadata | `html-attribute`, `html-title` | Wraps HTML in one element with `data-ai-generated` and the record's id (TinyMCE and CKEditor 5 keep it) and a `title` -- "AI-generated" in the user's language, a space, the record's id (Gmail keeps it, through to the recipient). Reads back which held: `html-attribute`, or `html-title` when only the title did. HTML only: escape plain text into HTML first. |
+| `HtmlAttributeMarker` (`html-attribute`) | metadata | `html-attribute`, `html-title` | Wraps HTML in one element with `data-ai-generated` and the record's id (TinyMCE and CKEditor 5 keep it) and a `title` -- "AI-generated" in the user's language, a space, the record's id (Gmail keeps it, through to the recipient). One paragraph is marked inside it (`<p><span ...>...</span></p>`), several blocks get a `div`. Reads back which held: `html-attribute`, or `html-title` when only the title did. HTML only: escape plain text into HTML first. |
 | `MarkdownFrontMatterMarker` (`front-matter`) | metadata | `front-matter` | `ai-generated: true` and `ai-record-id: "<id>"` in the YAML front matter of a whole Markdown file, merged into front matter it has. |
 | `KeyValueMarker` (`key-value`) | metadata | `key-value` | The same two keys: `ai-generated` = `true`, then `ai-record-id` = the record's id, read back. |
 | `SidecarMarker` (`sidecar`) | metadata | `sidecar` | The signed record in `<file>.provenance.json` beside the file. |
@@ -176,8 +199,9 @@ content. Reason codes: `sink-cannot-carry`, `stripped-by-host`, `short-text`, `e
 `no-watermark-remote-model`, `no-watermark-greedy`, `runtime-without-watermark`, `server-unavailable`.
 
 A tool that declares `output` and does not place its content is recorded and reported, unless the content is exempt
-(an exempt edit kind, code, a label, the internal switch); with `development: true` its call fails, so you notice
-while you build. A marker that throws is recorded (`failed: <error>`) and the placement goes on, in development too.
+(an exempt edit kind, code, a label, the internal switch) or the call's `edit` said `null` (not content); with
+`development: true` its call fails, so you notice while you build. A marker that throws is recorded
+(`failed: <error>`) and the placement goes on, in development too.
 
 ## Receipts
 
@@ -195,12 +219,24 @@ whether content carries this installation's marks. An agent's client checks on i
 the signed-in user (`/v1/provenance/verify`, which refuses an agent token with 403 `agent_token_not_allowed`).
 `client.agent.provenance.verify()` always takes the agent's route. Nothing submitted is kept.
 
+A record of HTML or Markdown is found by its markup and by the words a reader copies: `place()` sends, beside the
+content's hash, `text_sha256` -- the SHA-256 of the text a reader sees, normalised as content is hashed
+(`readerTextSha256(content, mediaType)`). Plain text and markup with nothing to read send none. `readerText` gives
+that text: of HTML without comments and the contents of `script`, `style`, `template`, `head` and `title`, block
+elements (`p`, `div`, `br`, `li`, headings, table rows and cells, ...) as line breaks, every other tag gone, entities
+decoded; of Markdown as a renderer shows it -- without front matter, heading, emphasis, list, task and quote markers,
+with inline code's text, a link's text and an image's alt text, fenced code's lines, table cells apart, HTML read as
+HTML. A visible label is not part of the hashed text: a copy that takes the label line with it does not match by
+hash.
+
 ## Edit kinds
 
 `suggestEditKind(original, revised)` says `corrected` (exempt) only for a small change -- word similarity of 0.85 or
 more (a typo fix counts for less than a changed word; each CJK character is a word), the same number of sentences, a
-word count within 0.8 to 1.25 times -- and `rewritten` otherwise. `similarityClassifier()` applies it to placements
-declared `rewritten` or `corrected` that name the text they replace (`request.original`), and records its reason
+word count within 0.8 to 1.25 times -- and `rewritten` otherwise. HTML and Markdown are compared by the text a reader
+sees (`suggestEditKind(a, b, { mediaType: "text/html" })`), so markup an editor adds is no change of words.
+`similarityClassifier()` applies it to placements declared `rewritten` or `corrected` that name the text they replace
+(`request.original`), in the placement's media type, and records its reason
 (`small change: 95 % of words kept, the same 2 sentence(s)`) on the device:
 
 ```ts
@@ -231,7 +267,8 @@ marks on content your agent moves (a picture goes in as the same bytes).
 
 The TypeScript and the .NET SDK follow one order, one rule for what content needs, and write the same marks, so what
 one writes the other reads, and so does the server's detector. Both test suites hold the same vectors
-(`vectors.test.ts` here, `SharedVectorTests` there).
+(`vectors.test.ts` here, `SharedVectorTests` there), and read the same `reader-text-vectors.json` for the text a
+reader sees.
 
 | Step | What happens |
 |---|---|
@@ -240,7 +277,7 @@ one writes the other reads, and so does the server's detector. Both test suites 
 | 3 | The markers that fit, by layer; the built-ins in this order: `server-record`, `image-guard`, `watermark-status`, `html-attribute`, `front-matter`, `key-value`, `sidecar`, `http-header`; then yours; the policy's label when none of them is a label. |
 | 4 | The needed layers checked before signing; `refuse` refuses here. |
 | 5 | The record signed; without one no marker runs, `{ metadata, signed-record, applied: false, reason: server-unavailable }`; `refuse` refuses here when the content needs metadata (or a label). |
-| 6 | Prepare, insert, attach; the pipeline adds `host`, `sink-cannot-carry` when no host marker fits, and the watermark from the receipt when no marker gave it; the layers sorted by layer. |
+| 6 | Prepare, insert, attach; the pipeline adds `host`, `sink-cannot-carry` when no host marker fits, and the watermark from the receipt when no marker gave it; the layers sorted by layer. An insert that throws after signing: every layer `applied: false` (detail `insert failed: <error>`), reported, then thrown on. |
 | 7 | Report, observers, transcript. |
 
 | Needed layer | For | Holds when |
@@ -254,7 +291,7 @@ one writes the other reads, and so does the server's detector. Both test suites 
 | YAML front matter | `ai-generated: true` and `ai-record-id: "<id>"` after the fields of front matter the file has (an earlier mark replaced, the rest byte for byte), or new front matter followed by a blank line; the text's own line breaks (CRLF when it has any). |
 | Key-value | `ai-generated` = `true`, then `ai-record-id` = the id. |
 | HTTP or mail header | `X-AI-Generated: <id>`. (`X-Faden-Provenance` is the gateway's header with an answer's receipt ids, not a mark.) |
-| HTML | `<span data-ai-generated="<id>" title="<label> <id>">...</span>`, a `div` around block content (`p`, `div`, `ul`, `ol`, `li`, `table`, `h1`-`h6`, `blockquote`, `pre`, `section`, `article`, `header`, `footer`, `figure`, `hr`, `dl`); the label is `AI-generated`, `KI-generiert`, `Généré par IA`, `Generado por IA` or `人工智能生成`; attribute values escape `&`, `<`, `>` and `"` only. |
+| HTML | `<span data-ai-generated="<id>" title="<label> <id>">...</span>`; content that is one `<p ...>` with inline content gets it inside: `<p ...><span ...>...</span></p>` (white space around kept); a `div` around other block content (`p`, `div`, `ul`, `ol`, `li`, `table`, `h1`-`h6`, `blockquote`, `pre`, `section`, `article`, `header`, `footer`, `figure`, `hr`, `dl`); the label is `AI-generated`, `KI-generiert`, `Généré par IA`, `Generado por IA` or `人工智能生成`; attribute values escape `&`, `<`, `>` and `"` only. |
 | Visible label | Before HTML `<p data-ai-label="<id>">[icon]<label></p>`; before Markdown `*<label>*` and a blank line, after its front matter; before plain text `<label>` and a blank line. |
 | Sidecar | `<file>.provenance.json`, compact JSON: `{"contract":"provenance/v1","record":{...},"signature":"...","timestamp":"...","facts":{...}}`, the signed record as the server signed it; `timestamp` and `facts` only where there are some. |
 | Office | Anchor `_faden_ai_` and the first 24 hex digits of the id, dashes removed (`officeAnchorName`: a hidden Word bookmark, an Excel name); the custom XML part `<provenance xmlns="https://fadenstack.com/ns/provenance/1.0"><record id="<id>" anchor="<anchor>" timestamp="<token>">JWS</record>...</provenance>` -- no declaration, no white space between elements, `timestamp` only where there is one (`officeCustomXmlPart`); the document property `AI-Generated-Content`, `true` and the ids newest first in at most 255 characters (`officeDocumentPropertyValue`); the PowerPoint tag `FADEN_AI_RECORD`; for a mail `X-AI-Generated`. The server's detector reads the ids from `customXml/` parts with the namespace and from `docProps/custom.xml`. |

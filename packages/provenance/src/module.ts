@@ -236,13 +236,16 @@ function receiptStage(inner: ChatStreamer, receipts: TurnReceipts): ChatStreamer
   };
 }
 
-/** After a tool that declares content for people ran: did the content go through `place()`? */
+/**
+ * After a tool that declares content for people ran: did the content go through `place()`? A call its declaration
+ * says writes no content (`edit` returned `null`) is not checked.
+ */
 function checkingStage(): ToolStage {
   return {
     async invoke(invocation, next) {
       const result = await next(invocation);
       const output = invocation.tool.output;
-      if (!output) return result;
+      if (!output || outputEditKind(output, invocation.arguments as Record<string, unknown>) === null) return result;
       const value = invocation.arguments[output.argument];
       const empty = value === undefined || value === null || (typeof value === "string" && value.trim() === "")
         || (Array.isArray(value) && value.length === 0);
@@ -304,6 +307,7 @@ class CallProvenance implements Provenance {
   async unmarked(output: ToolOutput, args: Readonly<Record<string, unknown>>): Promise<void> {
     const policy = await this.policy();
     const editKind = outputEditKind(output, args as Record<string, unknown>);
+    if (editKind === null) return; // the declaration says this call writes no content
     const value = args[output.argument];
     const text = typeof value === "string" ? value : JSON.stringify(value) ?? "";
     if (policy.internal_technical || policy.exempt_edit_kinds.includes(editKind) || isCode(output.mediaType)

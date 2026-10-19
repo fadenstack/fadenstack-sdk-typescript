@@ -1,7 +1,11 @@
+import { readFileSync } from "node:fs";
+
 import { describe, expect, it } from "vitest";
 
+import { normalizeText } from "@fadenstack/client";
 import { englishStrings, germanStrings } from "@fadenstack/ui";
 import {
+  hasReaderText,
   invisibleMark,
   invisibleRecordIds,
   isCode,
@@ -11,6 +15,8 @@ import {
   officeCustomXmlPart,
   officeDocumentPropertyValue,
   readOfficeCustomXmlPart,
+  readerText,
+  readerTextSha256,
   tokensOf,
   withFrontMatter,
   wrapHtml,
@@ -34,11 +40,17 @@ describe("shared vectors (the .NET SDK has the same)", () => {
     expect(invisibleRecordIds(`Thanks ❤\u{FE0F}${expected}`)).toEqual([ID]);
   });
 
-  it("HTML: one element with data-ai-generated and the title, the label and the id", () => {
-    expect(wrapHtml("Hello", ID, englishStrings.aiGeneratedTitle(ID)))
-      .toBe(`<span data-ai-generated="${ID}" title="AI-generated ${ID}">Hello</span>`);
+  it("HTML: one element with data-ai-generated and the title, the label and the id; one paragraph is marked inside it", () => {
+    const en = englishStrings.aiGeneratedTitle(ID);
+    expect(wrapHtml("Hello", ID, en)).toBe(`<span data-ai-generated="${ID}" title="AI-generated ${ID}">Hello</span>`);
     expect(wrapHtml("<p>Hallo</p>", ID, germanStrings.aiGeneratedTitle(ID)))
-      .toBe(`<div data-ai-generated="${ID}" title="KI-generiert ${ID}"><p>Hallo</p></div>`);
+      .toBe(`<p><span data-ai-generated="${ID}" title="KI-generiert ${ID}">Hallo</span></p>`);
+    expect(wrapHtml('\n<P class="lead">Hi <b>there</b></P>\n', ID, en))
+      .toBe(`\n<p class="lead"><span data-ai-generated="${ID}" title="AI-generated ${ID}">Hi <b>there</b></span></p>\n`);
+    expect(wrapHtml("<p>One.</p><p>Two.</p>", ID, en)).toBe(`<div data-ai-generated="${ID}" title="AI-generated ${ID}"><p>One.</p><p>Two.</p></div>`);
+    expect(wrapHtml("<p>One.</p><ul><li>Two</li></ul>", ID, en))
+      .toBe(`<div data-ai-generated="${ID}" title="AI-generated ${ID}"><p>One.</p><ul><li>Two</li></ul></div>`);
+    expect(wrapHtml("<pre>x</pre>", ID, en)).toBe(`<div data-ai-generated="${ID}" title="AI-generated ${ID}"><pre>x</pre></div>`);
   });
 
   it("front matter: the two keys, the id quoted, a blank line before a body without front matter", () => {
@@ -70,5 +82,28 @@ describe("shared vectors (the .NET SDK has the same)", () => {
     expect(isCode("application/xhtml+xml")).toBe(false);
     expect(tokensOf("abcdefghi")).toBe(3);
     expect(tokensOf("人工智能 abc")).toBe(5); // four CJK characters and four others
+  });
+});
+
+interface ReaderTextVector {
+  name: string;
+  media_type: string;
+  input: string;
+  /** The text a reader sees, normalised as it is hashed; null: no text hash (not markup, or nothing to read). */
+  text: string | null;
+  sha256: string | null;
+}
+
+describe("the text a reader sees (reader-text-vectors.json; the .NET SDK reads the same file)", () => {
+  const vectors = JSON.parse(readFileSync(new URL("fixtures/reader-text-vectors.json", import.meta.url), "utf8")) as ReaderTextVector[];
+
+  it("has the cases", () => {
+    expect(vectors.length).toBeGreaterThanOrEqual(15);
+  });
+
+  it.each(vectors.map((v) => [v.name, v] as const))("%s", async (_, v) => {
+    const text = hasReaderText(v.media_type) ? normalizeText(readerText(v.input, v.media_type)) : null;
+    expect(text === "" ? null : text).toBe(v.text);
+    expect((await readerTextSha256(v.input, v.media_type)) ?? null).toBe(v.sha256);
   });
 });

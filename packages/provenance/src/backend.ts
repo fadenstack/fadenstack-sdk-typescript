@@ -70,6 +70,7 @@ export class MemoryBackend implements ProvenanceBackend {
       media_type: request.media_type,
       content_hash: request.content_sha256.split("").reverse().join(""),
       hash_key_version: 1,
+      text_hash: request.text_sha256 ? request.text_sha256.split("").reverse().join("") : null,
     };
     const signed: SignedRecord = { record, signature: `memory.${btoa(record.id)}.unsigned`, timestamp: null };
     this.records.push({ request: { ...request }, signed });

@@ -15,6 +15,7 @@ export {
 } from "./pipeline.js";
 export {
   Carriers,
+  withHostValue,
   type ContentMarker,
   type EditClassification,
   type EditClassifier,
@@ -42,6 +43,7 @@ export { MemoryBackend, ServerBackend } from "./backend.js";
 export { tightenPolicy } from "./policy.js";
 export { ProvenanceReader, type FoundMark, type ProvenanceReaderOptions } from "./reader.js";
 export { editSimilarity, similarityClassifier, suggestEditKind, type EditSimilarityOptions } from "./editKind.js";
+export { decodeHtmlEntities, hasReaderText, htmlText, markdownText, readerText, readerTextSha256 } from "./readerText.js";
 export { findPersonalData, type PersonalDataFinding } from "./personalData.js";
 export { type MarkStrings, type MarkStringsOption } from "./titles.js";
 export { isCode, isLabel, isRecordId, tokensOf } from "./content.js";

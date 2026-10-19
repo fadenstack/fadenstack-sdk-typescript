@@ -79,9 +79,12 @@ const insertReply = defineTool<{ text: string }>({
 | `extracted` | Selected or structured existing content, unsummarised | No |
 
 `edit` may also be a function of the call's arguments, for a tool that decides per call:
-`edit: (args) => (args.mode === "polish" ? "corrected" : "rewritten")`. The declaration is metadata: it goes in the
-[app manifest](#the-app-manifest), and the provenance module (`@fadenstack/provenance`) checks that the content went
-through its `place()`, which marks it where it lands. See [Marking AI-generated content](provenance.md).
+`edit: (args) => (args.mode === "polish" ? "corrected" : "rewritten")`. It returns `null` for a call whose argument
+is not content for people to read -- a form tool that picks an option in a drop-down or ticks a check box:
+`edit: ({ kind }) => (kind === "text" ? "generated" : null)`. Such a call is not marked and not reported. The
+declaration is metadata: it goes in the [app manifest](#the-app-manifest), and the provenance module
+(`@fadenstack/provenance`) checks that the content went through its `place()`, which marks it where it lands. See
+[Marking AI-generated content](provenance.md).
 
 ## Arguments are checked first
 
