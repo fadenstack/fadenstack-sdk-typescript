@@ -12,6 +12,36 @@ const ONE_PARAGRAPH = /^([ \t\r\n\f]*)<p((?:[ \t\r\n\f][^>]*)?)>([\s\S]*)<\/p>([
 const PARAGRAPH_END = /<\/p[ \t\r\n\f>]/i;
 const START_TAG = /<[a-zA-Z][^\s/>]*((?:\s+[^\s=/>]+(?:\s*=\s*(?:"[^"]*"|'[^']*'|[^\s"'=<>`]+))?)*)\s*\/?>/g;
 const ATTRIBUTE = /([^\s=/>]+)(?:\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s"'=<>`]+)))?/g;
+/** The attribute a visible label names its record in (`VisibleLabelMarker`). */
+const LABEL_ATTRIBUTE = "data-ai-label";
+
+/** An attribute of a start tag: its name in lower case, its value decoded and trimmed, and the attribute as written. */
+export interface TagAttribute {
+  readonly name: string;
+  readonly value: string;
+  readonly written: string;
+}
+
+/** The attributes in a start tag's attribute text (what follows its name). */
+export function tagAttributes(text: string): TagAttribute[] {
+  return [...text.matchAll(ATTRIBUTE)].map((a) => ({ name: a[1]!.toLowerCase(), value: decodeEntities(a[2] ?? a[3] ?? a[4] ?? "").trim(), written: a[0] }));
+}
+
+/**
+ * The record whose text an element with these attributes holds: the record its `data-ai-generated` names, else the
+ * one a title of ours names; `null` for a visible label (`data-ai-label`), which holds no record's text; undefined
+ * for any other element.
+ */
+export function markOf(attributes: Iterable<{ readonly name: string; readonly value: string }>, templates: readonly TitleTemplate[]): string | null | undefined {
+  let title: string | undefined;
+  let label = false;
+  for (const { name, value } of attributes) {
+    if (name === AI_GENERATED_ATTRIBUTE && RECORD_ID.test(value)) return value;
+    if (name === LABEL_ATTRIBUTE && RECORD_ID.test(value)) label = true;
+    else if (name === "title") title ??= recordIdInTitle(value, templates);
+  }
+  return label ? null : title;
+}
 
 /**
  * The record ids an HTML text's marks name: in `data-ai-generated` attributes, in titles of ours, and in the
@@ -25,11 +55,9 @@ export function htmlRecordIds(
   const title = new Set<string>();
   const label = new Set<string>();
   for (const tag of html.matchAll(START_TAG)) {
-    for (const a of (tag[1] ?? "").matchAll(ATTRIBUTE)) {
-      const name = a[1]!.toLowerCase();
-      const value = decodeEntities(a[2] ?? a[3] ?? a[4] ?? "").trim();
+    for (const { name, value } of tagAttributes(tag[1] ?? "")) {
       if (name === AI_GENERATED_ATTRIBUTE && RECORD_ID.test(value)) attribute.add(value);
-      else if (name === "data-ai-label" && RECORD_ID.test(value)) label.add(value);
+      else if (name === LABEL_ATTRIBUTE && RECORD_ID.test(value)) label.add(value);
       else if (name === "title") {
         const id = recordIdInTitle(value, templates);
         if (id) title.add(id);

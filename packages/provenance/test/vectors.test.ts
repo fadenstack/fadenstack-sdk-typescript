@@ -2,7 +2,7 @@ import { readFileSync } from "node:fs";
 
 import { describe, expect, it } from "vitest";
 
-import { PLACEMENT_FAILURE, normalizeText, placementFailure } from "@fadenstack/client";
+import { PLACEMENT_FAILURE, normalizeText, placementFailure, textSha256 } from "@fadenstack/client";
 import { englishStrings, germanStrings } from "@fadenstack/ui";
 import {
   hasReaderText,
@@ -17,7 +17,10 @@ import {
   readOfficeCustomXmlPart,
   readerText,
   readerTextSha256,
+  recordText,
+  recordTextSha256,
   similarityClassifier,
+  splitMarksInHtml,
   suggestEditKind,
   tokensOf,
   withFrontMatter,
@@ -149,5 +152,63 @@ describe("the edit kind of a revision (edit-kind-vectors.json; the .NET SDK read
     const decided = similarityClassifier().classify({ tool: "t", declared: "rewritten", mediaType: v.media_type, content: v.revised, original: v.original });
     expect(decided).toEqual({ kind: v.kind, reason: v.reason });
     expect(suggestEditKind(v.original, v.revised, { mediaType: v.media_type })).toBe(v.kind);
+  });
+});
+
+/** A later write into marked HTML: `html` with `|` at the place, `split` with `|` where the write goes, `record` what R1 was placed from. */
+interface MarkSplitVector {
+  name: string;
+  html: string;
+  split: string;
+  record: string;
+}
+
+interface RecordTextVector {
+  name: string;
+  html: string;
+  record_id: string;
+  /** The record's text, normalised as it is hashed; null: the HTML holds none of it. */
+  text: string | null;
+}
+
+describe("marks split for a later write, and a record's text read back (mark-split-vectors.json; the .NET SDK reads the same file)", () => {
+  const vectors = JSON.parse(readFileSync(new URL("fixtures/mark-split-vectors.json", import.meta.url), "utf8")) as {
+    split: MarkSplitVector[];
+    record_text: RecordTextVector[];
+  };
+  const R1 = "5a0e2b5c-7f3e-4a51-9a40-6a1c55e1d3f1";
+  const R2 = "0b6f9a3e-1c2d-4e5f-8a9b-0c1d2e3f4a5b";
+  /** What the agent writes later, marked as R2 (`wrapHtml`). */
+  const later = wrapHtml("We are sorry for the trouble.", R2, englishStrings.aiGeneratedTitle(R2));
+
+  it("has the cases", () => {
+    expect(vectors.split.length).toBeGreaterThanOrEqual(11);
+    expect(vectors.record_text.length).toBeGreaterThanOrEqual(7);
+  });
+
+  it.each(vectors.split.map((v) => [v.name, v] as const))("split: %s", async (_, v) => {
+    const html = v.html.replace("|", "");
+    const split = splitMarksInHtml(html, v.html.indexOf("|"));
+    expect(`${split.html.slice(0, split.at)}|${split.html.slice(split.at)}`).toBe(v.split);
+    // R1's text is still its record's -- before the later write, and after it, with R2's own beside it.
+    const recorded = await readerTextSha256(v.record, "text/html");
+    expect(await recordTextSha256(html, R1)).toBe(recorded);
+    expect(await recordTextSha256(split.html, R1)).toBe(recorded);
+    const written = split.html.slice(0, split.at) + later + split.html.slice(split.at);
+    expect(await recordTextSha256(written, R1)).toBe(recorded);
+    expect(await recordTextSha256(written, R2)).toBe(await textSha256("We are sorry for the trouble."));
+  });
+
+  it("split: a place inside a tag, a comment or a character reference is refused", () => {
+    expect(() => splitMarksInHtml("<p>a</p>", 2)).toThrow(RangeError);
+    expect(() => splitMarksInHtml("a<!-- b -->c", 4)).toThrow(RangeError);
+    expect(() => splitMarksInHtml("a&amp;b", 3)).toThrow(RangeError);
+    expect(() => splitMarksInHtml("ab", 3)).toThrow(RangeError);
+    expect(splitMarksInHtml("a&amp;b", 6)).toEqual({ html: "a&amp;b", at: 6 });
+  });
+
+  it.each(vectors.record_text.map((v) => [v.name, v] as const))("record text: %s", async (_, v) => {
+    expect(normalizeText(recordText(v.html, v.record_id)) || null).toBe(v.text);
+    expect((await recordTextSha256(v.html, v.record_id)) ?? null).toBe(v.text === null ? null : await textSha256(v.text));
   });
 });

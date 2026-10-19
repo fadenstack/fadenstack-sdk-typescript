@@ -48,7 +48,10 @@ export async function readerTextSha256(text: string, mediaType: string): Promise
 // -- HTML -------------------------------------------------------------------------------------------
 
 /** Elements whose content no reader sees. */
-const DROPPED = new Set(["script", "style", "template", "head", "title"]);
+export const DROPPED = new Set(["script", "style", "template", "head", "title"]);
+
+/** Elements that never have content or an end tag. */
+export const VOID = new Set(["area", "base", "br", "col", "embed", "hr", "img", "input", "link", "meta", "param", "source", "track", "wbr"]);
 
 /** Elements that start a line of their own. */
 const BLOCKS = new Set([
@@ -58,24 +61,64 @@ const BLOCKS = new Set([
   "tfoot", "th", "thead", "tr", "ul",
 ]);
 
+/** Whether an element (by its name in lower case) is a block: it starts a line of its own and holds lines. `br` is a line break, not a block. */
+export function isBlockElement(name: string): boolean {
+  return BLOCKS.has(name) && name !== "br";
+}
+
 /** The plain text of HTML: what a reader sees, with a line break for each block element (see the module's notes). */
 export function htmlText(html: string): string {
   return textOfHtml(html.startsWith(BOM) ? html.slice(1) : html);
 }
 
-function textOfHtml(html: string): string {
-  const n = html.length;
+/** Told each tag `textOfHtml` reads (but those of dropped elements): to follow which element the text is in. */
+export interface HtmlTagHook {
+  /** Whether the text from here to the next tag is kept. */
+  readonly keeping: boolean;
+  /** A tag: its name in lower case, whether it is an end tag, its attributes as written, whether it closes itself (`/>`). */
+  tag(name: string, closing: boolean, attributes: string, selfClosing: boolean): void;
+}
+
+/** The reader's text of HTML; with a `hook`, only the text it keeps (line breaks for blocks always: they are white space). */
+export function textOfHtml(html: string, hook?: HtmlTagHook): string {
   let out = "";
-  let text = 0; // where the text not yet written starts
+  scanHtml(html, (piece) => {
+    if (piece.kind === "text") {
+      if (!hook || hook.keeping) out += decodeHtmlEntities(html.slice(piece.start, piece.end));
+    } else if (piece.kind === "tag") {
+      hook?.tag(piece.name, piece.closing, piece.attributes, piece.selfClosing);
+      if (BLOCKS.has(piece.name)) out += "\n";
+    }
+  });
+  return out;
+}
+
+/**
+ * A piece of HTML as `scanHtml` reads it, from `start` to `end`: text, a comment (or a doctype, CDATA, a processing
+ * instruction), an element's start or end tag (its name in lower case, its attributes as written), or a dropped
+ * element whole (`script`, `style`, ...: its start tag to its end tag).
+ */
+export type HtmlPiece =
+  | { kind: "text"; start: number; end: number }
+  | { kind: "comment"; start: number; end: number }
+  | { kind: "dropped"; start: number; end: number; name: string }
+  | { kind: "tag"; start: number; end: number; name: string; closing: boolean; attributes: string; selfClosing: boolean };
+
+/** HTML in pieces, in order and covering all of it, as the reader's text reads it. */
+export function scanHtml(html: string, visit: (piece: HtmlPiece) => void): void {
+  const n = html.length;
+  let text = 0; // where the text not yet visited starts
   const flush = (end: number) => {
-    if (end > text) out += decodeHtmlEntities(html.slice(text, end));
+    if (end > text) visit({ kind: "text", start: text, end });
   };
   let i = 0;
   while ((i = html.indexOf("<", i)) >= 0) {
     if (html.startsWith("<!--", i)) {
       flush(i);
       const close = html.indexOf("-->", i + 4);
-      i = text = close < 0 ? n : close + 3;
+      const end = close < 0 ? n : close + 3;
+      visit({ kind: "comment", start: i, end });
+      i = text = end;
       continue;
     }
     const next = html.charCodeAt(i + 1);
@@ -87,11 +130,12 @@ function textOfHtml(html: string): string {
         continue;
       }
       flush(i);
+      visit({ kind: "comment", start: i, end: close + 1 });
       i = text = close + 1;
       continue;
     }
-    const end = next === 0x2f;
-    const nameAt = end ? i + 2 : i + 1;
+    const closing = next === 0x2f;
+    const nameAt = closing ? i + 2 : i + 1;
     if (!isAsciiLetter(html.charCodeAt(nameAt))) {
       i++; // a "<" in the text
       continue;
@@ -105,15 +149,17 @@ function textOfHtml(html: string): string {
     }
     flush(i);
     const name = asciiLower(html.slice(nameAt, j));
-    i = text = close;
-    if (!end && DROPPED.has(name) && html.charCodeAt(close - 2) !== 0x2f) {
-      i = text = afterEndTag(html, name, close);
-    } else if (BLOCKS.has(name)) {
-      out += "\n";
+    const selfClosing = html.charCodeAt(close - 2) === 0x2f;
+    if (!closing && DROPPED.has(name) && !selfClosing) {
+      const end = afterEndTag(html, name, close);
+      visit({ kind: "dropped", start: i, end, name });
+      i = text = end;
+      continue;
     }
+    visit({ kind: "tag", start: i, end: close, name, closing, attributes: html.slice(j, close - 1), selfClosing });
+    i = text = close;
   }
   flush(n);
-  return out;
 }
 
 /** A tag name in lower case: ASCII letters only, so both SDKs agree on every name. */

@@ -2,6 +2,7 @@ import type { UiStrings } from "@fadenstack/ui";
 
 import { RECORD_ID, isImage } from "./content.js";
 import { htmlRecordIds } from "./markers/htmlAttribute.js";
+import { recordText, recordTextSha256 } from "./markers/htmlNesting.js";
 import { inspectImage } from "./markers/imageGuard.js";
 import { frontMatterMark } from "./markers/markdownFrontMatter.js";
 import { invisibleRecordIds } from "./markers/unicodeText.js";
@@ -55,6 +56,19 @@ export class ProvenanceReader {
       ...[...title].map((recordId) => ({ carrier: "html-title", recordId })),
       ...[...label].map((recordId) => ({ carrier: "visible-label", recordId })),
     ];
+  }
+
+  /**
+   * The text a reader sees of one record in HTML: of every element that carries its id, in document order, without
+   * the elements of other records inside them (`recordText`). A mark a later write split in two reads as one again.
+   */
+  recordText(html: string, recordId: string): string {
+    return recordText(html, recordId, this.#templates);
+  }
+
+  /** SHA-256 of `recordText`, normalised as content is hashed: the record's `text_sha256` while the text is the record's. */
+  recordTextSha256(html: string, recordId: string): Promise<string | undefined> {
+    return recordTextSha256(html, recordId, this.#templates);
   }
 
   /** YAML front matter that says `ai-generated: true`, with the record's id if it names one. */

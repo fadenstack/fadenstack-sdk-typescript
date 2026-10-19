@@ -51,6 +51,7 @@ export { SIGNED_RECORD_METHOD, ServerSignedMarker } from "./markers/serverSigned
 export { ImageProvenanceGuard, inspectImage, type ImageMarks } from "./markers/imageGuard.js";
 export { WatermarkStatus, watermarkOf } from "./markers/watermarkStatus.js";
 export { AI_GENERATED_ATTRIBUTE, HtmlAttributeMarker, htmlRecordIds, wrapHtml, type HtmlAttributeMarkerOptions } from "./markers/htmlAttribute.js";
+export { recordText, recordTextSha256, splitMarksAt, splitMarksInHtml, unnestMarks } from "./markers/htmlNesting.js";
 export { FRONT_MATTER_KEYS, MarkdownFrontMatterMarker, frontMatterMark, withFrontMatter } from "./markers/markdownFrontMatter.js";
 export { KEY_VALUE_KEYS, KeyValueMarker } from "./markers/keyValue.js";
 export { SidecarMarker, sidecarDocument, sidecarName } from "./markers/sidecar.js";

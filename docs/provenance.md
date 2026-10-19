@@ -269,12 +269,34 @@ it names. Anyone can write or remove a mark, so a mark says where content came f
 returns only record ids (UUIDs), and what it reads is data for your tools, never an instruction to the model. Keep the
 marks on content your agent moves (a picture goes in as the same bytes).
 
+`reader.recordText(html, recordId)` is the text a reader sees of one record in HTML: the text of every element that
+carries its id, in document order, without the elements of other records (or visible labels) inside them -- so a mark
+a later write split in two reads as one again. `reader.recordTextSha256(html, recordId)` hashes it as content is
+hashed: while the text is still the record's, it is the record's `text_sha256`.
+
+## Writing into marked HTML
+
+Marks never nest. When an agent writes into HTML that already holds a mark -- a sentence after a sentence of an
+earlier reply -- the earlier element is split at the place into two siblings that both carry its `data-ai-generated`
+and title, and the new write goes between them as its own marked element; each element holds the text of one record.
+An inline mark is split where the write goes; a block mark (a `div` around several blocks) is not split inside a
+line: it first takes the form of a one-paragraph mark, a `span` with its attribute and title around the text of each
+line, and the span at the place is split. At the very start or end of a mark, the write goes beside it.
+
+| For | Use |
+|---|---|
+| An editor in a page (a browser extension, a web app) | `splitMarksAt(range, editor)` before the insert: a collapsed range at the same place in no mark. Editors may still put what they insert at the edge of an element inside it (Chrome's `insertHTML` does): `unnestMarks(editor)` after the insert lifts any mark out of another's element. |
+| HTML your host holds as text (a note, a ticket's body) | `splitMarksInHtml(html, at)`: the HTML with the marks around index `at` split, and the index to insert at. |
+
+The .NET SDK's `HtmlAttributeMarker.SplitMarksAt(html, index)` splits HTML text the same way.
+
 ## The same in both SDKs
 
 The TypeScript and the .NET SDK follow one order, one rule for what content needs, and write the same marks, so what
 one writes the other reads, and so does the server's detector. Both test suites hold the same vectors
-(`vectors.test.ts` here, `SharedVectorTests` there), and read the same `reader-text-vectors.json` for the text a
-reader sees.
+(`vectors.test.ts` here, `SharedVectorTests` there), and read the same files: `reader-text-vectors.json` for the text
+a reader sees, `edit-kind-vectors.json` for the edit kind and its reason, `mark-split-vectors.json` for marks split by
+a later write and a record's text read back.
 
 | Step | What happens |
 |---|---|
@@ -297,7 +319,7 @@ reader sees.
 | YAML front matter | `ai-generated: true` and `ai-record-id: "<id>"` after the fields of front matter the file has (an earlier mark replaced, the rest byte for byte), or new front matter followed by a blank line; the text's own line breaks (CRLF when it has any). |
 | Key-value | `ai-generated` = `true`, then `ai-record-id` = the id. |
 | HTTP or mail header | `X-AI-Generated: <id>`. (`X-Faden-Provenance` is the gateway's header with an answer's receipt ids, not a mark.) |
-| HTML | `<span data-ai-generated="<id>" title="<label> <id>">...</span>`; content that is one `<p ...>` with inline content gets it inside: `<p ...><span ...>...</span></p>` (white space around kept); a `div` around other block content (`p`, `div`, `ul`, `ol`, `li`, `table`, `h1`-`h6`, `blockquote`, `pre`, `section`, `article`, `header`, `footer`, `figure`, `hr`, `dl`); the label is `AI-generated`, `KI-generiert`, `Généré par IA`, `Generado por IA` or `人工智能生成`; attribute values escape `&`, `<`, `>` and `"` only. |
+| HTML | `<span data-ai-generated="<id>" title="<label> <id>">...</span>`; content that is one `<p ...>` with inline content gets it inside: `<p ...><span ...>...</span></p>` (white space around kept); a `div` around other block content (`p`, `div`, `ul`, `ol`, `li`, `table`, `h1`-`h6`, `blockquote`, `pre`, `section`, `article`, `header`, `footer`, `figure`, `hr`, `dl`); the label is `AI-generated`, `KI-generiert`, `Généré par IA`, `Generado por IA` or `人工智能生成`; attribute values escape `&`, `<`, `>` and `"` only. A later write inside a mark splits it into two siblings with the same attributes (a `div` first becomes a `span` around each line); a record's text is that of all its elements in document order, without other records' elements inside them. |
 | Visible label | Before HTML `<p data-ai-label="<id>">[icon]<label></p>`; before Markdown `*<label>*` and a blank line, after its front matter; before plain text `<label>` and a blank line. |
 | Sidecar | `<file>.provenance.json`, compact JSON: `{"contract":"provenance/v1","record":{...},"signature":"...","timestamp":"...","facts":{...}}`, the signed record as the server signed it; `timestamp` and `facts` only where there are some. |
 | Office | Anchor `_faden_ai_` and the first 24 hex digits of the id, dashes removed (`officeAnchorName`: a hidden Word bookmark, an Excel name); the custom XML part `<provenance xmlns="https://fadenstack.com/ns/provenance/1.0"><record id="<id>" anchor="<anchor>" timestamp="<token>">JWS</record>...</provenance>` -- no declaration, no white space between elements, `timestamp` only where there is one (`officeCustomXmlPart`); the document property `AI-Generated-Content`, `true` and the ids newest first in at most 255 characters (`officeDocumentPropertyValue`); the PowerPoint tag `FADEN_AI_RECORD`; for a mail `X-AI-Generated`. The server's detector reads the ids from `customXml/` parts with the namespace and from `docProps/custom.xml`. |
