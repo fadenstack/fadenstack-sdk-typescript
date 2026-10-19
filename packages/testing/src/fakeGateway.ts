@@ -123,6 +123,8 @@ export interface FakeReply {
   usage?: { prompt: number; completion: number };
   /** A stream error after the text (the answer broke off). */
   streamError?: { message: string; code?: string };
+  /** The finish reason, in place of the one its parts give (`tool_calls` or `stop`): `length` for a model out of tokens. */
+  finish?: string;
   /** A rate limit (429) instead of an answer. */
   rateLimit?: { retryAfterS?: number; code?: string; message?: string };
   /** Milliseconds between chunks. */
@@ -770,7 +772,7 @@ export class FakeGateway {
     if (calls.length) message["tool_calls"] = calls;
     const out: Record<string, unknown> = {
       id: `chatcmpl-${this.#next()}`, object: "chat.completion", model: "fake-model",
-      choices: [{ index: 0, message, finish_reason: reply.refuse ? "content_filter" : calls.length ? "tool_calls" : "stop" }],
+      choices: [{ index: 0, message, finish_reason: reply.refuse ? "content_filter" : reply.finish ?? (calls.length ? "tool_calls" : "stop") }],
       usage: usage(reply),
     };
     const faden: Record<string, unknown> = {};
@@ -830,7 +832,7 @@ export class FakeGateway {
                 function: { name: call.function.name, arguments: args.slice(0, half) } }] })));
               controller.enqueue(encoder.encode(chunk({ tool_calls: [{ index, function: { arguments: args.slice(half) } }] })));
             });
-            await send(chunk({}, calls.length ? "tool_calls" : "stop"));
+            await send(chunk({}, reply.finish ?? (calls.length ? "tool_calls" : "stop")));
           }
           await send(`data: ${JSON.stringify({ id, object: "chat.completion.chunk", model: "fake-model", choices: [], usage: usage(reply) })}\n\n`);
           // The receipt comes last, as the stream closes, before [DONE].

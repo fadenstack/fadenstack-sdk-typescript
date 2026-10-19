@@ -49,6 +49,8 @@ export class TurnViewModel extends Observable {
   #error: string | undefined;
   #tokens: number | undefined;
   #durationText = "";
+  /** A model call of the turn ended with nothing (`empty_answer`): Retry is offered, as for a failed turn. */
+  #unanswered = false;
 
   constructor(context: PartContext, host: TurnHost | undefined, userText: string, timestamp: Date,
     attachments: readonly AttachmentChip[] = [], state: TurnState = "running") {
@@ -118,8 +120,10 @@ export class TurnViewModel extends Observable {
     return this.#parts.filter((p): p is MarkdownPart => p instanceof MarkdownPart).map((p) => p.text).filter(Boolean).join("\n\n");
   }
 
+  /** A failed or stopped turn, or one whose answer came back empty, can be sent again. */
   get canRetry(): boolean {
-    return this.#host !== undefined && (this.#state === "failed" || this.#state === "stopped");
+    return this.#host !== undefined
+      && (this.#state === "failed" || this.#state === "stopped" || (this.#state === "completed" && this.#unanswered));
   }
 
   copy(): void {
@@ -225,6 +229,7 @@ export class TurnViewModel extends Observable {
   /** @internal */
   addNotice(notice: GovernanceNotice): void {
     if (notice.outcome === "prompt_blocked") this.#setState("blocked");
+    if (notice.outcome === "empty_answer") this.#unanswered = true;
     this.addPart(NoticePart.from(notice, this.#context));
   }
 
@@ -281,6 +286,12 @@ export class TurnViewModel extends Observable {
   /** @internal */
   addRestoredPart(part: ResponsePart): void {
     this.#parts = [...this.#parts, part];
+  }
+
+  /** @internal */
+  addRestoredNotice(notice: GovernanceNotice): void {
+    if (notice.outcome === "empty_answer") this.#unanswered = true;
+    this.addRestoredPart(NoticePart.from(notice, this.#context));
   }
 
   #finish(state: TurnState): void {

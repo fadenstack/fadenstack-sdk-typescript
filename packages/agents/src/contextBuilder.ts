@@ -27,7 +27,7 @@ export const NO_TOOL_RESULT = "The tool returned no result.";
 const BLANK = /^[\t-\r \u0085\u00a0\u1680\u2000-\u200a\u2028\u2029\u202f\u205f\u3000]*$/;
 
 /** Empty, or white space only. */
-const isBlank = (text: string): boolean => BLANK.test(text);
+export const isBlank = (text: string): boolean => BLANK.test(text);
 
 /**
  * Builds a request's history from the transcript, with the session rule applied on the device: a

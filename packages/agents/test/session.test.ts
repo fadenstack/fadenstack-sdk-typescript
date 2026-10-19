@@ -216,6 +216,55 @@ describe("a tool that returns nothing", () => {
   });
 });
 
+describe("a model call that ends with nothing", () => {
+  const EMPTY = { outcome: "empty_answer", stage: "output", message: "The model ended without an answer." };
+
+  it("tells the user that no answer came back, also for white space only", async () => {
+    let calls = 0;
+    const s = await setup({ model: () => (++calls === 1 ? { reasoning: "Let me think about this for a long time." } : { text: " \n\n" }) });
+    const session = await s.agent.startSession();
+    const events = await collect(session.stream("Summarise the report."));
+    expect(events.filter((e) => e.type === "notice")).toEqual([{ type: "notice", turnId: expect.any(String), notice: EMPTY }]);
+    expect(events.at(-1)).toMatchObject({ type: "turn_completed", result: { outcome: "completed", notices: [EMPTY] } });
+    expect(session.transcript.filter((e) => e.type === EntryTypes.governanceNotice).map((e) => e.data)).toEqual([EMPTY]);
+    expect((await session.send("Again.")).notices).toEqual([EMPTY]);
+  });
+
+  it("says when the model used up its length first, also after a tool call", async () => {
+    const s = await setup({
+      model: (r) => (lastToolResults(r).size ? { reasoning: "Thinking it over.", finish: "length" }
+        : { toolCalls: [{ name: "read_page", arguments: { page: 7 } }] }),
+    });
+    const session = await s.agent.startSession();
+    const result = await session.send("What is on page 7?");
+    expect(result.notices).toEqual([
+      { outcome: "empty_answer", stage: "output", category: "length", message: "The model used up its length before it wrote an answer." },
+    ]);
+  });
+
+  it("is no notice for an answer, a tool call, a cut-off answer, a refusal or a stop", async () => {
+    const replies: FakeModel[] = [
+      () => ({ text: "Here." }),
+      (r) => (lastToolResults(r).size ? { text: "Page 7 has a table." } : { toolCalls: [{ name: "read_page", arguments: { page: 7 } }] }),
+      () => ({ text: "The first half", finish: "length" }),
+      () => ({ refuse: { stage: "output", message: "Stopped." } }),
+      () => ({ refuse: { stage: "input", message: "No secrets." } }),
+    ];
+    for (const model of replies) {
+      const s = await setup({ model });
+      const result = await (await s.agent.startSession()).send("Go.");
+      expect(result.notices.filter((n) => n.outcome === "empty_answer")).toEqual([]);
+    }
+    const s = await setup({ model: () => ({ reasoning: "Thinking slowly, at length.", delayMs: 20 }) });
+    const session = await s.agent.startSession();
+    const stop = new AbortController();
+    await expect((async () => {
+      for await (const e of session.stream("Go.", { signal: stop.signal })) if (e.type === "reasoning") stop.abort(new Error("stopped by the user"));
+    })()).rejects.toThrow("stopped by the user");
+    expect(session.transcript.filter((e) => e.type === EntryTypes.governanceNotice)).toEqual([]);
+  });
+});
+
 describe("refusals are outcomes", () => {
   it("a refused prompt is not sent again", async () => {
     const s = await setup({ model: (r) => (lastUserText(r).includes("secret") ? { refuse: { stage: "input", message: "No secrets." } } : { text: "fine" }) });

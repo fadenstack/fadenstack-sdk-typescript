@@ -46,6 +46,7 @@ export const frenchStrings: UiStrings = {
     rate_limited: "Trop de requêtes",
     round_limit: "Arrêtée",
     provenance_refused: "Non écrit : le contenu n'a pas pu être marqué comme généré par IA",
+    empty_answer: "Aucune réponse reçue",
   },
   noticeFallback: "Remarque",
   tryAgainIn: (seconds) => `Réessayez dans ${seconds} s.`,
@@ -53,6 +54,9 @@ export const frenchStrings: UiStrings = {
   piiTitle: "Données personnelles protégées",
   piiMessage: (total, list) =>
     `${total} ${total <= 1 ? "valeur tenue" : "valeurs tenues"} à l'écart du modèle : ${list}`,
+  emptyAnswer: "Le modèle s'est arrêté sans écrire de réponse. Vous pouvez réessayer.",
+  emptyAnswerLength:
+    "Le modèle a atteint sa limite de longueur avant d'écrire une réponse, par exemple pendant sa réflexion. Vous pouvez réessayer.",
   thinking: "Réflexion…",
   thoughtFor: (seconds) => `A réfléchi ${seconds} s`,
   usedReferences: (count) => (count <= 1 ? `${count} référence utilisée` : `${count} références utilisées`),

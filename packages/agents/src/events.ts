@@ -34,7 +34,7 @@ export type AgentEvent =
   /** A call waits for the user; the approval handler is asked right after. */
   | { type: "approval_requested"; turnId: string; request: ApprovalRequest }
   | { type: "approval_decided"; turnId: string; request: ApprovalRequest; decision: ApprovalDecision }
-  /** A refusal or a limit, to show on the turn. */
+  /** A refusal, a limit, or a model call that ended with nothing (`empty_answer`), to show on the turn. */
   | { type: "notice"; turnId: string; notice: GovernanceNotice }
   /** Any other gateway event (citations, a PII notice, events core does not know yet). */
   | { type: "gateway_event"; turnId: string; event: FadenstackEvent }

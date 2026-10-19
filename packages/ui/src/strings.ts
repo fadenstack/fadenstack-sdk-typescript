@@ -54,6 +54,10 @@ export interface UiStrings {
   decision(id: string): string;
   piiTitle: string;
   piiMessage(total: number, list: string): string;
+  /** A model call ended with no text and no tool call (`empty_answer`): what the notice says, and that Retry may help. */
+  emptyAnswer: string;
+  /** The same when the model ran out of tokens first (`empty_answer`, `length`), often while thinking. */
+  emptyAnswerLength: string;
   // reasoning and references
   thinking: string;
   thoughtFor(seconds: number): string;
@@ -196,12 +200,15 @@ export const englishStrings: UiStrings = {
     rate_limited: "Too many requests",
     round_limit: "Stopped",
     provenance_refused: "Not written: it could not be marked as AI-generated",
+    empty_answer: "No answer came back",
   },
   noticeFallback: "Notice",
   tryAgainIn: (seconds) => `Try again in ${seconds} s.`,
   decision: (id) => `Decision ${id}`,
   piiTitle: "Personal data protected",
   piiMessage: (total, list) => `${total} value${total === 1 ? "" : "s"} kept from the model: ${list}`,
+  emptyAnswer: "The model ended without writing an answer. You can try again.",
+  emptyAnswerLength: "The model reached its length limit before it wrote an answer, for example while thinking. You can try again.",
   thinking: "Thinking...",
   thoughtFor: (seconds) => `Thought for ${seconds} s`,
   usedReferences: (count) => (count === 1 ? "Used 1 reference" : `Used ${count} references`),

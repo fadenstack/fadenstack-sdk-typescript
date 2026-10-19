@@ -1,8 +1,8 @@
 import { EntryTypes, TurnStatus, type ApprovalRequest, type TranscriptEntry } from "@fadenstack/agents";
-import { parseToolClass, type ChatOutcome } from "@fadenstack/client";
+import { parseToolClass, type ChatOutcome, type GovernanceNotice } from "@fadenstack/client";
 
 import type { AttachmentChip } from "./attachments.js";
-import { ApprovalPart, NoticePart, type ApprovalState, type PartContext } from "./parts.js";
+import { ApprovalPart, type ApprovalState, type PartContext } from "./parts.js";
 import { TurnViewModel, type TurnHost, type TurnState } from "./turn.js";
 
 type Data = Record<string, unknown>;
@@ -81,10 +81,12 @@ export function buildTurn(entries: readonly TranscriptEntry[], context: PartCont
         break;
       }
       case EntryTypes.governanceNotice: {
-        const notice = { outcome: str(d, "outcome") ?? "", message: str(d, "message") ?? "" } as Parameters<typeof NoticePart.from>[0];
+        const notice: GovernanceNotice = { outcome: str(d, "outcome") ?? "", message: str(d, "message") ?? "" };
         const decisionId = str(d, "decision_id");
         if (decisionId) notice.decisionId = decisionId;
-        turn.addRestoredPart(NoticePart.from(notice, context));
+        const category = str(d, "category"); // an empty answer's `length` picks its message
+        if (category) notice.category = category;
+        turn.addRestoredNotice(notice);
         break;
       }
       case EntryTypes.turnEnd: {

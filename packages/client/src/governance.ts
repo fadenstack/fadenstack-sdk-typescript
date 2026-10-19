@@ -15,7 +15,7 @@ export type ChatOutcome =
 
 /** What the user is told about a refusal, and what an auditor finds it by. */
 export interface GovernanceNotice {
-  /** `prompt_blocked`, `response_blocked`, `tool_denied`, `rate_limited`, `round_limit`, ... */
+  /** `prompt_blocked`, `response_blocked`, `tool_denied`, `rate_limited`, `round_limit`, `empty_answer`, ... */
   outcome: string;
   /** `input`, `output`, `tool`. */
   stage?: string;

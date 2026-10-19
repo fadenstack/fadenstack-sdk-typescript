@@ -10,6 +10,7 @@ import {
   type ChatOptions,
   type ChatOutcome,
   type FadenstackEvent,
+  type FinishReason,
   type GovernanceNotice,
   type ReceiptNote,
   type ToolCall,
@@ -21,7 +22,7 @@ import {
 import type { FadenstackAgent } from "./agent.js";
 import { ApprovalDecision, type ApprovalRequest, type ApprovalScope } from "./approvals.js";
 import { attachmentData, type MessageAttachment } from "./attachments.js";
-import { ContextBuilder } from "./contextBuilder.js";
+import { ContextBuilder, isBlank } from "./contextBuilder.js";
 import { EventQueue } from "./eventQueue.js";
 import type { AgentEvent, AgentResult, ToolOutcome } from "./events.js";
 import type { ToolInvocation, ToolInvoker, ToolServiceCall } from "./stages.js";
@@ -320,6 +321,7 @@ class Turn {
     if (this.#skills.length) options.skills = this.#skills;
     if (this.#agent.settings.reasoning) options.reasoningEffort = this.#agent.settings.reasoning;
     let text = "";
+    let finish: FinishReason | undefined;
     const calls: ToolCall[] = [];
     const receipts: ReceiptNote[] = [];
     for await (const update of this.#agent.settings.chat.stream(this.#session.history, options)) {
@@ -347,6 +349,7 @@ class Turn {
           receipts.push(update.receipt);
           break;
         case "finish":
+          finish = update.reason;
           if (update.reason === "content_filter" && !this.#blocked) {
             this.#blocked = { outcome: "response_blocked", stage: "output", message: "The answer was stopped." };
           }
@@ -366,6 +369,8 @@ class Turn {
       });
     }
     if (this.#blocked) await this.#notice(this.#blocked);
+    // A model that thought and then wrote nothing would leave the user with nothing at all on screen.
+    else if (calls.length === 0 && isBlank(text) && !signal.aborted) await this.#notice(emptyAnswer(finish));
     return calls;
   }
 
@@ -730,6 +735,16 @@ class Turn {
 const CORE_ENTRY_TYPES: ReadonlySet<string> = new Set(Object.values(EntryTypes));
 /** A module's entry type: its name, a dot, what happened (`provenance.placed`). */
 const MODULE_ENTRY_TYPE = /^[a-z][a-z0-9_-]*(\.[a-z0-9_-]+)+$/;
+
+/**
+ * The notice for a model call that ended with no text and no tool call (`empty_answer`); `length` when the model ran
+ * out of tokens first, often while thinking. The UI says it in the user's language and offers to try again.
+ */
+function emptyAnswer(finish: FinishReason | undefined): GovernanceNotice {
+  return finish === "length"
+    ? { outcome: "empty_answer", stage: "output", category: "length", message: "The model used up its length before it wrote an answer." }
+    : { outcome: "empty_answer", stage: "output", message: "The model ended without an answer." };
+}
 
 /** A receipt as the transcript keeps it: its id and whether it was signed, never the receipt. */
 function receiptData(note: ReceiptNote): Data {

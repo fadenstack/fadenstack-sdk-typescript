@@ -12,6 +12,7 @@ import {
   NoticePart,
   RenderBatcher,
   ToolCallPart,
+  germanStrings,
   immediateScheduler,
   type AgentChatOptions,
   type OutgoingMessage,
@@ -114,6 +115,40 @@ describe("AgentChatViewModel", () => {
     expect(turn.parts[0]).toMatchObject({ severity: "blocked", title: "Your message was not sent", message: "Customer data stays here." });
     turn.edit();
     expect(vm.input).toBe("Our customer list");
+  });
+
+  it("says when no answer came back, and offers Retry as for a failed turn", async () => {
+    let calls = 0;
+    const { vm, gateway } = await chat({ model: () => (++calls === 1 ? { reasoning: "Thinking it over." } : { text: "Here it is." }) });
+    await vm.send("Summarise");
+    const turn = vm.turns[0]!;
+    expect(turn.state).toBe("completed");
+    expect(turn.parts.map((p) => p.kind)).toEqual(["reasoning", "notice"]);
+    expect(turn.parts[1]).toMatchObject({
+      severity: "warning", title: "No answer came back", message: "The model ended without writing an answer. You can try again.",
+    });
+    expect(turn.canRetry).toBe(true);
+    await turn.retry();
+    expect(vm.turns.map((t) => t.userText)).toEqual(["Summarise", "Summarise"]);
+    expect(vm.turns[1]!).toMatchObject({ answerText: "Here it is.", canRetry: false });
+    expect(gateway.modelCalls).toHaveLength(2);
+  });
+
+  it("says when the model used up its length, in the panel's language, also in a chat opened again", async () => {
+    const { vm, agent } = await chat({ model: () => ({ reasoning: "Thinking it over.", finish: "length" }) });
+    await vm.send("Summarise");
+    expect(vm.turns[0]!.parts[1]).toMatchObject({
+      title: "No answer came back",
+      message: "The model reached its length limit before it wrote an answer, for example while thinking. You can try again.",
+    });
+    const reopened = new AgentChatViewModel(agent, new ApprovalBroker(), { scheduler: immediateScheduler, strings: germanStrings });
+    await reopened.initialize();
+    await reopened.openSession(vm.currentSessionId!);
+    const turn = reopened.turns[0]!;
+    expect(turn.parts.find((p) => p instanceof NoticePart)).toMatchObject({
+      title: "Keine Antwort erhalten", message: germanStrings.emptyAnswerLength,
+    });
+    expect(turn.canRetry).toBe(true);
   });
 
   it("keeps an answer's receipt out of the answer: no notice for it", async () => {

@@ -417,12 +417,13 @@ export class NoticePart extends ResponsePart {
   /** @internal */
   static from(notice: GovernanceNotice, context: PartContext): NoticePart {
     const severity: NoticeSeverity = notice.outcome === "prompt_blocked" || notice.outcome === "response_blocked" ? "blocked"
-      : notice.outcome === "tool_denied" || notice.outcome === "rate_limited" ? "warning"
+      : notice.outcome === "tool_denied" || notice.outcome === "rate_limited" || notice.outcome === "empty_answer" ? "warning"
       : "info";
     return NoticePart.localized(context, severity, (strings) => ({
       title: strings.noticeTitles[notice.outcome] ?? strings.noticeFallback,
-      message: notice.retryAfterMs !== undefined
-        ? `${notice.message} ${strings.tryAgainIn(Math.ceil(notice.retryAfterMs / 1000))}`
+      // An empty answer is the SDK's own notice, not a policy's: no admin's message to show, the panel's words instead.
+      message: notice.outcome === "empty_answer" ? (notice.category === "length" ? strings.emptyAnswerLength : strings.emptyAnswer)
+        : notice.retryAfterMs !== undefined ? `${notice.message} ${strings.tryAgainIn(Math.ceil(notice.retryAfterMs / 1000))}`
         : notice.message,
       detail: notice.decisionId ? strings.decision(notice.decisionId) : undefined,
     }));
