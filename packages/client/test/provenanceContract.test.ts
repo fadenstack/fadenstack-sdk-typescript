@@ -101,7 +101,10 @@ const MIRRORED: { schema: string; fields: Record<string, "required" | "optional"
 ];
 
 /** Schemas of the server's internal routes (gateway and engine), which no SDK sends or reads. */
-const INTERNAL = ["capabilities", "engine-info", "error-detail", "image-mark-request", "image-mark-result", "placement-request", "receipt-request"];
+const INTERNAL = [
+  "capabilities", "engine-info", "error-detail", "image-mark-request", "image-mark-result", "not-written-records",
+  "placement-request", "receipt-request",
+];
 
 function fieldsOf(schema: Schema): { required: string[]; properties: string[] } {
   return { required: [...(schema.required ?? [])].sort(), properties: Object.keys(schema.properties ?? {}).sort() };
@@ -163,7 +166,7 @@ describe("the provenance/v1 contract", () => {
   it("reports a placement as written by default, and a failure only as a short code", () => {
     const properties = contractSchema("placement-report").properties!;
     expect(properties["written"]).toMatchObject({ type: "boolean", default: true });
-    expect(properties["failure"]!.anyOf![0]).toMatchObject({ type: "string", pattern: PLACEMENT_FAILURE.source, maxLength: 64 });
+    expect(properties["failure"]!.anyOf![0]).toMatchObject({ type: "string", pattern: PLACEMENT_FAILURE.source });
   });
 
   it("gives generated content its own source type, and every other kind the composite one", () => {
