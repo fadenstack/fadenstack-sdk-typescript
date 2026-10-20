@@ -1,6 +1,6 @@
 {
   "name": "@fadenstack/ui-vue",
-  "version": "0.2.0-rc.3",
+  "version": "0.3.0-rc.1",
   "description": "The Vue skin for the Fadenstack chat view models: a Copilot-style chat panel",
   "license": "Apache-2.0",
   "author": "Emagin8 UG (haftungsbeschränkt)",
@@ -40,10 +40,10 @@
     "access": "public"
   },
   "dependencies": {
-    "@fadenstack/agents": "0.2.0-rc.3",
-    "@fadenstack/client": "0.2.0-rc.3",
-    "@fadenstack/ui": "0.2.0-rc.3",
-    "@fadenstack/ui-web": "0.2.0-rc.3"
+    "@fadenstack/agents": "0.3.0-rc.1",
+    "@fadenstack/client": "0.3.0-rc.1",
+    "@fadenstack/ui": "0.3.0-rc.1",
+    "@fadenstack/ui-web": "0.3.0-rc.1"
   },
   "peerDependencies": {
     "vue": "^3.5.0"
