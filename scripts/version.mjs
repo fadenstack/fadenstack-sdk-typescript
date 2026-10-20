@@ -28,14 +28,18 @@ if (wanted && !/^\d+\.\d+\.\d+(-[0-9A-Za-z.-]+)?$/.test(wanted)) {
 
 const packages = packageFiles.map((file) => ({ file, json: JSON.parse(readFileSync(file, "utf8")) }));
 const ours = new Set(packages.map((p) => p.json.name));
+// Where a package names another of ours: @fadenstack/testing has agents and provenance as optional peers.
+const pinFields = ["dependencies", "peerDependencies"];
 
 if (check) {
   const expected = wanted ?? packages[0].json.version;
   const problems = [];
   for (const { json } of packages) {
     if (json.version !== expected) problems.push(`${json.name} is ${json.version}`);
-    for (const [name, range] of Object.entries(json.dependencies ?? {})) {
-      if (ours.has(name) && range !== expected) problems.push(`${json.name} depends on ${name} ${range}`);
+    for (const field of pinFields) {
+      for (const [name, range] of Object.entries(json[field] ?? {})) {
+        if (ours.has(name) && range !== expected) problems.push(`${json.name} ${field}: ${name} ${range}`);
+      }
     }
   }
   const sdkVersion = readFileSync(manifestFile, "utf8").match(sdkVersionPattern)?.[1];
@@ -48,8 +52,10 @@ if (check) {
 } else {
   for (const { file, json } of packages) {
     json.version = wanted;
-    for (const name of Object.keys(json.dependencies ?? {})) {
-      if (ours.has(name)) json.dependencies[name] = wanted;
+    for (const field of pinFields) {
+      for (const name of Object.keys(json[field] ?? {})) {
+        if (ours.has(name)) json[field][name] = wanted;
+      }
     }
     writeFileSync(file, `${JSON.stringify(json, null, 2)}\n`);
   }
