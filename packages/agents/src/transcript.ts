@@ -20,6 +20,7 @@ export interface TranscriptEntry {
 export const EntryTypes = {
   sessionStart: "session.start",
   userMessage: "user.message",
+  userCommand: "user.command",
   turnStart: "assistant.turn_start",
   assistantMessage: "assistant.message",
   toolStart: "tool.execution_start",
@@ -57,7 +58,8 @@ export function newId(): string {
 export function sessionInfo(agent: string, id: string, entries: readonly TranscriptEntry[]): SessionInfo {
   const first = entries[0]!;
   const user = entries.find((e) => e.type === EntryTypes.userMessage);
-  const text = typeof user?.data["text"] === "string" ? (user.data["text"] as string) : null;
+  const command = entries.find((e) => e.type === EntryTypes.userCommand);
+  const text = typeof user?.data["text"] === "string" ? user.data["text"] : typeof command?.data["name"] === "string" ? command.data["name"] : null;
   return { id, agent, started: first.timestamp, lastActivity: entries[entries.length - 1]!.timestamp, title: titleOf(text) };
 }
 

@@ -449,3 +449,20 @@ A new skin draws the classes of `@fadenstack/ui-web/styles.css` and takes the re
 `iconPaths` for the icons, `agentAvatar()` for the avatar as SVG data, `stickToBottom`, `dismissOnOutside`,
 `fitToContent` and `composerKey` for the behaviours, and `toolBadges`, `toolStatusIcon`, `noticeIcon` and the others
 for how parts look. The React and Vue skins are the examples.
+# History and other explicit command buttons
+
+Use `chat.invokeTool(name, arguments, { origin: "user_history" })` for a concrete
+user action. It shares busy state, approval cards and `chat.stop()` with chat,
+preserving the composer's draft, skills and attachments. The optional
+`beforeCommand(command, signal)` / `afterCommand(command)` hooks let the host
+check native context and release its lifecycle state. Message hooks are separate;
+commands never resolve or send the next message's attachments. Host guards must
+respect the cancellation signal.
+
+The method returns the command receipt when available. Preparation errors appear
+in `chat.error`; errors and Stop after a turn starts appear on that command turn.
+An already busy or uninitialized chat returns `undefined`. Command turns cannot
+be edited/retried as prompts, including after reopening history. The Vue and
+React skins respect this distinction. See [explicit command requirements](tools.md#explicit-user-commands)
+for central compatibility and the host's native execution responsibilities.
+

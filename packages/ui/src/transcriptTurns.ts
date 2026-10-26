@@ -31,6 +31,7 @@ export function groupTurns(entries: readonly TranscriptEntry[]): TranscriptEntry
 /** One turn read back from the transcript. */
 export function buildTurn(entries: readonly TranscriptEntry[], context: PartContext, host: TurnHost | undefined): TurnViewModel {
   const user = entries.find((e) => e.type === EntryTypes.userMessage);
+  const command = entries.find((e) => e.type === EntryTypes.userCommand);
   const skills: AttachmentChip[] = Array.isArray(user?.data["skills"])
     ? (user!.data["skills"] as Data[]).map((s) => ({ title: str(s, "name") ?? str(s, "slug") ?? "", subtitle: undefined, skill: true }))
     : [];
@@ -42,7 +43,7 @@ export function buildTurn(entries: readonly TranscriptEntry[], context: PartCont
         return chip;
       })
     : [];
-  const turn = new TurnViewModel(context, host, str(user?.data, "text") ?? "", new Date((user ?? entries[0]!).timestamp),
+  const turn = new TurnViewModel(context, command ? undefined : host, str(user?.data, "text") ?? str(command?.data, "name") ?? "", new Date((user ?? command ?? entries[0]!).timestamp),
     [...skills, ...attachments], "completed");
   turn.setId(entries[0]!.turnId!);
   let state: TurnState = "stopped"; // a turn without an end was interrupted

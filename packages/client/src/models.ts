@@ -2,6 +2,8 @@ import { parseToolMode, type ToolMode } from "./tools/toolModes.js";
 
 /** What the SDK caches about its agent (`GET /v1/agents/{agent}/profile`): never its instructions. */
 export interface AgentProfile {
+  /** Authenticated identity returned by newer gateways; absent on older servers. Never inferred from JWT text. */
+  principal?: AgentPrincipal;
   id: string;
   slug: string;
   name: string;
@@ -32,6 +34,21 @@ export interface AgentProfile {
   features: string[];
   /** The signed-in user's own settings, shared by all their clients and the console. */
   user: UserSettings;
+}
+
+export interface AgentPrincipal {
+  tenantId: string;
+  userId: string;
+  agentId: string;
+  deviceId: string | null;
+}
+
+/** Verified response fields only. Missing identity remains unavailable. */
+export function toAgentPrincipal(value: unknown): AgentPrincipal | undefined {
+  const p = obj(value);
+  if (!str(p["tenant_id"]) || !str(p["user_id"]) || !str(p["agent_id"])) return undefined;
+  return { tenantId: str(p["tenant_id"])!, userId: str(p["user_id"])!, agentId: str(p["agent_id"])!,
+    deviceId: str(p["device_id"]) ?? null };
 }
 
 /** What every client of a user shares (`user` in the profile; `AgentResource.setUserLanguage` changes it). */
@@ -100,6 +117,7 @@ export function toAgentProfile(json: unknown): AgentProfile {
   const localMcp = obj(p["local_mcp"]);
   const modes = obj(p["tool_modes"]);
   return {
+    ...(toAgentPrincipal(p["principal"]) ? { principal: toAgentPrincipal(p["principal"])! } : {}),
     id: str(p["id"]) ?? "",
     slug: str(p["slug"]) ?? "",
     name: str(p["name"]) ?? str(p["slug"]) ?? "",

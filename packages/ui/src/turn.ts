@@ -126,6 +126,9 @@ export class TurnViewModel extends Observable {
       && (this.#state === "failed" || this.#state === "stopped" || (this.#state === "completed" && this.#unanswered));
   }
 
+  /** Explicit commands have no prompt to edit or resend. */
+  get canEdit(): boolean { return this.#host !== undefined && !this.isRunning; }
+
   copy(): void {
     this.#host?.copy(this.answerText);
   }

@@ -5,6 +5,8 @@ export {
   type AgentChatOptions,
   type LanguageOption,
   type OutgoingMessage,
+  type OutgoingCommand,
+  type ChatCommandOptions,
   type PictureInput,
   type SessionItem,
   type ToolModeOption,

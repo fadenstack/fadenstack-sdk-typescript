@@ -304,3 +304,28 @@ const agent = FadenstackAgent.createBuilder().useClient(client).addToolSource(pl
 `getTools(context, signal)` is called when the agent starts. `context` has the `client` and the agent's `profile`.
 A host tool wins over a source's tool of the same name. If the source has a `dispose()` method, `agent.dispose()`
 calls it.
+# Explicit user commands
+
+`session.invokeTool(name, arguments, { origin: "user_history", signal })` and
+`session.streamTool(...)` run one concrete host tool without a model request.
+They use the same tool stages, modes, approval handler and cancellation as chat.
+Use this for a user clicking a history action, with a stable action ID; the host
+still owns current native permissions, exact preview, conditional execution and
+reconciliation. A command never makes a native journal entry safely reversible
+by itself, and an uncertain result must not be retried automatically.
+
+The gateway must support the authenticated `/v1/agents/{agent}/tools/check`
+endpoint and publish the host tool with its exact schema digest. The SDK checks
+current central policy before approval and again immediately before dispatch,
+and compares the authenticated principal, profile, argument and decision stamps.
+Missing support or changed bindings fail closed. Destructive commands require
+individual approval, including in Auto. Stamps are comparisons, not signed
+native execution permits. Tool stages that change command arguments are refused
+before the check endpoint; combinations such as local PII unmasking need a
+separately verified final-payload/disclosure contract before use.
+
+Commands are recorded as `user.command`, separately from `user.message`, with
+normal tool/approval receipts. Their turns are excluded from later model history;
+there is no invented prompt or orphan tool result. Refresh native context before
+a later model turn needs to reason about the changed state.
+

@@ -1,11 +1,37 @@
-import { FadenstackApiError } from "../errors.js";
-import type { FadenstackTransport } from "../http/transport.js";
+import { FadenstackApiError, FadenstackError } from "../errors.js";
+import { jsonRequest, type FadenstackTransport } from "../http/transport.js";
+import { toApiError } from "../http/errorReader.js";
 import { toWireManifest, type AppManifest } from "../manifest.js";
-import { toAgentProfile, toSkillList, toWireEvent, type AgentClientEvent, type AgentProfile, type SkillList } from "../models.js";
+import { toAgentPrincipal, toAgentProfile, toSkillList, toWireEvent, type AgentClientEvent, type AgentPrincipal, type AgentProfile, type SkillList } from "../models.js";
+import type { ToolClass, ToolMode } from "../tools/toolModes.js";
 import { AgentProvenanceResource } from "./provenance.js";
 
 /** The server takes at most this many events per report. */
 export const MAX_EVENTS_PER_REPORT = 100;
+
+export interface HostToolCheck {
+  name: string;
+  arguments: Record<string, unknown>;
+  toolMode: ToolMode;
+  origin: "user_command" | "user_history";
+  phase: "prepare" | "dispatch";
+  schemaSha256: string;
+  prepared?: Pick<HostToolDecision, "profileStamp" | "argumentsStamp" | "decisionStamp">;
+  conversationId: string;
+  turnId: string;
+}
+
+export interface HostToolDecision {
+  decision: "deny" | "ask" | "run";
+  toolClass: ToolClass;
+  effectiveToolMode: ToolMode;
+  requiredByRule: boolean;
+  message: string;
+  profileStamp: string;
+  argumentsStamp: string;
+  decisionStamp: string;
+  principal: AgentPrincipal;
+}
 
 /** The client's agent: its profile, the events the SDK reports, and approvals the gateway waits for. */
 export class AgentResource {
@@ -27,6 +53,35 @@ export class AgentResource {
   /** The agent's current version: model, tool contract, local MCP mode, tool modes; never its instructions. */
   async getProfile(signal?: AbortSignal): Promise<AgentProfile> {
     return toAgentProfile(await this.#transport.get<unknown>(this.#route("profile"), signal));
+  }
+
+  /** Current policy for a device's explicit user command. Never invokes a native/gateway tool or a model. */
+  async checkHostTool(check: HostToolCheck, signal?: AbortSignal): Promise<HostToolDecision> {
+    const body = {
+      name: check.name, arguments: check.arguments, tool_mode: check.toolMode, origin: check.origin,
+      phase: check.phase, schema_sha256: check.schemaSha256,
+      ...(check.prepared ? { prepared_profile: check.prepared.profileStamp,
+        prepared_arguments: check.prepared.argumentsStamp, prepared_decision: check.prepared.decisionStamp } : {}),
+    };
+    const { response, text } = await this.#transport.request(() => {
+      const spec = jsonRequest("POST", this.#route("tools/check"), body);
+      return { ...spec, headers: { ...spec.headers,
+        "x-faden-conversation-id": check.conversationId, "x-faden-turn-id": check.turnId } };
+    }, signal);
+    if (!response.ok) throw toApiError(response, text);
+    const p = JSON.parse(text) as Record<string, unknown>;
+    const principal = toAgentPrincipal(p["principal"]);
+    const digest = (v: unknown): v is string => typeof v === "string" && /^[0-9a-f]{64}$/.test(v);
+    if (!["deny", "ask", "run"].includes(String(p["decision"]))
+      || !["read", "write", "destructive", "unknown"].includes(String(p["tool_class"]))
+      || !["off", "read_only", "ask", "auto"].includes(String(p["effective_tool_mode"]))
+      || !digest(p["profile_stamp"]) || !digest(p["arguments_stamp"]) || !digest(p["decision_stamp"])
+      || typeof p["required_by_rule"] !== "boolean" || typeof p["message"] !== "string" || !principal) {
+      throw new FadenstackError("The gateway did not return a valid host-command policy decision.");
+    }
+    return { decision: p["decision"] as HostToolDecision["decision"], toolClass: p["tool_class"] as ToolClass,
+      effectiveToolMode: p["effective_tool_mode"] as ToolMode, requiredByRule: p["required_by_rule"], message: p["message"],
+      profileStamp: p["profile_stamp"], argumentsStamp: p["arguments_stamp"], decisionStamp: p["decision_stamp"], principal };
   }
 
   /** Reports what the SDK did -- names, counts, outcomes. Up to 100 per call. */

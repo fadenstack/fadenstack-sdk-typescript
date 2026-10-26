@@ -45,9 +45,13 @@ export class ContextBuilder {
 
   build(entries: readonly TranscriptEntry[]): ChatMessage[] {
     const status = new Map<string, string>();
+    const commands = new Set(entries.filter(e => e.type === EntryTypes.userCommand && e.turnId).map(e => e.turnId));
     for (const e of entries) if (e.type === EntryTypes.turnEnd && e.turnId) status.set(e.turnId, e.status ?? TurnStatus.ok);
     const newest = [...entries].reverse().find((e) => e.turnId)?.turnId;
     const included = (entry: TranscriptEntry): boolean => {
+      // UI commands are local tool activity, not model turns. Replaying their results
+      // would disclose content without a prompt and create orphan tool messages.
+      if (commands.has(entry.turnId)) return false;
       // The newest turn without an end is in progress: all of it. An older one was cut off (the app closed while
       // it ran): left out as a cancelled one is, so no tool call goes without its result.
       const turnStatus = status.get(entry.turnId!) ?? (entry.turnId === newest ? TurnStatus.ok : TurnStatus.cancelled);

@@ -28,6 +28,7 @@ import type { AgentEvent, AgentResult, ToolOutcome } from "./events.js";
 import type { ToolInvocation, ToolInvoker, ToolServiceCall } from "./stages.js";
 import { checkArguments, type AgentTool, type ToolServiceKey, type ToolServices } from "./tools.js";
 import { EntryTypes, TurnStatus, newId, type TranscriptEntry } from "./transcript.js";
+import { commandJson, commandSchemaHash } from "./commands.js";
 
 /** A skill the user picked for a message: its slug for the server, its name for the transcript. */
 export interface PickedSkill {
@@ -42,6 +43,18 @@ export interface SendOptions {
   skills?: readonly PickedSkill[];
   /** Stops the turn: it is recorded as cancelled and the stream throws the reason. */
   signal?: AbortSignal;
+}
+
+export interface HostCommandOptions {
+  origin?: "user_command" | "user_history";
+  signal?: AbortSignal;
+}
+
+export interface HostCommandResult {
+  turnId: string;
+  callId: string;
+  outcome: ToolOutcome;
+  result: string | undefined;
 }
 
 type Data = Record<string, unknown>;
@@ -76,6 +89,16 @@ function stricterClass(own: ToolClass, other: ToolClass | undefined): ToolClass 
 
 /** Destructive and unclassified tools ask every time: never for the chat, never always. */
 const asksEveryTime = (toolClass: ToolClass): boolean => toolClass === "destructive" || toolClass === "unknown";
+
+class CommandDenied extends Error {}
+
+function freezeCommand<T>(value: T): T {
+  if (value && typeof value === "object") {
+    for (const child of Object.values(value)) freezeCommand(child);
+    Object.freeze(value);
+  }
+  return value;
+}
 
 /**
  * One conversation with the agent, kept on this device (06). A turn sends the history the session rule allows,
@@ -138,6 +161,51 @@ export class AgentSession {
       if (event.type === "turn_completed") result = event.result;
     }
     return result!;
+  }
+
+  /** One explicit user command through current central policy, stages and approval; no model request. */
+  async invokeTool(name: string, args: Record<string, unknown>, options: HostCommandOptions = {}): Promise<HostCommandResult> {
+    let result: HostCommandResult | undefined;
+    for await (const event of this.streamTool(name, args, options)) {
+      if (event.type === "tool_completed") result = {
+        turnId: event.turnId, callId: event.callId, outcome: event.outcome, result: event.result,
+      };
+    }
+    if (!result) throw new Error("The host command did not finish.");
+    return result;
+  }
+
+  /** Streams an explicit user action using normal SDK events; cancellation also cancels pending approval. */
+  async *streamTool(name: string, args: Record<string, unknown>, options: HostCommandOptions = {}): AsyncGenerator<AgentEvent> {
+    if (this.#running) throw new Error("A turn is already running in this session.");
+    if (!/^[A-Za-z0-9_-]{1,64}$/.test(name)) throw new TypeError("A valid host tool name is required.");
+    const copied = JSON.parse(commandJson(args)) as Record<string, unknown>;
+    const origin = options.origin ?? "user_command";
+    if (origin !== "user_command" && origin !== "user_history") throw new TypeError("Invalid command origin.");
+    this.#running = true;
+    const stop = new AbortController();
+    const onAbort = () => stop.abort(options.signal?.reason);
+    if (options.signal?.aborted) onAbort();
+    options.signal?.addEventListener("abort", onAbort, { once: true });
+    const queue = new EventQueue<AgentEvent>();
+    const access: SessionAccess = {
+      append: (type, turnId, data, status) => this.#append(type, turnId, data, status),
+      approved: this.#approvedForSession,
+    };
+    const turn = new Turn(this, newId(), (e) => queue.push(e), access);
+    const run = turn.runCommand(name, copied, origin, stop.signal)
+      .then(() => queue.end(), (error: unknown) => queue.end(error ?? new Error("The command failed.")))
+      .finally(() => this.agent.reporter.flush());
+    let finished = false;
+    try {
+      for await (const event of queue) yield event;
+      finished = true;
+    } finally {
+      if (!finished) stop.abort(abortReason());
+      await run;
+      options.signal?.removeEventListener("abort", onAbort);
+      this.#running = false;
+    }
   }
 
   /**
@@ -248,6 +316,8 @@ class Turn {
   #toolDenied = false;
   #mode: ToolMode = "ask";
   #skills: string[] = [];
+  #commandOrigin: "user_command" | "user_history" | undefined;
+  #commandInputJson: string | undefined;
 
   constructor(session: AgentSession, id: string, emit: (event: AgentEvent) => void, access: SessionAccess) {
     this.#session = session;
@@ -258,6 +328,25 @@ class Turn {
 
   get #agent(): FadenstackAgent {
     return this.#session.agent;
+  }
+
+  async runCommand(name: string, args: Record<string, unknown>, origin: "user_command" | "user_history", signal: AbortSignal): Promise<void> {
+    this.#mode = this.#session.effectiveToolMode;
+    this.#commandOrigin = origin;
+    this.#commandInputJson = commandJson(args);
+    await this.#access.append(EntryTypes.userCommand, this.#id, { name, origin });
+    await this.#access.append(EntryTypes.turnStart, this.#id, { tool_mode: this.#session.toolMode, effective_tool_mode: this.#mode, origin });
+    this.#emit({ type: "turn_started", turnId: this.#id, toolMode: this.#mode });
+    try {
+      signal.throwIfAborted();
+      const tool = this.#agent.find(name);
+      if (tool && tool.source !== "host") throw new Error("Explicit commands are available for host tools only.");
+      await this.#runTool({ id: newId(), name, arguments: args, argumentsJson: commandJson(args) }, signal);
+      await this.#end(TurnStatus.ok, this.#toolDenied ? "tool_denied" : "completed");
+    } catch (error) {
+      await this.#end(signal.aborted ? TurnStatus.cancelled : TurnStatus.error, undefined);
+      throw signal.aborted ? signal.reason ?? error : error;
+    }
   }
 
   async run(message: string, attachments: readonly MessageAttachment[], skills: readonly PickedSkill[], signal: AbortSignal): Promise<void> {
@@ -527,7 +616,7 @@ class Turn {
     if (invalid) return { result: `Error: ${invalid}`, outcome: "error", waited: 0 };
     let waited = 0;
     const rule = mark?.rule === true;
-    if (rule || decision === "ask") {
+    if (!this.#commandOrigin && (rule || decision === "ask")) {
       const settled = await this.#approve({
         callId: call.id,
         toolName: tool.name,
@@ -558,6 +647,7 @@ class Turn {
       return { result: resultText(value), outcome: "ok", waited };
     } catch (error) {
       if (signal.aborted) throw signal.reason ?? error;
+      if (error instanceof CommandDenied) return { result: error.message, outcome: "denied", waited };
       return { result: `Error: ${error instanceof Error ? error.message : String(error)}`, outcome: "error", waited };
     }
   }
@@ -581,6 +671,7 @@ class Turn {
 
   #invoker(services: CallServices): ToolInvoker {
     let invoker: ToolInvoker = async (i) => {
+      if (this.#commandOrigin) return this.#invokeCommand(i, () => services.ran(i.arguments));
       services.ran(i.arguments); // the arguments the tool gets, after the stages that change them
       return i.tool.invoke(i.arguments, i.context);
     };
@@ -593,6 +684,58 @@ class Turn {
     return invoker;
   }
 
+  /** The final stage arguments are reviewed, then checked again immediately before the native tool runs. */
+  async #invokeCommand(invocation: ToolInvocation, dispatching: () => void): Promise<unknown> {
+    const signal = invocation.context.signal;
+    signal.throwIfAborted();
+    const serialized = commandJson(invocation.arguments);
+    // A transformation such as local PII unmasking must not disclose raw values
+    // through a new policy endpoint. Such command/module combinations need their
+    // own verified disclosure contract; ordinary chat keeps its existing path.
+    if (serialized !== this.#commandInputJson) throw new Error("Transformed direct-command arguments are not supported. Use the normal governed conversation.");
+    const args = JSON.parse(serialized) as Record<string, unknown>;
+    const invalid = checkArguments(invocation.tool.parameters, args);
+    if (invalid) throw new Error(invalid);
+    const base = { name: invocation.tool.name, arguments: args, toolMode: this.#mode,
+      schemaSha256: await commandSchemaHash(invocation.tool.parameters), origin: this.#commandOrigin!,
+      conversationId: this.#session.id, turnId: this.#id };
+    const resource = this.#agent.client.agent!;
+    const prepared = await resource.checkHostTool({ ...base, phase: "prepare" }, signal);
+    if (!this.#agent.profile.principal || commandJson(prepared.principal) !== commandJson(this.#agent.profile.principal)) {
+      throw new Error("The command's authenticated identity does not match the active agent profile.");
+    }
+    const toolClass = stricterClass(invocation.toolClass, prepared.toolClass);
+    const mode = narrowestMode(this.#mode, prepared.effectiveToolMode);
+    const decision = decideTool(mode, toolClass);
+    if (prepared.decision === "deny" || decision === "hidden") {
+      this.#toolDenied = true;
+      await this.#notice({ outcome: "tool_denied", stage: "tool", message: prepared.message });
+      throw new CommandDenied(prepared.message);
+    }
+    if (prepared.decision === "ask" || decision === "ask") {
+      const settled = await this.#approve({ callId: invocation.context.callId,
+        toolName: invocation.tool.name, toolClass, source: "host", reason: prepared.message,
+        arguments: freezeCommand(JSON.parse(serialized) as Record<string, unknown>),
+      }, prepared.requiredByRule, undefined, signal,
+      invocation.tool.describe ? () => describeTarget(invocation.tool, args, signal) : undefined, true);
+      if (!settled.approved) {
+        this.#toolDenied = true;
+        throw new CommandDenied(`The user declined to run '${invocation.tool.name}'.`);
+      }
+    }
+    if (commandJson(invocation.arguments) !== serialized) throw new Error("The command changed after review.");
+    const checked = await resource.checkHostTool({ ...base, phase: "dispatch", prepared }, signal);
+    if (checked.decision === "deny" || checked.profileStamp !== prepared.profileStamp
+      || checked.argumentsStamp !== prepared.argumentsStamp || checked.decisionStamp !== prepared.decisionStamp
+      || commandJson(checked.principal) !== commandJson(prepared.principal)) {
+      throw new Error("The command's identity or policy changed. Review it again.");
+    }
+    signal.throwIfAborted();
+    if (commandJson(invocation.arguments) !== serialized) throw new Error("The command changed after review.");
+    dispatching();
+    return invocation.tool.invoke(JSON.parse(serialized) as Record<string, unknown>, invocation.context);
+  }
+
   /**
    * Settles a call that needs approval, first that applies: an admin's rule asks (once only, even in bypass);
    * bypass mode approves; a destructive or unclassified tool asks (once only); what the user allowed always, then
@@ -601,10 +744,10 @@ class Turn {
    * only when the user is asked: what the call acts on, for the card.
    */
   async #approve(base: ApprovalRequest, rule: boolean, timeoutMs: number | undefined, signal: AbortSignal,
-    target?: () => Promise<string | undefined>): Promise<Settled> {
+    target?: () => Promise<string | undefined>, individual = false): Promise<Settled> {
     const { toolName: name, toolClass } = base;
-    const open = !rule && !asksEveryTime(toolClass);
-    const standing: ApprovalScope | undefined = rule ? undefined
+    const open = !individual && !rule && !asksEveryTime(toolClass);
+    const standing: ApprovalScope | undefined = rule || individual ? undefined
       : this.#agent.permissionMode === "bypass" ? "bypass"
       : !open ? undefined
       : (await this.#approvedAlways(name, toolClass)) ? "always"

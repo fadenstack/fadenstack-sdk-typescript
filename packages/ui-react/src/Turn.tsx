@@ -34,7 +34,7 @@ export const TurnView = memo(function TurnView({ turn, strings, renderers }: {
         {turn.isPromptBlocked && (
           <div className="fdn-user-note">
             <span>{strings.notSent}</span>
-            <button type="button" className="fdn-link" onClick={() => turn.edit()}>{strings.editAndResend}</button>
+            {turn.canEdit && <button type="button" className="fdn-link" onClick={() => turn.edit()}>{strings.editAndResend}</button>}
           </div>
         )}
       </div>
@@ -59,9 +59,9 @@ export const TurnView = memo(function TurnView({ turn, strings, renderers }: {
                 <Icon name="retry" size={14} />
               </button>
             )}
-            <button type="button" className="fdn-icon-button fdn-small" title={strings.edit} aria-label={strings.edit} onClick={() => turn.edit()}>
+            {turn.canEdit && <button type="button" className="fdn-icon-button fdn-small" title={strings.edit} aria-label={strings.edit} onClick={() => turn.edit()}>
               <Icon name="edit" size={14} />
-            </button>
+            </button>}
             <span className="fdn-muted">{turnMeta(turn)}</span>
           </div>
         )}

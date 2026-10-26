@@ -27,7 +27,7 @@ const turn = useViewModel(() => props.turn);
       >{{ a.title }}</span></span></div></div>
       <div v-if="turn.isPromptBlocked" class="fdn-user-note">
         <span>{{ strings.notSent }}</span>
-        <button type="button" class="fdn-link" @click="turn.edit()">{{ strings.editAndResend }}</button>
+        <button v-if="turn.canEdit" type="button" class="fdn-link" @click="turn.edit()">{{ strings.editAndResend }}</button>
       </div>
     </div>
     <div class="fdn-answer">
@@ -44,7 +44,7 @@ const turn = useViewModel(() => props.turn);
         <button v-if="turn.canRetry" type="button" class="fdn-icon-button fdn-small" :title="strings.retry" :aria-label="strings.retry" @click="turn.retry()">
           <Icon name="retry" :size="14" />
         </button>
-        <button type="button" class="fdn-icon-button fdn-small" :title="strings.edit" :aria-label="strings.edit" @click="turn.edit()">
+        <button v-if="turn.canEdit" type="button" class="fdn-icon-button fdn-small" :title="strings.edit" :aria-label="strings.edit" @click="turn.edit()">
           <Icon name="edit" :size="14" />
         </button>
         <span class="fdn-muted">{{ turnMeta(turn) }}</span>

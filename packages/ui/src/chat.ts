@@ -1,4 +1,4 @@
-import type { AgentEvent, AgentSession, FadenstackAgent, MessageAttachment, TranscriptEntry } from "@fadenstack/agents";
+import type { AgentEvent, AgentSession, FadenstackAgent, HostCommandResult, MessageAttachment, TranscriptEntry } from "@fadenstack/agents";
 import { FadenstackSignInRequiredError, TOOL_MODES, narrowestMode, type SkillOption, type ToolMode } from "@fadenstack/client";
 
 import { aboutView, footerLink, refSource, type AboutView, type PanelLink } from "./about.js";
@@ -66,6 +66,10 @@ export interface AgentChatOptions {
   beforeSend?: (message: OutgoingMessage, signal: AbortSignal) => void | Promise<void>;
   /** Runs once after every send, however it ended: its turn finished, failed or was stopped, or `beforeSend` threw. */
   afterSend?: (message: OutgoingMessage) => void;
+  /** Explicit UI commands have their own host guard. They never resolve composer attachments or call `beforeSend`. */
+  beforeCommand?: (command: OutgoingCommand, signal: AbortSignal) => void | Promise<void>;
+  /** Runs after a command, including failed preparation and Stop. */
+  afterCommand?: (command: OutgoingCommand) => void;
   /** The muted "Fadenstack" link on the line under the composer (default true). False hides it; About stays. */
   branding?: boolean;
   /**
@@ -84,6 +88,16 @@ export interface AgentChatOptions {
 export interface OutgoingMessage {
   /** What the user sent, trimmed. */
   readonly text: string;
+}
+
+/** An explicit UI action. Its arguments remain in the governed tool path, separate from a model message. */
+export interface OutgoingCommand {
+  readonly name: string;
+  readonly origin: "user_command" | "user_history";
+}
+
+export interface ChatCommandOptions {
+  origin?: OutgoingCommand["origin"];
 }
 
 /** A picture for the next message (`attachPicture`): pasted, dropped, or taken by the host (a screenshot). */
@@ -147,6 +161,8 @@ export class AgentChatViewModel extends Observable implements TurnHost {
   readonly #focusListeners = new Set<() => void>();
   readonly #beforeSend: AgentChatOptions["beforeSend"];
   readonly #afterSend: AgentChatOptions["afterSend"];
+  readonly #beforeCommand: AgentChatOptions["beforeCommand"];
+  readonly #afterCommand: AgentChatOptions["afterCommand"];
   readonly #refSource: string;
   readonly #footerLink: PanelLink | undefined;
   readonly #openLink: (url: string) => void;
@@ -207,6 +223,8 @@ export class AgentChatViewModel extends Observable implements TurnHost {
     };
     this.#beforeSend = options.beforeSend;
     this.#afterSend = options.afterSend;
+    this.#beforeCommand = options.beforeCommand;
+    this.#afterCommand = options.afterCommand;
     this.#refSource = refSource(options.refSource);
     this.#footerLink = options.branding === false ? undefined : footerLink(this.#refSource);
     this.#openLink = options.openLink ?? openInNewTab;
@@ -492,6 +510,53 @@ export class AgentChatViewModel extends Observable implements TurnHost {
       this.#runAfterSend(outgoing);
       this.notify();
     }
+  }
+
+  /**
+   * Runs a concrete host command through the SDK's current policy/approval path without a model call.
+   * Shares busy/Stop/approval rendering with chat, while preserving its draft, skills and attachments.
+   * History commands cannot be retried as a prompt or replayed automatically from a transcript.
+   */
+  async invokeTool(name: string, args: Record<string, unknown>, options: ChatCommandOptions = {}): Promise<HostCommandResult | undefined> {
+    if (!this.#ready || this.#busy) return undefined;
+    const command: OutgoingCommand = Object.freeze({ name, origin: options.origin ?? "user_command" });
+    const stop = new AbortController();
+    this.#stop = stop;
+    this.#busy = true;
+    this.#error = undefined;
+    let turn: TurnViewModel | undefined;
+    let result: HostCommandResult | undefined;
+    this.notify();
+    try {
+      const snapshot = structuredClone(args);
+      await this.#beforeCommand?.(command, stop.signal);
+      stop.signal.throwIfAborted();
+      turn = new TurnViewModel(this.#context, undefined, name, this.#context.now());
+      this.#turns = [...this.#turns, turn];
+      this.#current = turn;
+      this.notify();
+      if (!this.#session) this.#session = await this.#agent.startSession(this.#mode);
+      this.#session.toolMode = this.#mode;
+      for await (const event of this.#session.streamTool(name, snapshot, { origin: command.origin, signal: stop.signal })) {
+        this.#apply(turn, event);
+        if (event.type === "tool_completed") result = { turnId: event.turnId, callId: event.callId, outcome: event.outcome, result: event.result };
+      }
+    } catch (error) {
+      if (turn) {
+        const active = turn;
+        this.#batcher.enqueue(() => stop.signal.aborted ? active.stop() : active.fail(error instanceof Error ? error.message : String(error)));
+      } else if (!stop.signal.aborted) this.#error = error instanceof Error ? error.message : String(error);
+      if (error instanceof FadenstackSignInRequiredError) this.#signInRequired = true;
+    } finally {
+      await this.#batcher.whenFlushed();
+      this.#current = undefined;
+      this.#stop = undefined;
+      this.#busy = false;
+      if (turn) this.#touchSession(name);
+      try { this.#afterCommand?.(command); } catch (error) { this.#error = error instanceof Error ? error.message : String(error); }
+      this.notify();
+    }
+    return result;
   }
 
   /** Stops the running turn (Esc). */
