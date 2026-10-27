@@ -309,6 +309,8 @@ calls it.
 `session.invokeTool(name, arguments, { origin: "user_history", signal })` and
 `session.streamTool(...)` run one concrete host tool without a model request.
 They use the same tool stages, modes, approval handler and cancellation as chat.
+An optional `label` sets a single-line transcript title (maximum 200 characters).
+It is display metadata and is never added to tool arguments or model history.
 Use this for a user clicking a history action, with a stable action ID; the host
 still owns current native permissions, exact preview, conditional execution and
 reconciliation. A command never makes a native journal entry safely reversible

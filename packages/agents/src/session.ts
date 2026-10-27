@@ -48,6 +48,8 @@ export interface SendOptions {
 export interface HostCommandOptions {
   origin?: "user_command" | "user_history";
   signal?: AbortSignal;
+  /** Single-line local display text, never an argument, grant or model message. */
+  label?: string;
 }
 
 export interface HostCommandResult {
@@ -182,6 +184,8 @@ export class AgentSession {
     const copied = JSON.parse(commandJson(args)) as Record<string, unknown>;
     const origin = options.origin ?? "user_command";
     if (origin !== "user_command" && origin !== "user_history") throw new TypeError("Invalid command origin.");
+    const label = options.label;
+    if (label !== undefined && (typeof label !== "string" || !label.trim() || label.length > 200 || /[\x00-\x1f\x7f]/.test(label))) throw new TypeError("A command label must be a single line of at most 200 characters.");
     this.#running = true;
     const stop = new AbortController();
     const onAbort = () => stop.abort(options.signal?.reason);
@@ -193,7 +197,7 @@ export class AgentSession {
       approved: this.#approvedForSession,
     };
     const turn = new Turn(this, newId(), (e) => queue.push(e), access);
-    const run = turn.runCommand(name, copied, origin, stop.signal)
+    const run = turn.runCommand(name, copied, origin, stop.signal, label?.trim())
       .then(() => queue.end(), (error: unknown) => queue.end(error ?? new Error("The command failed.")))
       .finally(() => this.agent.reporter.flush());
     let finished = false;
@@ -330,11 +334,11 @@ class Turn {
     return this.#session.agent;
   }
 
-  async runCommand(name: string, args: Record<string, unknown>, origin: "user_command" | "user_history", signal: AbortSignal): Promise<void> {
+  async runCommand(name: string, args: Record<string, unknown>, origin: "user_command" | "user_history", signal: AbortSignal, label?: string): Promise<void> {
     this.#mode = this.#session.effectiveToolMode;
     this.#commandOrigin = origin;
     this.#commandInputJson = commandJson(args);
-    await this.#access.append(EntryTypes.userCommand, this.#id, { name, origin });
+    await this.#access.append(EntryTypes.userCommand, this.#id, { name, origin, ...(label ? { label } : {}) });
     await this.#access.append(EntryTypes.turnStart, this.#id, { tool_mode: this.#session.toolMode, effective_tool_mode: this.#mode, origin });
     this.#emit({ type: "turn_started", turnId: this.#id, toolMode: this.#mode });
     try {

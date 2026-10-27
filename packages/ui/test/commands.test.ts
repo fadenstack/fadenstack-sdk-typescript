@@ -36,6 +36,22 @@ async function pending(vm: AgentChatViewModel): Promise<ApprovalPart> {
 }
 
 describe("chat explicit commands", () => {
+  it("keeps a human label across reopening without changing policy arguments or model history", async () => {
+    const s = await fixture();
+    const running = s.vm.invokeTool("restore_record", { action_id: "action-label" }, { label: "Undo file change", origin: "user_history" });
+    (await pending(s.vm)).allow();
+    await running;
+    expect(s.vm.turns[0]?.userText).toBe("Undo file change");
+    expect(s.check.mock.calls[0]?.[0]).toMatchObject({ name: "restore_record", arguments: { action_id: "action-label" } });
+    const id = s.vm.currentSessionId!;
+    s.vm.newChat();
+    await s.vm.openSession(id);
+    expect(s.vm.turns[0]).toMatchObject({ userText: "Undo file change", canRetry: false, canEdit: false });
+    await s.vm.send("A separate message");
+    expect(JSON.stringify(s.gateway.modelCalls[0]?.messages)).not.toContain("Undo file change");
+    s.vm.dispose(); await s.agent.dispose();
+  });
+
   it("uses shared approval/Stop state without consuming the draft or resolving attachments, and restores as a command", async () => {
     const beforeSend = vi.fn(); const beforeCommand = vi.fn(); const afterCommand = vi.fn();
     const s = await fixture({ beforeSend, beforeCommand, afterCommand });

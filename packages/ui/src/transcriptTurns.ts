@@ -43,7 +43,7 @@ export function buildTurn(entries: readonly TranscriptEntry[], context: PartCont
         return chip;
       })
     : [];
-  const turn = new TurnViewModel(context, command ? undefined : host, str(user?.data, "text") ?? str(command?.data, "name") ?? "", new Date((user ?? command ?? entries[0]!).timestamp),
+  const turn = new TurnViewModel(context, command ? undefined : host, str(user?.data, "text") ?? str(command?.data, "label") ?? str(command?.data, "name") ?? "", new Date((user ?? command ?? entries[0]!).timestamp),
     [...skills, ...attachments], "completed");
   turn.setId(entries[0]!.turnId!);
   let state: TurnState = "stopped"; // a turn without an end was interrupted

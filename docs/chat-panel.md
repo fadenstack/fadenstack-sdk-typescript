@@ -454,6 +454,10 @@ for how parts look. The React and Vue skins are the examples.
 Use `chat.invokeTool(name, arguments, { origin: "user_history" })` for a concrete
 user action. It shares busy state, approval cards and `chat.stop()` with chat,
 preserving the composer's draft, skills and attachments. The optional
+`label` option gives the command a human-readable transcript title, such as
+`"Undo file change"`. It must be a nonempty single line of at most 200 characters;
+it changes display metadata only, never the tool name, arguments or policy checks.
+The optional
 `beforeCommand(command, signal)` / `afterCommand(command)` hooks let the host
 check native context and release its lifecycle state. Message hooks are separate;
 commands never resolve or send the next message's attachments. Host guards must

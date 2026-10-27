@@ -18,6 +18,13 @@ async function fixture(answer = true, configure?: Parameters<typeof setup>[2]) {
 }
 
 describe("explicit governed host commands", () => {
+  it("rejects multiline command labels before policy or native dispatch", async () => {
+    const s = await fixture();
+    await expect(s.session.invokeTool("delete_page", { page: 7 }, { label: "Undo\nforged command" })).rejects.toThrow("single line");
+    expect(s.check).not.toHaveBeenCalled();
+    expect(s.pages.deleted).toEqual([]);
+  });
+
   it("checks twice, asks individually and runs without a model request", async () => {
     const s = await fixture();
     const result = await s.session.invokeTool("delete_page", { page: 7 }, { origin: "user_history" });

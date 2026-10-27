@@ -94,10 +94,13 @@ export interface OutgoingMessage {
 export interface OutgoingCommand {
   readonly name: string;
   readonly origin: "user_command" | "user_history";
+  readonly label?: string;
 }
 
 export interface ChatCommandOptions {
   origin?: OutgoingCommand["origin"];
+  /** Human-readable local command title. Does not change governance or model history. */
+  label?: string;
 }
 
 /** A picture for the next message (`attachPicture`): pasted, dropped, or taken by the host (a screenshot). */
@@ -519,7 +522,9 @@ export class AgentChatViewModel extends Observable implements TurnHost {
    */
   async invokeTool(name: string, args: Record<string, unknown>, options: ChatCommandOptions = {}): Promise<HostCommandResult | undefined> {
     if (!this.#ready || this.#busy) return undefined;
-    const command: OutgoingCommand = Object.freeze({ name, origin: options.origin ?? "user_command" });
+    const label = options.label;
+    if (label !== undefined && (typeof label !== "string" || !label.trim() || label.length > 200 || /[\x00-\x1f\x7f]/.test(label))) throw new TypeError("A command label must be a single line of at most 200 characters.");
+    const command: OutgoingCommand = Object.freeze({ name, origin: options.origin ?? "user_command", ...(label ? { label: label.trim() } : {}) });
     const stop = new AbortController();
     this.#stop = stop;
     this.#busy = true;
@@ -531,13 +536,13 @@ export class AgentChatViewModel extends Observable implements TurnHost {
       const snapshot = structuredClone(args);
       await this.#beforeCommand?.(command, stop.signal);
       stop.signal.throwIfAborted();
-      turn = new TurnViewModel(this.#context, undefined, name, this.#context.now());
+      turn = new TurnViewModel(this.#context, undefined, command.label ?? name, this.#context.now());
       this.#turns = [...this.#turns, turn];
       this.#current = turn;
       this.notify();
       if (!this.#session) this.#session = await this.#agent.startSession(this.#mode);
       this.#session.toolMode = this.#mode;
-      for await (const event of this.#session.streamTool(name, snapshot, { origin: command.origin, signal: stop.signal })) {
+      for await (const event of this.#session.streamTool(name, snapshot, { origin: command.origin, signal: stop.signal, ...(command.label ? { label: command.label } : {}) })) {
         this.#apply(turn, event);
         if (event.type === "tool_completed") result = { turnId: event.turnId, callId: event.callId, outcome: event.outcome, result: event.result };
       }
@@ -552,7 +557,7 @@ export class AgentChatViewModel extends Observable implements TurnHost {
       this.#current = undefined;
       this.#stop = undefined;
       this.#busy = false;
-      if (turn) this.#touchSession(name);
+      if (turn) this.#touchSession(command.label ?? name);
       try { this.#afterCommand?.(command); } catch (error) { this.#error = error instanceof Error ? error.message : String(error); }
       this.notify();
     }
