@@ -1,6 +1,6 @@
 {
   "name": "@fadenstack/testing",
-  "version": "0.3.0-rc.1",
+  "version": "0.3.0-rc.2",
   "description": "A scripted fake Fadenstack server for testing agents offline, and helpers for running tools by hand",
   "license": "Apache-2.0",
   "author": "Emagin8 UG (haftungsbeschränkt)",
@@ -41,11 +41,11 @@
     "access": "public"
   },
   "dependencies": {
-    "@fadenstack/client": "0.3.0-rc.1"
+    "@fadenstack/client": "0.3.0-rc.2"
   },
   "peerDependencies": {
-    "@fadenstack/agents": "0.3.0-rc.1",
-    "@fadenstack/provenance": "0.3.0-rc.1"
+    "@fadenstack/agents": "0.3.0-rc.2",
+    "@fadenstack/provenance": "0.3.0-rc.2"
   },
   "peerDependenciesMeta": {
     "@fadenstack/agents": {
