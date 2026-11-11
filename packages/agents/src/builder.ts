@@ -23,6 +23,7 @@ import { IndexedDbSessionStore } from "./indexedDbSessionStore.js";
 import { MemorySessionStore, type SessionStore } from "./sessionStore.js";
 import type { ChatStage, FadenstackModule, ToolServiceFactory, ToolSource, ToolStage } from "./stages.js";
 import type { AgentTool, ToolServiceKey } from "./tools.js";
+import type { GrantPlaceResolver } from "./grants.js";
 
 /** What an agent was built with. */
 export interface AgentSettings {
@@ -42,6 +43,7 @@ export interface AgentSettings {
   readonly approvalStore: ApprovalStore;
   readonly permissionMode: PermissionMode;
   readonly requireHostToolPolicyChecks: boolean;
+  readonly grantPlaceResolver?: GrantPlaceResolver;
   readonly defaultMode: ToolMode;
   readonly maxRounds: number;
   readonly historyTokens: number;
@@ -84,6 +86,7 @@ export class AgentBuilder {
   #approvalStore: ApprovalStore | undefined;
   #permissionMode: PermissionMode = "ask";
   #requireHostToolPolicyChecks = false;
+  #grantPlaceResolver: GrantPlaceResolver | undefined;
   #defaultMode: ToolMode = "ask";
   #maxRounds = 16;
   #historyTokens = 24_000;
@@ -158,6 +161,9 @@ export class AgentBuilder {
     this.#requireHostToolPolicyChecks = true;
     return this;
   }
+
+  /** A work grant never replaces native resolution, scope or access checks. */
+  useGrantPlaceResolver(resolver: GrantPlaceResolver): this { this.#grantPlaceResolver = resolver; return this; }
 
   /**
    * The mode new sessions start in. It can only be stricter than `ask`: every session starts asking unless the
@@ -272,6 +278,7 @@ export class AgentBuilder {
       approvalStore: this.#approvalStore ?? (globalThis.indexedDB ? new IndexedDbApprovalStore() : new MemoryApprovalStore()),
       permissionMode: this.#permissionMode,
       requireHostToolPolicyChecks: this.#requireHostToolPolicyChecks,
+      ...(this.#grantPlaceResolver ? { grantPlaceResolver: this.#grantPlaceResolver } : {}),
       defaultMode: this.#defaultMode,
       maxRounds: this.#maxRounds,
       historyTokens: this.#historyTokens,

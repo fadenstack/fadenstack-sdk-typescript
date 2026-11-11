@@ -5,14 +5,16 @@ import { FadenstackError } from "./errors.js";
 export type ApprovalLevel = ToolMode | "bypass";
 export type AnswerScope = "once" | "chat" | "always";
 export type StandingApproval = "chat" | "time" | "grant" | "always";
-export interface AgentApprovals {
+export interface ApprovalSettings {
   /** Null means any supported standing choice; an empty list means once only. */
   standing: StandingApproval[] | null;
   longestGrantMinutes: number;
   grantClasses: ("read" | "write")[];
-  bypass?: { allowed: boolean; longestMinutes: number; evidence: string;
-    stepUp: { required: true; maxAge: number; start: string } };
+  bypass?: BypassSettings;
 }
+export interface BypassSettings { allowed: boolean; longestMinutes: number; evidence: string; stepUp: StepUpSettings }
+export interface StepUpSettings { required: true; maxAge: number; start: string }
+export interface ToolModeSettings { default: ToolMode; ceiling: ToolMode | null; max?: ApprovalLevel; openWorldEnforced: boolean }
 
 /** What the SDK caches about its agent (`GET /v1/agents/{agent}/profile`): never its instructions. */
 export interface AgentProfile {
@@ -38,9 +40,9 @@ export interface AgentProfile {
   serverTools: string[] | null;
   knowledge: string[];
   localMcp: { mode: string; developerMode: boolean };
-  toolModes: { default: ToolMode; ceiling: ToolMode | null; max?: ApprovalLevel; openWorldEnforced: boolean };
+  toolModes: ToolModeSettings;
   /** Absent on pre-0.7 servers. Never infer grants from the feature name alone. */
-  approvals?: AgentApprovals;
+  approvals?: ApprovalSettings;
   /** What the SDKs show: `greeting`, `suggestions`. */
   ui: Record<string, unknown>;
   extensions: Record<string, unknown>;
@@ -80,6 +82,9 @@ export interface ToolContractEntry {
   risk?: string;
   schemaSha256?: string;
   approval?: string;
+  /** The reviewed target mapping used by server-held work grants. */
+  targetType?: "document" | "folder" | "site" | "app" | "desk";
+  targetArgument?: string;
 }
 
 /** A skill the user can pick for a message (`AgentResource.listSkills`); never its instructions. */
@@ -156,6 +161,15 @@ export function toAgentProfile(json: unknown): AgentProfile {
           if (risk !== undefined) entry.risk = risk;
           if (sha !== undefined) entry.schemaSha256 = sha;
           if (approval !== undefined) entry.approval = approval;
+          const targetType = str(t["target_type"]);
+          const targetArgument = str(t["target_argument"]);
+          if (targetType !== undefined || targetArgument !== undefined) {
+            if (!["document", "folder", "site", "app", "desk"].includes(targetType ?? "")
+              || !targetArgument?.startsWith("/") || /~(?:[^01]|$)/.test(targetArgument))
+              throw new FadenstackError("Invalid tool grant target mapping.");
+            entry.targetType = targetType as NonNullable<ToolContractEntry["targetType"]>;
+            entry.targetArgument = targetArgument;
+          }
           return entry;
         })
       : [],
@@ -168,7 +182,7 @@ export function toAgentProfile(json: unknown): AgentProfile {
       ...(max ? { max } : {}),
       openWorldEnforced: modes["open_world_enforced"] === true,
     },
-    ...(p["approvals"] !== undefined ? { approvals: toAgentApprovals(p["approvals"]) } : {}),
+    ...(p["approvals"] !== undefined ? { approvals: toApprovalSettings(p["approvals"]) } : {}),
     ui: obj(p["ui"]),
     extensions: obj(p["extensions"]),
     requiredClientModules: strings(p["required_client_modules"]),
@@ -178,7 +192,7 @@ export function toAgentProfile(json: unknown): AgentProfile {
   };
 }
 
-function toAgentApprovals(value: unknown): AgentApprovals {
+function toApprovalSettings(value: unknown): ApprovalSettings {
   const p = obj(value);
   const standing = p["standing"];
   const classes = p["grant_classes"];
@@ -189,7 +203,7 @@ function toAgentApprovals(value: unknown): AgentApprovals {
     || !validList(classes, ["read", "write"]) || !Number.isSafeInteger(minutes) || (minutes as number) < 0) {
     throw new FadenstackError("Invalid agent approval limits.");
   }
-  const result: AgentApprovals = { standing: standing as StandingApproval[] | null,
+  const result: ApprovalSettings = { standing: standing as StandingApproval[] | null,
     grantClasses: classes as ("read" | "write")[], longestGrantMinutes: minutes as number };
   if (p["bypass"] !== undefined) {
     const b = obj(p["bypass"]), step = obj(b["step_up"]);
@@ -238,7 +252,8 @@ export interface ApprovalDecidedEvent extends ClientEventBase {
   /** How long the user took; not given when nobody was asked. */
   waitMs?: number;
   /** What let an approved call through: the user once, this chat, always on this device, or bypass mode. */
-  scope?: "once" | "chat" | "always" | "bypass";
+  scope?: "once" | "chat" | "always" | "bypass" | "grant";
+  grantId?: string;
 }
 
 /** A local MCP server was attached, and the tools it offers. */
@@ -280,6 +295,7 @@ export function toWireEvent(event: AgentClientEvent): Record<string, unknown> {
       put("decision", event.decision);
       put("wait_ms", event.waitMs === undefined ? undefined : Math.max(0, Math.round(event.waitMs)));
       put("scope", event.scope);
+      put("grant_id", event.grantId);
       break;
     case "local_mcp.attached":
       put("label", event.label);

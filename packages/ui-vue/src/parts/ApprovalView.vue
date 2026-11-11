@@ -21,6 +21,12 @@ const part = useViewModel(() => props.part);
     <p v-if="part.target" class="fdn-approval-target" dir="auto">{{ part.target }}</p>
     <pre v-if="part.argumentsText" class="fdn-approval-args" dir="auto">{{ part.argumentsText }}</pre>
     <div v-if="part.isPending" class="fdn-approval-actions">
+      <template v-if="part.timeGrantChoices.length">
+        <p class="fdn-approval-reason">{{ part.timeGrantHint }}</p>
+        <div class="fdn-approval-pair">
+          <button v-for="choice in part.timeGrantChoices" :key="choice.minutes" type="button" class="fdn-button" @click="part.allowForTime(choice.minutes)">{{ choice.label }}</button>
+        </div>
+      </template>
       <div class="fdn-approval-pair">
         <button type="button" class="fdn-button fdn-primary" @click="part.allow()">{{ strings.allow }}</button>
         <button v-if="part.canAllowForSession" type="button" class="fdn-button" @click="part.allowForSession()">{{ strings.allowForChat }}</button>

@@ -210,12 +210,13 @@ export class AgentResource {
         const value = grantObject(JSON.parse(text));
         const error = value["error"];
         if (["authorization_pending", "slow_down", "access_denied", "expired_token", "invalid_grant"].includes(String(error)))
-          return { error: error as Extract<StepUpPoll, { error: string }>["error"], ...(value["interval"] === undefined ? {} : { interval: grantNumber(value["interval"]) }) };
+          return { proof: null, error: error as StepUpPoll["error"], interval: value["interval"] === undefined ? null : grantNumber(value["interval"]) };
       }
       throw toApiError(response, text);
     }
     const value = grantObject(JSON.parse(text));
-    return { proof: grantString(value["proof"]), expiresIn: grantNumber(value["expires_in"]), signedInAt: grantString(value["signed_in_at"]), method: grantString(value["method"]) };
+    return { proof: { proof: grantString(value["proof"]), expiresIn: grantNumber(value["expires_in"]),
+      signedInAt: grantString(value["signed_in_at"]), method: grantString(value["method"]) }, error: null, interval: null };
   }
 
   async #grantRequest(method: string, rest: string, body: unknown, options: { conversationId?: string; stepUpProof?: string; signal?: AbortSignal }): Promise<unknown> {

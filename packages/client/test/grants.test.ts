@@ -23,7 +23,7 @@ describe("server-held grants", () => {
     const { api, requests } = fixture();
     const result = await api.createGrant({ kind: "time", minutes: 120, tools: ["read_page"], maxCalls: 20,
       shownTextSha256: "a".repeat(64), clientVersion: "test" }, { conversationId: "chat" });
-    expect(result).toMatchObject({ remainingSeconds: 1800, serverNow: now, narrowed: ["minutes"], scope: { tools: ["read_page"] } });
+    expect(result).toMatchObject({ remainingS: 1800, serverNow: now, narrowed: ["minutes"], scope: { tools: ["read_page"] } });
     expect(requests[0]).toMatchObject({ path: "/v1/agents/nc/grants", method: "POST",
       body: { kind: "time", minutes: 120, tools: ["read_page"], max_calls: 20, shown_text_sha256: "a".repeat(64), client_version: "test" },
       headers: { "x-faden-conversation-id": "chat" } });
@@ -77,7 +77,7 @@ describe("Bypass step-up wire", () => {
   it("returns polling states and sends the proof only as the grant header", async () => {
     const { api, requests } = fixture(path => path.endsWith("/token")
       ? Response.json({ error: "slow_down", interval: 10 }, { status: 400 }) : Response.json(grant));
-    expect(await api.pollStepUp("synthetic-private-code")).toEqual({ error: "slow_down", interval: 10 });
+    expect(await api.pollStepUp("synthetic-private-code")).toEqual({ proof: null, error: "slow_down", interval: 10 });
     await api.createGrant({ kind: "bypass", minutes: 30 }, { conversationId: "chat", stepUpProof: "synthetic-proof" });
     expect(requests[1]!.headers).toMatchObject({ "x-faden-step-up": "synthetic-proof", "x-faden-conversation-id": "chat" });
     expect(JSON.stringify(requests[1]!.body)).not.toContain("synthetic-proof");
@@ -85,7 +85,7 @@ describe("Bypass step-up wire", () => {
 
   it("parses a completed proof and exposes invalid states as failures", async () => {
     const { api } = fixture(() => Response.json({ proof: "synthetic-proof", expires_in: 300, signed_in_at: now, method: "password" }));
-    expect(await api.pollStepUp("synthetic-private-code")).toEqual({ proof: "synthetic-proof", expiresIn: 300, signedInAt: now, method: "password" });
+    expect(await api.pollStepUp("synthetic-private-code")).toEqual({ proof: { proof: "synthetic-proof", expiresIn: 300, signedInAt: now, method: "password" }, error: null, interval: null });
     const bad = fixture(() => Response.json({ error: "unexpected" }, { status: 400 }));
     await expect(bad.api.pollStepUp("synthetic-private-code")).rejects.toThrow();
   });

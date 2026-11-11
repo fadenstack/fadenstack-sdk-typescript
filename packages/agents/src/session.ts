@@ -30,6 +30,7 @@ import type { ToolInvocation, ToolInvoker, ToolServiceCall } from "./stages.js";
 import { checkArguments, type AgentTool, type ToolServiceKey, type ToolServices } from "./tools.js";
 import { EntryTypes, TurnStatus, newId, type TranscriptEntry } from "./transcript.js";
 import { commandJson, commandSchemaHash } from "./commands.js";
+import type { GrantCall } from "./grants.js";
 
 /** A skill the user picked for a message: its slug for the server, its name for the transcript. */
 export interface PickedSkill {
@@ -297,6 +298,8 @@ export class AgentSession {
 /** How a call that needed approval was settled. */
 interface Settled {
   scope?: ApprovalScope;
+  grantId?: string;
+  coveredGrantId?: string;
   approved: boolean;
   /** Nobody answered in time. */
   timedOut: boolean;
@@ -321,6 +324,7 @@ class Turn {
   readonly #notices: GovernanceNotice[] = [];
   readonly #deniedByGateway = new Set<string>();
   readonly #marks = new Map<string, GatewayMark>();
+  readonly #grantUsed = new Map<string, { grantId: string; toolName: string }>();
   readonly #receipts: ReceiptNote[] = [];
   #text = "";
   #usage: Usage | undefined;
@@ -410,6 +414,7 @@ class Turn {
 
   /** One model call; returns the calls of the agent's own tools to run. */
   async #request(signal: AbortSignal): Promise<ToolCall[]> {
+    this.#grantUsed.clear();
     const options: ChatOptions = {
       conversationId: this.#session.id,
       turnId: this.#id,
@@ -478,6 +483,14 @@ class Turn {
   async #onGatewayEvent(event: FadenstackEvent, signal: AbortSignal): Promise<void> {
     const value = event.value;
     switch (eventKind(event)) {
+      case "faden.grants":
+        this.#agent.grants.snapshot(value);
+        break;
+      case "faden.grant_used": {
+        const callId = str(value, "toolCallId"), toolName = str(value, "toolCallName"), grantId = str(value, "grantId");
+        if (callId && toolName && grantId) this.#grantUsed.set(callId, { grantId, toolName });
+        break;
+      }
       case "faden.gateway_round":
         await this.#keepRound(value);
         break;
@@ -653,6 +666,7 @@ class Turn {
     if (invalid) return { result: `Error: ${invalid}`, outcome: "error", waited: 0 };
     let waited = 0;
     const rule = mark?.rule === true || contractApproval === "always" || policy?.decision.requiredByRule === true;
+    let coverage: { id: string; call: GrantCall } | undefined;
     if (!this.#commandOrigin && (rule || decision === "ask" || policy?.decision.decision === "ask")) {
       const settled = await this.#approve({
         callId: call.id,
@@ -666,6 +680,8 @@ class Turn {
         ...(tool.openWorld ? { openWorld: true } : {}),
       }, rule, undefined, signal, tool.describe ? () => describeTarget(tool, args, signal) : undefined);
       waited = settled.waitedMs ?? 0;
+      if (settled.coveredGrantId) coverage = { id: settled.coveredGrantId, call: this.#grantCall({ callId: call.id,
+        toolName: tool.name, toolClass, arguments: args, requiredByRule: rule }) };
       if (!settled.approved) {
         this.#toolDenied = true;
         const reason = settled.reason ? ` (${settled.reason})` : "";
@@ -680,7 +696,7 @@ class Turn {
         toolClass,
         context: { signal, callId: call.id, sessionId: this.#session.id, turnId: this.#id, services },
       };
-      const value = await this.#invoker(services, policy)(invocation);
+      const value = await this.#invoker(services, policy, coverage)(invocation);
       return { result: resultText(value), outcome: "ok", waited };
     } catch (error) {
       if (signal.aborted) throw signal.reason ?? error;
@@ -706,9 +722,11 @@ class Turn {
     });
   }
 
-  #invoker(services: CallServices, policy?: PreparedHostPolicy): ToolInvoker {
+  #invoker(services: CallServices, policy?: PreparedHostPolicy, coverage?: { id: string; call: GrantCall }): ToolInvoker {
     let invoker: ToolInvoker = async (i) => {
       if (this.#commandOrigin) return this.#invokeCommand(i, () => services.ran(i.arguments));
+      if (coverage && !await this.#agent.grants.covers(coverage.id, { ...coverage.call, arguments: i.arguments }, i.context.signal, true))
+        throw new Error("The server-held grant changed or no longer covers this call. Review a new call.");
       if (policy) await this.#checkHostDispatch(i, policy);
       services.ran(i.arguments); // the arguments the tool gets, after the stages that change them
       return i.tool.invoke(i.arguments, i.context);
@@ -813,6 +831,13 @@ class Turn {
     const allowed = (kind: "chat" | "always") => this.#agent.profile.approvals?.standing == null
       || this.#agent.profile.approvals.standing.includes(kind);
     const chatAllowed = open && allowed("chat"), alwaysAllowed = open && allowed("always");
+    const marked = this.#grantUsed.get(base.callId);
+    if (open && marked?.toolName === name && await this.#agent.grants.covers(marked.grantId,
+      this.#grantCall({ ...base, requiredByRule: rule }), signal)) {
+      await this.#record(base, { approved: true, scope: "grant", asked: false, rule, timedOut: false, waitedMs: undefined, grantId: marked.grantId });
+      return { approved: true, scope: "grant", grantId: marked.grantId, coveredGrantId: marked.grantId,
+        timedOut: false, waitedMs: undefined, reason: undefined };
+    }
     const standing: ApprovalScope | undefined = rule || individual ? undefined
       : this.#agent.permissionMode === "bypass" ? "bypass"
       : !open ? undefined
@@ -824,8 +849,11 @@ class Turn {
       return { approved: true, scope: standing, timedOut: false, waitedMs: undefined, reason: undefined };
     }
     const described = target ? await target() : undefined;
+    const grantDurations = open && this.#agent.grants.offers("time") && ["read", "write"].includes(toolClass)
+      && this.#agent.profile.approvals!.grantClasses.includes(toolClass as "read" | "write") ? this.#agent.grants.choices : [];
     const request: ApprovalRequest = {
-      ...base, canAllowForSession: chatAllowed, canAllowAlways: alwaysAllowed, ...(rule ? { requiredByRule: true } : {}), ...(described ? { target: described } : {}),
+      ...base, canAllowForSession: chatAllowed, canAllowAlways: alwaysAllowed,
+      ...(grantDurations.length ? { grantDurations } : {}), ...(rule ? { requiredByRule: true } : {}), ...(described ? { target: described } : {}),
     };
     this.#emit({ type: "approval_requested", turnId: this.#id, request });
     const limit = timeoutMs === undefined ? signal : AbortSignal.any([signal, AbortSignal.timeout(timeoutMs)]);
@@ -842,24 +870,45 @@ class Turn {
     const waitedMs = performance.now() - started;
     // What the request offered, and nothing more: a handler cannot widen it.
     let scope: ApprovalScope | undefined = !decision?.approved ? undefined
+      : decision.forTime !== undefined && grantDurations.includes(decision.forTime) ? "grant"
       : decision.always && alwaysAllowed ? "always"
       : decision.forSession && chatAllowed ? "chat"
       : "once";
+    let grantId: string | undefined;
+    let confirmedMinutes: number | undefined;
+    if (scope === "grant") {
+      try {
+        const grant = await untilAborted(this.#agent.grants.grantForTime(name, decision!.forTime!, undefined, undefined, signal), signal);
+        grantId = grant.id;
+        confirmedMinutes = Math.ceil(grant.remainingS / 60);
+      } catch (error) {
+        if (signal.aborted) throw signal.reason ?? error;
+        scope = "once";
+        await this.#notice({ outcome: "grant_failed", stage: "tool", message: "A time grant could not be confirmed. This call alone was allowed; inspect active grants before requesting another." });
+      }
+    }
     if (scope === "always" && !(await this.#keepAlways(name, toolClass))) scope = "once";
     if (scope === "chat") this.#access.approved.add(name);
-    await this.#record(base, { approved: scope !== undefined, scope, asked: true, rule, timedOut: decision === undefined, waitedMs });
+    await this.#record(base, { approved: scope !== undefined, scope, asked: true, rule, timedOut: decision === undefined, waitedMs,
+      ...(grantId ? { grantId } : {}), ...(confirmedMinutes !== undefined ? { minutes: confirmedMinutes } : {}) });
     const decided: ApprovalDecision = !decision ? ApprovalDecision.deny("No answer in time.")
       : scope === "always" ? ApprovalDecision.approveAlways()
       : scope === "chat" ? ApprovalDecision.approveForSession()
+      : scope === "grant" ? ApprovalDecision.approveFor(confirmedMinutes! * 60_000)
       : scope === "once" ? ApprovalDecision.approve()
       : decision;
     this.#emit({ type: "approval_decided", turnId: this.#id, request, decision: decided });
-    return { approved: scope !== undefined, scope, timedOut: decision === undefined, waitedMs, reason: decision?.reason };
+    return { approved: scope !== undefined, scope, ...(grantId ? { grantId } : {}), timedOut: decision === undefined, waitedMs, reason: decision?.reason };
+  }
+
+  #grantCall(base: Pick<ApprovalRequest, "callId" | "toolName" | "toolClass" | "arguments" | "requiredByRule">): GrantCall {
+    return { ...base, requiredByRule: base.requiredByRule === true, conversationId: this.#session.id, turnId: this.#id };
   }
 
   /** The approval's transcript entry, and the server's record of it (names only). */
   async #record(request: ApprovalRequest, how: {
     approved: boolean; scope: ApprovalScope | undefined; asked: boolean; rule: boolean; timedOut: boolean; waitedMs: number | undefined;
+    grantId?: string; minutes?: number;
   }): Promise<void> {
     await this.#access.append(EntryTypes.approvalDecision, this.#id, {
       call_id: request.callId,
@@ -872,12 +921,14 @@ class Turn {
       rule: how.rule,
       timed_out: how.timedOut,
       wait_ms: Math.round(how.waitedMs ?? 0),
+      ...(how.grantId ? { grant_id: how.grantId } : {}), ...(how.minutes !== undefined ? { minutes: how.minutes } : {}),
     });
     this.#agent.reporter.add({
       type: "approval.decided", conversationId: this.#session.id, tool: request.toolName,
       decision: how.timedOut ? "timeout" : how.approved ? "approved" : "denied",
       ...(how.waitedMs !== undefined ? { waitMs: how.waitedMs } : {}),
       ...(how.scope ? { scope: how.scope } : {}),
+      ...(how.grantId ? { grantId: how.grantId } : {}),
     });
   }
 

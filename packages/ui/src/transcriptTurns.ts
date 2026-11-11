@@ -78,7 +78,9 @@ export function buildTurn(entries: readonly TranscriptEntry[], context: PartCont
         };
         const decided: ApprovalState = d["timed_out"] === true ? "expired" : d["approved"] !== true ? "denied"
           : d["scope"] === "always" ? "approved_always" : d["for_session"] === true ? "approved_for_session" : "approved";
-        turn.addApprovalPart(new ApprovalPart(context, request, decided));
+        const card = new ApprovalPart(context, request, decided);
+        if (d["scope"] === "grant" && typeof d["minutes"] === "number") card.confirmTime(d["minutes"] as number);
+        turn.addApprovalPart(card);
         break;
       }
       case EntryTypes.governanceNotice: {

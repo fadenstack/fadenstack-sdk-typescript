@@ -2,6 +2,11 @@ import { describe, expect, it } from "vitest";
 import { FadenstackClient, decideTool, toAgentProfile } from "@fadenstack/client";
 
 describe("0.7 approval wire compatibility", () => {
+  it("retains the reviewed JSON-pointer target mapping for work grants", () => {
+    const profile = toAgentProfile({ host_tool_contract: [{ name: "read", risk: "read", target_type: "document", target_argument: "/resource~1id" }] });
+    expect(profile.hostToolContract[0]).toMatchObject({ targetType: "document", targetArgument: "/resource~1id" });
+    expect(() => toAgentProfile({ host_tool_contract: [{ name: "read", target_type: "document", target_argument: "/bad~2key" }] })).toThrow();
+  });
   it("retains the maximum and standing restrictions without enabling unsupported modes", () => {
     const p = toAgentProfile({ tool_modes: { default: "ask", ceiling: "ask", max: "auto" },
       approvals: { standing: [], longest_grant_minutes: 0, grant_classes: [] } });

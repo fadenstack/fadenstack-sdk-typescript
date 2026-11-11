@@ -25,6 +25,7 @@ import { AgentSession } from "./session.js";
 import type { AgentContext } from "./stages.js";
 import { toDefinition, withToolClass, type AgentTool, type ToolOutput } from "./tools.js";
 import { newId, type SessionInfo } from "./transcript.js";
+import { AgentGrants } from "./grants.js";
 
 /**
  * An agent served by a Fadenstack server and run on this device: its profile, its tools, and its sessions.
@@ -35,6 +36,7 @@ export class FadenstackAgent {
   readonly settings: AgentSettings;
   /** @internal */
   readonly reporter: EventReporter;
+  readonly grants: AgentGrants;
   #profile: AgentProfile | undefined;
   #context: AgentContext | undefined;
   #tools: readonly AgentTool[] = [];
@@ -45,6 +47,7 @@ export class FadenstackAgent {
   private constructor(settings: AgentSettings) {
     this.settings = settings;
     this.reporter = new EventReporter(settings.client, settings.report);
+    this.grants = new AgentGrants(this, settings.grantPlaceResolver);
   }
 
   /** @internal The builder's way in: `FadenstackAgent.createBuilder()...build()`. */

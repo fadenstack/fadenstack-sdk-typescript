@@ -65,3 +65,4 @@ export {
 export { IndexedDbSessionStore, type IndexedDbSessionStoreOptions } from "./indexedDbSessionStore.js";
 export { EventReporter } from "./reporter.js";
 export { EventQueue } from "./eventQueue.js";
+export { AgentGrants, GrantPlace, type GrantCall, type GrantPlaceResolver } from "./grants.js";

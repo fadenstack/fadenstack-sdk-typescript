@@ -19,6 +19,8 @@ export interface GrantRequest {
   clientVersion?: string;
 }
 export interface GrantExtension { minutes?: number; targets?: GrantTarget[]; shownTextSha256?: string }
+export interface GrantScope { tools?: string[]; classes?: ToolClass[]; targets?: GrantTarget[] }
+export interface GrantStepUp { method: string; provider: string | null; at: string | null }
 export interface AgentGrant {
   id: string;
   kind: "time" | "work" | "bypass";
@@ -27,18 +29,18 @@ export interface AgentGrant {
   agentVersion: number;
   deviceId: string;
   conversationId: string | null;
-  scope: { tools?: string[]; classes?: ToolClass[]; targets?: GrantTarget[] };
+  scope: GrantScope;
   issuedAt: string | null;
   expiresAt: string;
   /** Display only: freshness/permission must always be checked with the server. */
-  remainingSeconds: number;
+  remainingS: number;
   maxCalls: number | null;
   callsUsed: number;
   pausedAt: string | null;
   revokedAt: string | null;
   revokedBy: string | null;
   evidenceLevel: "decisions" | "calls" | "results";
-  stepUp: { method: string; provider: string | null; at: string | null } | null;
+  stepUp: GrantStepUp | null;
   serverNow: string;
   narrowed: string[];
 }
@@ -53,8 +55,13 @@ export interface StepUpStarted {
   expiresIn: number;
   interval: number;
 }
-export type StepUpPoll = { proof: string; expiresIn: number; signedInAt: string; method: string }
-  | { error: "authorization_pending" | "slow_down" | "access_denied" | "expired_token" | "invalid_grant"; interval?: number };
+export interface StepUpProof { proof: string; expiresIn: number; signedInAt: string; method: string }
+/** The named equivalent of .NET's (Proof, Error, Interval) polling result. */
+export interface StepUpPoll {
+  proof: StepUpProof | null;
+  error: "authorization_pending" | "slow_down" | "access_denied" | "expired_token" | "invalid_grant" | null;
+  interval: number | null;
+}
 
 type Json = Record<string, unknown>;
 export const grantObject = (v: unknown): Json => {
@@ -109,7 +116,7 @@ export function toAgentGrant(value: unknown, serverNow?: string): AgentGrant {
   return { id: grantString(g["id"]), kind, status: member(g["status"], ["active", "paused", "revoked", "expired", "spent"]),
     agentId: grantString(g["agent_id"]), agentVersion: grantNumber(g["agent_version"]), deviceId: grantString(g["device_id"]),
     conversationId: nullable(g["conversation_id"]), scope: parsedScope, issuedAt: nullableDate(g["issued_at"]), expiresAt: date(g["expires_at"]),
-    remainingSeconds: grantNumber(g["remaining_s"]), maxCalls: g["max_calls"] === null ? null : grantNumber(g["max_calls"]), callsUsed: grantNumber(g["calls_used"]),
+    remainingS: grantNumber(g["remaining_s"]), maxCalls: g["max_calls"] === null ? null : grantNumber(g["max_calls"]), callsUsed: grantNumber(g["calls_used"]),
     pausedAt: nullableDate(g["paused_at"]), revokedAt: nullableDate(g["revoked_at"]), revokedBy: nullable(g["revoked_by"]),
     evidenceLevel: member(g["evidence_level"], ["decisions", "calls", "results"]),
     stepUp: step ? { method: grantString(step["method"]), provider: nullable(step["provider"]), at: nullableDate(step["at"]) } : null,

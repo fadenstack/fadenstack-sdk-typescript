@@ -217,14 +217,15 @@ export class TurnViewModel extends Observable {
   approvalDecided(request: ApprovalRequest, decision: ApprovalDecision): void {
     const card = [...this.#parts].reverse().find((p): p is ApprovalPart =>
       p instanceof ApprovalPart && p.request.callId === request.callId && p.toolName === request.toolName);
-    if (card?.isPending) {
+    if (card?.isUnsettled) {
       const state: ApprovalState = decision.approved ? (decision.always ? "approved_always" : decision.forSession ? "approved_for_session" : "approved")
         : decision.reason === "No answer in time." ? "expired" : "denied";
       card.setState(state);
+      if (decision.approved && decision.forTime !== undefined) card.confirmTime(Math.ceil(decision.forTime / 60_000));
     }
     const tool = this.#tools.get(key(request.callId, request.toolName));
     if (tool?.state === "waiting_for_approval") tool.setState("running");
-    if (this.#state === "waiting_for_approval" && !this.#parts.some((p) => p instanceof ApprovalPart && p.isPending)) {
+    if (this.#state === "waiting_for_approval" && !this.#parts.some((p) => p instanceof ApprovalPart && p.isUnsettled)) {
       this.#setState("running");
     }
   }
@@ -300,7 +301,10 @@ export class TurnViewModel extends Observable {
   #finish(state: TurnState): void {
     this.#closeText();
     for (const part of this.#parts) {
-      if (part instanceof ApprovalPart && part.isPending) part.setState("expired");
+      if (part instanceof ApprovalPart && part.isUnsettled) {
+        if (state === "stopped") part.stop();
+        else part.setState("expired");
+      }
     }
     for (const tool of this.#tools.values()) if (tool.isRunning) tool.setState("cancelled");
     const elapsed = this.#context.now().getTime() - this.timestamp.getTime();

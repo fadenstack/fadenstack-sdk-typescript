@@ -8,7 +8,7 @@ import type { MarkdownBlock } from "./markdown/model.js";
 import { tableToTsv, toHtml } from "./markdown/serialize.js";
 import { Observable } from "./observable.js";
 import { writeClipboard, type Clipboard } from "./services.js";
-import type { UiStrings } from "./strings.js";
+import { englishStrings, type UiStrings } from "./strings.js";
 
 /**
  * What every part can reach: the texts, the clipboard, the locale, the preview length. The chat's parts share one,
@@ -243,7 +243,7 @@ export class ToolCallPart extends ResponsePart {
   }
 }
 
-export type ApprovalState = "pending" | "approved" | "approved_for_session" | "approved_always" | "denied" | "expired";
+export type ApprovalState = "pending" | "confirming" | "approved" | "approved_for_time" | "approved_for_session" | "approved_always" | "denied" | "expired";
 
 /**
  * "Run delete_page?" with Allow, Allow for this chat, Allow always and Deny -- answered in place, like Copilot.
@@ -256,6 +256,8 @@ export class ApprovalPart extends ResponsePart {
   readonly #context: PartContext;
   readonly #pending: PendingApproval | undefined;
   #state: ApprovalState;
+  #confirmedMinutes: number | undefined;
+  #stopped = false;
 
   constructor(context: PartContext, request: ApprovalRequest, state: ApprovalState, pending?: PendingApproval) {
     super();
@@ -312,6 +314,14 @@ export class ApprovalPart extends ResponsePart {
     return this.request.canAllowAlways === true;
   }
 
+  get timeGrantChoices(): readonly { minutes: number; label: string }[] {
+    if (this.isDangerous || this.request.requiredByRule) return [];
+    const values = [...new Set(this.request.grantDurations ?? [])].filter(n => Number.isSafeInteger(n) && n > 0 && n <= 1440 * 60_000).map(duration => Math.ceil(duration / 60_000));
+    return values.map(minutes => ({ minutes, label: (this.#context.strings.allowForTime ?? englishStrings.allowForTime!)(minutes) }));
+  }
+
+  get timeGrantHint(): string { return this.#context.strings.timeGrantHint ?? englishStrings.timeGrantHint!; }
+
   get state(): ApprovalState {
     return this.#state;
   }
@@ -320,9 +330,15 @@ export class ApprovalPart extends ResponsePart {
     return this.#state === "pending";
   }
 
+  get isUnsettled(): boolean { return this.isPending || this.#state === "confirming"; }
+
   get stateText(): string {
     const s = this.#context.strings;
     switch (this.#state) {
+      case "confirming":
+        return s.confirmingGrant ?? englishStrings.confirmingGrant!;
+      case "approved_for_time":
+        return this.#confirmedMinutes === undefined ? s.allowed : (s.allowedForTime ?? englishStrings.allowedForTime!)(this.#confirmedMinutes);
       case "approved":
         return s.allowed;
       case "approved_for_session":
@@ -332,7 +348,7 @@ export class ApprovalPart extends ResponsePart {
       case "denied":
         return s.denied;
       case "expired":
-        return s.noAnswer;
+        return this.#stopped ? s.stopped : s.noAnswer;
       default:
         return "";
     }
@@ -351,6 +367,21 @@ export class ApprovalPart extends ResponsePart {
     if (!this.canAllowAlways) return;
     this.#decide(ApprovalDecision.approveAlways(), "approved_always");
   }
+
+  allowForTime(minutes: number): void {
+    if (!this.timeGrantChoices.some(choice => choice.minutes === minutes) || !this.#pending?.resolve(ApprovalDecision.approveFor(minutes * 60_000))) return;
+    this.setState("confirming"); // no claim that a server-held grant exists before the server answers
+  }
+
+  /** @internal Actual server-narrowed duration, also used when restoring a confirmed receipt. */
+  confirmTime(minutes: number): void {
+    if (!Number.isSafeInteger(minutes) || minutes <= 0 || minutes > 1440) return;
+    this.#confirmedMinutes = minutes;
+    this.setState("approved_for_time");
+  }
+
+  /** @internal Preserve the legacy state while distinguishing Stop from an approval timeout. */
+  stop(): void { this.#stopped = true; this.setState("expired"); }
 
   deny(): void {
     this.#decide(ApprovalDecision.deny(), "denied");

@@ -18,6 +18,8 @@ export interface ApprovalRequest {
   canAllowForSession?: boolean;
   /** Whether "Allow always" may be offered: where "Allow for this chat" may. */
   canAllowAlways?: boolean;
+  /** Durations in milliseconds offered for a server-held grant; absent for individual/floor/destructive actions. */
+  grantDurations?: readonly number[];
   /** An admin's "Ask first" rule covers the call: `reason` is the admin's message. It asks every time. */
   requiredByRule?: boolean;
   /**
@@ -45,6 +47,8 @@ export interface ApprovalDecision {
    * it (`canAllowAlways`); otherwise it approves this call only.
    */
   always?: boolean;
+  /** Milliseconds, matching .NET's ForTime TimeSpan; JSON grant requests use whole minutes. */
+  forTime?: number;
   reason?: string;
 }
 
@@ -52,11 +56,12 @@ export const ApprovalDecision = {
   approve: (): ApprovalDecision => ({ approved: true }),
   approveForSession: (): ApprovalDecision => ({ approved: true, forSession: true }),
   approveAlways: (): ApprovalDecision => ({ approved: true, always: true }),
+  approveFor: (duration: number): ApprovalDecision => ({ approved: true, forTime: duration }),
   deny: (reason?: string): ApprovalDecision => (reason === undefined ? { approved: false } : { approved: false, reason }),
 };
 
 /** What let a call that needed approval through: the user for this call, this chat, always, or bypass mode. */
-export type ApprovalScope = "once" | "chat" | "always" | "bypass";
+export type ApprovalScope = "once" | "chat" | "always" | "bypass" | "grant";
 
 /**
  * Whether the SDK asks (`ask`, the default) or approves every call it would ask about (`bypass`), destructive ones

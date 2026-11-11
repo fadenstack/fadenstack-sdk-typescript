@@ -39,6 +39,10 @@ export interface UiStrings {
   allow: string;
   allowForChat: string;
   allowAlways: string;
+  allowForTime?(minutes: number): string;
+  allowedForTime?(minutes: number): string;
+  confirmingGrant?: string;
+  timeGrantHint?: string;
   deny: string;
   allowed: string;
   allowedForChat: string;
@@ -186,6 +190,10 @@ export const englishStrings: UiStrings = {
   allow: "Allow",
   allowForChat: "Allow for this chat",
   allowAlways: "Allow always",
+  allowForTime: minutes => `Allow for ${minutes} min`,
+  allowedForTime: minutes => `Server confirmed up to ${minutes} min`,
+  confirmingGrant: "Confirming permission with the server…",
+  timeGrantHint: "For a time allows this tool in your chats on this device until it expires. Native permissions and administrator rules still apply.",
   deny: "Deny",
   allowed: "Allowed",
   allowedForChat: "Allowed for this chat",

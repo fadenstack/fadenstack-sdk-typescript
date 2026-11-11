@@ -48,7 +48,10 @@ export {
   toWireEvent,
   type AgentClientEvent,
   type AgentProfile,
-  type AgentApprovals,
+  type ApprovalSettings,
+  type BypassSettings,
+  type StepUpSettings,
+  type ToolModeSettings,
   type ApprovalLevel,
   type AnswerScope,
   type StandingApproval,
@@ -64,8 +67,8 @@ export {
   type ToolExecutedEvent,
 } from "./models.js";
 export { AgentResource, MAX_EVENTS_PER_REPORT, HOST_TOOL_DISPATCH_FEATURE, type HostToolCheck, type HostToolDecision } from "./resources/agent.js";
-export { toAgentGrant, type AgentGrant, type GrantRequest, type GrantExtension, type GrantTarget, type GrantList,
-  type GrantReport, type StepUpStarted, type StepUpPoll } from "./grants.js";
+export { toAgentGrant, type AgentGrant, type GrantRequest, type GrantExtension, type GrantTarget, type GrantScope, type GrantStepUp, type GrantList,
+  type GrantReport, type StepUpStarted, type StepUpProof, type StepUpPoll } from "./grants.js";
 export { AgentProvenanceResource, ProvenanceResource, toProvenancePolicy, toSignedRecord } from "./resources/provenance.js";
 export {
   COMPOSITE_WITH_TRAINED_ALGORITHMIC_MEDIA,

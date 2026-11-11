@@ -200,7 +200,7 @@ interface SignIn {
 /** The fields the real gateway accepts per event type (`extra=forbid`): anything else is a 422. */
 const EVENT_FIELDS: Record<string, readonly string[]> = {
   "tool.executed": ["tool", "source", "server", "duration_ms", "outcome"],
-  "approval.decided": ["tool", "decision", "wait_ms", "scope"],
+  "approval.decided": ["tool", "decision", "wait_ms", "scope", "grant_id"],
   "local_mcp.attached": ["label", "command", "url", "tools"],
   "session.stats": ["turns", "compactions", "retention_sessions", "retention_days"],
 };

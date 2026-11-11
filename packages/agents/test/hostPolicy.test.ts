@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { ApprovalDecision, MemoryApprovalStore, StageOrder } from "@fadenstack/agents";
-import { HOST_TOOL_DISPATCH_FEATURE, type AgentApprovals, type AgentPrincipal, type HostToolDecision } from "@fadenstack/client";
+import { HOST_TOOL_DISPATCH_FEATURE, type ApprovalSettings, type AgentPrincipal, type HostToolDecision } from "@fadenstack/client";
 import { lastToolResults, type FakeModel } from "@fadenstack/testing";
 import { setup } from "./helpers.js";
 
@@ -17,7 +17,7 @@ async function fixture(answer = true, configure?: Parameters<typeof setup>[2], r
   });
   const resource = s.client.agent!;
   const original = resource.getProfile.bind(resource);
-  const controls: { approvals: AgentApprovals; version?: number; feature: boolean } = {
+  const controls: { approvals: ApprovalSettings; version?: number; feature: boolean } = {
     approvals: { standing: null, longestGrantMinutes: 120, grantClasses: ["read", "write"] }, feature: true,
   };
   vi.spyOn(resource, "getProfile").mockImplementation(async signal => {

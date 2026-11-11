@@ -97,6 +97,13 @@ export function ApprovalView({ part, strings }: { part: ApprovalPart; strings: U
       {part.argumentsText && <pre className="fdn-approval-args" dir="auto">{part.argumentsText}</pre>}
       {part.isPending ? (
         <div className="fdn-approval-actions">
+          {part.timeGrantChoices.length > 0 && <>
+            <p className="fdn-approval-reason">{part.timeGrantHint}</p>
+            <div className="fdn-approval-pair">
+              {part.timeGrantChoices.map(choice => <button key={choice.minutes} type="button" className="fdn-button"
+                onClick={() => part.allowForTime(choice.minutes)}>{choice.label}</button>)}
+            </div>
+          </>}
           <div className="fdn-approval-pair">
             <button type="button" className="fdn-button fdn-primary" onClick={() => part.allow()}>{strings.allow}</button>
             {part.canAllowForSession && (
