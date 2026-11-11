@@ -59,7 +59,8 @@ export class FadenstackTransport {
   }
 
   /**
-   * Sends a request with the bearer token and reads the whole answer. A 401 gets one retry with a fresh token.
+   * Sends a request with the bearer token and reads the whole answer. A 401 gets one retry with a fresh token, except
+   * a step-up challenge.
    * Errors are not thrown here: the caller reads the status (a refusal can be an answer).
    */
   async request(build: () => RequestSpec, signal?: AbortSignal): Promise<{ response: Response; text: string }> {
@@ -116,7 +117,9 @@ export class FadenstackTransport {
         if (signal.aborted) throw signal.reason ?? error;
         throw new FadenstackUnreachableError(`Fadenstack could not be reached: ${describe(error)}`, { cause: error });
       }
-      if (response.status === 401 && token !== undefined && attempt === 0) {
+      // A step-up challenge (RFC 9470: a fresh sign-in is needed, `bypass_step_up_required`) is not a bad token: no
+      // refresh and no second request -- it goes to the caller, who starts the second sign-in.
+      if (response.status === 401 && token !== undefined && attempt === 0 && !isStepUpChallenge(response)) {
         await response.body?.cancel().catch(() => undefined);
         await this.#credentials!.invalidate(token);
         continue;
@@ -164,6 +167,11 @@ export function jsonRequest(method: string, url: URL, body?: unknown): RequestSp
     spec.body = JSON.stringify(body);
   }
   return spec;
+}
+
+/** A 401 that asks for a fresher sign-in (RFC 9470 `insufficient_user_authentication`), not for a new token. */
+export function isStepUpChallenge(response: Response): boolean {
+  return /\berror\s*=\s*"?insufficient_user_authentication\b/i.test(response.headers.get("www-authenticate") ?? "");
 }
 
 function requireUrl(value: string | URL, name: string, allowInsecureHttp: boolean | undefined): URL {

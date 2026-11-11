@@ -128,9 +128,12 @@ export class AgentSession {
     this.#context = new ContextBuilder(agent.settings.historyTokens);
   }
 
-  /** The mode turns run in: the user's pick, narrowed by the ceiling the server sets, if any. */
+  /**
+   * The mode turns run in: the user's pick (`auto` for `ask` in an app set to bypass mode, as `agent.modeFor` says),
+   * narrowed by the ceiling the server sets, if any.
+   */
   get effectiveToolMode(): ToolMode {
-    return narrowestMode(this.toolMode, this.agent.ceiling);
+    return narrowestMode(this.agent.modeFor(this.toolMode), this.agent.ceiling);
   }
 
   /** The transcript, as kept on this device. */
@@ -414,7 +417,9 @@ class Turn {
 
   /** One model call; returns the calls of the agent's own tools to run. */
   async #request(signal: AbortSignal): Promise<ToolCall[]> {
+    // The gateway's word on a call holds for its round only: a later call with the same id is judged anew.
     this.#grantUsed.clear();
+    this.#marks.clear();
     const options: ChatOptions = {
       conversationId: this.#session.id,
       turnId: this.#id,
@@ -838,9 +843,8 @@ class Turn {
       return { approved: true, scope: "grant", grantId: marked.grantId, coveredGrantId: marked.grantId,
         timedOut: false, waitedMs: undefined, reason: undefined };
     }
-    const standing: ApprovalScope | undefined = rule || individual ? undefined
-      : this.#agent.permissionMode === "bypass" ? "bypass"
-      : !open ? undefined
+    // No standing approval in bypass mode: the app's Bypass is the server's (a second sign-in), never a local yes.
+    const standing: ApprovalScope | undefined = rule || individual || !open ? undefined
       : alwaysAllowed && (await this.#approvedAlways(name, toolClass)) ? "always"
       : chatAllowed && this.#access.approved.has(name) ? "chat"
       : undefined;
@@ -890,7 +894,9 @@ class Turn {
     if (scope === "always" && !(await this.#keepAlways(name, toolClass))) scope = "once";
     if (scope === "chat") this.#access.approved.add(name);
     await this.#record(base, { approved: scope !== undefined, scope, asked: true, rule, timedOut: decision === undefined, waitedMs,
-      ...(grantId ? { grantId } : {}), ...(confirmedMinutes !== undefined ? { minutes: confirmedMinutes } : {}) });
+      ...(grantId ? { grantId } : {}),
+      ...(scope === "grant" ? { grantMinutes: Math.round(decision!.forTime! / 60_000) } : {}),
+      ...(confirmedMinutes !== undefined ? { confirmedMinutes } : {}) });
     const decided: ApprovalDecision = !decision ? ApprovalDecision.deny("No answer in time.")
       : scope === "always" ? ApprovalDecision.approveAlways()
       : scope === "chat" ? ApprovalDecision.approveForSession()
@@ -908,7 +914,7 @@ class Turn {
   /** The approval's transcript entry, and the server's record of it (names only). */
   async #record(request: ApprovalRequest, how: {
     approved: boolean; scope: ApprovalScope | undefined; asked: boolean; rule: boolean; timedOut: boolean; waitedMs: number | undefined;
-    grantId?: string; minutes?: number;
+    grantId?: string; grantMinutes?: number; confirmedMinutes?: number;
   }): Promise<void> {
     await this.#access.append(EntryTypes.approvalDecision, this.#id, {
       call_id: request.callId,
@@ -921,7 +927,10 @@ class Turn {
       rule: how.rule,
       timed_out: how.timedOut,
       wait_ms: Math.round(how.waitedMs ?? 0),
-      ...(how.grantId ? { grant_id: how.grantId } : {}), ...(how.minutes !== undefined ? { minutes: how.minutes } : {}),
+      // The same keys as every SDK's (sdk/43 §6): the time the person picked, and what the server confirmed.
+      ...(how.grantId ? { grant_id: how.grantId } : {}),
+      ...(how.grantMinutes !== undefined ? { grant_minutes: how.grantMinutes } : {}),
+      ...(how.confirmedMinutes !== undefined ? { grant_confirmed_minutes: how.confirmedMinutes } : {}),
     });
     this.#agent.reporter.add({
       type: "approval.decided", conversationId: this.#session.id, tool: request.toolName,

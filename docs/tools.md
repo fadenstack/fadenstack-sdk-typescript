@@ -161,9 +161,10 @@ The user picks a tool mode for each session. By each tool's class, the mode deci
 and which are hidden. The modes are `off`, `read_only`, `ask` and `auto`, from narrowest to widest.
 [Tools](../../concepts/tools.md) has the table of what each mode does with each class.
 
-New sessions start in `ask`. `useDefaultToolMode` on the builder, and the agent's profile, can make that stricter,
-never wider. To start a session in another mode, pass it to `startSession`. To change a session's mode, set
-`session.toolMode`; the next turn runs in it:
+New sessions start in the agent's default level from the server: `ask` unless the agent's author set another, and
+`ask` from an older server or for a level this SDK does not know. `useDefaultToolMode` on the builder caps it, never
+widens it (for an app that never starts in `auto`, say). To start a session in another mode, pass it to `startSession`.
+To change a session's mode, set `session.toolMode`; the next turn runs in it:
 
 ```ts
 const session = await agent.startSession("read_only");
@@ -174,8 +175,9 @@ A hidden tool is not offered to the model. If the model calls it anyway, the cal
 hands the call over or else by the session: the turn gets a `tool_denied` notice, and the model is told the tool is not
 allowed.
 
-`session.effectiveToolMode` is the mode turns run in: `session.toolMode`, narrowed by any limit the agent's profile
-sets: the server may limit the modes a user can pick (a ceiling, from an administrator's rules).
+`session.effectiveToolMode` is the mode turns run in: `session.toolMode`, narrowed by `agent.ceiling`, the limit the
+agent's profile sets: the narrowest of an administrator's ceiling and the agent's highest level. A level this SDK does
+not know counts as `read_only`, never as no limit.
 
 To show in your UI what a mode does with a tool, `@fadenstack/client` exports `decideTool(mode, toolClass)`, which
 returns `run`, `ask` or `hidden`.
@@ -239,15 +241,16 @@ it aborts. Approvals for your own tools have no time limit of their own.
 A call the tool mode or an administrator's rule asks about is settled by the first of these that applies:
 
 1. An administrator's "Ask first" rule covers it: it asks, with Allow and Deny only, every time. Nothing below
-   changes that, bypass mode included.
-2. The agent runs in bypass mode: it runs without asking.
-3. The tool is `destructive` or `unknown`: it asks, with Allow and Deny only, every time.
-4. The user allowed the tool always, under the class it has now: it runs without asking.
-5. The user allowed the tool for this chat: it runs without asking.
-6. It asks, with Allow, Allow for this chat, Allow always and Deny.
+   changes that.
+2. The tool is `destructive` or `unknown`: it asks, with Allow and Deny only, every time.
+3. The user allowed the tool always, under the class it has now: it runs without asking.
+4. The user allowed the tool for this chat: it runs without asking.
+5. It asks, with Allow, Allow for this chat, Allow always and Deny.
 
 Every outcome goes in the session's transcript as an `approval.decision` entry, with what let the call through
-(`scope`: `once`, `chat`, `always` or `bypass`), and is reported to the server the same way.
+(`scope`: `once`, `chat`, `always` or `grant`), and is reported to the server the same way. A call a grant let
+through also records `grant_id`, and, where the person picked a time, `grant_minutes` (what they picked) and
+`grant_confirmed_minutes` (what the server confirmed): the same keys as the .NET SDK's.
 
 ### Allow always
 
@@ -260,10 +263,13 @@ that became `destructive` or `unknown`, or that an administrator's rule now cove
 
 ### Bypass mode
 
-`usePermissionMode("bypass")` approves every call that would ask, `destructive` and `unknown` ones too, without asking
-anyone. It is for development and trusted automation, set in your code; never offer it to users. An administrator's
-"Ask first" rule still asks. The agent warns once on the console when it starts in bypass mode, and the transcript and
-the server's record say `bypass` for each call it let through. A tool the mode hides stays hidden.
+Bypass is the server's: a person switches approvals off for one conversation after signing in again in the browser,
+where the organisation allows it, and the server records every call under it. This SDK does not offer it yet.
+
+`usePermissionMode("bypass")` asks for it in your code. Until this SDK offers the server's Bypass, a session that
+would run in `ask` runs in `auto` instead, never above `useDefaultToolMode` or the agent's ceiling. Nothing is
+approved without the person: `destructive` and `unknown` calls, an administrator's "Ask first" rule and the server's
+own questions still ask, and a tool the mode hides stays hidden. The agent warns once on the console when it starts.
 
 ### Rules from the administrator
 

@@ -128,14 +128,33 @@ export class FadenstackAgent {
     return this.#tools;
   }
 
-  /** The most any session may use: the profile's ceiling, if the server sets one, or `auto`. */
+  /**
+   * The most any session may use: the narrowest of the profile's ceiling and the agent's highest level, where the
+   * server sets them, else `auto`. A level this SDK does not know reads as `read_only` (the profile's parser), never
+   * as none. The server's Bypass is not offered by this SDK yet, so a highest level of Bypass is `auto` here.
+   */
   get ceiling(): ToolMode {
-    return this.#profile?.toolModes.ceiling ?? "auto";
+    const modes = this.#profile?.toolModes;
+    const max = modes?.max === undefined || modes.max === "bypass" ? "auto" : modes.max;
+    return narrowestMode(narrowestMode("auto", modes?.ceiling), max);
   }
 
-  /** The mode new sessions start in: `ask`, or stricter. */
+  /**
+   * The mode new sessions start in: the agent's default level from the server (`ask` from an older server, or for a
+   * level this SDK does not know), no higher than the app's own default (`useDefaultToolMode`) and the ceiling.
+   */
   get defaultToolMode(): ToolMode {
-    return narrowestMode(narrowestMode(this.settings.defaultMode, this.#profile?.toolModes.default ?? "ask"), this.ceiling);
+    return narrowestMode(narrowestMode(this.#profile?.toolModes.default ?? "ask", this.settings.defaultMode), this.ceiling);
+  }
+
+  /**
+   * @internal The mode a session's turns run in before the ceiling. An app set to bypass mode gets no Bypass from this
+   * SDK yet (the server's Bypass with its second sign-in comes later): a session that would ask runs in `auto` instead,
+   * never above the app's own default -- destructive, unclassified and rule-asked calls still ask, and the gateway's
+   * own questions still go to the person.
+   */
+  modeFor(mode: ToolMode): ToolMode {
+    return this.settings.permissionMode === "bypass" && mode === "ask" ? narrowestMode("auto", this.settings.defaultMode) : mode;
   }
 
   /**
@@ -211,8 +230,9 @@ export class FadenstackAgent {
     this.#context = context;
     if (this.settings.permissionMode === "bypass" && !this.#warned) {
       this.#warned = true;
-      console.warn(`The agent '${this.slug}' runs in bypass mode: tool calls that would ask are approved without asking, ` +
-        "destructive ones too; an admin's \"Ask first\" rule still asks. Use it only for development and trusted automation.");
+      console.warn(`The agent '${this.slug}' is set to bypass mode, which this SDK does not offer yet (the server's Bypass ` +
+        "needs a second sign-in): its sessions run in auto instead. Destructive and unclassified calls, an admin's " +
+        "\"Ask first\" rule and the gateway's own questions still ask.");
     }
     if (this.settings.report) void this.#reportManifest();
   }

@@ -54,6 +54,12 @@ and `expires_in` retain the server's units. For example, .NET
 `AgentGrant.remainingS` mirrors .NET `RemainingS`. `pollStepUp()` returns named
 `proof/error/interval` fields corresponding to the .NET polling tuple.
 
-Explicit `user_command`/`user_history` paths keep individual approval. Bypass is
-not enabled or advertised by this implementation. Its separate step-up flow and
-shared level/work-grant management UI must be certified before a host offers it.
+Explicit `user_command`/`user_history` paths keep individual approval. The server's
+Bypass is not offered or announced by this implementation yet; until it is,
+`usePermissionMode("bypass")` runs a session that would ask in `auto` instead and
+approves nothing on its own (see [Tools and approvals](tools.md#bypass-mode)). Its
+step-up flow and shared level/work-grant management UI come with it.
+
+A call a time grant let through is recorded in the transcript with `grant_id`,
+`grant_minutes` (the time the person picked) and `grant_confirmed_minutes` (what the
+server confirmed), the keys the .NET SDK writes and reads.

@@ -80,11 +80,20 @@ describe("server-confirmed time grants in both shared skins", () => {
 
   it("restores the actual confirmation from the journal without offering a new permission", () => {
     const entries: TranscriptEntry[] = [{ id: "one", parentId: null, timestamp: new Date().toISOString(), turnId: "turn", status: null,
-      type: EntryTypes.approvalDecision, data: { call_id: "call", name: "write_note", asked: true, approved: true, scope: "grant", minutes: 15 } }];
+      type: EntryTypes.approvalDecision, data: { call_id: "call", name: "write_note", asked: true, approved: true, scope: "grant",
+        grant_minutes: 30, grant_confirmed_minutes: 15 } }];
     const restored = buildTurn(entries, context, undefined);
     const part = restored.parts.find((p): p is ApprovalPart => p instanceof ApprovalPart)!;
     expect(part.stateText).toBe("Server confirmed up to 15 min");
     expect(part.isPending).toBe(false);
     expect(part.timeGrantChoices).toEqual([]);
+  });
+
+  it("reads an entry the .NET SDK wrote: the picked time under grant_minutes", () => {
+    const entries: TranscriptEntry[] = [{ id: "one", parentId: null, timestamp: new Date().toISOString(), turnId: "turn", status: null,
+      type: EntryTypes.approvalDecision, data: { call_id: "call", name: "write_note", asked: true, approved: true, scope: "grant", grant_minutes: 30 } }];
+    const part = buildTurn(entries, context, undefined).parts.find((p): p is ApprovalPart => p instanceof ApprovalPart)!;
+    expect(part.stateText).toContain("30 min");
+    expect(part.isPending).toBe(false);
   });
 });

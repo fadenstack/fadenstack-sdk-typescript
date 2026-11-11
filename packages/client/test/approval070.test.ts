@@ -5,7 +5,12 @@ describe("0.7 approval wire compatibility", () => {
   it("retains the reviewed JSON-pointer target mapping for work grants", () => {
     const profile = toAgentProfile({ host_tool_contract: [{ name: "read", risk: "read", target_type: "document", target_argument: "/resource~1id" }] });
     expect(profile.hostToolContract[0]).toMatchObject({ targetType: "document", targetArgument: "/resource~1id" });
-    expect(() => toAgentProfile({ host_tool_contract: [{ name: "read", target_type: "document", target_argument: "/bad~2key" }] })).toThrow();
+    // A mapping this SDK cannot read is left out (a work grant never covers that tool), and the profile still loads.
+    for (const bad of [{ target_type: "document", target_argument: "/bad~2key" }, { target_type: "mailbox", target_argument: "/id" },
+      { target_type: "document", target_argument: "id" }]) {
+      const entry = toAgentProfile({ host_tool_contract: [{ name: "read", risk: "read", ...bad }] }).hostToolContract[0]!;
+      expect(entry).toEqual({ name: "read", risk: "read" });
+    }
   });
   it("retains the maximum and standing restrictions without enabling unsupported modes", () => {
     const p = toAgentProfile({ tool_modes: { default: "ask", ceiling: "ask", max: "auto" },
@@ -16,15 +21,37 @@ describe("0.7 approval wire compatibility", () => {
   });
 
   it.each([
-    { standing: ["unexpected"], longest_grant_minutes: 120, grant_classes: ["read"] },
-    { standing: [], longest_grant_minutes: -1, grant_classes: ["read"] },
-    { standing: [], longest_grant_minutes: 1.5, grant_classes: ["read"] },
-    { standing: [], longest_grant_minutes: 120, grant_classes: ["destructive"] },
-    { standing: [], longest_grant_minutes: 120, grant_classes: "read" },
-    { standing: ["chat", "chat"], longest_grant_minutes: 120, grant_classes: ["read"] },
-    null,
-  ])("refuses malformed approval limits rather than treating them as unrestricted", approvals => {
-    expect(() => toAgentProfile({ approvals })).toThrow("Invalid agent approval limits");
+    [{ standing: ["unexpected"], longest_grant_minutes: 120, grant_classes: ["read"] }, { standing: [], longestGrantMinutes: 120, grantClasses: ["read"] }],
+    [{ standing: ["chat", "later"], longest_grant_minutes: 120, grant_classes: ["read"] }, { standing: ["chat"], longestGrantMinutes: 120, grantClasses: ["read"] }],
+    [{ standing: [], longest_grant_minutes: -1, grant_classes: ["read"] }, { standing: [], longestGrantMinutes: 0, grantClasses: ["read"] }],
+    [{ standing: [], longest_grant_minutes: 1.5, grant_classes: ["read"] }, { standing: [], longestGrantMinutes: 0, grantClasses: ["read"] }],
+    [{ standing: [], longest_grant_minutes: 120, grant_classes: ["destructive"] }, { standing: [], longestGrantMinutes: 120, grantClasses: [] }],
+    [{ standing: [], longest_grant_minutes: 120, grant_classes: "read" }, { standing: [], longestGrantMinutes: 120, grantClasses: [] }],
+    [{ standing: "chat", longest_grant_minutes: 120, grant_classes: ["read"] }, { standing: [], longestGrantMinutes: 120, grantClasses: ["read"] }],
+    [{ standing: ["chat", "chat"], longest_grant_minutes: 120, grant_classes: ["read"] }, { standing: ["chat"], longestGrantMinutes: 120, grantClasses: ["read"] }],
+    [null, { standing: [], longestGrantMinutes: 0, grantClasses: [] }],
+    ["any", { standing: [], longestGrantMinutes: 0, grantClasses: [] }],
+  ])("narrows malformed or unknown approval limits, never widens them and never fails the profile (%j)", (approvals, expected) => {
+    expect(toAgentProfile({ approvals }).approvals).toEqual(expected);
+  });
+
+  it("reads an unknown level as read only, and no level or Bypass as no limit", () => {
+    expect(toAgentProfile({ tool_modes: { ceiling: "supervised", max: "later" } }).toolModes).toMatchObject({ ceiling: "read_only", max: "read_only" });
+    expect(toAgentProfile({ tool_modes: { ceiling: "bypass", max: "bypass" } }).toolModes).toMatchObject({ ceiling: null, max: "bypass" });
+    const none = toAgentProfile({ tool_modes: { ceiling: null } }).toolModes;
+    expect(none.ceiling).toBeNull();
+    expect(none.max).toBeUndefined();
+    expect(toAgentProfile({ tool_modes: { default: "bypass" } }).toolModes.default).toBe("ask");
+  });
+
+  it("does not allow Bypass the server describes incompletely or with another sign-in route", () => {
+    const bypass = (b: unknown) => toAgentProfile({ approvals: { standing: null, longest_grant_minutes: 120, grant_classes: ["read"], bypass: b } }).approvals!.bypass;
+    const step = { required: true, max_age: 300, start: "/api/agent-tokens/step-ups" };
+    expect(bypass({ allowed: true, longest_minutes: 60, evidence: "calls", step_up: step })).toMatchObject({ allowed: true, longestMinutes: 60 });
+    expect(bypass({ allowed: true, longest_minutes: 60, evidence: "calls", step_up: { ...step, start: "https://elsewhere.test/x" } })!.allowed).toBe(false);
+    expect(bypass({ allowed: true, longest_minutes: 60, evidence: "calls", step_up: { ...step, required: false } })!.allowed).toBe(false);
+    expect(bypass({ allowed: "yes", step_up: step })!.allowed).toBe(false);
+    expect(bypass({ allowed: true, longest_minutes: 60, evidence: "full", step_up: step })).toMatchObject({ allowed: true, evidence: "full" });
   });
 
   it("keeps Bypass metadata without treating it as a legacy Auto permission", () => {
@@ -36,7 +63,7 @@ describe("0.7 approval wire compatibility", () => {
     expect(p.toolModes.max).toBe("bypass");
     expect(p.approvals?.bypass).toMatchObject({ allowed: false, stepUp: { required: true, maxAge: 300 } });
     expect(p.toolModes.default).toBe("ask");
-    expect(() => toAgentProfile({ tool_modes: { max: "unreviewed" } })).toThrow();
+    expect(toAgentProfile({ tool_modes: { max: "unreviewed" } }).toolModes.max).toBe("read_only");
   });
 
   it("preserves the legacy overload and sends explicit scopes with the new overload", async () => {

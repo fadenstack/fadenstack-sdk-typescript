@@ -165,22 +165,58 @@ describe("an admin's Ask first rule", () => {
   });
 });
 
+// The app's Bypass is the server's, after a second sign-in; this SDK does not offer it yet, so bypass mode runs a
+// session that would ask in auto instead, under the floor (fadenstack-dev sdk/43 §9 decision 2; as the .NET SDK).
 describe("bypass mode", () => {
-  it("approves what would ask, destructive too, says bypass in the transcript and the report, and warns once", async () => {
+  it("never approves on its own: a destructive call still asks, nothing says bypass, and it warns once", async () => {
     const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
     const s = await setup({ model: once({ name: "delete_page", arguments: { page: 7 } }) }, () => ApprovalDecision.deny(),
       (b) => b.usePermissionMode("bypass"));
     expect(s.agent.permissionMode).toBe("bypass");
     const session = await s.agent.startSession();
-    await session.send("delete");
+    const result = await session.send("delete");
     await s.agent.restart();
-    expect(s.asked).toEqual([]);
-    expect(s.pages.deleted).toEqual([7]);
-    expect(decisions(session)).toMatchObject([{ approved: true, scope: "bypass", asked: false, rule: false }]);
+    expect(s.asked).toMatchObject([{ toolName: "delete_page", toolClass: "destructive", canAllowForSession: false }]);
+    expect(s.pages.deleted).toEqual([]);
+    expect(result.outcome).toBe("tool_denied");
+    expect(decisions(session)).toMatchObject([{ approved: false, asked: true }]);
     await s.agent.flush();
-    expect(s.gateway.reported.find((e) => e["type"] === "approval.decided")).toMatchObject({ decision: "approved", scope: "bypass" });
+    expect(s.gateway.reported.filter((e) => e["type"] === "approval.decided").map((e) => e["scope"])).not.toContain("bypass");
     expect(warn).toHaveBeenCalledTimes(1);
     expect(String(warn.mock.calls[0]![0])).toContain("bypass mode");
+  });
+
+  it("runs a session that would ask in auto: a write runs unasked, and the turn says auto", async () => {
+    vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    const s = await setup({ model: once({ name: "write_page", arguments: { page: 8, text: "x" } }) }, () => ApprovalDecision.deny(),
+      (b) => b.usePermissionMode("bypass"));
+    const session = await s.agent.startSession();
+    expect(session.toolMode).toBe("ask");
+    expect(session.effectiveToolMode).toBe("auto");
+    await session.send("write");
+    expect(s.asked).toEqual([]);
+    expect(s.pages.pages.get(8)).toBe("x");
+    expect(s.gateway.modelCalls[0]!.toolMode).toBe("auto");
+  });
+
+  it("stays under the app's own default and the server's ceiling", async () => {
+    vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    const capped = await setup({}, undefined, (b) => b.usePermissionMode("bypass").useDefaultToolMode("ask"));
+    expect((await capped.agent.startSession()).effectiveToolMode).toBe("ask");
+    const ceiling = await setup({ agents: [{ slug: "docs", contract: PAGE_CONTRACT, ceiling: "ask" }] }, undefined,
+      (b) => b.usePermissionMode("bypass"));
+    expect((await ceiling.agent.startSession()).effectiveToolMode).toBe("ask");
+  });
+
+  it("never answers the gateway's own question: it goes to the person", async () => {
+    vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    const s = await setup(
+      { model: () => ({ gatewayTool: { name: "mcp_github.delete_repo", approval: { message: "Deleting needs your OK.", rule: false } }, text: "Done." }) },
+      () => ApprovalDecision.deny("not now"), (b) => b.usePermissionMode("bypass"));
+    const session = await s.agent.startSession();
+    await session.send("delete the repo");
+    expect(s.asked).toMatchObject([{ toolName: "mcp_github.delete_repo", source: "gateway" }]);
+    expect(s.gateway.approvals).toEqual([{ approvalId: expect.stringMatching(/^approval-/), approved: false }]);
   });
 
   it("does not widen the tool mode", async () => {
@@ -191,6 +227,53 @@ describe("bypass mode", () => {
     const result = await session.send("write");
     expect(result.outcome).toBe("tool_denied");
     expect(s.pages.pages.get(8)).toBe("Figure F2");
+  });
+});
+
+// The agent's levels from a 0.7.0 server, as the .NET SDK reads them (fadenstack-dev sdk/43 §2: T2, T3).
+describe("the agent's levels from the server", () => {
+  const agent = (extra: Record<string, string>) => ({ agents: [{ slug: "docs", contract: PAGE_CONTRACT, ...extra }] });
+
+  it("starts in the server's default level, also above ask, capped by the app's own default", async () => {
+    expect((await (await setup(agent({ defaultLevel: "auto" }))).agent.startSession()).toolMode).toBe("auto");
+    const capped = await setup(agent({ defaultLevel: "auto" }), undefined, (b) => b.useDefaultToolMode("ask"));
+    expect((await capped.agent.startSession()).toolMode).toBe("ask");
+    expect((await (await setup(agent({ defaultLevel: "bypass" }))).agent.startSession()).toolMode).toBe("ask");
+    expect((await (await setup(agent({ defaultLevel: "later" }))).agent.startSession()).toolMode).toBe("ask");
+  });
+
+  it("never goes above the agent's highest level, and reads an unknown one as read only", async () => {
+    const started = async (extra: Record<string, string>) => {
+      const s = await setup(agent(extra));
+      await s.agent.start();
+      return s.agent;
+    };
+    expect((await started({ maxLevel: "ask" })).ceiling).toBe("ask");
+    expect((await started({ maxLevel: "bypass" })).ceiling).toBe("auto");
+    expect((await started({ ceiling: "auto", maxLevel: "later" })).ceiling).toBe("read_only");
+    expect((await started({ defaultLevel: "auto", maxLevel: "read_only" })).defaultToolMode).toBe("read_only");
+    const s = await setup({ ...agent({ maxLevel: "ask" }), model: once({ name: "write_page", arguments: { page: 8, text: "x" } }) },
+      () => ApprovalDecision.deny());
+    const session = await s.agent.startSession("auto");
+    expect(session.effectiveToolMode).toBe("ask");
+    await session.send("write");
+    expect(s.asked).toHaveLength(1);
+  });
+
+  it("holds the gateway's word on a call for its round only", async () => {
+    let round = 0;
+    const mark = { type: "CUSTOM", name: "faden.approval_required",
+      value: { toolCallId: "same", toolCallName: "write_page", message: "Checked by the gateway.", toolClass: "destructive", rule: false } };
+    const s = await setup({ model: () => {
+      round++;
+      return round === 1 ? { text: "1", toolCalls: [{ name: "write_page", arguments: { page: 8, text: "a" }, id: "same" }], events: [mark] }
+        : round === 2 ? { text: "2", toolCalls: [{ name: "write_page", arguments: { page: 8, text: "b" }, id: "same" }] }
+        : { text: "Done." };
+    } }, () => ApprovalDecision.approve());
+    const session = await s.agent.startSession("auto");
+    await session.send("write twice");
+    expect(s.asked).toMatchObject([{ toolName: "write_page", toolClass: "destructive" }]); // the marked call only
+    expect(s.pages.pages.get(8)).toBe("b");
   });
 });
 

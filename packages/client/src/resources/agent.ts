@@ -5,7 +5,7 @@ import { toWireManifest, type AppManifest } from "../manifest.js";
 import { toAgentPrincipal, toAgentProfile, toSkillList, toWireEvent, type AgentClientEvent, type AgentPrincipal, type AgentProfile, type SkillList, type AnswerScope } from "../models.js";
 import type { ToolClass, ToolMode } from "../tools/toolModes.js";
 import { AgentProvenanceResource } from "./provenance.js";
-import { grantObject, grantString, grantNumber, toAgentGrant, toWireGrant,
+import { grantObject, grantString, grantNumber, toAgentGrant, toAgentGrants, toWireGrant,
   type GrantRequest, type GrantExtension, type AgentGrant, type GrantList, type GrantReport, type StepUpStarted, type StepUpPoll } from "../grants.js";
 
 /** The server takes at most this many events per report. */
@@ -158,7 +158,7 @@ export class AgentResource {
     const value = grantObject(await this.#transport.get<unknown>(this.#route("grants"), signal));
     const serverNow = grantString(value["server_now"]);
     if (!Array.isArray(value["data"])) throw new FadenstackError("Invalid grant list.");
-    return { data: value["data"].map(v => toAgentGrant(v, serverNow)), serverNow };
+    return { data: toAgentGrants(value["data"], serverNow), serverNow };
   }
 
   async getGrant(id: string, signal?: AbortSignal): Promise<AgentGrant> {

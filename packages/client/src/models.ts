@@ -1,5 +1,4 @@
 import { parseToolMode, type ToolMode } from "./tools/toolModes.js";
-import { FadenstackError } from "./errors.js";
 
 /** New levels are projected without making legacy clients advertise Bypass support. */
 export type ApprovalLevel = ToolMode | "bypass";
@@ -137,8 +136,7 @@ export function toAgentProfile(json: unknown): AgentProfile {
   const p = obj(json);
   const localMcp = obj(p["local_mcp"]);
   const modes = obj(p["tool_modes"]);
-  const max = modes["max"] === "bypass" ? "bypass" : parseToolMode(str(modes["max"]));
-  if (modes["max"] !== undefined && !max) throw new FadenstackError("Invalid agent approval maximum.");
+  const max = modes["max"] === "bypass" ? "bypass" : toLevel(modes["max"]);
   return {
     ...(toAgentPrincipal(p["principal"]) ? { principal: toAgentPrincipal(p["principal"])! } : {}),
     id: str(p["id"]) ?? "",
@@ -163,10 +161,9 @@ export function toAgentProfile(json: unknown): AgentProfile {
           if (approval !== undefined) entry.approval = approval;
           const targetType = str(t["target_type"]);
           const targetArgument = str(t["target_argument"]);
-          if (targetType !== undefined || targetArgument !== undefined) {
-            if (!["document", "folder", "site", "app", "desk"].includes(targetType ?? "")
-              || !targetArgument?.startsWith("/") || /~(?:[^01]|$)/.test(targetArgument))
-              throw new FadenstackError("Invalid tool grant target mapping.");
+          // A mapping this SDK cannot read is left out: a work grant then never covers the tool (it asks).
+          if (["document", "folder", "site", "app", "desk"].includes(targetType ?? "")
+            && targetArgument?.startsWith("/") && !/~(?:[^01]|$)/.test(targetArgument)) {
             entry.targetType = targetType as NonNullable<ToolContractEntry["targetType"]>;
             entry.targetArgument = targetArgument;
           }
@@ -178,7 +175,8 @@ export function toAgentProfile(json: unknown): AgentProfile {
     localMcp: { mode: str(localMcp["mode"]) ?? "disable", developerMode: localMcp["developer_mode"] === true },
     toolModes: {
       default: parseToolMode(str(modes["default"])) ?? "ask",
-      ceiling: parseToolMode(str(modes["ceiling"])) ?? null,
+      // No ceiling, or Bypass (which this SDK does not offer): no limit beyond Auto.
+      ceiling: modes["ceiling"] === "bypass" ? null : toLevel(modes["ceiling"]) ?? null,
       ...(max ? { max } : {}),
       openWorldEnforced: modes["open_world_enforced"] === true,
     },
@@ -192,27 +190,44 @@ export function toAgentProfile(json: unknown): AgentProfile {
   };
 }
 
+/**
+ * A level from the profile: none (absent or null) is no limit; one this SDK does not know narrows to read-only -- it
+ * cannot be taken for none, and a later server's new level must not break the profile.
+ */
+function toLevel(value: unknown): ToolMode | undefined {
+  if (value === undefined || value === null) return undefined;
+  return parseToolMode(str(value)) ?? "read_only";
+}
+
+/** Known members only, each once: a value this SDK does not know grants nothing. */
+function known<T extends string>(value: unknown, allowed: readonly T[]): T[] {
+  return Array.isArray(value) ? [...new Set(value.filter((x): x is T => typeof x === "string" && allowed.includes(x as T)))] : [];
+}
+
+const minutesOr = (value: unknown, missing: number): number =>
+  value === undefined ? missing : Number.isSafeInteger(value) && (value as number) >= 0 ? (value as number) : 0;
+
+/**
+ * What the agent's approval card may offer. Never throws: a later server may add values. What is malformed or unknown
+ * narrows -- no standing choice, no grant class, no minutes, Bypass not allowed -- and never widens.
+ */
 function toApprovalSettings(value: unknown): ApprovalSettings {
+  // Not an object at all: nothing standing, no grant -- never read as "any" the way a missing field is.
+  if (value === null || typeof value !== "object" || Array.isArray(value)) return { standing: [], grantClasses: [], longestGrantMinutes: 0 };
   const p = obj(value);
   const standing = p["standing"];
-  const classes = p["grant_classes"];
-  const minutes = p["longest_grant_minutes"];
-  const validList = (v: unknown, allowed: readonly string[]): v is string[] => Array.isArray(v)
-    && v.every(x => typeof x === "string" && allowed.includes(x)) && new Set(v).size === v.length;
-  if (!(standing === null || validList(standing, ["chat", "time", "grant", "always"]))
-    || !validList(classes, ["read", "write"]) || !Number.isSafeInteger(minutes) || (minutes as number) < 0) {
-    throw new FadenstackError("Invalid agent approval limits.");
-  }
-  const result: ApprovalSettings = { standing: standing as StandingApproval[] | null,
-    grantClasses: classes as ("read" | "write")[], longestGrantMinutes: minutes as number };
+  const result: ApprovalSettings = {
+    standing: standing === null || standing === undefined ? null : known(standing, ["chat", "time", "grant", "always"]),
+    grantClasses: p["grant_classes"] === undefined ? ["read", "write"] : known(p["grant_classes"], ["read", "write"]),
+    longestGrantMinutes: minutesOr(p["longest_grant_minutes"], 120),
+  };
   if (p["bypass"] !== undefined) {
     const b = obj(p["bypass"]), step = obj(b["step_up"]);
-    if (typeof b["allowed"] !== "boolean" || !Number.isSafeInteger(b["longest_minutes"]) || (b["longest_minutes"] as number) < 0
-      || !["decisions", "calls", "results"].includes(String(b["evidence"])) || step["required"] !== true
-      || !Number.isSafeInteger(step["max_age"]) || (step["max_age"] as number) <= 0
-      || step["start"] !== "/api/agent-tokens/step-ups") throw new FadenstackError("Invalid Bypass approval limits.");
-    result.bypass = { allowed: b["allowed"], longestMinutes: b["longest_minutes"] as number, evidence: b["evidence"] as string,
-      stepUp: { required: true, maxAge: step["max_age"] as number, start: step["start"] } };
+    const maxAge = Number.isSafeInteger(step["max_age"]) && (step["max_age"] as number) > 0 ? (step["max_age"] as number) : 300;
+    // Allowed only as the server describes it in full: a second sign-in, at the one route this SDK starts it at.
+    const allowed = b["allowed"] === true && step["required"] === true && step["start"] === "/api/agent-tokens/step-ups";
+    result.bypass = { allowed, longestMinutes: minutesOr(b["longest_minutes"], 120),
+      evidence: str(b["evidence"]) ?? "calls", stepUp: { required: true, maxAge, start: "/api/agent-tokens/step-ups" } };
   }
   return result;
 }

@@ -84,6 +84,8 @@ export class FadenstackClient {
     const tokenOptions: AgentTokenProviderOptions = { apiUrl: options.apiUrl ?? options.serverUrl, agent: options.agent };
     if (store) tokenOptions.store = store;
     if (options.fetch) tokenOptions.fetch = options.fetch;
+    // The same rule for the sign-in as for the client: a development server over http only where the app allows it.
+    if (options.allowInsecureHttp !== undefined) tokenOptions.allowInsecureHttp = options.allowInsecureHttp;
     const tokens = new AgentTokenProvider(tokenOptions);
     return { client: new FadenstackClient({ ...rest, credentials: tokens }), tokens };
   }

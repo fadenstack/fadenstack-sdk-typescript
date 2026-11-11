@@ -163,8 +163,8 @@ const agent = FadenstackAgent.createBuilder()
 | `useApprovals(handler)` | Who decides on tool calls that need approval. Without one, every such call is declined. |
 | `useSessionStore(store)` | Where sessions live. By default IndexedDB in a browser and memory elsewhere. See [Sessions on the device](sessions.md). |
 | `useApprovalStore(store)` | Where "Allow always" is kept. By default IndexedDB in a browser and memory elsewhere. See [Tools and approvals](tools.md#allow-always). |
-| `usePermissionMode(mode)` | `ask` (the default), or `bypass` for development and trusted automation. See [Tools and approvals](tools.md#bypass-mode). |
-| `useDefaultToolMode(mode)` | The mode new sessions start in. It can only be stricter than `ask`. |
+| `usePermissionMode(mode)` | `ask` (the default), or `bypass`, which asks for the server's Bypass; this SDK does not offer it yet, so such sessions run in `auto` instead of `ask`. See [Tools and approvals](tools.md#bypass-mode). |
+| `useDefaultToolMode(mode)` | A cap on the mode new sessions start in (the agent's default level from the server). It narrows, never widens. |
 | `useMaxRounds(rounds)` | Model calls per turn before the loop stops. Default 16. |
 | `useHistoryBudget(tokens)` | About how many tokens of history a request carries. Older turns are left out. Default 24 000. |
 | `useReasoning(effort)` | How much a reasoning model thinks before it answers: `none`, `minimal`, `low`, `medium`, `high` or `xhigh`. Models without the setting ignore it. |
@@ -198,7 +198,7 @@ The agent starts the first time you open a session, or when you call `agent.star
 - checks that the builder has every module the profile requires, and throws a `FadenstackError` if not;
 - settles the tools: host tools outside a non-empty contract are dropped, the others run under the stricter of your
   class and the contract's; without a contract, or for an entry without a `risk`, a tool is `unknown` and asks;
-- warns once, on the console, when the agent runs in bypass mode;
+- warns once, on the console, when the app set bypass mode;
 - reports the app's manifest to the server, unless event reporting is off.
 
 After that, `agent.profile` is the `AgentProfile` and `agent.tools` lists the tools with the classes they run under.
@@ -209,7 +209,7 @@ When a new version of the agent is published, `agent.restart()` loads the profil
 A session is one conversation, kept on the device:
 
 ```ts
-const session = await agent.startSession();          // starts in "ask"
+const session = await agent.startSession();          // the agent's default level: "ask" unless set otherwise
 const again = await agent.openSession(session.id);   // a session from this device's store
 ```
 
@@ -248,7 +248,7 @@ Every event has a `type` and the `turnId` of its turn:
 | `tool_started` | `callId`, `name`, `toolClass`, `source`, `arguments` | A tool starts. `source` is `host` for your tools, `mcp` for a tool from an MCP server, or `gateway` for a tool the server runs. For a server tool, `arguments` is empty: the server keeps them. |
 | `tool_completed` | `callId`, `name`, `source`, `outcome`, `result`, `durationMs` | A tool ended. `outcome` is `ok`, `error`, `denied` or `cancelled`. The duration leaves out the time spent waiting for an approval. |
 | `approval_requested` | `request` | A tool call waits for the user. Your approval handler is asked right after. |
-| `approval_decided` | `request`, `decision` | The user decided, or no answer came in time. Calls that an approval for this chat, an approval kept always, or bypass mode let through are not asked, and send neither event. |
+| `approval_decided` | `request`, `decision` | The user decided, or no answer came in time. Calls that an approval for this chat, an approval kept always, or a grant let through are not asked, and send neither event. |
 | `notice` | `notice` | A refusal or a limit, to show on the turn. See [Outcomes and errors](outcomes.md#notices). |
 | `gateway_event` | `event` | An event from the server, as it arrived: citations, a PII notice, and others. |
 | `turn_completed` | `result` | The turn ended. `result` is the `AgentResult`. |

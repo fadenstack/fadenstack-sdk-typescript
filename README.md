@@ -84,7 +84,7 @@ if (!(await tokens.isSignedIn())) {
 }
 
 const agent = FadenstackAgent.createBuilder().useClient(client).addTools(readTicket).build();
-const session = await agent.startSession(); // starts in "ask"
+const session = await agent.startSession(); // the agent's default level: "ask" unless set otherwise
 for await (const event of session.stream("What is ticket T-1042 about?")) {
   if (event.type === "text") process.stdout.write(event.text);
   if (event.type === "turn_completed") console.log(`\n(${event.result.outcome})`);

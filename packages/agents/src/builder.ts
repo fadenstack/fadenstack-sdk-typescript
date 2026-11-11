@@ -1,6 +1,5 @@
 import {
   FadenstackClient,
-  narrowestMode,
   type ChatStreamer,
   type FadenstackClientOptions,
   type ManifestContext,
@@ -44,7 +43,8 @@ export interface AgentSettings {
   readonly permissionMode: PermissionMode;
   readonly requireHostToolPolicyChecks: boolean;
   readonly grantPlaceResolver?: GrantPlaceResolver;
-  readonly defaultMode: ToolMode;
+  /** The app's cap on the server's default level; undefined: none. */
+  readonly defaultMode?: ToolMode;
   readonly maxRounds: number;
   readonly historyTokens: number;
   readonly report: boolean;
@@ -87,7 +87,7 @@ export class AgentBuilder {
   #permissionMode: PermissionMode = "ask";
   #requireHostToolPolicyChecks = false;
   #grantPlaceResolver: GrantPlaceResolver | undefined;
-  #defaultMode: ToolMode = "ask";
+  #defaultMode: ToolMode | undefined;
   #maxRounds = 16;
   #historyTokens = 24_000;
   #report = true;
@@ -145,10 +145,10 @@ export class AgentBuilder {
   }
 
   /**
-   * `ask` (the default): calls the tool mode asks about wait for the user. `bypass`: they are approved without
-   * asking, destructive ones too -- for development and trusted automation, never a user's choice. An admin's
-   * "Ask first" rule still asks, and the transcript and the server's record say `bypass` for each call it let
-   * through. The agent warns once when it starts in bypass.
+   * `ask` (the default): calls the tool mode asks about wait for the user. `bypass`: the app's code asks for the
+   * server's Bypass, which needs a second sign-in and which this SDK does not offer yet -- until then its sessions run
+   * in `auto` instead of `ask`. Destructive and unclassified calls, an admin's "Ask first" rule and the gateway's own
+   * questions still ask; nothing is approved without the person. The agent warns once when it starts.
    */
   usePermissionMode(mode: PermissionMode): this {
     if (mode !== "ask" && mode !== "bypass") throw new TypeError(`A permission mode is ask or bypass, not '${String(mode)}'.`);
@@ -166,11 +166,12 @@ export class AgentBuilder {
   useGrantPlaceResolver(resolver: GrantPlaceResolver): this { this.#grantPlaceResolver = resolver; return this; }
 
   /**
-   * The mode new sessions start in. It can only be stricter than `ask`: every session starts asking unless the
-   * user widens that session.
+   * A cap on the mode new sessions start in. Sessions start in the agent's default level from the server (`ask`
+   * unless its author set another); this can only narrow it, never widen it -- for an app that never starts in
+   * `auto`, say.
    */
   useDefaultToolMode(mode: ToolMode): this {
-    this.#defaultMode = narrowestMode("ask", mode);
+    this.#defaultMode = mode;
     return this;
   }
 
@@ -279,7 +280,7 @@ export class AgentBuilder {
       permissionMode: this.#permissionMode,
       requireHostToolPolicyChecks: this.#requireHostToolPolicyChecks,
       ...(this.#grantPlaceResolver ? { grantPlaceResolver: this.#grantPlaceResolver } : {}),
-      defaultMode: this.#defaultMode,
+      ...(this.#defaultMode ? { defaultMode: this.#defaultMode } : {}),
       maxRounds: this.#maxRounds,
       historyTokens: this.#historyTokens,
       report: this.#report,

@@ -1,4 +1,4 @@
-import { bytesSha256, toAgentGrant, type AgentGrant, type GrantTarget, type ToolClass, type ApprovalSettings } from "@fadenstack/client";
+import { bytesSha256, toAgentGrants, type AgentGrant, type GrantTarget, type ToolClass, type ApprovalSettings } from "@fadenstack/client";
 import type { FadenstackAgent } from "./agent.js";
 
 export interface GrantPlace { type: GrantTarget["type"]; identifier: string; label: string }
@@ -102,13 +102,16 @@ export class AgentGrants {
     return structuredClone(grant);
   }
 
-  /** Replace, never union an old authority snapshot with a new one. Malformed snapshots clear cached authority. */
+  /**
+   * Replace, never union an old authority snapshot with a new one. A malformed snapshot, or a grant of another agent
+   * version or device, clears cached authority; a single grant this SDK cannot read is left out (`toAgentGrants`).
+   */
   snapshot(value: unknown): void {
     this.#known.clear();
     try {
       const event = value as { serverNow?: unknown; grants?: unknown };
       if (typeof event?.serverNow !== "string" || !Array.isArray(event.grants)) throw new Error("Invalid grant snapshot.");
-      const grants = event.grants.map(raw => toAgentGrant(raw, event.serverNow as string));
+      const grants = toAgentGrants(event.grants, event.serverNow);
       for (const grant of grants) this.#owned(grant);
       for (const grant of grants) this.#known.set(grant.id, structuredClone(grant));
       this.#offsetMs = Date.parse(event.serverNow) - Date.now();

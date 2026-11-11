@@ -123,6 +123,22 @@ export function toAgentGrant(value: unknown, serverNow?: string): AgentGrant {
     serverNow: date(serverNow ?? g["server_now"]), narrowed: g["narrowed"] === undefined ? [] : list(g["narrowed"]) };
 }
 
+/**
+ * A list from the server. A grant this SDK cannot read -- a later kind, status or evidence level, or a malformed one --
+ * is left out: it covers nothing here. The others stand, so one new value does not take every grant away.
+ */
+export function toAgentGrants(values: readonly unknown[], serverNow: string): AgentGrant[] {
+  const grants: AgentGrant[] = [];
+  for (const value of values) {
+    try {
+      grants.push(toAgentGrant(value, serverNow));
+    } catch {
+      // left out, as above
+    }
+  }
+  return grants;
+}
+
 export function toWireGrant(request: GrantRequest): Json {
   return { kind: request.kind, minutes: request.minutes, ...(request.tools !== undefined ? { tools: request.tools } : {}),
     ...(request.classes !== undefined ? { classes: request.classes } : {}), ...(request.targets !== undefined ? { targets: request.targets } : {}),
