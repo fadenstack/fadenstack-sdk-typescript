@@ -2,9 +2,11 @@ import { FadenstackApiError, FadenstackError } from "../errors.js";
 import { jsonRequest, type FadenstackTransport } from "../http/transport.js";
 import { toApiError } from "../http/errorReader.js";
 import { toWireManifest, type AppManifest } from "../manifest.js";
-import { toAgentPrincipal, toAgentProfile, toSkillList, toWireEvent, type AgentClientEvent, type AgentPrincipal, type AgentProfile, type SkillList } from "../models.js";
+import { toAgentPrincipal, toAgentProfile, toSkillList, toWireEvent, type AgentClientEvent, type AgentPrincipal, type AgentProfile, type SkillList, type AnswerScope } from "../models.js";
 import type { ToolClass, ToolMode } from "../tools/toolModes.js";
 import { AgentProvenanceResource } from "./provenance.js";
+import { grantObject, grantString, grantNumber, toAgentGrant, toWireGrant,
+  type GrantRequest, type GrantExtension, type AgentGrant, type GrantList, type GrantReport, type StepUpStarted, type StepUpPoll } from "../grants.js";
 
 /** The server takes at most this many events per report. */
 export const MAX_EVENTS_PER_REPORT = 100;
@@ -134,7 +136,93 @@ export class AgentResource {
   }
 
   /** Approves or declines a gateway tool call waiting for the user (`faden.approval_required`). */
-  async answerApproval(approvalId: string, approved: boolean, signal?: AbortSignal): Promise<void> {
-    await this.#transport.post<unknown>(this.#route(`approvals/${encodeURIComponent(approvalId)}`), { approved }, signal);
+  answerApproval(approvalId: string, approved: boolean, signal?: AbortSignal): Promise<void>;
+  answerApproval(approvalId: string, approved: boolean, scope: AnswerScope, signal?: AbortSignal): Promise<void>;
+  async answerApproval(approvalId: string, approved: boolean, scopeOrSignal?: AnswerScope | AbortSignal, signal?: AbortSignal): Promise<void> {
+    const scope = typeof scopeOrSignal === "string" ? scopeOrSignal : undefined;
+    if (scope !== undefined && !["once", "chat", "always"].includes(scope)) throw new TypeError("Invalid approval answer scope.");
+    await this.#transport.post<unknown>(this.#route(`approvals/${encodeURIComponent(approvalId)}`),
+      { approved, ...(scope !== undefined ? { scope } : {}) }, typeof scopeOrSignal === "string" ? signal : scopeOrSignal);
+  }
+
+  /** The person's confirmed request; only the returned server scope holds. Never create a grant automatically. */
+  async createGrant(request: GrantRequest, options: { conversationId?: string; stepUpProof?: string; signal?: AbortSignal } = {}): Promise<AgentGrant> {
+    return toAgentGrant(await this.#grantRequest("POST", "grants", toWireGrant(request), options));
+  }
+
+  async listGrants(signal?: AbortSignal): Promise<GrantList> {
+    const value = grantObject(await this.#transport.get<unknown>(this.#route("grants"), signal));
+    const serverNow = grantString(value["server_now"]);
+    if (!Array.isArray(value["data"])) throw new FadenstackError("Invalid grant list.");
+    return { data: value["data"].map(v => toAgentGrant(v, serverNow)), serverNow };
+  }
+
+  async getGrant(id: string, signal?: AbortSignal): Promise<AgentGrant> {
+    return toAgentGrant(await this.#transport.get<unknown>(this.#route(`grants/${encodeURIComponent(id)}`), signal));
+  }
+
+  async revokeGrant(id: string, signal?: AbortSignal): Promise<AgentGrant> {
+    return toAgentGrant(await this.#transport.json<unknown>("DELETE", this.#route(`grants/${encodeURIComponent(id)}`), undefined, signal));
+  }
+
+  async pauseGrant(id: string, signal?: AbortSignal): Promise<AgentGrant> {
+    return toAgentGrant(await this.#transport.post<unknown>(this.#route(`grants/${encodeURIComponent(id)}/pause`), {}, signal));
+  }
+
+  async resumeGrant(id: string, signal?: AbortSignal): Promise<AgentGrant> {
+    return toAgentGrant(await this.#transport.post<unknown>(this.#route(`grants/${encodeURIComponent(id)}/resume`), {}, signal));
+  }
+
+  async extendGrant(id: string, extension: GrantExtension, signal?: AbortSignal): Promise<AgentGrant> {
+    return toAgentGrant(await this.#transport.post<unknown>(this.#route(`grants/${encodeURIComponent(id)}/extend`), {
+      ...(extension.minutes !== undefined ? { minutes: extension.minutes } : {}), ...(extension.targets !== undefined ? { targets: extension.targets } : {}),
+      ...(extension.shownTextSha256 !== undefined ? { shown_text_sha256: extension.shownTextSha256 } : {}),
+    }, signal));
+  }
+
+  async reportGrant(id: string, calls: readonly string[], signal?: AbortSignal): Promise<GrantReport> {
+    const value = grantObject(await this.#transport.post<unknown>(this.#route(`grants/${encodeURIComponent(id)}/report`), { calls }, signal));
+    return { matched: grantNumber(value["matched"]), deviceOnly: grantNumber(value["device_only"]), gatewayOnly: grantNumber(value["gateway_only"]) };
+  }
+
+  /** Codes and proofs are memory-only; the host opens the verified same-server sign-in page. */
+  async startStepUp(longestMinutes?: number, clientVersion?: string, signal?: AbortSignal): Promise<StepUpStarted> {
+    const value = grantObject(await this.#transport.post<unknown>(this.#transport.api("api/agent-tokens/step-ups"),
+      { ...(longestMinutes !== undefined ? { longest_minutes: longestMinutes } : {}), ...(clientVersion !== undefined ? { client_version: clientVersion } : {}) }, signal));
+    const uri = grantString(value["verification_uri"]), complete = grantString(value["verification_uri_complete"]);
+    // A malformed/compromised response cannot redirect the second sign-in to another origin.
+    if (new URL(uri).origin !== this.#transport.apiUrl.origin || new URL(complete).origin !== this.#transport.apiUrl.origin)
+      throw new FadenstackError("The step-up sign-in origin changed.");
+    const interval = grantNumber(value["interval"]), expiresIn = grantNumber(value["expires_in"]);
+    if (!interval || !expiresIn) throw new FadenstackError("Invalid step-up timing.");
+    return { stepUpCode: grantString(value["step_up_code"]), userCode: grantString(value["user_code"]), verificationUri: uri,
+      verificationUriComplete: complete, expiresIn, interval };
+  }
+
+  async pollStepUp(stepUpCode: string, signal?: AbortSignal): Promise<StepUpPoll> {
+    const { response, text } = await this.#transport.request(() => jsonRequest("POST", this.#transport.api("api/agent-tokens/step-ups/token"), { step_up_code: stepUpCode }), signal);
+    if (!response.ok) {
+      if (response.status === 400) {
+        const value = grantObject(JSON.parse(text));
+        const error = value["error"];
+        if (["authorization_pending", "slow_down", "access_denied", "expired_token", "invalid_grant"].includes(String(error)))
+          return { error: error as Extract<StepUpPoll, { error: string }>["error"], ...(value["interval"] === undefined ? {} : { interval: grantNumber(value["interval"]) }) };
+      }
+      throw toApiError(response, text);
+    }
+    const value = grantObject(JSON.parse(text));
+    return { proof: grantString(value["proof"]), expiresIn: grantNumber(value["expires_in"]), signedInAt: grantString(value["signed_in_at"]), method: grantString(value["method"]) };
+  }
+
+  async #grantRequest(method: string, rest: string, body: unknown, options: { conversationId?: string; stepUpProof?: string; signal?: AbortSignal }): Promise<unknown> {
+    const { response, text } = await this.#transport.request(() => {
+      const spec = jsonRequest(method, this.#route(rest), body);
+      return { ...spec, headers: { ...spec.headers,
+        ...(options.conversationId !== undefined ? { "x-faden-conversation-id": options.conversationId } : {}),
+        ...(options.stepUpProof !== undefined ? { "x-faden-step-up": options.stepUpProof } : {}),
+      } };
+    }, options.signal);
+    if (!response.ok) throw toApiError(response, text);
+    return JSON.parse(text) as unknown;
   }
 }

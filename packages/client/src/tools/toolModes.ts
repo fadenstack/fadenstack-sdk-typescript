@@ -31,7 +31,12 @@ export const OPEN_WORLD_ENFORCED = false;
  *     ask         run   ask     ask          ask
  *     auto        run   run     ask          ask
  */
-export function decideTool(mode: ToolMode, toolClass: ToolClass): ToolModeDecision {
+export function decideTool(mode: ToolMode, toolClass: ToolClass, approval?: string): ToolModeDecision {
+  // Contract hints never unhide a tool or relax a destructive/unknown class.
+  if (mode !== "off" && (mode !== "read_only" || toolClass === "read")) {
+    if (approval === "always" || approval === "ask") return "ask";
+    if (approval === "never" && (toolClass === "read" || toolClass === "write")) return "run";
+  }
   switch (mode) {
     case "off":
       return "hidden";

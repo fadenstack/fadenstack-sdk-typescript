@@ -1,4 +1,18 @@
 import { parseToolMode, type ToolMode } from "./tools/toolModes.js";
+import { FadenstackError } from "./errors.js";
+
+/** New levels are projected without making legacy clients advertise Bypass support. */
+export type ApprovalLevel = ToolMode | "bypass";
+export type AnswerScope = "once" | "chat" | "always";
+export type StandingApproval = "chat" | "time" | "grant" | "always";
+export interface AgentApprovals {
+  /** Null means any supported standing choice; an empty list means once only. */
+  standing: StandingApproval[] | null;
+  longestGrantMinutes: number;
+  grantClasses: ("read" | "write")[];
+  bypass?: { allowed: boolean; longestMinutes: number; evidence: string;
+    stepUp: { required: true; maxAge: number; start: string } };
+}
 
 /** What the SDK caches about its agent (`GET /v1/agents/{agent}/profile`): never its instructions. */
 export interface AgentProfile {
@@ -24,7 +38,9 @@ export interface AgentProfile {
   serverTools: string[] | null;
   knowledge: string[];
   localMcp: { mode: string; developerMode: boolean };
-  toolModes: { default: ToolMode; ceiling: ToolMode | null; openWorldEnforced: boolean };
+  toolModes: { default: ToolMode; ceiling: ToolMode | null; max?: ApprovalLevel; openWorldEnforced: boolean };
+  /** Absent on pre-0.7 servers. Never infer grants from the feature name alone. */
+  approvals?: AgentApprovals;
   /** What the SDKs show: `greeting`, `suggestions`. */
   ui: Record<string, unknown>;
   extensions: Record<string, unknown>;
@@ -116,6 +132,8 @@ export function toAgentProfile(json: unknown): AgentProfile {
   const p = obj(json);
   const localMcp = obj(p["local_mcp"]);
   const modes = obj(p["tool_modes"]);
+  const max = modes["max"] === "bypass" ? "bypass" : parseToolMode(str(modes["max"]));
+  if (modes["max"] !== undefined && !max) throw new FadenstackError("Invalid agent approval maximum.");
   return {
     ...(toAgentPrincipal(p["principal"]) ? { principal: toAgentPrincipal(p["principal"])! } : {}),
     id: str(p["id"]) ?? "",
@@ -147,8 +165,10 @@ export function toAgentProfile(json: unknown): AgentProfile {
     toolModes: {
       default: parseToolMode(str(modes["default"])) ?? "ask",
       ceiling: parseToolMode(str(modes["ceiling"])) ?? null,
+      ...(max ? { max } : {}),
       openWorldEnforced: modes["open_world_enforced"] === true,
     },
+    ...(p["approvals"] !== undefined ? { approvals: toAgentApprovals(p["approvals"]) } : {}),
     ui: obj(p["ui"]),
     extensions: obj(p["extensions"]),
     requiredClientModules: strings(p["required_client_modules"]),
@@ -156,6 +176,31 @@ export function toAgentProfile(json: unknown): AgentProfile {
     features: strings(p["features"]),
     user: { language: str(obj(p["user"])["language"]) || null },
   };
+}
+
+function toAgentApprovals(value: unknown): AgentApprovals {
+  const p = obj(value);
+  const standing = p["standing"];
+  const classes = p["grant_classes"];
+  const minutes = p["longest_grant_minutes"];
+  const validList = (v: unknown, allowed: readonly string[]): v is string[] => Array.isArray(v)
+    && v.every(x => typeof x === "string" && allowed.includes(x)) && new Set(v).size === v.length;
+  if (!(standing === null || validList(standing, ["chat", "time", "grant", "always"]))
+    || !validList(classes, ["read", "write"]) || !Number.isSafeInteger(minutes) || (minutes as number) < 0) {
+    throw new FadenstackError("Invalid agent approval limits.");
+  }
+  const result: AgentApprovals = { standing: standing as StandingApproval[] | null,
+    grantClasses: classes as ("read" | "write")[], longestGrantMinutes: minutes as number };
+  if (p["bypass"] !== undefined) {
+    const b = obj(p["bypass"]), step = obj(b["step_up"]);
+    if (typeof b["allowed"] !== "boolean" || !Number.isSafeInteger(b["longest_minutes"]) || (b["longest_minutes"] as number) < 0
+      || !["decisions", "calls", "results"].includes(String(b["evidence"])) || step["required"] !== true
+      || !Number.isSafeInteger(step["max_age"]) || (step["max_age"] as number) <= 0
+      || step["start"] !== "/api/agent-tokens/step-ups") throw new FadenstackError("Invalid Bypass approval limits.");
+    result.bypass = { allowed: b["allowed"], longestMinutes: b["longest_minutes"] as number, evidence: b["evidence"] as string,
+      stepUp: { required: true, maxAge: step["max_age"] as number, start: step["start"] } };
+  }
+  return result;
 }
 
 /**

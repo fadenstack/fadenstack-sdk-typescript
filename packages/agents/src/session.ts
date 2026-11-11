@@ -295,6 +295,7 @@ export class AgentSession {
 
 /** How a call that needed approval was settled. */
 interface Settled {
+  scope?: ApprovalScope;
   approved: boolean;
   /** Nobody answered in time. */
   timedOut: boolean;
@@ -551,7 +552,8 @@ class Turn {
     const rule = (value as Data)["rule"] !== false;
     const settled = await this.#approve(request, rule, typeof timeoutS === "number" ? timeoutS * 1000 : 5 * 60_000, signal);
     if (settled.timedOut) return; // the gateway expires it on its own
-    await this.#agent.client.agent!.answerApproval(approvalId, settled.approved, signal);
+    const scope = settled.scope === "chat" || settled.scope === "always" ? settled.scope : "once";
+    await this.#agent.client.agent!.answerApproval(approvalId, settled.approved, scope, signal);
     if (!settled.approved) this.#toolDenied = true;
   }
 
@@ -609,7 +611,8 @@ class Turn {
    */
   async #decideAndRun(tool: AgentTool, toolClass: ToolClass, mark: GatewayMark | undefined, call: ToolCall,
     args: Record<string, unknown>, signal: AbortSignal): Promise<{ result: string; outcome: ToolOutcome; waited: number }> {
-    const decision = decideTool(this.#mode, toolClass);
+    const contractApproval = this.#agent.profile.hostToolContract.find(entry => entry.name === tool.name)?.approval;
+    const decision = decideTool(this.#mode, toolClass, contractApproval);
     if (decision === "hidden") {
       this.#toolDenied = true;
       const why = `the tool mode is ${this.#mode}`;
@@ -619,14 +622,14 @@ class Turn {
     const invalid = checkArguments(tool.parameters, args);
     if (invalid) return { result: `Error: ${invalid}`, outcome: "error", waited: 0 };
     let waited = 0;
-    const rule = mark?.rule === true;
+    const rule = mark?.rule === true || contractApproval === "always";
     if (!this.#commandOrigin && (rule || decision === "ask")) {
       const settled = await this.#approve({
         callId: call.id,
         toolName: tool.name,
         toolClass,
         source: tool.source,
-        reason: rule ? mark.message
+        reason: rule ? mark?.message ?? "This tool requires individual approval."
           : toolClass === "unknown" ? "Nobody has said what this tool does."
           : `'${tool.name}' is ${toolClass}; the tool mode is ${this.#mode}.`,
         arguments: args,
@@ -751,19 +754,22 @@ class Turn {
     target?: () => Promise<string | undefined>, individual = false): Promise<Settled> {
     const { toolName: name, toolClass } = base;
     const open = !individual && !rule && !asksEveryTime(toolClass);
+    const allowed = (kind: "chat" | "always") => this.#agent.profile.approvals?.standing == null
+      || this.#agent.profile.approvals.standing.includes(kind);
+    const chatAllowed = open && allowed("chat"), alwaysAllowed = open && allowed("always");
     const standing: ApprovalScope | undefined = rule || individual ? undefined
       : this.#agent.permissionMode === "bypass" ? "bypass"
       : !open ? undefined
-      : (await this.#approvedAlways(name, toolClass)) ? "always"
-      : this.#access.approved.has(name) ? "chat"
+      : alwaysAllowed && (await this.#approvedAlways(name, toolClass)) ? "always"
+      : chatAllowed && this.#access.approved.has(name) ? "chat"
       : undefined;
     if (standing) {
       await this.#record(base, { approved: true, scope: standing, asked: false, rule, timedOut: false, waitedMs: undefined });
-      return { approved: true, timedOut: false, waitedMs: undefined, reason: undefined };
+      return { approved: true, scope: standing, timedOut: false, waitedMs: undefined, reason: undefined };
     }
     const described = target ? await target() : undefined;
     const request: ApprovalRequest = {
-      ...base, canAllowForSession: open, canAllowAlways: open, ...(rule ? { requiredByRule: true } : {}), ...(described ? { target: described } : {}),
+      ...base, canAllowForSession: chatAllowed, canAllowAlways: alwaysAllowed, ...(rule ? { requiredByRule: true } : {}), ...(described ? { target: described } : {}),
     };
     this.#emit({ type: "approval_requested", turnId: this.#id, request });
     const limit = timeoutMs === undefined ? signal : AbortSignal.any([signal, AbortSignal.timeout(timeoutMs)]);
@@ -780,8 +786,8 @@ class Turn {
     const waitedMs = performance.now() - started;
     // What the request offered, and nothing more: a handler cannot widen it.
     let scope: ApprovalScope | undefined = !decision?.approved ? undefined
-      : decision.always && open ? "always"
-      : decision.forSession && open ? "chat"
+      : decision.always && alwaysAllowed ? "always"
+      : decision.forSession && chatAllowed ? "chat"
       : "once";
     if (scope === "always" && !(await this.#keepAlways(name, toolClass))) scope = "once";
     if (scope === "chat") this.#access.approved.add(name);
@@ -792,7 +798,7 @@ class Turn {
       : scope === "once" ? ApprovalDecision.approve()
       : decision;
     this.#emit({ type: "approval_decided", turnId: this.#id, request, decision: decided });
-    return { approved: scope !== undefined, timedOut: decision === undefined, waitedMs, reason: decision?.reason };
+    return { approved: scope !== undefined, scope, timedOut: decision === undefined, waitedMs, reason: decision?.reason };
   }
 
   /** The approval's transcript entry, and the server's record of it (names only). */
