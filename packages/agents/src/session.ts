@@ -12,6 +12,7 @@ import {
   type FadenstackEvent,
   type FinishReason,
   type GovernanceNotice,
+  type HostToolDecision,
   type ReceiptNote,
   type ToolCall,
   type ToolClass,
@@ -303,6 +304,12 @@ interface Settled {
   waitedMs: number | undefined;
   /** The user's reason for declining. */
   reason: string | undefined;
+}
+
+interface PreparedHostPolicy {
+  decision: HostToolDecision;
+  inputJson: string;
+  controlsJson: string;
 }
 
 /** One turn: the loop of model calls and tool runs, and its record. */
@@ -611,6 +618,29 @@ class Turn {
    */
   async #decideAndRun(tool: AgentTool, toolClass: ToolClass, mark: GatewayMark | undefined, call: ToolCall,
     args: Record<string, unknown>, signal: AbortSignal): Promise<{ result: string; outcome: ToolOutcome; waited: number }> {
+    let policy: PreparedHostPolicy | undefined;
+    if (!this.#commandOrigin && tool.source === "host" && this.#agent.hostToolPolicyChecks) {
+      try {
+        await this.#agent.refreshPolicy(signal);
+        const inputJson = commandJson(args);
+        const decision = await this.#agent.client.agent!.checkHostTool({ name: tool.name, arguments: JSON.parse(inputJson) as Record<string, unknown>,
+          origin: "model_tool", callId: call.id, phase: "prepare", toolMode: narrowestMode(this.#mode, this.#session.effectiveToolMode),
+          schemaSha256: await commandSchemaHash(tool.parameters), conversationId: this.#session.id, turnId: this.#id }, signal);
+        if (!this.#agent.profile.principal || commandJson(decision.principal) !== commandJson(this.#agent.profile.principal))
+          throw new Error("The host call's authenticated identity changed.");
+        if (decision.decision === "deny") {
+          this.#toolDenied = true;
+          await this.#notice({ outcome: "tool_denied", stage: "tool", message: decision.message });
+          return { result: decision.message, outcome: "denied", waited: 0 };
+        }
+        policy = { decision, inputJson, controlsJson: this.#approvalControlsJson() };
+        toolClass = stricterClass(toolClass, decision.toolClass);
+        this.#mode = narrowestMode(narrowestMode(this.#mode, this.#session.effectiveToolMode), decision.effectiveToolMode);
+      } catch (error) {
+        if (signal.aborted) throw signal.reason ?? error;
+        return { result: `Error: ${error instanceof Error ? error.message : String(error)}`, outcome: "error", waited: 0 };
+      }
+    }
     const contractApproval = this.#agent.profile.hostToolContract.find(entry => entry.name === tool.name)?.approval;
     const decision = decideTool(this.#mode, toolClass, contractApproval);
     if (decision === "hidden") {
@@ -622,8 +652,8 @@ class Turn {
     const invalid = checkArguments(tool.parameters, args);
     if (invalid) return { result: `Error: ${invalid}`, outcome: "error", waited: 0 };
     let waited = 0;
-    const rule = mark?.rule === true || contractApproval === "always";
-    if (!this.#commandOrigin && (rule || decision === "ask")) {
+    const rule = mark?.rule === true || contractApproval === "always" || policy?.decision.requiredByRule === true;
+    if (!this.#commandOrigin && (rule || decision === "ask" || policy?.decision.decision === "ask")) {
       const settled = await this.#approve({
         callId: call.id,
         toolName: tool.name,
@@ -650,7 +680,7 @@ class Turn {
         toolClass,
         context: { signal, callId: call.id, sessionId: this.#session.id, turnId: this.#id, services },
       };
-      const value = await this.#invoker(services)(invocation);
+      const value = await this.#invoker(services, policy)(invocation);
       return { result: resultText(value), outcome: "ok", waited };
     } catch (error) {
       if (signal.aborted) throw signal.reason ?? error;
@@ -676,9 +706,10 @@ class Turn {
     });
   }
 
-  #invoker(services: CallServices): ToolInvoker {
+  #invoker(services: CallServices, policy?: PreparedHostPolicy): ToolInvoker {
     let invoker: ToolInvoker = async (i) => {
       if (this.#commandOrigin) return this.#invokeCommand(i, () => services.ran(i.arguments));
+      if (policy) await this.#checkHostDispatch(i, policy);
       services.ran(i.arguments); // the arguments the tool gets, after the stages that change them
       return i.tool.invoke(i.arguments, i.context);
     };
@@ -689,6 +720,31 @@ class Turn {
       invoker = (i) => stage.invoke(i, next);
     }
     return invoker;
+  }
+
+  #approvalControlsJson(): string {
+    return commandJson({ modes: this.#agent.profile.toolModes, approvals: this.#agent.profile.approvals ?? null });
+  }
+
+  /** No transformed local values are sent to a new cloud endpoint; native proposals retain their own final binding. */
+  async #checkHostDispatch(invocation: ToolInvocation, policy: PreparedHostPolicy): Promise<void> {
+    const signal = invocation.context.signal;
+    signal.throwIfAborted();
+    if (commandJson(invocation.arguments) !== policy.inputJson)
+      throw new Error("Host arguments changed after policy review. Transformed host arguments require a reviewed disclosure contract.");
+    await this.#agent.refreshPolicy(signal);
+    if (this.#approvalControlsJson() !== policy.controlsJson) throw new Error("Approval limits changed. Review a new host call.");
+    const checked = await this.#agent.client.agent!.checkHostTool({ name: invocation.tool.name,
+      arguments: JSON.parse(policy.inputJson) as Record<string, unknown>, origin: "model_tool", callId: invocation.context.callId,
+      phase: "dispatch", prepared: policy.decision, toolMode: narrowestMode(this.#mode, this.#session.effectiveToolMode),
+      schemaSha256: await commandSchemaHash(invocation.tool.parameters), conversationId: this.#session.id, turnId: this.#id }, signal);
+    const before = policy.decision;
+    if (checked.decision === "deny" || checked.profileStamp !== before.profileStamp || checked.argumentsStamp !== before.argumentsStamp
+      || checked.decisionStamp !== before.decisionStamp || commandJson(checked.principal) !== commandJson(before.principal)
+      || commandJson(checked.principal) !== commandJson(this.#agent.profile.principal))
+      throw new Error("The host call's identity or central policy changed. Review it again.");
+    signal.throwIfAborted();
+    if (commandJson(invocation.arguments) !== policy.inputJson) throw new Error("Host arguments changed after approval.");
   }
 
   /** The final stage arguments are reviewed, then checked again immediately before the native tool runs. */

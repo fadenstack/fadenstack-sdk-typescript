@@ -10,12 +10,15 @@ import { grantObject, grantString, grantNumber, toAgentGrant, toWireGrant,
 
 /** The server takes at most this many events per report. */
 export const MAX_EVENTS_PER_REPORT = 100;
+export const HOST_TOOL_DISPATCH_FEATURE = "host_tools.dispatch_check";
 
 export interface HostToolCheck {
   name: string;
   arguments: Record<string, unknown>;
   toolMode: ToolMode;
-  origin: "user_command" | "user_history";
+  origin: "user_command" | "user_history" | "model_tool";
+  /** Required for model calls; binds audit attribution across preparation and dispatch. */
+  callId?: string;
   phase: "prepare" | "dispatch";
   schemaSha256: string;
   prepared?: Pick<HostToolDecision, "profileStamp" | "argumentsStamp" | "decisionStamp">;
@@ -61,6 +64,7 @@ export class AgentResource {
   async checkHostTool(check: HostToolCheck, signal?: AbortSignal): Promise<HostToolDecision> {
     const body = {
       name: check.name, arguments: check.arguments, tool_mode: check.toolMode, origin: check.origin,
+      ...(check.callId !== undefined ? { call_id: check.callId } : {}),
       phase: check.phase, schema_sha256: check.schemaSha256,
       ...(check.prepared ? { prepared_profile: check.prepared.profileStamp,
         prepared_arguments: check.prepared.argumentsStamp, prepared_decision: check.prepared.decisionStamp } : {}),

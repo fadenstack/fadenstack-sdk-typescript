@@ -41,6 +41,7 @@ export interface AgentSettings {
   /** Where "Allow always" is kept. */
   readonly approvalStore: ApprovalStore;
   readonly permissionMode: PermissionMode;
+  readonly requireHostToolPolicyChecks: boolean;
   readonly defaultMode: ToolMode;
   readonly maxRounds: number;
   readonly historyTokens: number;
@@ -82,6 +83,7 @@ export class AgentBuilder {
   #sessions: SessionStore | undefined;
   #approvalStore: ApprovalStore | undefined;
   #permissionMode: PermissionMode = "ask";
+  #requireHostToolPolicyChecks = false;
   #defaultMode: ToolMode = "ask";
   #maxRounds = 16;
   #historyTokens = 24_000;
@@ -148,6 +150,12 @@ export class AgentBuilder {
   usePermissionMode(mode: PermissionMode): this {
     if (mode !== "ask" && mode !== "bypass") throw new TypeError(`A permission mode is ask or bypass, not '${String(mode)}'.`);
     this.#permissionMode = mode;
+    return this;
+  }
+
+  /** Require fresh central host dispatch checks; never fall back to cached policy on an older gateway. */
+  requireHostToolPolicyChecks(): this {
+    this.#requireHostToolPolicyChecks = true;
     return this;
   }
 
@@ -263,6 +271,7 @@ export class AgentBuilder {
       sessions: this.#sessions ?? (globalThis.indexedDB ? new IndexedDbSessionStore() : new MemorySessionStore()),
       approvalStore: this.#approvalStore ?? (globalThis.indexedDB ? new IndexedDbApprovalStore() : new MemoryApprovalStore()),
       permissionMode: this.#permissionMode,
+      requireHostToolPolicyChecks: this.#requireHostToolPolicyChecks,
       defaultMode: this.#defaultMode,
       maxRounds: this.#maxRounds,
       historyTokens: this.#historyTokens,

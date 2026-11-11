@@ -1,5 +1,6 @@
 import {
   FadenstackError,
+  HOST_TOOL_DISPATCH_FEATURE,
   SDK_LANGUAGE,
   SDK_VERSION,
   decideTool,
@@ -39,6 +40,7 @@ export class FadenstackAgent {
   #tools: readonly AgentTool[] = [];
   #starting: Promise<void> | undefined;
   #warned = false;
+  #hostPolicySeen = false;
 
   private constructor(settings: AgentSettings) {
     this.settings = settings;
@@ -86,6 +88,31 @@ export class FadenstackAgent {
   /** `ask`, or `bypass` when the app set it (`usePermissionMode`). */
   get permissionMode(): PermissionMode {
     return this.settings.permissionMode;
+  }
+
+  /** Once negotiated, loss of policy-check support fails closed until a new authenticated agent is built. */
+  get hostToolPolicyChecks(): boolean {
+    return this.#hostPolicySeen || this.settings.requireHostToolPolicyChecks;
+  }
+
+  /** Refresh mutable approval controls; an identity/contract change requires a new reviewed agent context. */
+  async refreshPolicy(signal?: AbortSignal): Promise<void> {
+    const before = this.profile;
+    const fresh = await this.client.agent!.getProfile(signal);
+    this.#assertHostPolicySupport(fresh);
+    const binding = (p: AgentProfile) => JSON.stringify({ id: p.id, slug: p.slug, version: p.version, draft: p.draft,
+      principal: p.principal, contract: p.hostToolContract, instructions: p.instructionsSha256,
+      modules: p.requiredClientModules, extensions: p.extensions });
+    if (binding(before) !== binding(fresh)) throw new FadenstackError("The agent identity or published contract changed. Reconnect before running tools.");
+    this.#profile = fresh;
+    if (this.#context) this.#context = { ...this.#context, profile: fresh };
+  }
+
+  #assertHostPolicySupport(profile: AgentProfile): void {
+    const supported = profile.features.includes(HOST_TOOL_DISPATCH_FEATURE);
+    if ((this.settings.requireHostToolPolicyChecks || this.#hostPolicySeen) && !supported)
+      throw new FadenstackError("This agent requires fresh central host-tool dispatch checks. The gateway does not advertise support.");
+    if (supported) this.#hostPolicySeen = true;
   }
 
   /** The last report to the server that failed, for diagnostics (reports never fail a turn). */
@@ -152,6 +179,7 @@ export class FadenstackAgent {
 
   async #start(signal?: AbortSignal): Promise<void> {
     const profile = await this.client.agent!.getProfile(signal);
+    this.#assertHostPolicySupport(profile);
     const missing = profile.requiredClientModules.filter((m) => !this.settings.modules.includes(m));
     if (missing.length) {
       throw new FadenstackError(`The agent '${this.slug}' needs the module(s) ${missing.join(", ")}; add them to the builder.`);

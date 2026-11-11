@@ -55,4 +55,21 @@ describe("0.7 approval wire compatibility", () => {
     expect(decideTool("auto", "destructive", "never")).toBe("ask");
     expect(decideTool("auto", "unknown", "never")).toBe("ask");
   });
+
+  it("attributes model host checks with the native tool-call id and session headers", async () => {
+    let captured: unknown;
+    let headers: Headers | undefined;
+    const client = new FadenstackClient({ serverUrl: "https://offline.test", agent: "nc", fetch: async (_input, init) => {
+      captured = JSON.parse(init!.body as string);
+      headers = new Headers(init?.headers);
+      return Response.json({ decision: "ask", tool_class: "destructive", effective_tool_mode: "ask", required_by_rule: true,
+        message: "Review", profile_stamp: "a".repeat(64), arguments_stamp: "b".repeat(64), decision_stamp: "c".repeat(64),
+        principal: { tenant_id: "tenant", user_id: "user", agent_id: "agent", device_id: "device" } });
+    } });
+    await client.agent!.checkHostTool({ name: "nc_test", arguments: { value: "reviewed" }, toolMode: "ask", origin: "model_tool",
+      callId: "model-call", phase: "prepare", schemaSha256: "d".repeat(64), conversationId: "chat", turnId: "turn" });
+    expect(captured).toMatchObject({ origin: "model_tool", call_id: "model-call", arguments: { value: "reviewed" } });
+    expect(headers?.get("x-faden-conversation-id")).toBe("chat");
+    expect(headers?.get("x-faden-turn-id")).toBe("turn");
+  });
 });

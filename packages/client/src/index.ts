@@ -63,7 +63,7 @@ export {
   type ToolContractEntry,
   type ToolExecutedEvent,
 } from "./models.js";
-export { AgentResource, MAX_EVENTS_PER_REPORT, type HostToolCheck, type HostToolDecision } from "./resources/agent.js";
+export { AgentResource, MAX_EVENTS_PER_REPORT, HOST_TOOL_DISPATCH_FEATURE, type HostToolCheck, type HostToolDecision } from "./resources/agent.js";
 export { toAgentGrant, type AgentGrant, type GrantRequest, type GrantExtension, type GrantTarget, type GrantList,
   type GrantReport, type StepUpStarted, type StepUpPoll } from "./grants.js";
 export { AgentProvenanceResource, ProvenanceResource, toProvenancePolicy, toSignedRecord } from "./resources/provenance.js";
