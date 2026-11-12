@@ -96,8 +96,9 @@ await check("host-read", async () => {
 
 await check("ask-approve", async () => {
   const session = await agent.startSession("ask");
-  const result = await session.send("Call fill_field with ref e1 and value Jane Doe now. Do not ask me first.");
-  if (!filled.includes("e1=Jane Doe")) throw new Error(`fill_field did not run (outcome ${result.outcome})`);
+  // A value that is not personal data: a name such as "Jane Doe" is redacted by a server's PII policy before the model sees it.
+  const result = await session.send("Call fill_field with ref e1 and value ACME-42 now. Do not ask me first.");
+  if (!filled.includes("e1=ACME-42")) throw new Error(`fill_field did not run (outcome ${result.outcome})`);
   const asked = session.transcript.some((e) => e.type === "approval.decision" && e.data.approved === true);
   if (!asked) throw new Error("it ran without an approval in ask mode");
   return "asked, approved, ran";
