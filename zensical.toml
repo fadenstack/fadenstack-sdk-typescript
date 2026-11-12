@@ -5,12 +5,21 @@ nav = [
   { "Overview" = "index.md" },
   { "Build an agent" = "agent.md" },
   { "Tools and approvals" = "tools.md" },
+  { "Server-held grants and Bypass" = "server-grants.md" },
+  { "Host commands and central policy" = "host-commands.md" },
+  { "Central policy for native hosts" = "host-policy.md" },
+  { "Local tools" = "local-tools.md" },
   { "Outcomes and errors" = "outcomes.md" },
   { "Sessions on the device" = "sessions.md" },
   { "The chat panel" = "chat-panel.md" },
   { "Marking AI-generated content" = "provenance.md" },
   { "Testing without a server" = "testing.md" },
   { "Plain chat completions" = "plain-api.md" },
+  { "Hosting" = "hosting.md" },
+  { "Extending" = "extending.md" },
+  { "Libraries" = "libraries.md" },
+  { "Samples" = "samples.md" },
+  { "Parity with the .NET SDK" = "parity.md" },
 ]
 
 [project.markdown_extensions]
