@@ -137,6 +137,48 @@ await session.stopBypass();      // ends it from the next call on; the chat goes
 `off` or `read_only`. Where Bypass cannot be had -- the server does not offer it, or the app opens no second sign-in --
 a session that would ask runs in `auto` instead (never above `useDefaultToolMode` or the ceiling) and the agent warns once.
 
+## The grant lifecycle
+
+A grant the server holds must not run on unattended, whatever app started it. `GrantLifecycle` (`@fadenstack/agents`;
+.NET's `GrantLifecycle`) keeps the rules for every host, over `agent.grants`, by the server's clock. The host feeds it
+what only it knows; it pauses, resumes and ends the device's grants for the agent (a stretch of work and Bypass by
+default; `options.manages` adds others) and says when one is near its end and when one ended.
+
+```ts
+const life = new GrantLifecycle(agent.grants);           // ticks every 15 s by itself; { tickEvery: 0 } and call life.tick()
+life.onEnded(({ grant, reason, ran, callsUsed }) => show(grant.id, reason));
+life.onEndingSoon(({ grant, left }) => offerMoreTime(grant));
+
+await agent.start();                                      // signed in
+await life.appStarted();                                  // the next start: resume or end what the last run left paused
+addEventListener("pagehide", () => void life.appEnding()); // the app's end
+```
+
+| The host feeds | What the lifecycle does |
+|---|---|
+| `appEnding()` | Pauses every running grant at the server (waits at most 3 s). The time runs on. Offline, the grant runs on at the server until its time. |
+| `appStarted()` | Reads the server's list, resumes each grant paused **less than 30 minutes** ago by the server's clock -- no card, no second sign-in; the server checks that Bypass is still allowed -- and ends the others (`away`). A grant found running runs on. A refusal (403) ends it with the server's reason; 503 or no connection keeps it paused and tries again at each tick. |
+| `setScreenLock("locked" \| "unlocked" \| "unknown")` | A stretch of work pauses while the screen is locked and resumes with the unlock; locked for **30 minutes** it ends (`locked`). Bypass is paused by the app's end only. `unknown` never pauses and never ends, and after a lock it never resumes. |
+| `stop()` | Ends every grant of the device it looks after, a paused one too, and says `stopped`. The result says how many ended; those left run on at the server until their time. The host stops the running turns itself. |
+| `keepGoing(id)` | Adds 30 minutes, within the longest grant from its start (`grant_at_longest` past that); never for Bypass. |
+
+`onEndingSoon` fires once per end time, two minutes before the end (not for Bypass). `onEnded` fires once per grant with
+`reason`: `time`, `stopped`, `elsewhere` (the server ended it and cannot say why), `spent`, `locked`, `away`, `admin`,
+`kill_switch`, `limit` or `host` (`life.end(id)`), plus `ran` (milliseconds) and `callsUsed`. `life.waiting` counts the
+grants that wait for the server.
+
+**What a browser host feeds.** A page cannot know that the app "ends" the way a desktop app does:
+
+- `appEnding()` from `pagehide` (and, where the page may be frozen without one, from `visibilitychange` to `hidden` --
+  but then call `appStarted()` when it is visible again). A request started at `pagehide` is not guaranteed to finish;
+  if it does not, the grant runs on at the server until its time, which is why it should be short.
+- `appStarted()` once the agent is signed in, at every page load.
+- `setScreenLock()` from what the host knows. A browser tab that merely loses the focus is **not** locked. The Idle
+  Detection API (`IdleDetector`, `screenState`) reports a locked screen where it is allowed; without it, feed nothing
+  (or `unknown`): the grants are then bounded by their time only.
+
+The UI shows the lifecycle with `GrantMarkerViewModel` (see [the chat panel](chat-panel.md#grants-bypass-and-the-markers)).
+
 ## Stores per signed-in user
 
 Sessions and what was allowed always are kept in the signed-in user's own IndexedDB databases

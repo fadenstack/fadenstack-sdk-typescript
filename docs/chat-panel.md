@@ -430,6 +430,76 @@ sign out or its own options, so they all sit in one place:
 The gear is always there: its last item is About, below your items. See
 [About and the Fadenstack link](#about-and-the-fadenstack-link).
 
+**Approvals** is the settings' section for what the person allowed for longer than one call: the grants the server
+holds ("Working alongside you in report.docx, 30 min left", "Bypass in a chat, 30 min left"), and the tools allowed
+always on this device, each with **Revoke**. It is read again whenever the settings open (`chat.grants.load()`).
+
+## Grants, Bypass and the markers
+
+With the same `ApprovalBroker` as the agent's approvals, the panel also draws the cards and the second sign-in of the
+server-held grants (see [Server-held grants and Bypass](server-grants.md)); the broker is the agent's grant handler and
+step-up handler, so there is no code of your own:
+
+```ts
+const approvals = new ApprovalBroker();
+const agent = FadenstackAgent.createBuilder().useClient(client).useApprovals(approvals).build();
+const chat = new AgentChatViewModel(agent, approvals);
+```
+
+- **The work card** ("Work alongside you?", `session.offerWork(places)`) lists the places, each of which the person
+  may take out, the time to pick (15 min, 30 min, 1 h, 2 h; 30 min first), what the agent may do there without asking
+  and that it still asks before deleting, sending, paying or publishing. **Not now** comes first. **The extension
+  card** ("Keep working alongside you?", `session.offerExtension(...)`) shows only what it adds ("30 min longer").
+  A card shows in the chat of its conversation only; one offered before its conversation existed shows in every chat.
+- **The marker** of a chat's running stretch of work says "Working alongside you · 23 min left" by the server's clock
+  (paused: "· paused"), has **Stop** (every grant of the device, and the running turn) and, two minutes before the
+  end, "Another 30 min" (as far as the server allows; it says so when it cannot).
+- **The Bypass entry** in the tool-mode menu appears only where the server offers Bypass to this agent. Picking it
+  opens the confirmation (`chat.startBypass()` does the same); it never switches on by itself. The card says what
+  no longer asks, what still asks, what the server records, how long (15 min, 30 min, 1 h, never longer than the
+  server's longest, no extension) and takes an optional reason that administrators see. **Not now** comes first and has
+  the focus; Allow ("Switch Bypass on") is never the default, and Enter and Escape do not press it. After the click
+  the card waits: the second sign-in opens in a new tab (`approvals.openBrowser` is the hook to change that), the card
+  shows its code and "Open the page again", and Bypass is on only when the server confirmed it. If it does not
+  come, the card says why -- not approved in the browser, took too long, no browser, refused, offline, the server
+  cannot check -- and the chat stays as it was.
+- **Bypass on** shows "Bypass on · 12 min left" with what is recorded and Stop; the chat list marks the chats that run
+  in Bypass. **When it ends** the chat says why ("Bypass ended: an administrator ended it. Approvals ask again.") with
+  **Switch on again**, which opens the confirmation again. Pausing at the app's end is not an end.
+- **Focus.** A new card takes the focus, on its **Not now** button. The confirmation's buttons are reachable by Tab
+  and pressed with Space; the switch and "Open the page again" ignore Enter.
+- A call a longer approval let through reads "Allowed by your longer approval".
+
+Times are said as people say them: `period(chat.strings, ms)` gives "15 min", "2 h", "1 h 30 min", never "120 min".
+
+### The marker for the whole device
+
+A chat's marker is the chat's. For a host that shows a marker outside the chat -- a toolbar chip, a badge on the
+avatar, a menu -- `GrantMarkerViewModel` shows every grant of the device over the
+[grant lifecycle](server-grants.md#the-grant-lifecycle): the time left of the grant ending first ("3 grants running ·
+first ends in 12 min" with several), one line per grant with its chat, **Stop**, "Another 30 min" once near the end
+(never for Bypass), and one summary per grant that ended ("Worked alongside you for 23 min", where, how many calls ran
+without asking, and why it ended). A summary for a grant that ended while the screen was locked waits until the person
+is back.
+
+```ts
+const lifecycle = new GrantLifecycle(agent.grants);
+const marker = new GrantMarkerViewModel(lifecycle, () => chat.strings, {
+  chatTitle: (conversationId) => titles.get(conversationId),
+  stopTurn: (conversationId) => chats.get(conversationId)?.stop(),
+});
+// React: <GrantMarkerView marker={marker} />      Vue: <GrantMarker :marker="marker" />
+```
+
+`marker.retext()` after a change of language. What the host feeds the lifecycle is in
+[the grant lifecycle](server-grants.md#the-grant-lifecycle).
+
+| View model | What it holds |
+|---|---|
+| `chat.grants` (`GrantsViewModel`) | The chat's `cards`, `bypassCard`, the markers (`hasMarker`, `markerText`, `isEnding`, `hasBypass`, `bypassText`), the ended line (`hasBypassEnded`, `bypassEndedText`, `canSwitchOnAgain`), `standing` for Settings, and `stop()`, `keepGoing()`, `stopBypass()`, `switchOnAgain()`, `load()`. |
+| `GrantPart`, `BypassPart` | A card: `title`, `places`, `durations`, `selectedDuration`, `buttons` (Not now first), `allow()`, `notNow()`, `state`; the Bypass card also `reason`, `isSigningIn`, `signInCodeText`, `openAgain()`, `ignoresKey()` and `initialFocus` (never Allow). |
+| `GrantMarkerViewModel` | The device-wide marker: `markerText`, `badgeText`, `entries`, `summaries`, `stop()`, `keepGoing()`. |
+
 ## View models for other frameworks
 
 Each view model is observable: `subscribe(listener)` calls the listener after each change and returns the unsubscribe,
