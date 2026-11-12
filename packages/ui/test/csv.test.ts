@@ -89,7 +89,8 @@ describe("browserSaveFile", () => {
     expect(() => browserSaveFile({ name: "x.csv", type: "text/csv", content: "a" })).not.toThrow();
   });
 
-  it("makes a temporary link with the file's name, clicks it, and releases the object URL", async () => {
+  it("makes a temporary link with the file's name, clicks it, and releases the object URL once the download surely began", () => {
+    vi.useFakeTimers();
     const doc = { createElement: vi.fn(), body: { appendChild: vi.fn() } };
     const link = { href: "", download: "", rel: "", style: { display: "" }, click: vi.fn(), remove: vi.fn() };
     doc.createElement.mockReturnValue(link);
@@ -103,9 +104,13 @@ describe("browserSaveFile", () => {
       expect(link.click).toHaveBeenCalledOnce();
       expect(link.remove).toHaveBeenCalledOnce();
       expect((create.mock.calls[0]![0] as Blob).type).toBe("text/csv;charset=utf-8");
-      await new Promise((r) => setTimeout(r, 5));
+      // Revoked at once, a download that has not started yet may be cancelled.
+      vi.advanceTimersByTime(1000);
+      expect(revoke).not.toHaveBeenCalled();
+      vi.advanceTimersByTime(40_000);
       expect(revoke).toHaveBeenCalledWith("blob:fake");
     } finally {
+      vi.useRealTimers();
       vi.unstubAllGlobals();
       create.mockRestore();
       revoke.mockRestore();

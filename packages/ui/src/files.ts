@@ -30,5 +30,6 @@ export function browserSaveFile(file: FileToSave): void {
   doc.body.appendChild(link);
   link.click();
   link.remove();
-  setTimeout(() => URL.revokeObjectURL(url), 0); // the download has started by then
+  // Revoked once the browser surely has the file: revoking at once may cancel a download that has not started yet.
+  setTimeout(() => URL.revokeObjectURL(url), 40_000);
 }
