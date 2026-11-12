@@ -6,14 +6,21 @@
 /** What a tool does. `unknown`: nobody vouched for it -- it always asks, and read-only hides it. */
 export type ToolClass = "read" | "write" | "destructive" | "unknown";
 
-/** What the user lets tools do in a session. Every session starts in `ask`. */
-export type ToolMode = "off" | "read_only" | "ask" | "auto";
+/**
+ * What the user lets tools do in a session. Every session starts in `ask`. `bypass` is the server's Bypass: `auto`, plus
+ * what the conversation's Bypass grant covers (destructive and unclassified calls). It holds only while the server
+ * holds that grant; nobody picks it from a menu (`TOOL_MODES` does not list it).
+ */
+export type ToolMode = "off" | "read_only" | "ask" | "auto" | "bypass";
 
 /** What a mode does with a tool: runs it, asks first, or hides it (not offered; refused if called anyway). */
 export type ToolModeDecision = "run" | "ask" | "hidden";
 
-/** The modes from narrowest to widest. */
-export const TOOL_MODES: readonly ToolMode[] = ["off", "read_only", "ask", "auto"];
+/** The modes a person picks from a menu, from narrowest to widest. Bypass is switched on with its own confirmation. */
+export const TOOL_MODES: readonly Exclude<ToolMode, "bypass">[] = ["off", "read_only", "ask", "auto"];
+
+/** All modes from narrowest to widest. */
+const MODE_ORDER: readonly ToolMode[] = [...TOOL_MODES, "bypass"];
 
 /** The header a request carries its session's mode in. */
 export const TOOL_MODE_HEADER = "X-Faden-Tool-Mode";
@@ -30,6 +37,7 @@ export const OPEN_WORLD_ENFORCED = false;
  *     read_only   run   -       -            -
  *     ask         run   ask     ask          ask
  *     auto        run   run     ask          ask
+ *     bypass      run   run     ask*         ask*      * run under the conversation's Bypass grant (the caller checks it)
  */
 export function decideTool(mode: ToolMode, toolClass: ToolClass, approval?: string): ToolModeDecision {
   // Contract hints never unhide a tool or relax a destructive/unknown class.
@@ -45,6 +53,7 @@ export function decideTool(mode: ToolMode, toolClass: ToolClass, approval?: stri
     case "ask":
       return toolClass === "read" ? "run" : "ask";
     case "auto":
+    case "bypass":
       return toolClass === "read" || toolClass === "write" ? "run" : "ask";
     default:
       return "hidden";
@@ -54,12 +63,12 @@ export function decideTool(mode: ToolMode, toolClass: ToolClass, approval?: stri
 /** The narrower of a mode and a ceiling (a ceiling never widens). */
 export function narrowestMode(mode: ToolMode, ceiling: ToolMode | null | undefined): ToolMode {
   if (!ceiling) return mode;
-  return TOOL_MODES.indexOf(ceiling) < TOOL_MODES.indexOf(mode) ? ceiling : mode;
+  return MODE_ORDER.indexOf(ceiling) < MODE_ORDER.indexOf(mode) ? ceiling : mode;
 }
 
 export function parseToolMode(value: string | null | undefined): ToolMode | undefined {
   const v = value?.trim().toLowerCase();
-  return (TOOL_MODES as readonly string[]).includes(v ?? "") ? (v as ToolMode) : undefined;
+  return (MODE_ORDER as readonly string[]).includes(v ?? "") ? (v as ToolMode) : undefined;
 }
 
 /** A contract's `risk`, or a class name; anything else is `unknown`. */

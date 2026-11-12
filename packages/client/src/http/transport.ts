@@ -21,6 +21,17 @@ export interface TransportOptions {
   timeoutMs?: number;
 }
 
+/** The header a client announces what it can do beyond the agent API it was written for (sdk/40 §3 rule 5). */
+export const CLIENT_SUPPORTS_HEADER = "X-Faden-Client-Supports";
+
+/**
+ * What an agent announces once it has the whole flow of the server's Bypass: the confirmation, the grant, the marker,
+ * the report at the end of each turn (`tool_mode.bypass`) and the second sign-in in the browser before it is switched
+ * on (`bypass.step_up`). The server offers Bypass only to a client that names both, so announce them only together with
+ * that flow (`FadenstackTransport.announce`; the agents package does it when the app gives a step-up handler).
+ */
+export const BYPASS_SUPPORTS: readonly string[] = Object.freeze(["tool_mode.bypass", "bypass.step_up"]);
+
 /** A request, built afresh for each attempt (a retry needs a new body). */
 export interface RequestSpec {
   method: string;
@@ -39,6 +50,7 @@ export class FadenstackTransport {
   readonly timeoutMs: number;
   readonly fetch: FetchLike;
   readonly #credentials: TokenProvider | undefined;
+  readonly #supports = new Set<string>();
 
   constructor(options: TransportOptions) {
     this.serverUrl = withSlash(requireUrl(options.serverUrl, "serverUrl", options.allowInsecureHttp));
@@ -46,6 +58,22 @@ export class FadenstackTransport {
     this.#credentials = options.credentials;
     this.timeoutMs = options.timeoutMs ?? 5 * 60_000;
     this.fetch = options.fetch ?? ((input, init) => globalThis.fetch(input, init));
+  }
+
+  /**
+   * Names what this client can do (`X-Faden-Client-Supports`, on every request from now on): the server offers new
+   * levels and fields only to clients that name them. Nothing is announced unless this is called.
+   */
+  announce(...features: readonly string[]): void {
+    for (const feature of features) {
+      if (!/^[a-z][a-z0-9_.]*$/.test(feature)) throw new TypeError(`'${feature}' is not a feature name.`);
+      this.#supports.add(feature);
+    }
+  }
+
+  /** What this client announces, in the order given. */
+  get announced(): readonly string[] {
+    return [...this.#supports];
   }
 
   /** A gateway route: `gateway("v1/sessions")`. */
@@ -102,6 +130,7 @@ export class FadenstackTransport {
     for (let attempt = 0; ; attempt++) {
       const spec = build();
       const headers = new Headers(spec.headers);
+      if (this.#supports.size > 0 && !headers.has(CLIENT_SUPPORTS_HEADER)) headers.set(CLIENT_SUPPORTS_HEADER, [...this.#supports].join(", "));
       let token: string | undefined;
       if (this.#credentials && !headers.has("authorization")) {
         token = await this.#credentials.getAccessToken(signal);

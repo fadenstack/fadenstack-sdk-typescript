@@ -73,7 +73,8 @@ export interface UiStrings {
   greetingFallback(agent: string): string;
   newChat: string;
   yesterday: string;
-  modes: Record<ToolMode, { label: string; description: string }>;
+  /** The modes a person picks (Bypass is switched on with its own confirmation, a later UI package). */
+  modes: Record<Exclude<ToolMode, "bypass">, { label: string; description: string }>;
   limitedTo(description: string, mode: string): string;
   // the settings menu
   settings: string;

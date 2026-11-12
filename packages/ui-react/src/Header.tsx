@@ -55,7 +55,7 @@ function ModeMenu({ chat }: { chat: AgentChatViewModel }): ReactElement {
               </span>
             </button>
           ))}
-          {chat.toolModeHint !== chat.strings.modes[chat.toolMode].description && (
+          {chat.toolModeHint !== chat.toolModeDescription && (
             <div className="fdn-menu-note">{chat.toolModeHint}</div>
           )}
           <button type="button" role="menuitem" className="fdn-menu-item" onClick={() => void chat.resetApprovals()}>

@@ -174,8 +174,9 @@ export function toAgentProfile(json: unknown): AgentProfile {
     knowledge: strings(p["knowledge"]),
     localMcp: { mode: str(localMcp["mode"]) ?? "disable", developerMode: localMcp["developer_mode"] === true },
     toolModes: {
-      default: parseToolMode(str(modes["default"])) ?? "ask",
-      // No ceiling, or Bypass (which this SDK does not offer): no limit beyond Auto.
+      // Never Bypass (sdk/38 D2): a default the server names as Bypass is Ask.
+      default: ((d) => (d && d !== "bypass" ? d : "ask"))(parseToolMode(str(modes["default"]))),
+      // No ceiling, or Bypass as the ceiling: no limit below Bypass (the agent narrows it to Auto where Bypass is not offered).
       ceiling: modes["ceiling"] === "bypass" ? null : toLevel(modes["ceiling"]) ?? null,
       ...(max ? { max } : {}),
       openWorldEnforced: modes["open_world_enforced"] === true,
@@ -225,8 +226,9 @@ function toApprovalSettings(value: unknown): ApprovalSettings {
     const b = obj(p["bypass"]), step = obj(b["step_up"]);
     const maxAge = Number.isSafeInteger(step["max_age"]) && (step["max_age"] as number) > 0 ? (step["max_age"] as number) : 300;
     // Allowed only as the server describes it in full: a second sign-in, at the one route this SDK starts it at.
-    const allowed = b["allowed"] === true && step["required"] === true && step["start"] === "/api/agent-tokens/step-ups";
-    result.bypass = { allowed, longestMinutes: minutesOr(b["longest_minutes"], 120),
+    const longest = minutesOr(b["longest_minutes"], 120);
+    const allowed = b["allowed"] === true && step["required"] === true && step["start"] === "/api/agent-tokens/step-ups" && longest > 0;
+    result.bypass = { allowed, longestMinutes: longest,
       evidence: str(b["evidence"]) ?? "calls", stepUp: { required: true, maxAge, start: "/api/agent-tokens/step-ups" } };
   }
   return result;
