@@ -419,7 +419,10 @@ export class GrantLifecycle {
       await this.grants.revoke(grantId, signal);
       return true;
     } catch (error) {
-      return errorStatus(error) === 404; // offline: it runs on at the server until its time
+      if (errorStatus(error) !== 404) return false; // offline: it runs on at the server until its time
+      // ended meanwhile: the copy drops it now, as end() does, not at the next look (.NET 46062f5)
+      await this.#refreshQuietly(signal);
+      return true;
     }
   }
 

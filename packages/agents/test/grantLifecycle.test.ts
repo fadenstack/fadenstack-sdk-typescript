@@ -280,6 +280,24 @@ describe("Stop", () => {
     expect(rig.s.grants.status(second.id)).toBe("revoked");
   });
 
+  it("drops a grant the server already ended from the running list at once", async () => {
+    const rig = await Rig.start();
+    const first = await rig.work(30, "c-1");
+    const second = await rig.work(30, "c-2");
+    rig.s.grants.end(first.id, "person");
+    const real = rig.s.agent.grants.revoke.bind(rig.s.agent.grants);
+    rig.s.agent.grants.revoke = async (id, signal) => {
+      if (id === first.id) throw Object.assign(new Error("You have no such grant."), { status: 404 });
+      return real(id, signal);
+    };
+
+    await rig.life.stop();
+
+    // The device's copy reads the server's list again: no marker shows it until the next look (.NET 46062f5).
+    expect(rig.life.running.map(g => g.id)).not.toContain(first.id);
+    expect(rig.life.running.map(g => g.id)).not.toContain(second.id);
+  });
+
   it("says so when the server cannot take the stop, and ends nothing said", async () => {
     const rig = await Rig.start();
     const grant = await rig.work(30);
