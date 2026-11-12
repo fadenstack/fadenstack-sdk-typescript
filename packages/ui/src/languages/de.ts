@@ -266,4 +266,9 @@ export const germanStrings: UiStrings = {
     host: "Die App hat sie beendet.",
   },
   downloadCsv: "CSV herunterladen",
+  exportChat: "Chat exportieren",
+  exportChatTitle: "Chat",
+  exportYou: "Sie",
+  exportSkills: (list) => `Skills: ${list}`,
+  exportAttachments: (list) => `Anhänge: ${list}`,
 };

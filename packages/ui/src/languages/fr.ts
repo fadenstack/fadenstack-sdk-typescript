@@ -267,4 +267,9 @@ export const frenchStrings: UiStrings = {
     host: "L'application y a mis fin.",
   },
   downloadCsv: "Télécharger en CSV",
+  exportChat: "Exporter la conversation",
+  exportChatTitle: "Conversation",
+  exportYou: "Vous",
+  exportSkills: (list) => `Compétences : ${list}`,
+  exportAttachments: (list) => `Pièces jointes : ${list}`,
 };

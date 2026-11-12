@@ -76,6 +76,10 @@ function closeAbout(returnFocus: boolean): void {
       <ApprovalsSection :grants="chat.grants" />
       <div v-if="slots.default" v-bind="languages ? { class: 'fdn-menu-extra' } : {}"><slot /></div>
       <div v-bind="languages || slots.default ? { class: 'fdn-menu-extra' } : {}">
+        <button type="button" role="menuitem" class="fdn-menu-item" :disabled="!chat.canExport" @click="chat.saveChatMarkdown()">
+          <span class="fdn-menu-check" />
+          <span class="fdn-menu-label">{{ chat.strings.exportChat }}</span>
+        </button>
         <button type="button" role="menuitem" aria-haspopup="dialog" class="fdn-menu-item" @click="chat.setAboutOpen(true)">
           <span class="fdn-menu-check" />
           <span class="fdn-menu-label">{{ chat.strings.about }}</span>

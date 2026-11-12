@@ -6,6 +6,7 @@ import { FadenstackSignInRequiredError, TOOL_MODES, narrowestMode, type SkillOpt
 import { aboutView, footerLink, refSource, type AboutView, type PanelLink } from "./about.js";
 import type { ApprovalBroker, PendingApproval } from "./approvalBroker.js";
 import { AttachmentViewModel, type AttachmentChip } from "./attachments.js";
+import { chatFileName, chatToMarkdown } from "./export.js";
 import { browserSaveFile, type SaveFile } from "./files.js";
 import { RenderBatcher } from "./batcher.js";
 import { formatWhen } from "./format.js";
@@ -225,6 +226,7 @@ export class AgentChatViewModel extends Observable implements TurnHost {
   readonly #afterCommand: AgentChatOptions["afterCommand"];
   readonly #refSource: string;
   readonly #footerLink: PanelLink | undefined;
+  readonly #saveFile: SaveFile;
   readonly #openLink: (url: string) => void;
   // Approvals arrive twice: as an event, in order with the turn's other events, and as the broker's request,
   // which carries the answer. Whichever comes second adds the card, so it sits where the event put it.
@@ -288,6 +290,7 @@ export class AgentChatViewModel extends Observable implements TurnHost {
       showUnmarked: false,
       saveFile: options.saveFile ?? browserSaveFile,
     };
+    this.#saveFile = options.saveFile ?? browserSaveFile;
     this.#beforeSend = options.beforeSend;
     this.#turnGate = options.turnGate;
     this.#afterSend = options.afterSend;
@@ -449,6 +452,51 @@ export class AgentChatViewModel extends Observable implements TurnHost {
 
   get isEmpty(): boolean {
     return this.#turns.length === 0;
+  }
+
+  /** The chat has something to export: at least one message. */
+  get canExport(): boolean {
+    return !this.isEmpty;
+  }
+
+  /**
+   * The open chat as a Markdown document: its title (a translated "Chat" without one), the date in the chat's locale, then every
+   * turn in order -- the person's message, the titles of the skills and attachments that went with it, the agent's answer, and one
+   * line per tool call. Reasoning, approval cards and the content of attachments are not in it. Earlier turns that are not
+   * shown yet are in it too.
+   */
+  exportMarkdown(): string {
+    const earlier = this.#history.slice(0, this.#loadedFrom).map((t) => buildTurn(t, this.#context, this));
+    const turns = [...earlier, ...this.#turns];
+    return chatToMarkdown({
+      title: this.#chatTitle(), agent: this.#title, date: turns[0]?.timestamp ?? this.#context.now(),
+      locale: this.#context.locale, strings: this.strings, turns,
+    });
+  }
+
+  /** The file name `saveChatMarkdown` uses: the title's letters and digits, spaces as hyphens, at most 60 characters, `.md`; `chat.md` without a title. */
+  get exportFileName(): string {
+    return chatFileName(this.#chatTitle());
+  }
+
+  /** Saves `exportMarkdown()` through the host's `saveFile` (`text/markdown`). Nothing happens for an empty chat. The settings close. */
+  async saveChatMarkdown(): Promise<void> {
+    this.#settingsOpen = false;
+    this.notify();
+    if (!this.canExport) return;
+    try {
+      await this.#saveFile({ name: this.exportFileName, type: "text/markdown", content: this.exportMarkdown() });
+    } catch {
+      // the host could not save: the person sees what the host shows
+    }
+  }
+
+  /** The chat's own title: the history's name for it, or the first message; empty before there is one. */
+  #chatTitle(): string {
+    const id = this.#session?.id;
+    const item = id ? this.#sessions.find((s) => s.id === id) : undefined;
+    const title = item && !this.#untitled.has(item.id) ? item.title : this.#turns[0]?.userText ?? "";
+    return (title.split(/\r?\n/).find((line) => line.trim()) ?? "").trim().slice(0, 60);
   }
 
   /** Older turns of an opened session that are not shown yet. */

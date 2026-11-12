@@ -119,6 +119,10 @@ function SettingsMenu({ chat, extra }: { chat: AgentChatViewModel; extra?: React
           <ApprovalsSection grants={chat.grants} />
           {extra && <div className={languages ? "fdn-menu-extra" : undefined}>{extra}</div>}
           <div className={languages || extra ? "fdn-menu-extra" : undefined}>
+            <button type="button" role="menuitem" className="fdn-menu-item" disabled={!chat.canExport} onClick={() => void chat.saveChatMarkdown()}>
+              <span className="fdn-menu-check" />
+              <span className="fdn-menu-label">{s.exportChat}</span>
+            </button>
             <button type="button" role="menuitem" aria-haspopup="dialog" className="fdn-menu-item" onClick={() => chat.setAboutOpen(true)}>
               <span className="fdn-menu-check" />
               <span className="fdn-menu-label">{s.about}</span>

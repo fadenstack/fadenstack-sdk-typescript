@@ -338,6 +338,17 @@ export interface UiStrings {
   // saving files
   /** The button beside "Copy table": saves the table as a CSV file. */
   downloadCsv: string;
+  // exporting a chat
+  /** The settings item that saves the open chat as a Markdown file. */
+  exportChat: string;
+  /** The heading of an exported chat that has no title. */
+  exportChatTitle: string;
+  /** The label over the person's message in an exported chat. */
+  exportYou: string;
+  /** Under a message in an exported chat: the skills that went with it; list: their names. */
+  exportSkills(list: string): string;
+  /** Under a message in an exported chat: the attachments that went with it; list: their titles. */
+  exportAttachments(list: string): string;
 }
 
 export const englishStrings: UiStrings = {
@@ -598,6 +609,11 @@ export const englishStrings: UiStrings = {
     host: "The app ended it.",
   },
   downloadCsv: "Download CSV",
+  exportChat: "Export chat",
+  exportChatTitle: "Chat",
+  exportYou: "You",
+  exportSkills: (list) => `Skills: ${list}`,
+  exportAttachments: (list) => `Attachments: ${list}`,
 };
 
 /**

@@ -262,4 +262,9 @@ export const chineseSimplifiedStrings: UiStrings = {
     host: "应用已将其结束。",
   },
   downloadCsv: "下载 CSV",
+  exportChat: "导出聊天",
+  exportChatTitle: "聊天",
+  exportYou: "您",
+  exportSkills: (list) => `技能：${list}`,
+  exportAttachments: (list) => `附件：${list}`,
 };

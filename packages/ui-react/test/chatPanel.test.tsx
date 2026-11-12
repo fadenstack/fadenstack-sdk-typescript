@@ -208,11 +208,30 @@ describe("ChatPanel's settings", () => {
     await panel(() => ({ text: "ok" }), "write", { strings: { send: "Go" } });
     fireEvent.click(screen.getByRole("button", { name: "Settings" }));
     expect(screen.queryAllByRole("menuitemradio")).toEqual([]);
-    expect(screen.getAllByRole("menuitem").map((b) => b.textContent)).toEqual(["About"]);
+    expect(screen.getAllByRole("menuitem").map((b) => b.textContent)).toEqual(["Export chat", "About"]);
     cleanup();
     await panel(() => ({ text: "ok" }), "write", {}, { settingsExtra: <button type="button" role="menuitem">Sign out</button> });
     fireEvent.click(screen.getByRole("button", { name: "Settings" }));
-    expect(screen.getAllByRole("menuitem").map((b) => b.textContent)).toEqual(["Sign out", "About"]);
+    expect(screen.getAllByRole("menuitem").map((b) => b.textContent)).toEqual(["Sign out", "Export chat", "About"]);
+  });
+
+  it("exports the chat as Markdown from the settings: disabled while the chat is empty, then it saves through saveFile", async () => {
+    const saved: { name: string; type: string; content: string }[] = [];
+    const { chat } = await panel(() => ({ text: "An answer." }), "write", { saveFile: (f) => void saved.push(f) });
+    fireEvent.click(screen.getByRole("button", { name: "Settings" }));
+    expect((screen.getByRole("menuitem", { name: "Export chat" }) as HTMLButtonElement).disabled).toBe(true);
+    fireEvent.click(screen.getByRole("button", { name: "Settings" }));
+    await act(() => chat.send("Hello there"));
+    fireEvent.click(screen.getByRole("button", { name: "Settings" }));
+    const item = screen.getByRole("menuitem", { name: "Export chat" }) as HTMLButtonElement;
+    expect(item.disabled).toBe(false);
+    await act(async () => {
+      fireEvent.click(item);
+    });
+    expect(saved.map((f) => [f.name, f.type])).toEqual([["Hello-there.md", "text/markdown"]]);
+    expect(saved[0]!.content).toContain("> Hello there");
+    expect(saved[0]!.content).toContain("An answer.");
+    expect(screen.queryByRole("menu")).toBeNull(); // the settings closed
   });
 });
 

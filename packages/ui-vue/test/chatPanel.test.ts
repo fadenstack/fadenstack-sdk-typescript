@@ -276,19 +276,37 @@ describe("ChatPanel's settings (Vue)", () => {
     await button(locked.wrapper, "Paramètres").trigger("click");
     expect(locked.wrapper.find(".fdn-menu-note").text()).toBe("Défini par votre organisation");
     expect(locked.wrapper.findAll("[role=menuitemradio]").every((b) => (b.element as HTMLButtonElement).disabled)).toBe(true);
-    expect(locked.wrapper.findAll(".fdn-settings [role=menuitem]").map((b) => b.text())).toEqual(["À propos"]);
+    expect(locked.wrapper.findAll(".fdn-settings [role=menuitem]").map((b) => b.text())).toEqual(["Exporter la conversation", "À propos"]);
 
     const fixed = await panel(() => ({ text: "ok" }), { strings: { send: "Go" } });
     await button(fixed.wrapper, "Settings").trigger("click");
     expect(fixed.wrapper.findAll("[role=menuitemradio]")).toHaveLength(0);
-    expect(fixed.wrapper.findAll(".fdn-settings [role=menuitem]").map((b) => b.text())).toEqual(["About"]);
+    expect(fixed.wrapper.findAll(".fdn-settings [role=menuitem]").map((b) => b.text())).toEqual(["Export chat", "About"]);
   });
 
   it("puts About after the host's items", async () => {
     const { wrapper } = await panel(() => ({ text: "ok" }), {}, "write",
       { slots: { "settings-extra": () => h("button", { type: "button", role: "menuitem" }, "Sign out") } });
     await button(wrapper, "Settings").trigger("click");
-    expect(wrapper.findAll(".fdn-settings [role=menuitem]").map((b) => b.text())).toEqual(["Sign out", "About"]);
+    expect(wrapper.findAll(".fdn-settings [role=menuitem]").map((b) => b.text())).toEqual(["Sign out", "Export chat", "About"]);
+  });
+
+  it("exports the chat as Markdown from the settings: disabled while the chat is empty, then it saves through saveFile", async () => {
+    const saved: { name: string; type: string; content: string }[] = [];
+    const { wrapper, chat } = await panel(() => ({ text: "An answer." }), { saveFile: (f) => void saved.push(f) });
+    await button(wrapper, "Settings").trigger("click");
+    expect((wrapper.find(".fdn-settings [role=menuitem]").element as HTMLButtonElement).disabled).toBe(true);
+    await button(wrapper, "Settings").trigger("click");
+    await chat.send("Hello there");
+    await nextTick();
+    await button(wrapper, "Settings").trigger("click");
+    const item = wrapper.findAll(".fdn-settings [role=menuitem]").find((b) => b.text() === "Export chat")!;
+    expect((item.element as HTMLButtonElement).disabled).toBe(false);
+    await item.trigger("click");
+    expect(saved.map((f) => [f.name, f.type])).toEqual([["Hello-there.md", "text/markdown"]]);
+    expect(saved[0]!.content).toContain("> Hello there");
+    expect(saved[0]!.content).toContain("An answer.");
+    expect(wrapper.find(".fdn-settings").exists()).toBe(false); // the settings closed
   });
 });
 
@@ -320,7 +338,7 @@ describe("ChatPanel's About and links (Vue)", () => {
     expect(wrapper.findAll(".fdn-footer > *").map((c) => c.classes().join(" "))).toEqual(["fdn-ai-notice"]);
     expect(wrapper.find(".fdn-footer a").exists()).toBe(false);
     await button(wrapper, "Settings").trigger("click");
-    await wrapper.find(".fdn-settings [role=menuitem]").trigger("click");
+    await wrapper.findAll(".fdn-settings [role=menuitem]").find((b) => b.text() === "About")!.trigger("click");
     expect(wrapper.findAll(".fdn-about a")).toHaveLength(3);
 
     const alone = await panel(() => ({ text: "ok" }), { strings: { aiNotice: "" } });
@@ -335,7 +353,7 @@ describe("ChatPanel's About and links (Vue)", () => {
     const { wrapper, chat } = await panel(() => ({ text: "ok" }), { openLink: (url) => opened.push(url) });
     expect(button(wrapper, "Settings").classes()).toEqual(["fdn-icon-button"]);
     await button(wrapper, "Settings").trigger("click");
-    await wrapper.find(".fdn-settings [role=menuitem]").trigger("click");
+    await wrapper.findAll(".fdn-settings [role=menuitem]").find((b) => b.text() === "About")!.trigger("click");
     await flushPromises();
     expect(chat.isSettingsOpen).toBe(false);
     expect(wrapper.find(".fdn-settings").exists()).toBe(false);

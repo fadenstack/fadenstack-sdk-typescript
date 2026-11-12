@@ -32,6 +32,7 @@ export {
   type PanelLink,
 } from "./about.js";
 export { CSV_BOM, csvField, csvFileName, rowsToCsv, tableToCsv } from "./csv.js";
+export { chatFileName, chatToMarkdown, type ChatExportInput } from "./export.js";
 export { browserSaveFile, type FileToSave, type SaveFile } from "./files.js";
 export { SkillPickerViewModel, matchSkills, skillToken } from "./skills.js";
 export { TurnViewModel, type TurnHost, type TurnState } from "./turn.js";
