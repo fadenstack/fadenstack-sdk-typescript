@@ -1,4 +1,5 @@
 import { FadenstackStreamError } from "../errors.js";
+import { ClientLog, writeLog } from "../logging.js";
 import { isRefusal, readNotice, type GovernanceNotice } from "../governance.js";
 import { parseError, toApiError } from "../http/errorReader.js";
 import type { FadenstackTransport, RequestSpec } from "../http/transport.js";
@@ -75,7 +76,7 @@ export class FadenstackChatClient implements ChatStreamer {
     }
     if (!response.body) throw new FadenstackStreamError("The answer had no body.");
     for (const receipt of readReceiptHeader(response.headers.get(RECEIPT_HEADER))) yield { type: "receipt", receipt };
-    const assembler = new StreamAssembler();
+    const assembler = new StreamAssembler(this.#transport);
     for await (const sse of readSse(response.body, options.signal)) {
       yield* assembler.read(sse);
       if (assembler.done) break;
@@ -250,6 +251,12 @@ function toResponse(root: Json): ChatResponse {
 /** Turns the chunks of a stream into updates; tool calls come out whole, at their end. */
 class StreamAssembler {
   done = false;
+  readonly #transport: FadenstackTransport;
+
+  constructor(transport: FadenstackTransport) {
+    this.#transport = transport;
+  }
+
   readonly #calls = new Map<number, { id: string; name: string; args: string }>();
   #responseId: string | undefined;
   #model: string | undefined;
@@ -260,7 +267,12 @@ class StreamAssembler {
       try {
         raw = JSON.parse(sse.data) as Json;
       } catch {
+        writeLog(this.#transport.logger, ClientLog.eventSkipped, { Reason: "not valid JSON" });
         return; // a malformed event is skipped, as clients that do not know it do
+      }
+      if (raw === null || typeof raw !== "object" || Array.isArray(raw)) {
+        writeLog(this.#transport.logger, ClientLog.eventSkipped, { Reason: "not a JSON object" });
+        return;
       }
       const event = toFadenstackEvent(raw);
       yield { type: "event", event };

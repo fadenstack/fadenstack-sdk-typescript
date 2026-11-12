@@ -1,5 +1,6 @@
 import type { TokenProvider } from "../auth/tokens.js";
 import { FadenstackError, FadenstackUnreachableError } from "../errors.js";
+import { ClientLog, writeLog, type FadenstackLogger } from "../logging.js";
 import { toApiError } from "./errorReader.js";
 
 /** A `fetch` -- the global one, a test's, or one with the host's own settings. */
@@ -19,6 +20,8 @@ export interface TransportOptions {
   fetch?: FetchLike;
   /** How long one request may take, in ms (default 5 min). A stream is not cut by it once its answer started. */
   timeoutMs?: number;
+  /** Where the client logs (method, route, status, time; never a body, a header or a token). None by default. */
+  logger?: FadenstackLogger;
 }
 
 /** The header a client announces what it can do beyond the agent API it was written for (sdk/40 §3 rule 5). */
@@ -51,8 +54,10 @@ export class FadenstackTransport {
   readonly fetch: FetchLike;
   readonly #credentials: TokenProvider | undefined;
   readonly #supports = new Set<string>();
+  #logger: FadenstackLogger | undefined;
 
   constructor(options: TransportOptions) {
+    this.#logger = options.logger;
     this.serverUrl = withSlash(requireUrl(options.serverUrl, "serverUrl", options.allowInsecureHttp));
     this.apiUrl = withSlash(requireUrl(options.apiUrl ?? this.serverUrl, "apiUrl", options.allowInsecureHttp));
     this.#credentials = options.credentials;
@@ -69,6 +74,16 @@ export class FadenstackTransport {
       if (!/^[a-z][a-z0-9_.]*$/.test(feature)) throw new TypeError(`'${feature}' is not a feature name.`);
       this.#supports.add(feature);
     }
+  }
+
+  /** Where the client logs, if the host gave a logger. */
+  get logger(): FadenstackLogger | undefined {
+    return this.#logger;
+  }
+
+  /** Takes `logger` as the client's logger unless it already has one (the agent builder's `useLogging` reaches a client made elsewhere). */
+  useLogger(logger: FadenstackLogger): void {
+    this.#logger ??= logger;
   }
 
   /** What this client announces, in the order given. */
@@ -137,6 +152,7 @@ export class FadenstackTransport {
         headers.set("authorization", `Bearer ${token}`);
       }
       let response: Response;
+      const started = performance.now();
       try {
         // Never the browser's cookies: a console session for the same server would act instead of the app's user.
         const init: RequestInit = { method: spec.method, headers, signal, credentials: "omit" };
@@ -144,8 +160,12 @@ export class FadenstackTransport {
         response = await this.fetch(spec.url, init);
       } catch (error) {
         if (signal.aborted) throw signal.reason ?? error;
+        writeLog(this.#logger, ClientLog.requestFailed, { Method: spec.method, Route: spec.url.pathname,
+          ErrorType: error instanceof Error ? error.name : typeof error, DurationMs: Math.round(performance.now() - started), Attempt: attempt + 1 });
         throw new FadenstackUnreachableError(`Fadenstack could not be reached: ${describe(error)}`, { cause: error });
       }
+      writeLog(this.#logger, ClientLog.request, { Method: spec.method, Route: spec.url.pathname, Status: response.status,
+        DurationMs: Math.round(performance.now() - started), Attempt: attempt + 1 });
       // A step-up challenge (RFC 9470: a fresh sign-in is needed, `bypass_step_up_required`) is not a bad token: no
       // refresh and no second request -- it goes to the caller, who starts the second sign-in.
       if (response.status === 401 && token !== undefined && attempt === 0 && !isStepUpChallenge(response)) {

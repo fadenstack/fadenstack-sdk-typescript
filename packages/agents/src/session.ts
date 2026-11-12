@@ -1,5 +1,6 @@
 import {
   FadenstackRateLimitedError,
+  writeLog,
   decideTool,
   eventKind,
   isRefusal,
@@ -35,6 +36,7 @@ import type { ToolInvocation, ToolInvoker, ToolServiceCall } from "./stages.js";
 import { checkArguments, type AgentTool, type ToolServiceKey, type ToolServices } from "./tools.js";
 import { EntryTypes, TurnStatus, newId, type TranscriptEntry } from "./transcript.js";
 import { commandJson, commandSchemaHash } from "./commands.js";
+import { AgentLog } from "./log.js";
 import { reasoningLevelOf, reasoningRecord, type ReasoningLevel } from "./reasoning.js";
 import { AgentGrants, cutReason, type GrantCall, type GrantPlace, type GrantVerdict } from "./grants.js";
 
@@ -589,6 +591,15 @@ class Turn {
   #bypassEnded = false;
   // What this turn asks the model to think, fixed when it starts: a change of the level applies from the next message.
   #effort: ReasoningEffort | undefined;
+  // For the log: when the turn began, how many model calls it made, and what let the tool call in hand through.
+  readonly #began = performance.now();
+  #rounds = 0;
+  #approvalKind: string | undefined;
+
+  /** The log's scope: the conversation and the turn (.NET `Log.TurnScope`). */
+  get #scope(): { ConversationId: string; TurnId: string } {
+    return { ConversationId: this.#session.id, TurnId: this.#id };
+  }
 
   /** The Bypass grant the turn ran under; undefined when it did not run in Bypass. */
   get bypassGrant(): string | undefined {
@@ -653,6 +664,8 @@ class Turn {
       reasoning_effort: reasoningRecord(this.#effort),
     });
     this.#emit({ type: "turn_started", turnId: this.#id, toolMode: this.#mode });
+    writeLog(this.#agent.settings.logger, AgentLog.turnStarted, { ConversationId: this.#session.id, TurnId: this.#id, ToolMode: this.#mode,
+      Attachments: attachments.length }, this.#scope);
     try {
       for (let round = 0; ; round++) {
         if (round === this.#agent.settings.maxRounds) {
@@ -693,6 +706,8 @@ class Turn {
     this.#grantUsed.clear();
     this.#marks = [];
     this.#denials = [];
+    this.#rounds++;
+    const requested = performance.now();
     const options: ChatOptions = {
       conversationId: this.#session.id,
       turnId: this.#id,
@@ -748,6 +763,8 @@ class Turn {
     }
     if (this.#blocked) calls.length = 0; // a refused answer's tool calls never run
     const planned = this.#plan(calls, round);
+    writeLog(this.#agent.settings.logger, AgentLog.modelRequest, { TurnId: this.#id, Round: round, ToolCalls: planned.length,
+      DurationMs: Math.round(performance.now() - requested) }, this.#scope);
     this.#text += text;
     this.#receipts.push(...receipts);
     if (text || calls.length) {
@@ -921,6 +938,7 @@ class Turn {
 
   async #runTool(planned: PlannedCall, signal: AbortSignal): Promise<void> {
     const { call, mark } = planned;
+    this.#approvalKind = undefined;
     const tool = this.#agent.find(call.name);
     const source = tool?.source ?? "host";
     const toolClass: ToolClass = tool ? stricterClass(tool.toolClass, mark?.toolClass) : "unknown";
@@ -956,6 +974,9 @@ class Turn {
       call_id: call.id, name: call.name, source, result, outcome, duration_ms: Math.round(ran), origin: "client",
     });
     this.#emit({ type: "tool_completed", turnId: this.#id, callId: call.id, name: call.name, source, outcome, result, durationMs: ran });
+    // A name the model made up is its words, not ours: only the agent's own tools are named in logs.
+    writeLog(this.#agent.settings.logger, AgentLog.toolCall, { Tool: tool?.name ?? "(unknown)", ToolClass: toolClass, Source: source,
+      Outcome: outcome, Approval: this.#approvalKind ?? "none", DurationMs: Math.round(ran) }, this.#scope);
     if (tool) {
       this.#agent.reporter.add({
         type: "tool.executed", conversationId: this.#session.id, tool: call.name,
@@ -1287,6 +1308,10 @@ class Turn {
       ...(how.grantMinutes !== undefined ? { grant_minutes: how.grantMinutes } : {}),
       ...(how.confirmedMinutes !== undefined ? { grant_confirmed_minutes: how.confirmedMinutes } : {}),
     });
+    const kind = how.scope === undefined ? undefined : how.rule ? "rule" : how.scope;
+    this.#approvalKind = kind;
+    writeLog(this.#agent.settings.logger, AgentLog.approval, { Tool: request.toolName, ToolClass: request.toolClass,
+      Approval: kind ?? (how.timedOut ? "timeout" : "declined"), Asked: how.asked, WaitMs: Math.round(how.waitedMs ?? 0) }, this.#scope);
     this.#agent.reporter.add({
       type: "approval.decided", conversationId: this.#session.id, tool: request.toolName,
       decision: how.timedOut ? "timeout" : how.approved ? "approved" : "denied",
@@ -1322,6 +1347,8 @@ class Turn {
     if (notice.decisionId) data["decision_id"] = notice.decisionId;
     if (notice.retryAfterMs !== undefined) data["retry_after_ms"] = notice.retryAfterMs;
     await this.#access.append(EntryTypes.governanceNotice, this.#id, data);
+    writeLog(this.#agent.settings.logger, AgentLog.notice, { Outcome: notice.outcome, Stage: notice.stage ?? null, Category: notice.category ?? null,
+      Code: null, DecisionId: notice.decisionId ?? null }, this.#scope);
     this.#emit({ type: "notice", turnId: this.#id, notice });
   }
 
@@ -1333,6 +1360,8 @@ class Turn {
         ? { input_tokens: this.#usage.promptTokens, output_tokens: this.#usage.completionTokens, total_tokens: this.#usage.totalTokens }
         : null,
     }, status);
+    writeLog(this.#agent.settings.logger, AgentLog.turnEnded, { ConversationId: this.#session.id, TurnId: this.#id, ToolMode: this.#mode,
+      Rounds: this.#rounds, Status: status, Outcome: outcome ?? null, DurationMs: Math.round(performance.now() - this.#began) }, this.#scope);
     if (outcome) {
       this.#emit({
         type: "turn_completed",

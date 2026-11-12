@@ -1,6 +1,7 @@
 import {
   FadenstackError,
   HOST_TOOL_DISPATCH_FEATURE,
+  writeLog,
   SDK_LANGUAGE,
   SDK_VERSION,
   decideTool,
@@ -31,6 +32,7 @@ import { AgentBuilder, UNDESCRIBED_APP_NAME, type AgentSettings, type AppDescrip
 import { EventReporter } from "./reporter.js";
 import { AgentSession } from "./session.js";
 import { isChangingToolSource, type AgentContext, type ToolSource } from "./stages.js";
+import { AgentLog } from "./log.js";
 import { settleHostTools, toDefinition, type AgentTool, type ToolOutput } from "./tools.js";
 import { newId, type SessionInfo } from "./transcript.js";
 import { AgentGrants, isGrantHandler, type GrantHandler } from "./grants.js";
@@ -159,6 +161,7 @@ export class FadenstackAgent {
       this.#checkModules(fresh);
     } catch (error) {
       if (signal?.aborted) throw signal.reason ?? error;
+      writeLog(this.settings.logger, AgentLog.profileRereadFailed, { Agent: this.slug, ErrorType: error instanceof Error ? error.name : typeof error });
       return; // the profile held stays
     }
     this.#assertHostPolicySupport(fresh); // not swallowed above: a server that dropped the checks is not trusted with the old ones
@@ -322,6 +325,7 @@ export class FadenstackAgent {
           fresh = await source.getTools(this.#context, signal);
         } catch (error) {
           if (signal?.aborted) throw signal.reason ?? error;
+          writeLog(this.settings.logger, AgentLog.toolsRefreshFailed, { Agent: this.slug, ErrorType: error instanceof Error ? error.name : typeof error });
           continue; // it keeps the tools it had
         }
         const at = this.#sourceTools.findIndex((s) => s.source === source);
@@ -329,6 +333,7 @@ export class FadenstackAgent {
       }
       this.#tools = this.#compose(settleHostTools(this.settings.tools, this.profile), this.#sourceTools.map((s) => s.tools));
       this.#markGone(before, this.#tools);
+      writeLog(this.settings.logger, AgentLog.toolsRefreshed, { Agent: this.slug, Sources: changed.length, Tools: this.#tools.length });
     });
     this.#refreshing = run.catch(() => undefined);
     return run;
@@ -357,9 +362,16 @@ export class FadenstackAgent {
     this.#profile = profile;
     this.#profileRead = this.clock();
     this.#context = context;
+    const dropped = this.settings.tools.filter((t) => !hosts.some((h) => h.name === t.name));
+    for (const tool of dropped) writeLog(this.settings.logger, AgentLog.toolDropped, { Tool: tool.name });
+    writeLog(this.settings.logger, AgentLog.profileLoaded, { Agent: this.slug, Version: profile.version ?? null, Edition: profile.edition,
+      FeatureCount: profile.features.length, UserPartition: profile.principal !== undefined });
+    writeLog(this.settings.logger, AgentLog.toolsSettled, { Agent: this.slug, HostTools: hosts.length,
+      SourceTools: this.#tools.length - hosts.length, Dropped: dropped.length });
     if (this.settings.permissionMode === "bypass" && !this.#warned) {
       if (!this.bypassOffered) {
         this.#warned = true;
+        writeLog(this.settings.logger, AgentLog.bypassMode, { Agent: this.slug });
         console.warn(`The agent '${this.slug}' is set to bypass mode, which this server does not offer for it: its sessions ` +
           "run in auto instead. Destructive and unclassified calls, an admin's \"Ask first\" rule and the gateway's own questions still ask.");
       } else if (!this.stepUpHandler) {

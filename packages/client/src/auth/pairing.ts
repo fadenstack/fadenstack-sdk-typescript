@@ -1,6 +1,7 @@
 import { FadenstackError, FadenstackUnreachableError } from "../errors.js";
 import { toApiError, retryAfterMs } from "../http/errorReader.js";
 import { requireSecureUrl, type FetchLike } from "../http/transport.js";
+import { ClientLog, writeLog, type FadenstackLogger } from "../logging.js";
 import { AgentTokenProvider, MemoryTokenStore, readTokenSet, type SignedInUser, type TokenStore } from "./tokens.js";
 
 /** What the app says about itself when it asks for a pairing. The approval page shows it as the app's own word. */
@@ -96,6 +97,8 @@ export interface AgentPairingOptions {
   delay?: (ms: number, signal?: AbortSignal) => Promise<void>;
   /** Allow `http://` to another machine, for a development server. Off: https, or plain http only to this machine. */
   allowInsecureHttp?: boolean;
+  /** Where progress is logged (no code, no token, never who signed in). None by default. */
+  logger?: FadenstackLogger;
 }
 
 export interface PairingWaitOptions {
@@ -127,6 +130,7 @@ export class AgentPairing {
   readonly #fetch: FetchLike;
   readonly #now: () => number;
   readonly #delay: (ms: number, signal?: AbortSignal) => Promise<void>;
+  readonly #logger: FadenstackLogger | undefined;
 
   constructor(options: AgentPairingOptions) {
     const base = requireSecureUrl(options.apiUrl, "apiUrl", options.allowInsecureHttp);
@@ -135,6 +139,7 @@ export class AgentPairing {
     this.#fetch = options.fetch ?? ((input, init) => globalThis.fetch(input, init));
     this.#now = options.now ?? Date.now;
     this.#delay = options.delay ?? sleep;
+    this.#logger = options.logger;
   }
 
   /**
@@ -146,7 +151,10 @@ export class AgentPairing {
   async start(agent: string, deviceLabel: string, client: PairingClient, signal?: AbortSignal): Promise<PairingStart> {
     const { response, text } = await this.#send("api/agent-tokens/pairings",
       { agent, device_label: deviceLabel, client: { name: client.name, version: client.version, os: client.os } }, signal);
-    if (tooOld(response.status)) throw unsupported();
+    if (tooOld(response.status)) {
+      writeLog(this.#logger, ClientLog.pairingEnded, { Agent: agent, Outcome: "unsupported" });
+      throw unsupported();
+    }
     if (!response.ok) throw toApiError(response, text);
     let started: Record<string, unknown>;
     try {
@@ -164,6 +172,7 @@ export class AgentPairing {
       : this.#page(`${uri.href.split("#")[0]}#code=${encodeURIComponent(userCode)}`);
     const expiresIn = typeof started["expires_in"] === "number" && started["expires_in"] > 0 ? started["expires_in"] : 600;
     const interval = typeof started["interval"] === "number" ? Math.max(1, started["interval"]) : 5;
+    writeLog(this.#logger, ClientLog.pairingStarted, { Agent: agent, ExpiresInS: expiresIn });
     return new PairingStart(agent, pairingCode, userCode, uri, complete, this.#now() + expiresIn * 1000, interval * 1000);
   }
 
@@ -188,13 +197,14 @@ export class AgentPairing {
     for (;;) {
       await this.#delay(wait, signal);
       signal?.throwIfAborted();
-      if (this.#now() >= start.expiresAt) throw new FadenstackPairingExpiredError("The code expired.");
+      if (this.#now() >= start.expiresAt) throw this.#expired(start, "The code expired.");
       let answer: { response: Response; text: string };
       try {
         answer = await this.#send("api/agent-tokens/pairings/token", { pairing_code: pairingCode }, signal);
       } catch (error) {
         if (!(error instanceof FadenstackUnreachableError)) throw error;
         wait = BACKOFF_MS[Math.min(failures++, BACKOFF_MS.length - 1)]!;
+        writeLog(this.#logger, ClientLog.pairingRetrying, { Agent: start.agent, Reason: "network", WaitS: wait / 1000 });
         report("retrying");
         continue;
       }
@@ -202,6 +212,7 @@ export class AgentPairing {
       if (response.ok) return this.#finish(start, text);
       if (response.status >= 500) {
         wait = BACKOFF_MS[Math.min(failures++, BACKOFF_MS.length - 1)]!;
+        writeLog(this.#logger, ClientLog.pairingRetrying, { Agent: start.agent, Reason: `status ${response.status}`, WaitS: wait / 1000 });
         report("retrying");
         continue;
       }
@@ -215,14 +226,16 @@ export class AgentPairing {
           const retryAfter = retryAfterMs(response.headers, this.#now());
           if (retryAfter !== undefined && retryAfter > interval) interval = retryAfter;
           state = "slowed_down";
+          writeLog(this.#logger, ClientLog.pairingSlowedDown, { Agent: start.agent, IntervalS: Math.round(interval / 1000) });
           break;
         }
         case "access_denied":
+          writeLog(this.#logger, ClientLog.pairingEnded, { Agent: start.agent, Outcome: "denied" });
           throw new FadenstackPairingDeniedError("The sign-in was denied in the browser.");
         case "expired_token":
-          throw new FadenstackPairingExpiredError("The code expired.");
+          throw this.#expired(start, "The code expired.");
         case "invalid_grant":
-          throw new FadenstackPairingExpiredError("The server no longer knows this code. Get a new one.");
+          throw this.#expired(start, "The server no longer knows this code. Get a new one.");
         default:
           if (tooOld(response.status)) throw unsupported();
           throw toApiError(response, text);
@@ -241,7 +254,13 @@ export class AgentPairing {
     }
     if (!tokens.accessToken || !tokens.refreshToken) throw new FadenstackError("The server's sign-in answer was not understood.");
     await this.#store.save(AgentTokenProvider.storeKey(this.#api, start.agent), tokens);
+    writeLog(this.#logger, ClientLog.pairingEnded, { Agent: start.agent, Outcome: "signed in" });
     return { agentSlug: tokens.agent || start.agent, deviceId: tokens.deviceId, ...(tokens.user ? { signedInUser: tokens.user } : {}) };
+  }
+
+  #expired(start: PairingStart, message: string): FadenstackPairingExpiredError {
+    writeLog(this.#logger, ClientLog.pairingEnded, { Agent: start.agent, Outcome: "expired" });
+    return new FadenstackPairingExpiredError(message);
   }
 
   /** One POST; a request that gets no answer is a `FadenstackUnreachableError` (whose cause names why). */

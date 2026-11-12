@@ -1,6 +1,7 @@
 import { FadenstackApiError, FadenstackError, FadenstackSignInRequiredError, FadenstackUnreachableError } from "../errors.js";
 import { toApiError } from "../http/errorReader.js";
 import { requireSecureUrl, type FetchLike } from "../http/transport.js";
+import { ClientLog, writeLog, type FadenstackLogger } from "../logging.js";
 
 /** An agent sign-in on one device: a short access token and the refresh token that renews it. Times in ms since the epoch. */
 export interface TokenSet {
@@ -136,6 +137,8 @@ export interface AgentTokenProviderOptions {
   now?: () => number;
   /** Allow `http://` to another machine. Off: tokens go over https, or plain http only to this machine. */
   allowInsecureHttp?: boolean;
+  /** Where renewals and sign-outs are logged (the agent only; never a token). None by default. */
+  logger?: FadenstackLogger;
 }
 
 /**
@@ -149,6 +152,7 @@ export class AgentTokenProvider implements TokenProvider {
   readonly #fetch: FetchLike;
   readonly #now: () => number;
   readonly #key: string;
+  readonly #logger: FadenstackLogger | undefined;
   #tokens: TokenSet | undefined;
   #loaded = false;
   #refreshing: Promise<TokenSet> | undefined;
@@ -161,6 +165,7 @@ export class AgentTokenProvider implements TokenProvider {
     this.#fetch = options.fetch ?? ((input, init) => globalThis.fetch(input, init));
     this.#now = options.now ?? Date.now;
     this.#key = AgentTokenProvider.storeKey(this.#apiUrl, options.agent);
+    this.#logger = options.logger;
   }
 
   /** The key a sign-in is kept under: the backend and the agent. */
@@ -211,25 +216,30 @@ export class AgentTokenProvider implements TokenProvider {
    */
   async signOut(signal?: AbortSignal): Promise<void> {
     const current = this.#tokens ?? (this.#loaded ? undefined : await this.#store.load(this.#key));
+    let revoked = false;
     try {
-      if (current?.refreshToken) await this.#revoke(current.refreshToken, signal);
+      if (current?.refreshToken) revoked = await this.#revoke(current.refreshToken, signal);
     } finally {
       this.#tokens = undefined;
       this.#loaded = true;
       await this.#store.delete(this.#key);
     }
+    writeLog(this.#logger, ClientLog.signedOut, { Agent: this.agent, Revoked: revoked });
   }
 
-  async #revoke(refreshToken: string, signal?: AbortSignal): Promise<void> {
+  /** Whether the server confirmed (any 2xx); a failure of any kind is not an error here. */
+  async #revoke(refreshToken: string, signal?: AbortSignal): Promise<boolean> {
     try {
       const limit = AbortSignal.timeout(15_000);
-      await this.#fetch(new URL("api/agent-tokens/revoke", this.#apiUrl), {
+      const response = await this.#fetch(new URL("api/agent-tokens/revoke", this.#apiUrl), {
         method: "POST", credentials: "omit", signal: signal ? AbortSignal.any([signal, limit]) : limit,
         headers: { "content-type": "application/json", accept: "application/json" }, body: JSON.stringify({ refresh_token: refreshToken }),
       });
+      return response.ok;
     } catch (error) {
       if (signal?.aborted) throw signal.reason ?? error;
-      // best effort: the tokens go from this device either way
+      writeLog(this.#logger, ClientLog.signOutRevokeFailed, { Agent: this.agent, Reason: error instanceof Error ? error.name : typeof error });
+      return false; // best effort: the tokens go from this device either way
     }
   }
 
@@ -260,9 +270,11 @@ export class AgentTokenProvider implements TokenProvider {
       renewed = await this.#issue("api/agent-tokens/refresh", { refresh_token: current.refreshToken }, undefined,
         AbortSignal.timeout(REFRESH_TIMEOUT_MS));
     } catch (error) {
+      writeLog(this.#logger, ClientLog.tokenRefreshFailed, { Agent: this.agent,
+        Reason: error instanceof FadenstackApiError ? `status ${error.status}` : error instanceof Error ? error.name : typeof error });
       if (error instanceof FadenstackApiError && (error.status === 401 || error.status === 403)) {
         // Revoked, reused elsewhere (the whole sign-in ended), or the user lost access.
-        await this.signOut();
+        await this.#forget();
         throw new FadenstackSignInRequiredError(`The sign-in to '${this.agent}' ended: ${error.message}`, { cause: error });
       }
       throw error;
@@ -270,7 +282,15 @@ export class AgentTokenProvider implements TokenProvider {
     // A renewal may leave out who signed in: it is still the same person.
     if (renewed.user === undefined && current.user !== undefined) renewed = { ...renewed, user: current.user };
     await this.#remember(renewed);
+    writeLog(this.#logger, ClientLog.tokenRefreshed, { Agent: this.agent });
     return renewed;
+  }
+
+  /** The sign-in is gone on this device (the server ended it): no call to the server. */
+  async #forget(): Promise<void> {
+    this.#tokens = undefined;
+    this.#loaded = true;
+    await this.#store.delete(this.#key);
   }
 
   async #current(): Promise<TokenSet | undefined> {

@@ -36,6 +36,19 @@ export {
   type PairingState,
   type PairingWaitOptions,
 } from "./auth/pairing.js";
+export {
+  ClientLog,
+  consoleLogger,
+  defineLog,
+  noLogger,
+  writeLog,
+  type FadenstackLogger,
+  type LogDefinition,
+  type LogEvent,
+  type LogLevel,
+  type LogScope,
+  type LogValue,
+} from "./logging.js";
 export { toAgentToolList, type AgentToolInfo } from "./serverTools.js";
 export { BYPASS_SUPPORTS, CLIENT_SUPPORTS_HEADER, FadenstackTransport, jsonRequest, type FetchLike, type RequestSpec, type TransportOptions } from "./http/transport.js";
 export { parseError, toApiError, retryAfterMs, type ParsedError } from "./http/errorReader.js";

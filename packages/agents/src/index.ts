@@ -70,6 +70,7 @@ export {
   type ReasoningLevel,
   type ReasoningStore,
 } from "./reasoning.js";
+export { AGENT_LOG_CATEGORY, AgentLog } from "./log.js";
 export { attachmentData, isPicture, type MessageAttachment } from "./attachments.js";
 export { ContextBuilder, MAX_HISTORY_PICTURES, NO_TOOL_RESULT, toMessage, withAttachments } from "./contextBuilder.js";
 export {

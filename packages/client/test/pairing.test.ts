@@ -10,7 +10,9 @@ import {
   FadenstackRateLimitedError,
   FadenstackSignInRequiredError,
   MemoryTokenStore,
+  type FadenstackLogger,
   type FetchLike,
+  type LogEvent,
   type PairingProgress,
   type PairingStart,
   type TokenSet,
@@ -257,13 +259,24 @@ describe("pairing: wait", () => {
     await expect(waiting).rejects.toMatchObject({ name: "AbortError" });
   });
 
-  it("keeps the code, the tokens and the person out of what it logs and throws", async () => {
-    const rig = new Rig().poll(down, () => pending("authorization_pending"), approved);
-    const pairing = rig.pairing();
+  it("keeps the code, the tokens and the person out of what it logs and reports", async () => {
+    const events: LogEvent[] = [];
+    const logger: FadenstackLogger = { log: (e) => { events.push(e); } };
+    const rig = new Rig().poll(down, () => pending("slow_down"), () => pending("authorization_pending"), approved);
+    const pairing = new AgentPairing({ apiUrl: SERVER, store: rig.store, fetch: rig.fetch, now: () => rig.now, logger,
+      delay: async (ms) => { rig.waits.push(ms); rig.now += ms; } });
     const start = await pairing.start(AGENT, "PC", APP);
     const seen: string[] = [];
     await pairing.wait(start, { onProgress: (p) => seen.push(JSON.stringify(p)) });
     expect(seen.join("|")).not.toMatch(/SECRET|BDWP|anna@|10\.0\.0\.1/);
+    expect(events.map((e) => [e.eventId, e.message])).toEqual([
+      [1030, "Pairing for agent docs-assistant started; it is valid for 600 s"],
+      [1032, "Pairing for agent docs-assistant: the server could not be reached (network); trying again in 5 s"],
+      [1031, "Pairing for agent docs-assistant: the server asked to slow down (10 s)"],
+      [1033, "Pairing for agent docs-assistant ended: signed in"],
+    ]);
+    expect(events.every((e) => e.category === "Fadenstack.Client")).toBe(true);
+    expect(JSON.stringify(events)).not.toMatch(/SECRET|BDWP|anna@|10\.0\.0\.1/);
   });
 });
 
