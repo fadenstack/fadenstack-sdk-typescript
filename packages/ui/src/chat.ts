@@ -82,6 +82,26 @@ export interface AgentChatOptions {
    * a host that opens links its own way (Office's dialogs, an extension's tabs) passes its own.
    */
   openLink?: (url: string) => void;
+  /**
+   * A gate on running turns, for a host that runs several chats and limits how many work at the same time (.NET
+   * `TurnGate`). It is awaited when a turn is about to start (the user's message is shown, nothing is sent yet) and returns
+   * a lease that is released once, when the turn ends. While it waits, `isWaitingForSlot` is true; Stop aborts `signal` and
+   * nothing is sent; a gate that throws fails the turn. Absent (the default): no gate.
+   */
+  turnGate?: (signal: AbortSignal) => Promise<TurnLease>;
+}
+
+/** What a `turnGate` hands back: the slot a turn holds. Released (`dispose`, `[Symbol.dispose]` or called) once when the turn ends. */
+export type TurnLease = { dispose(): void } | { [Symbol.dispose](): void } | (() => void);
+
+function releaseLease(lease: TurnLease | undefined): void {
+  try {
+    if (typeof lease === "function") lease();
+    else if (lease && "dispose" in lease) lease.dispose();
+    else if (lease && Symbol.dispose in lease) lease[Symbol.dispose]();
+  } catch {
+    // a lease that fails to release must not break the chat
+  }
 }
 
 /** A message on its way, for `beforeSend` and `afterSend`. */
@@ -198,6 +218,8 @@ export class AgentChatViewModel extends Observable implements TurnHost {
   #input = "";
   #ready = false;
   #busy = false;
+  #waitingForSlot = false;
+  readonly #turnGate: AgentChatOptions["turnGate"];
   #historyOpen = false;
   #modeMenuOpen = false;
   #signInRequired = false;
@@ -225,6 +247,7 @@ export class AgentChatViewModel extends Observable implements TurnHost {
       now: options.now ?? (() => new Date()),
     };
     this.#beforeSend = options.beforeSend;
+    this.#turnGate = options.turnGate;
     this.#afterSend = options.afterSend;
     this.#beforeCommand = options.beforeCommand;
     this.#afterCommand = options.afterCommand;
@@ -386,6 +409,11 @@ export class AgentChatViewModel extends Observable implements TurnHost {
     return this.#busy;
   }
 
+  /** The turn is held back by the host's `turnGate` until a slot is free. */
+  get isWaitingForSlot(): boolean {
+    return this.#waitingForSlot;
+  }
+
   get isHistoryOpen(): boolean {
     return this.#historyOpen;
   }
@@ -488,6 +516,7 @@ export class AgentChatViewModel extends Observable implements TurnHost {
     this.#busy = true;
     this.#error = undefined;
     let turn: TurnViewModel | undefined;
+    let lease: TurnLease | undefined;
     try {
       if (this.#beforeSend) {
         this.notify();
@@ -513,9 +542,25 @@ export class AgentChatViewModel extends Observable implements TurnHost {
       this.#turns = [...this.#turns, turn];
       this.#current = turn;
       this.notify();
+      if (this.#turnGate) {
+        this.#waitingForSlot = true;
+        this.notify();
+        try {
+          lease = await this.#turnGate(stop.signal);
+          stop.signal.throwIfAborted();
+        } catch (error) {
+          const waiting = turn;
+          this.#batcher.enqueue(() => stop.signal.aborted ? waiting.stop() : waiting.fail(error instanceof Error ? error.message : String(error)));
+          await this.#batcher.whenFlushed();
+          return;
+        } finally {
+          this.#waitingForSlot = false;
+        }
+      }
       await this.#runTurn(turn, message, attached, skills, this.#mode, stop.signal);
       await this.#batcher.whenFlushed();
     } finally {
+      releaseLease(lease);
       this.#current = undefined;
       this.#stop = undefined;
       this.#busy = false;
