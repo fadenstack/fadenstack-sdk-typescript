@@ -1,5 +1,5 @@
 import { FadenstackStreamError } from "../errors.js";
-import { readNotice, type GovernanceNotice } from "../governance.js";
+import { isRefusal, readNotice, type GovernanceNotice } from "../governance.js";
 import { parseError, toApiError } from "../http/errorReader.js";
 import type { FadenstackTransport, RequestSpec } from "../http/transport.js";
 import { RECEIPT_EVENT, RECEIPT_HEADER, readReceiptEvent, readReceiptHeader } from "../provenance/receipts.js";
@@ -176,8 +176,9 @@ function receiptOf(event: FadenstackEvent): ReceiptNote | undefined {
   return event.type === "CUSTOM" && event.name === RECEIPT_EVENT ? readReceiptEvent(event.value) : undefined;
 }
 
-export function toolCall(id: string, name: string, argumentsJson: string): ToolCall {
+export function toolCall(id: string, name: string, argumentsJson: string, index?: number): ToolCall {
   const call: ToolCall = { id, name, argumentsJson, arguments: undefined };
+  if (index !== undefined) call.index = index;
   if (argumentsJson.trim() === "") {
     call.arguments = {};
     return call;
@@ -226,9 +227,9 @@ function toResponse(root: Json): ChatResponse {
       response.reasoning = str(message, "reasoning_content") ?? str(message, "reasoning") ?? "";
       response.text = str(message, "content") ?? "";
       if (Array.isArray(message["tool_calls"])) {
-        response.toolCalls = (message["tool_calls"] as Json[]).map((c) => {
+        response.toolCalls = (message["tool_calls"] as Json[]).map((c, i) => {
           const fn = (c["function"] ?? {}) as Json;
-          return toolCall(str(c, "id") ?? "", str(fn, "name") ?? "", str(fn, "arguments") ?? "");
+          return toolCall(str(c, "id") ?? "", str(fn, "name") ?? "", str(fn, "arguments") ?? "", i);
         });
       }
     }
@@ -236,8 +237,12 @@ function toResponse(root: Json): ChatResponse {
   const u = usage(root);
   if (u) response.usage = u;
   if (faden?.["governance"]) {
-    response.refused = readNotice(faden["governance"]);
-    response.finishReason = "content_filter";
+    // Only a refusal refuses; any other outcome informs (it stays in the events).
+    const notice = readNotice(faden["governance"]);
+    if (isRefusal(notice.outcome)) {
+      response.refused = notice;
+      response.finishReason = "content_filter";
+    }
   }
   return response;
 }
@@ -260,7 +265,9 @@ class StreamAssembler {
       const event = toFadenstackEvent(raw);
       yield { type: "event", event };
       if (event.type === "CUSTOM" && event.name === "faden.governance" && event.value) {
-        yield { type: "refused", notice: readNotice(event.value) };
+        // Only a refusal refuses; any other outcome is for the session to show, and the turn goes on.
+        const notice = readNotice(event.value);
+        if (isRefusal(notice.outcome)) yield { type: "refused", notice };
       }
       const receipt = receiptOf(event);
       if (receipt) yield { type: "receipt", receipt };
@@ -321,7 +328,7 @@ class StreamAssembler {
   }
 
   #takeCalls(): ToolCall[] {
-    const calls = [...this.#calls.entries()].sort(([a], [b]) => a - b).map(([, c]) => toolCall(c.id, c.name, c.args));
+    const calls = [...this.#calls.entries()].sort(([a], [b]) => a - b).map(([index, c]) => toolCall(c.id, c.name, c.args, index));
     this.#calls.clear();
     return calls;
   }

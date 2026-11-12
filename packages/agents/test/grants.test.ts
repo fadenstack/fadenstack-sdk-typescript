@@ -54,8 +54,10 @@ describe("server-held grant execution", () => {
         events: [marker], toolCalls: [1, 2].map(() => ({ id: "write-1", name: "write_resource", arguments: { resource_id: "nextcloud:files:2", text: "Reviewed" } })),
       });
       await s.session.send("write");
-      expect(s.invoke).toHaveBeenCalledOnce();
-      expect(s.asked).toHaveLength(1);
+      // The calls get ids of their own (a shared id cannot be told apart), so the gateway's word on "write-1" covers neither:
+      // one reservation is never spent twice, and both calls ask (as .NET does).
+      expect(s.invoke).not.toHaveBeenCalled();
+      expect(s.asked).toHaveLength(2);
     } finally { await s.agent.dispose(); }
   });
 

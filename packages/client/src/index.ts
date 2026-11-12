@@ -42,7 +42,7 @@ export {
   type Usage,
   type WireToolCall,
 } from "./chat/types.js";
-export { readNotice, type ChatOutcome, type GovernanceNotice } from "./governance.js";
+export { isRefusal, readNotice, type ChatOutcome, type GovernanceNotice } from "./governance.js";
 export {
   toAgentProfile,
   toWireEvent,
