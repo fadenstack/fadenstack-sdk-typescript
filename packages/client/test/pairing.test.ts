@@ -4,6 +4,7 @@ import {
   AgentPairing,
   AgentTokenProvider,
   FadenstackClient,
+  FadenstackPairingAgentError,
   FadenstackPairingDeniedError,
   FadenstackPairingExpiredError,
   FadenstackPairingUnsupportedError,
@@ -346,6 +347,159 @@ describe("pairing against the fake server", () => {
     } });
     await pairing.wait(await pairing.start("docs", "PC", APP));
     expect(waits).toEqual([5000, 5000, 10_000]);
+  });
+});
+
+describe("pairing: several agents", () => {
+  const slugs = (n: number) => Array.from({ length: n }, (_, i) => `agent-${i + 1}`);
+  const options = (extra: Record<string, unknown> = {}): FakeGatewayOptions =>
+    ({ pairing: true, principal: true, agents: [{ slug: "word" }, { slug: "excel" }, { slug: "outlook" }], ...extra }) as FakeGatewayOptions;
+  const make = (gateway: FakeGateway) => {
+    const store = new MemoryTokenStore();
+    const pairing = new AgentPairing({ apiUrl: gateway.serverUrl, store, fetch: gateway.fetch, delay: async () => undefined });
+    return { store, pairing };
+  };
+  const provider = (gateway: FakeGateway, store: MemoryTokenStore, agent: string) =>
+    new AgentTokenProvider({ apiUrl: gateway.serverUrl, agent, store, fetch: gateway.fetch });
+
+  it("refuses more than 8 agents, a repeat or an empty name before any request", async () => {
+    const rig = new Rig();
+    const pairing = rig.pairing();
+    await expect(pairing.start("agent-1", "PC", APP, { agents: slugs(8).slice(1).concat("agent-9") })).rejects.toBeInstanceOf(RangeError);
+    await expect(pairing.start("agent-1", "PC", APP, { agents: ["b", "b"] })).rejects.toBeInstanceOf(TypeError);
+    await expect(pairing.start("agent-1", "PC", APP, { agents: ["agent-1"] })).rejects.toBeInstanceOf(TypeError);
+    await expect(pairing.start("agent-1", "PC", APP, { agents: [""] })).rejects.toBeInstanceOf(TypeError);
+    expect(rig.requests).toHaveLength(0);
+    // exactly 8 in all is fine
+    await pairing.start("agent-1", "PC", APP, { agents: slugs(8).slice(1) });
+    expect(rig.requests).toHaveLength(1);
+    expect(rig.requests[0]!.body["agents"]).toEqual(slugs(8));
+  });
+
+  it("sends agents (the first included) only for several agents, and none for one", async () => {
+    const rig = new Rig();
+    await rig.pairing().start(AGENT, "PC", APP);
+    await rig.pairing().start(AGENT, "PC", APP, { agents: [] });
+    await rig.pairing().start(AGENT, "PC", APP, new AbortController().signal);
+    for (const r of rig.requests) expect(Object.keys(r.body)).toEqual(["agent", "device_label", "client"]);
+    await rig.pairing().start(AGENT, "PC", APP, { agents: ["b", "c"] });
+    expect(rig.requests[3]!.body["agent"]).toBe(AGENT);
+    expect(rig.requests[3]!.body["agents"]).toEqual([AGENT, "b", "c"]);
+  });
+
+  it("sends the agent on the token request only for an agent other than the first", async () => {
+    const rig = new Rig();
+    rig.startBody = { ...startAnswer(), agents: [AGENT, "b"] };
+    rig.poll(approved, () => jsonResponse(201, { ...tokens(), agent: "b" }));
+    const pairing = rig.pairing();
+    const start = await pairing.start(AGENT, "PC", APP, { agents: ["b"] });
+    expect(start.agents).toEqual([AGENT, "b"]);
+    await pairing.wait(start);
+    await pairing.redeem(start, "b");
+    const bodies = rig.requests.filter((r) => r.path.endsWith("/token")).map((r) => r.body);
+    expect(bodies).toEqual([{ pairing_code: PAIRING }, { pairing_code: PAIRING, agent: "b" }]);
+  });
+
+  it("wait with an agent waits for the approval and returns that agent's tokens, saved for that agent", async () => {
+    const gateway = new FakeGateway(options());
+    const { pairing, store } = make(gateway);
+    const start = await pairing.start("word", "Office on PC", APP, { agents: ["excel", "outlook"] });
+    expect(start.agents).toEqual(["word", "excel", "outlook"]);
+    expect(start.ignoredAgents).toEqual([]);
+    expect(gateway.pairings[0]!.agents).toEqual(["word", "excel", "outlook"]);
+    const waiting = pairing.wait(start, { agent: "excel" });
+    gateway.approvePairing("user@example.com");
+    expect((await waiting).agentSlug).toBe("excel");
+    expect(await provider(gateway, store, "excel").isSignedIn()).toBe(true);
+    expect(await provider(gateway, store, "word").isSignedIn()).toBe(false);
+    expect(gateway.signIns.map((s) => s.agent)).toEqual(["excel"]);
+  });
+
+  it("redeem collects each other agent once after one approval; the pairing is consumed after the last", async () => {
+    const gateway = new FakeGateway(options());
+    const { pairing, store } = make(gateway);
+    const start = await pairing.start("word", "Office on PC", APP, { agents: ["excel", "outlook"] });
+    const waiting = pairing.wait(start);
+    gateway.approvePairing("user@example.com");
+    expect((await waiting).agentSlug).toBe("word");
+    expect(gateway.pairings[0]!.state).toBe("approved");
+    expect((await pairing.redeem(start, "excel")).agentSlug).toBe("excel");
+    expect(gateway.pairings[0]!.state).toBe("approved");
+    expect((await pairing.redeem(start, "outlook")).agentSlug).toBe("outlook");
+    expect(gateway.pairings[0]!.state).toBe("consumed");
+    for (const agent of ["word", "excel", "outlook"]) expect(await provider(gateway, store, agent).isSignedIn()).toBe(true);
+    expect(gateway.signIns.map((s) => [s.agent, s.userId, s.label])).toEqual(
+      ["word", "excel", "outlook"].map((a) => [a, "user-1", "Office on PC"]));
+    // each sign-in is its own device
+    expect(new Set((await Promise.all(["word", "excel", "outlook"].map((a) => provider(gateway, store, a).getAccessToken()))).map(String)).size).toBe(3);
+  });
+
+  it("redeeming an agent twice, or one the person did not get, is a typed error saying not approved or already redeemed", async () => {
+    const gateway = new FakeGateway(options());
+    const { pairing } = make(gateway);
+    const start = await pairing.start("word", "PC", APP, { agents: ["excel", "outlook"] });
+    gateway.approvePairing("user@example.com", undefined, ["outlook"]);
+    await pairing.redeem(start, "excel");
+    const again = await pairing.redeem(start, "excel").catch((e: unknown) => e);
+    expect(again).toBeInstanceOf(FadenstackPairingAgentError);
+    expect(again).toMatchObject({ agent: "excel", reason: "not_approved_or_redeemed" });
+    expect((again as Error).message).toMatch(/did not approve it, or it was collected already/);
+    const refused = await pairing.redeem(start, "outlook").catch((e: unknown) => e);
+    expect(refused).toMatchObject({ agent: "outlook", reason: "not_approved_or_redeemed" });
+    expect(gateway.signIns.map((s) => s.agent)).toEqual(["excel"]);
+  });
+
+  it("an agent the pairing does not name is refused by the server as invalid_grant, not issued", async () => {
+    const gateway = new FakeGateway(options());
+    const { pairing } = make(gateway);
+    const start = await pairing.start("word", "PC", APP, { agents: ["excel"] });
+    gateway.approvePairing();
+    Object.defineProperty(start, "agents", { value: ["word", "excel", "outlook"] }); // claims more than the server stored
+    await expect(pairing.redeem(start, "outlook")).rejects.toMatchObject({ reason: "not_approved_or_redeemed" });
+    expect(gateway.signIns).toEqual([]);
+  });
+
+  it("redeeming before the approval says pending; a denial and an expiry keep their errors", async () => {
+    const gateway = new FakeGateway(options());
+    const { pairing } = make(gateway);
+    const start = await pairing.start("word", "PC", APP, { agents: ["excel"] });
+    await expect(pairing.redeem(start, "excel")).rejects.toMatchObject({ reason: "pending" });
+    gateway.denyPairing();
+    await expect(pairing.redeem(start, "excel")).rejects.toBeInstanceOf(FadenstackPairingDeniedError);
+    const other = await pairing.start("word", "PC", APP, { agents: ["excel"] });
+    gateway.expirePairings();
+    await expect(pairing.redeem(other, "excel")).rejects.toBeInstanceOf(FadenstackPairingExpiredError);
+  });
+
+  it("a server that ignores agents stores only the first: its tokens come, the others are named as left and refused locally", async () => {
+    const gateway = new FakeGateway(options({ pairing: { ignoreAgents: true } }));
+    const { pairing, store } = make(gateway);
+    const start = await pairing.start("word", "PC", APP, { agents: ["excel", "outlook"] });
+    expect(start.agents).toEqual([]);
+    expect(start.ignoredAgents).toEqual(["excel", "outlook"]);
+    expect(gateway.pairings[0]!.agents).toEqual(["word"]);
+    const waiting = pairing.wait(start);
+    gateway.approvePairing();
+    const result = await waiting;
+    expect(result.agentSlug).toBe("word");
+    expect(result.ignoredAgents).toEqual(["excel", "outlook"]);
+    expect(await provider(gateway, store, "word").isSignedIn()).toBe(true);
+    const before = gateway.pairings[0]!.polls;
+    const refused = await pairing.redeem(start, "excel").catch((e: unknown) => e);
+    expect(refused).toMatchObject({ agent: "excel", reason: "not_offered" });
+    await expect(pairing.wait(start, { agent: "outlook" })).rejects.toMatchObject({ reason: "not_offered" });
+    expect(gateway.pairings[0]!.polls).toBe(before); // nothing was sent
+  });
+
+  it("a single agent against the fake server still works with no agents on the wire", async () => {
+    const gateway = new FakeGateway(options());
+    const { pairing } = make(gateway);
+    const start = await pairing.start("word", "PC", APP);
+    expect(start.agents).toEqual(["word"]);
+    const waiting = pairing.wait(start);
+    gateway.approvePairing();
+    expect((await waiting).agentSlug).toBe("word");
+    expect(gateway.pairings[0]).toMatchObject({ agents: ["word"], redeemed: ["word"], state: "consumed" });
   });
 });
 

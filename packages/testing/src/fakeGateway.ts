@@ -210,6 +210,8 @@ export interface FakePairingOptions {
   pageOrigin?: string;
   /** The starts one address may make before the server answers 429 (default: no limit). */
   startLimit?: number;
+  /** An older 0.7.1 candidate: the start ignores `agents` (only the first agent is stored and redeemable, the answer has no `agents`). */
+  ignoreAgents?: boolean;
 }
 
 /** A pairing the fake server started, for assertions. */
@@ -218,6 +220,10 @@ export interface FakePairing {
   readonly pairingCode: string;
   readonly userCode: string;
   readonly agent: string;
+  /** Every agent the pairing names, the first included. */
+  readonly agents: readonly string[];
+  /** The agents whose tokens were collected. */
+  readonly redeemed: readonly string[];
   readonly deviceLabel: string | null;
   readonly client: { name: string; version: string; os: string };
   readonly state: "pending" | "approved" | "denied" | "consumed";
@@ -243,6 +249,9 @@ export interface CapturedRequest {
 interface PairingRow extends FakePairing {
   expiresAt: number;
   userId?: string;
+  /** The agents the approval covers (set at approval). */
+  approvedAgents?: string[];
+  redeemed: string[];
   // the row is changed in place by the routes; the public view is a copy
   state: FakePairing["state"];
   polls: number;
@@ -367,17 +376,21 @@ export class FakeGateway {
 
   /** The pairings started, in order (see `FakeGatewayOptions.pairing`). */
   get pairings(): readonly FakePairing[] {
-    return this.#pairings.map((p) => ({ pairingCode: p.pairingCode, userCode: p.userCode, agent: p.agent, deviceLabel: p.deviceLabel,
-      client: p.client, state: p.state, polls: p.polls }));
+    return this.#pairings.map((p) => ({ pairingCode: p.pairingCode, userCode: p.userCode, agent: p.agent, agents: [...p.agents], redeemed: [...p.redeemed],
+      deviceLabel: p.deviceLabel, client: p.client, state: p.state, polls: p.polls }));
   }
 
-  /** The person approves the newest pending pairing (or the one with `userCode`) in the console, as `email`. */
-  approvePairing(email = this.#users[0]!.email, userCode?: string): void {
+  /**
+   * The person approves the newest pending pairing (or the one with `userCode`) in the console, as `email`. One approval
+   * covers every agent the pairing names except those in `refuse` (agents the person may not use).
+   */
+  approvePairing(email = this.#users[0]!.email, userCode?: string, refuse: readonly string[] = []): void {
     const user = this.#users.find((u) => u.email === email);
     if (!user) throw new Error(`No user ${email}.`);
     const row = this.#pendingPairing(userCode);
     row.state = "approved";
     row.userId = user.id;
+    row.approvedAgents = row.agents.filter((a) => !refuse.includes(a));
   }
 
   /** The person denies the newest pending pairing (or the one with `userCode`). */
@@ -523,17 +536,21 @@ export class FakeGateway {
       const error = (code: string, extra: Record<string, unknown> = {}) =>
         json(400, { error: code, error_description: code, ...extra }, noStore);
       if (!row || row.state === "consumed") return error("invalid_grant");
+      const wanted = typeof b["agent"] === "string" && b["agent"] ? b["agent"] : row.agent;
+      if (!row.agents.includes(wanted)) return error("invalid_grant");
       if (row.expiresAt <= this.#now()) return error("expired_token");
       row.polls += 1;
       if (row.state === "denied") return error("access_denied");
       if (row.state === "approved") {
-        const agent = this.#agents.get(row.agent);
+        if (!row.approvedAgents!.includes(wanted) || row.redeemed.includes(wanted)) return error("invalid_grant");
+        const agent = this.#agents.get(wanted);
         const signIn: SignIn = {
-          deviceId: `device-${this.#next()}`, userId: row.userId!, agent: agent?.slug ?? row.agent, access: "", accessExpires: 0, refresh: "",
+          deviceId: `device-${this.#next()}`, userId: row.userId!, agent: agent?.slug ?? wanted, access: "", accessExpires: 0, refresh: "",
           refreshExpires: 0, revoked: false, label: row.deviceLabel, spent: new Set(),
         };
         this.#signIns.push(signIn);
-        row.state = "consumed";
+        row.redeemed.push(wanted);
+        if (row.approvedAgents!.every((a) => row.redeemed.includes(a))) row.state = "consumed";
         return json(201, this.#tokens(signIn, agent?.id ?? ""), noStore);
       }
       if (options.slowDown?.includes(row.polls)) return error("slow_down", { interval: (options.interval ?? 5) + 5 });
@@ -548,10 +565,19 @@ export class FakeGateway {
       return json(429, { detail: { code: "too_many_requests", message: "Too many sign-in requests from this address; try again later." } },
         { "retry-after": "60" });
     }
+    let agents = [b["agent"] as string];
+    if (b["agents"] !== undefined && !options.ignoreAgents) {
+      const sent = b["agents"];
+      if (!Array.isArray(sent) || sent.length === 0 || sent.length > 8 || sent.some((a) => typeof a !== "string" || !a) || sent[0] !== b["agent"]
+        || new Set(sent).size !== sent.length) {
+        return json(422, { detail: [{ msg: "agents: at most 8 slugs, the first being agent, no repeats" }] });
+      }
+      agents = sent as string[];
+    }
     const n = this.#next();
     const userCode = `ABCD-${String(1000 + Number(n)).slice(-4)}`;
     const row: PairingRow = {
-      pairingCode: `pairing-secret-${n}`, userCode, agent: b["agent"] as string, deviceLabel: typeof b["device_label"] === "string" ? b["device_label"] : null,
+      pairingCode: `pairing-secret-${n}`, userCode, agent: b["agent"] as string, agents, redeemed: [], deviceLabel: typeof b["device_label"] === "string" ? b["device_label"] : null,
       client: { name: String(client["name"]), version: String(client["version"]), os: String(client["os"]) },
       state: "pending", polls: 0, expiresAt: this.#now() + (options.expiresIn ?? 600) * 1000,
     };
@@ -560,6 +586,7 @@ export class FakeGateway {
     return json(201, {
       pairing_code: row.pairingCode, user_code: userCode, verification_uri: page, verification_uri_complete: `${page}#code=${userCode}`,
       expires_in: options.expiresIn ?? 600, interval: options.interval ?? 5,
+      ...(options.ignoreAgents ? {} : { agents }),
     }, noStore);
   }
 

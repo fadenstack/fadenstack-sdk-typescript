@@ -13,6 +13,25 @@ export interface PairingClient {
   os: string;
 }
 
+/**
+ * An agent's tokens cannot be had from this pairing. `reason` says why: `not_approved_or_redeemed` (the server answered
+ * `invalid_grant`: the person did not approve this agent, or its tokens were collected already), `pending` (nobody has
+ * approved yet), or `not_offered` (the server ignored the further agents when the pairing started, so only the first is
+ * on offer; nothing was sent).
+ */
+export class FadenstackPairingAgentError extends FadenstackError {
+  readonly agent: string;
+  readonly reason: "not_approved_or_redeemed" | "pending" | "not_offered";
+  constructor(agent: string, reason: FadenstackPairingAgentError["reason"], message: string) {
+    super(message);
+    this.agent = agent;
+    this.reason = reason;
+  }
+}
+
+/** The most agents one pairing can name, the first included. */
+export const MAX_PAIRING_AGENTS = 8;
+
 /** The person denied the pairing in the console. */
 export class FadenstackPairingDeniedError extends FadenstackError {}
 /** The code expired before it was approved, or the server no longer knows it. Start a new pairing. */
@@ -28,8 +47,15 @@ const codes = new WeakMap<PairingStart, string>();
  * property and not in `toString()` or `toJSON()`.
  */
 export class PairingStart {
-  /** @internal */
+  /** The first agent: the one `wait` returns tokens for unless told otherwise. */
   readonly agent: string;
+  /**
+   * The agents the server stored for this pairing, in order (the first is `agent`). Empty when the server ignored the
+   * `agents` the app asked for or does not know them: then only `agent` can be redeemed, see `ignoredAgents`.
+   */
+  readonly agents: readonly string[];
+  /** Agents the app asked for that the server did not store (an older server): their tokens cannot be had from this pairing. */
+  readonly ignoredAgents: readonly string[];
   /** The short code to show, e.g. `BDWP-HTQX`; the person compares it in the console. Show it, do not log it. */
   readonly userCode: string;
   /** The console page where the person enters the code; always on the server's own origin. */
@@ -42,8 +68,11 @@ export class PairingStart {
   readonly intervalMs: number;
 
   /** @internal */
-  constructor(agent: string, pairingCode: string, userCode: string, uri: URL, complete: URL, expiresAt: number, intervalMs: number) {
+  constructor(agent: string, agents: readonly string[], ignoredAgents: readonly string[], pairingCode: string, userCode: string, uri: URL,
+    complete: URL, expiresAt: number, intervalMs: number) {
     this.agent = agent;
+    this.agents = agents;
+    this.ignoredAgents = ignoredAgents;
     this.userCode = userCode;
     this.verificationUri = uri;
     this.verificationUriComplete = complete;
@@ -79,6 +108,8 @@ export interface PairingProgress {
 export interface PairingResult {
   /** The agent the person signed in to. */
   agentSlug: string;
+  /** Agents the app asked for that this pairing cannot give (an older server ignored them); absent otherwise. */
+  ignoredAgents?: readonly string[];
   /** This device's sign-in; the server lists and revokes sign-ins by it. */
   deviceId: string;
   /** Who approved it; undefined if the server did not say. */
@@ -101,7 +132,15 @@ export interface AgentPairingOptions {
   logger?: FadenstackLogger;
 }
 
+export interface PairingStartOptions {
+  /** The further agents, after the first (`start`'s `agent`): at most 7, no repeats, none equal to the first. One approval covers all. */
+  agents?: readonly string[];
+  signal?: AbortSignal;
+}
+
 export interface PairingWaitOptions {
+  /** Which agent's tokens to return; the first agent by default. Must be one the server stored (`PairingStart.agents`). */
+  agent?: string;
   /** Told the state and the time left after every poll. */
   onProgress?: (progress: PairingProgress) => void;
   /** Stops the wait; the pairing stays valid at the server until it expires. */
@@ -148,9 +187,16 @@ export class AgentPairing {
    * @throws FadenstackPairingUnsupportedError The server is older than this feature (404, or 405 from core 0.7.0).
    * @throws FadenstackRateLimitedError Too many pairings were started from this address (429).
    */
-  async start(agent: string, deviceLabel: string, client: PairingClient, signal?: AbortSignal): Promise<PairingStart> {
+  async start(agent: string, deviceLabel: string, client: PairingClient, options?: AbortSignal | PairingStartOptions): Promise<PairingStart> {
+    const { agents: further = [], signal } = options instanceof AbortSignal ? { signal: options } : options ?? {};
+    const all = [agent, ...further];
+    if (all.length > MAX_PAIRING_AGENTS) throw new RangeError(`A pairing names at most ${MAX_PAIRING_AGENTS} agents.`);
+    if (all.some((a) => typeof a !== "string" || !a)) throw new TypeError("Every agent of a pairing needs a name.");
+    if (new Set(all).size !== all.length) throw new TypeError("An agent can be named only once in a pairing.");
+    // one agent: the body is what it always was
     const { response, text } = await this.#send("api/agent-tokens/pairings",
-      { agent, device_label: deviceLabel, client: { name: client.name, version: client.version, os: client.os } }, signal);
+      { agent, ...(further.length > 0 ? { agents: all } : {}), device_label: deviceLabel,
+        client: { name: client.name, version: client.version, os: client.os } }, signal);
     if (tooOld(response.status)) {
       writeLog(this.#logger, ClientLog.pairingEnded, { Agent: agent, Outcome: "unsupported" });
       throw unsupported();
@@ -172,8 +218,11 @@ export class AgentPairing {
       : this.#page(`${uri.href.split("#")[0]}#code=${encodeURIComponent(userCode)}`);
     const expiresIn = typeof started["expires_in"] === "number" && started["expires_in"] > 0 ? started["expires_in"] : 600;
     const interval = typeof started["interval"] === "number" ? Math.max(1, started["interval"]) : 5;
+    const stored = Array.isArray(started["agents"]) ? (started["agents"] as unknown[]).filter((a): a is string => typeof a === "string") : [];
+    const offered = stored.length > 0 ? stored : [agent];
+    const ignored = further.filter((a) => !offered.includes(a));
     writeLog(this.#logger, ClientLog.pairingStarted, { Agent: agent, ExpiresInS: expiresIn });
-    return new PairingStart(agent, pairingCode, userCode, uri, complete, this.#now() + expiresIn * 1000, interval * 1000);
+    return new PairingStart(agent, stored, ignored, pairingCode, userCode, uri, complete, this.#now() + expiresIn * 1000, interval * 1000);
   }
 
   /**
@@ -188,6 +237,7 @@ export class AgentPairing {
     const { signal, onProgress } = options;
     const pairingCode = codes.get(start);
     if (pairingCode === undefined) throw new TypeError("Wait for a pairing that start() returned.");
+    const agent = this.#offered(start, options.agent);
     let interval = start.intervalMs;
     let wait = interval;
     let failures = 0;
@@ -200,7 +250,7 @@ export class AgentPairing {
       if (this.#now() >= start.expiresAt) throw this.#expired(start, "The code expired.");
       let answer: { response: Response; text: string };
       try {
-        answer = await this.#send("api/agent-tokens/pairings/token", { pairing_code: pairingCode }, signal);
+        answer = await this.#send("api/agent-tokens/pairings/token", tokenBody(start, pairingCode, agent), signal);
       } catch (error) {
         if (!(error instanceof FadenstackUnreachableError)) throw error;
         wait = BACKOFF_MS[Math.min(failures++, BACKOFF_MS.length - 1)]!;
@@ -209,7 +259,7 @@ export class AgentPairing {
         continue;
       }
       const { response, text } = answer;
-      if (response.ok) return this.#finish(start, text);
+      if (response.ok) return this.#finish(start, agent, text);
       if (response.status >= 500) {
         wait = BACKOFF_MS[Math.min(failures++, BACKOFF_MS.length - 1)]!;
         writeLog(this.#logger, ClientLog.pairingRetrying, { Agent: start.agent, Reason: `status ${response.status}`, WaitS: wait / 1000 });
@@ -245,17 +295,59 @@ export class AgentPairing {
     }
   }
 
-  async #finish(start: PairingStart, text: string): Promise<PairingResult> {
+  /**
+   * Collects another listed agent's tokens after the approval: one request, no waiting, and the tokens are saved for that agent.
+   * @throws FadenstackPairingAgentError Not approved yet (`pending`), not approved for this agent or already collected
+   *   (`not_approved_or_redeemed`, the server's `invalid_grant`), or never on offer (`not_offered`, nothing sent).
+   * @throws FadenstackPairingDeniedError The person denied the pairing.
+   * @throws FadenstackPairingExpiredError The code expired.
+   */
+  async redeem(start: PairingStart, agent: string, signal?: AbortSignal): Promise<PairingResult> {
+    const pairingCode = codes.get(start);
+    if (pairingCode === undefined) throw new TypeError("Redeem a pairing that start() returned.");
+    this.#offered(start, agent);
+    const { response, text } = await this.#send("api/agent-tokens/pairings/token", tokenBody(start, pairingCode, agent), signal);
+    if (response.ok) return this.#finish(start, agent, text);
+    switch (response.status === 429 ? "slow_down" : errorCode(text)) {
+      case "invalid_grant":
+        writeLog(this.#logger, ClientLog.pairingEnded, { Agent: agent, Outcome: "not redeemable" });
+        throw new FadenstackPairingAgentError(agent, "not_approved_or_redeemed",
+          `The sign-in for agent ${agent} cannot be collected: the person did not approve it, or it was collected already.`);
+      case "authorization_pending":
+      case "slow_down":
+        throw new FadenstackPairingAgentError(agent, "pending", "The person has not approved the pairing yet.");
+      case "access_denied":
+        throw new FadenstackPairingDeniedError("The sign-in was denied in the browser.");
+      case "expired_token":
+        throw this.#expired(start, "The code expired.");
+      default:
+        if (tooOld(response.status)) throw unsupported();
+        throw toApiError(response, text);
+    }
+  }
+
+  /** The agent to get tokens for: the first by default; one the server did not store (an older server) is refused before any request. */
+  #offered(start: PairingStart, agent: string | undefined): string {
+    if (agent === undefined || agent === start.agent) return start.agent;
+    if (!start.agents.includes(agent)) {
+      throw new FadenstackPairingAgentError(agent, "not_offered", start.ignoredAgents.includes(agent)
+        ? `The server did not take agent ${agent} into this pairing (it is older than several agents per pairing). Pair for it separately.`
+        : `Agent ${agent} is not part of this pairing.`);
+    }
+    return agent;
+  }
+
+  async #finish(start: PairingStart, agent: string, text: string): Promise<PairingResult> {
     let tokens;
     try {
-      tokens = readTokenSet(JSON.parse(text) as Record<string, unknown>, this.#now(), start.agent);
+      tokens = readTokenSet(JSON.parse(text) as Record<string, unknown>, this.#now(), agent);
     } catch {
       throw new FadenstackError("The server's sign-in answer was not understood.");
     }
     if (!tokens.accessToken || !tokens.refreshToken) throw new FadenstackError("The server's sign-in answer was not understood.");
-    await this.#store.save(AgentTokenProvider.storeKey(this.#api, start.agent), tokens);
-    writeLog(this.#logger, ClientLog.pairingEnded, { Agent: start.agent, Outcome: "signed in" });
-    return { agentSlug: tokens.agent || start.agent, deviceId: tokens.deviceId, ...(tokens.user ? { signedInUser: tokens.user } : {}) };
+    await this.#store.save(AgentTokenProvider.storeKey(this.#api, agent), tokens);
+    writeLog(this.#logger, ClientLog.pairingEnded, { Agent: agent, Outcome: "signed in" });
+    return { agentSlug: tokens.agent || agent, ...(start.ignoredAgents.length > 0 ? { ignoredAgents: start.ignoredAgents } : {}), deviceId: tokens.deviceId, ...(tokens.user ? { signedInUser: tokens.user } : {}) };
   }
 
   #expired(start: PairingStart, message: string): FadenstackPairingExpiredError {
@@ -292,6 +384,11 @@ export class AgentPairing {
     }
     return url;
   }
+}
+
+/** The token request: the code, and the agent only when it is not the first (the wire of one agent stays what it was). */
+function tokenBody(start: PairingStart, pairingCode: string, agent: string): Record<string, string> {
+  return agent === start.agent ? { pairing_code: pairingCode } : { pairing_code: pairingCode, agent };
 }
 
 /** A server older than pairing: no route (404), or a route of the same path for another method (405, as core 0.7.0 answers). */
