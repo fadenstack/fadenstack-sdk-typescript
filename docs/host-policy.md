@@ -1,5 +1,8 @@
 # Central policy before native host execution
 
+This page is written for a host that runs native tools. [Host commands and central policy](host-commands.md) is the guide to
+`invokeTool`, `streamTool` and the check on the wire.
+
 A gateway advertising `host_tools.dispatch_check` supports fresh policy checks for
 model-requested host tools. The agent automatically uses them once negotiated.
 Older gateways retain their legacy behavior. Hosts that require this guarantee

@@ -68,9 +68,12 @@ An access request (GDPR Art. 15 and 20) and an erasure request (Art. 17) for wha
 `ExportMyDataAsync` and `DeleteMyDataAsync`.
 
 ```ts
-const data = await agent.exportMyData();   // a JSON document, decrypted
-const result = await agent.deleteMyData(); // { storesCleared, hostSessionStoreLeft, hostApprovalStoreLeft, hostStoresLeft }
+const data = await agent.exportMyData();   // a MyDataExport: a JSON document, decrypted
+const result = await agent.deleteMyData(); // a DataDeletion: { storesCleared, hostSessionStoreLeft, hostApprovalStoreLeft, hostStoresLeft }
 ```
+
+Both start the agent first if it has not started, so the signed-in user is known. `MyDataExport`, `ExportedSession` and
+`DataDeletion` are types of `@fadenstack/agents`.
 
 `exportMyData()` returns one plain JSON object (the .NET SDK writes a ZIP; a document is what a page can hand to the
 person as a download):
@@ -85,16 +88,21 @@ person as a download):
 
 A store you passed yourself is read for this agent only (it cannot name its agents).
 
-`deleteMyData()` deletes the signed-in user's databases (sessions, "Allow always") **and their key**, so that a copy
-of the profile restored later can never be read. Afterwards the stores start empty, with a new key. It does not sign out
-(sign-in tokens stay; that is the host's call) and it does not touch the server. From a gateway that names no user it
+`deleteMyData()` deletes the signed-in user's databases (sessions, "Allow always" and the preferences, such as the
+level of thinking they picked) **and their key**, so that a copy of the profile restored later can never be read.
+Afterwards the stores start empty, with a new key. It does not sign out (sign-in tokens stay; that is the host's call)
+and it does not touch the server: what the server keeps is for its operator to erase. From a gateway that names no user it
 clears the shared databases of an older SDK. The result:
 
 | Field | What it is |
 |---|---|
-| `storesCleared` | How many of the SDK's IndexedDB databases existed and were removed (at most three: sessions, approvals, key). Stores in memory are simply dropped. |
+| `storesCleared` | How many of the SDK's IndexedDB databases existed and were removed (at most four: sessions, approvals, preferences, key). Stores in memory are simply dropped. The .NET SDK reports folders (`FoldersRemoved`). |
 | `hostSessionStoreLeft`, `hostApprovalStoreLeft` | A store you passed with `useSessionStore` / `useApprovalStore` is **not** deleted: it may hold other people's data. The flag says it was left. |
 | `hostStoresLeft` | Either of them: the person's data may still be in a store the host keeps. Delete their part there. |
+
+Check `hostStoresLeft` before you tell the person their data is gone. When it is true, the SDK emptied its own
+databases only, and the person's sessions or approvals may still be in the store you passed. A store of the host's own
+reasoning pick (`useReasoningStore`) stays the host's as well.
 
 It throws when a database stays open in a tab that does not close it; the SDK's own tabs close theirs on request.
 

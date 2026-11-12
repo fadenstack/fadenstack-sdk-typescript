@@ -209,6 +209,7 @@ The handler gets an `ApprovalRequest`:
 
 | Field | What it is |
 |---|---|
+| `sessionId`, `turnId` | The session and the turn the call belongs to. The SDK always sets them. See [Several chats, one handler](#several-chats-one-handler). |
 | `callId` | The call's id. |
 | `toolName` | The tool. |
 | `toolClass` | The class it runs under. |
@@ -300,6 +301,14 @@ The server can hold one of its own tools for the user's approval. The same handl
 says neither asks every time. The server waits only for a limited time: when it runs out, the `signal` aborts, the
 server does not run the call, and `approval_decided` reports that no answer came in time.
 
+### Several chats, one handler
+
+Every approval request names the session (`ApprovalRequest.sessionId`) and the turn (`turnId`) it belongs to. A screen
+that shows several chats at once can therefore use one approval handler and still put each card in the chat that owns
+it. `ApprovalBroker` does this: a chat view model asks it for the requests of the session it shows, and gets those and
+the requests that name no session. A listener that gives no session gets every request. The field is absent only on a
+request you built by hand. When no chat is listening, the broker declines the request.
+
 ### Approvals in a chat UI
 
 In a chat panel, approvals are cards in the conversation. `ApprovalBroker` from `@fadenstack/ui` is an approval
@@ -322,33 +331,89 @@ const pluginTools: ToolSource = {
 const agent = FadenstackAgent.createBuilder().useClient(client).addToolSource(pluginTools).build();
 ```
 
-`getTools(context, signal)` is called when the agent starts. `context` has the `client` and the agent's `profile`.
-A host tool wins over a source's tool of the same name. If the source has a `dispose()` method, `agent.dispose()`
-calls it.
-# Explicit user commands
+`getTools(context, signal)` is called when the agent starts. `context` has the `client` and the agent's `profile`, and
+`report(event)`, which reports an event to the server (names and counts, never content). A host tool wins over a
+source's tool of the same name, and the first source over a later one. If the source has a `dispose()` method,
+`agent.dispose()` calls it.
 
-`session.invokeTool(name, arguments, { origin: "user_history", signal })` and
-`session.streamTool(...)` run one concrete host tool without a model request.
-They use the same tool stages, modes, approval handler and cancellation as chat.
-An optional `label` sets a single-line transcript title (maximum 200 characters).
-It is display metadata and is never added to tool arguments or model history.
-Use this for a user clicking a history action, with a stable action ID; the host
-still owns current native permissions, exact preview, conditional execution and
-reconciliation. A command never makes a native journal entry safely reversible
-by itself, and an uncertain result must not be retried automatically.
+A source can also have a `declared()` method that returns the host tools it brings before the agent's contract settles
+them. The app manifest reports these, which is how the server learns of tools its contract does not list yet.
 
-The gateway must support the authenticated `/v1/agents/{agent}/tools/check`
-endpoint and publish the host tool with its exact schema digest. The SDK checks
-current central policy before approval and again immediately before dispatch,
-and compares the authenticated principal, profile, argument and decision stamps.
-Missing support or changed bindings fail closed. Destructive commands require
-individual approval, including in Auto. Stamps are comparisons, not signed
-native execution permits. Tool stages that change command arguments are refused
-before the check endpoint; combinations such as local PII unmasking need a
-separately verified final-payload/disclosure contract before use.
+### A source whose tools change
 
-Commands are recorded as `user.command`, separately from `user.message`, with
-normal tool/approval receipts. Their turns are excluded from later model history;
-there is no invented prompt or orphan tool result. Refresh native context before
-a later model turn needs to reason about the changed state.
+A `ChangingToolSource` is a tool source that also has `onChanged(listener)`: it calls the listener, from anywhere, when
+`getTools` would now answer differently, and returns the function that unsubscribes. Use it for a setting that switches
+a group of tools on or off, or a list your application edits.
 
+```ts
+import type { AgentContext, AgentTool, ChangingToolSource } from "@fadenstack/agents";
+
+class PluginTools implements ChangingToolSource {
+  readonly #listeners = new Set<() => void>();
+  #tools: readonly AgentTool[] = [];
+
+  set(tools: readonly AgentTool[]): void {
+    this.#tools = tools;
+    for (const listener of [...this.#listeners]) listener();
+  }
+
+  onChanged(listener: () => void): () => void {
+    this.#listeners.add(listener);
+    return () => this.#listeners.delete(listener);
+  }
+
+  async getTools(context: AgentContext): Promise<readonly AgentTool[]> {
+    return this.#tools;
+  }
+}
+```
+
+The agent notes that the source changed and asks it again at the start of the next turn, never inside a turn, so the
+tools of a turn do not change under it. The tools are settled by the same rules as at start: the contract drops what it
+does not list and sets the class. A tool that went away is refused by name with "(name) is no longer available." If the
+source throws, the agent keeps the tools it had. `isChangingToolSource(source)` tells the two kinds apart.
+
+### Tools that are offered per conversation
+
+An `AgentTool` can have a `scope`, a `ToolScope`. `offers(tool, session)` says whether the model is offered the tool in
+that conversation now, and `beforeCall(tool, session)` runs before a call is approved or run: it returns the text that
+answers the call instead of running it (the tool was not in scope and is now), or `undefined` to run it. A tool that
+is not offered can still be called by name. `OnRequestTools` is a tool source built on this: see
+[Local tools](local-tools.md).
+
+## The server's tools
+
+The organisation's MCP servers run on the server. `client.agent.listTools()` lists the tools they bring for the signed-in
+user and this agent (`GET /v1/agents/{agent}/tools`), for a screen that shows them:
+
+```ts
+const tools = await client.agent!.listTools();
+if (tools === null) {
+  // the server is older and does not list them
+} else {
+  for (const t of tools) console.log(t.name, t.server, t.allowed, t.enabled);
+}
+```
+
+Each `AgentToolInfo` has the `name` the model calls it by (`mcp.github.search`), the `server` that brings it, a
+`description`, `allowed` (this agent's tool rules let its requests be offered the tool and run it) and `enabled` (an
+administrator has not switched it off). It holds names and descriptions only, never how the server is reached. A field
+that is not a boolean `true` reads as `false`, and an entry without a name is left out. The call answers `null` when the
+server has no such route (a 404 whose code is not `agent_not_found`); an unknown agent is an error. The .NET SDK has
+`ListToolsAsync`.
+
+## Call ids
+
+A model names each tool call with an id. When a call has no id, or the same id as another call in the same round, the
+SDK gives it one of its own, `fs-{turn}-{round}-{index}`, so every call in the transcript, in events and in approval
+requests is told apart. The id it gets is the one in `tool_started`, `tool_completed` and `ApprovalRequest.callId`.
+
+A word from the server about a call (a refusal, or a mark that it asks) aims at a call by its position in the round or
+by its id. A word that cannot single out one call (it names no id, or one id that several calls have) covers every call
+of that tool in the round: a refusal is never lost, and a mark asks.
+
+## Host commands
+
+`session.invokeTool(name, args, options)` runs one host tool without a model request, for a button or a view of your
+application. It goes through the same policy, approval cards and transcript as a call the model asks for. See
+[Host commands and central policy](host-commands.md).

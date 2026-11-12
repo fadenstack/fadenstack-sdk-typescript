@@ -125,10 +125,11 @@ Call `chat.dispose()` when you remove the panel. It stops a running turn and sto
 - **Refusals and limits are notices.** A refused prompt is marked "Not sent", with Edit and resend.
 - **Reasoning and citations** are collapsible. A PII notice says how many values of which kind were kept from the
   model.
-- **The header** has the agent's name, the tool mode, the history (open or delete a chat), a new chat, and your
-  own buttons. The tool-mode menu ends with Reset approvals, which forgets what was allowed for this chat and always
+- **The header** has the agent's name, the tool mode, the thinking pill (how long the agent thinks: see
+  [Thinking](#thinking)), the history (open or delete a chat), a new chat, and your own buttons. The tool-mode menu ends with Reset approvals, which forgets what was allowed for this chat and always
   (`chat.resetApprovals()`).
-- **The settings** (the gear) have the language, your own items, and About last. See [Settings](#settings).
+- **The settings** (the gear) have the language, the switch for the notice about answers without an AI mark, the
+  approvals, your own items, and About last. See [Settings](#settings).
 - **The composer** has context chips, Enter to send, Shift+Enter for a new line, and Esc to stop. Under it are the AI
   notice and a muted Fadenstack link. See [About and the Fadenstack link](#about-and-the-fadenstack-link).
 - **After an answer**: copy (the Markdown as text, and as HTML so it pastes formatted into mail and documents), retry
@@ -200,6 +201,8 @@ threw.
 | `strings` | Texts you fix instead of a language the user picks. |
 | `locale` | The locale for dates and numbers. The browser's by default. |
 | `beforeSend`, `afterSend` | What your application does around each message. See [Before a message goes](#before-a-message-goes). |
+| `beforeCommand`, `afterCommand` | What your application does around a host command the person starts (`chat.invokeTool`). See [Host commands](#host-commands). |
+| `turnGate` | Limits how many turns work at the same time across chats. See [Limiting running turns](#limiting-running-turns). |
 | `branding` | The muted Fadenstack link under the message box. On by default; `false` hides it. About stays. |
 | `refSource` | Your app's name in the links to fadenstack.com. `sdk` by default. See [About and the Fadenstack link](#about-and-the-fadenstack-link). |
 | `openLink` | How the panel opens its links. A new tab by default. |
@@ -383,6 +386,19 @@ Under the message box the panel says, in the user's language, that the answers a
 the SDK act for a person on pages, documents and mails. Change its words like any other text; an empty `aiNotice`
 hides it, for an application that says the same in another place the user always sees.
 
+### An answer without an AI mark
+
+An administrator can allow a model route to answer without a machine-readable AI mark (EU AI Act Art. 50(2)). The server
+then sends a `faden.unmarked` event with the answer. The panel **hides it by default**: no notice appears, and the raw
+event name is never shown. Each person can turn the notice on in the panel's settings ("Tell me when an answer carries no
+AI mark"). From then on, one quiet notice ("Answer without an AI mark") sits on each such answer.
+
+In the view model, `chat.showUnmarkedNotice` is the state and `await chat.setShowUnmarkedNotice(on)` changes it and
+remembers it. It applies to the answers that come after. The setting is a preference of the person: it is kept in the
+`preferences` store (the browser's `localStorage` by default) under the key `unmarkedNotice`, as `"1"` when on and absent
+when off. The words are `strings.unmarkedTitle`, `unmarkedMessage` and `settingsUnmarked`. The .NET SDK calls the
+setting `TellUnmarked`.
+
 ## About and the Fadenstack link
 
 The settings end with **About**. It opens over the panel, below the gear, and shows the agent (its name, `Version 3`
@@ -421,8 +437,9 @@ your own, `@fadenstack/ui` exports the link helpers: `fadenstackLink`, `footerLi
 
 ## Settings
 
-The gear in the header opens the panel's settings: the language, and below it what your application adds, such as
-sign out or its own options, so they all sit in one place:
+The gear in the header opens the panel's settings: the language, the switch for the [notice about answers without an AI
+mark](#an-answer-without-an-ai-mark), and below them what your application adds, such as sign out or its own options,
+so they all sit in one place:
 
 === "React"
 
@@ -511,6 +528,44 @@ const marker = new GrantMarkerViewModel(lifecycle, () => chat.strings, {
 | `GrantPart`, `BypassPart` | A card: `title`, `places`, `durations`, `selectedDuration`, `buttons` (Not now first), `allow()`, `notNow()`, `state`; the Bypass card also `reason`, `isSigningIn`, `signInCodeText`, `openAgain()`, `ignoresKey()` and `initialFocus` (never Allow). |
 | `GrantMarkerViewModel` | The device-wide marker: `markerText`, `badgeText`, `entries`, `summaries`, `stop()`, `keepGoing()`. |
 
+## Thinking
+
+The header has a pill beside the tool mode where the person picks how long the agent thinks before it answers: Auto, Off,
+Low, Medium or High. A menu lists the levels with what each means; the arrow keys move, Enter or Space picks, and Escape
+closes it. The pick is kept for the person and the agent on the device, and a change applies from the next message. A
+server can cap the levels with `ui.reasoning.max` in the agent version, and the pill then offers no level above it. The
+levels and the cap are described in [How long the agent thinks](agent.md#how-long-the-agent-thinks).
+
+In the view model:
+
+| Member | What it is |
+|---|---|
+| `reasoningOptions` | The levels the agent offers, each a `ReasoningOption` with `level`, `label`, `description` and `selected`. Empty until the agent has started. |
+| `reasoningLevel`, `selectedReasoning` | The level new messages think at, and its option. |
+| `reasoningPillText`, `reasoningAutomationName`, `reasoningToolTip`, `reasoningHint` | The pill's words: the bare level ("Low"), the full name for screen readers ("Thinking: Low"), the tooltip, and the line saying what the level means. |
+| `isReasoningMenuOpen`, `setReasoningMenuOpen(open)` | Whether the menu is open. The state sits in the view model, so a skin needs none of its own. |
+| `selectReasoning(level)` | Takes the person's pick and closes the menu. A level the agent does not offer changes nothing. |
+
+## Limiting running turns
+
+A host that runs several chats, and wants to limit how many turns work at the same time, passes a `turnGate`. The panel
+awaits it when a turn is about to start: the person's message is already shown, and nothing has been sent yet.
+
+```ts
+const chat = new AgentChatViewModel(agent, approvals, {
+  turnGate: async (signal) => {
+    await slots.acquire(signal);      // your own limit: resolves when a slot is free
+    return () => slots.release();     // or { dispose() { ... } }
+  },
+});
+```
+
+The gate returns a lease, a function or an object with `dispose()` (`TurnLease`), that the panel releases once when the
+turn ends, however it ends. While the gate waits, `chat.isWaitingForSlot` is true and the turn shows the line
+`strings.waitingForSlot` ("Waiting for a free slot"). Stop aborts the `signal`: the turn is stopped and nothing is sent.
+A gate that throws fails the turn with its message. A lease that throws when released is ignored. Without a gate, turns
+start at once. The gate applies to messages, not to host commands. The .NET SDK has the same option, `TurnGate`.
+
 ## View models for other frameworks
 
 Each view model is observable: `subscribe(listener)` calls the listener after each change and returns the unsubscribe,
@@ -519,7 +574,7 @@ reference. Each turn and each part is its own view model, so one change re-rende
 
 | View model | What it holds |
 |---|---|
-| `AgentChatViewModel` | The chat: `turns`, `input`, `attachments`, `sessions`, `toolModes`, `toolMode`, `greeting`, `suggestions`, `isBusy`, `signInRequired`, `error`, `strings`, `about`, `footerLink`, and the actions `send`, `stop`, `newChat`, `openSession`, `loadEarlier`, `selectToolMode`, `setAboutOpen`, `openLink`. |
+| `AgentChatViewModel` | The chat: `turns`, `input`, `attachments`, `sessions`, `toolModes`, `toolMode`, `greeting`, `suggestions`, `isBusy`, `isWaitingForSlot`, `signInRequired`, `error`, `strings`, `about`, `footerLink`, `showUnmarkedNotice`, the thinking members above, and the actions `send`, `stop`, `newChat`, `openSession`, `loadEarlier`, `selectToolMode`, `selectReasoning`, `setShowUnmarkedNotice`, `invokeTool`, `setAboutOpen`, `openLink`. |
 | `TurnViewModel` | One exchange: `userText`, `parts`, `state`, `outcome`, `usageText`, `durationText`, and `copy`, `edit`, `retry`. |
 | `ResponsePart` | One part of an answer, with a `kind`: `markdown`, `reasoning`, `tool`, `approval`, `notice`, `citations`, and `card`, `table`, `progress` and `diff` for modules. |
 | `AttachmentViewModel` | One context chip. |
@@ -530,7 +585,10 @@ A new skin draws the classes of `@fadenstack/ui-web/styles.css` and takes the re
 `iconPaths` for the icons, `agentAvatar()` for the avatar as SVG data, `stickToBottom`, `dismissOnOutside`,
 `fitToContent` and `composerKey` for the behaviours, and `toolBadges`, `toolStatusIcon`, `noticeIcon` and the others
 for how parts look. The React and Vue skins are the examples.
-# History and other explicit command buttons
+
+## Host commands
+
+History and other explicit command buttons.
 
 Use `chat.invokeTool(name, arguments, { origin: "user_history" })` for a concrete
 user action. It shares busy state, approval cards and `chat.stop()` with chat,
@@ -548,6 +606,6 @@ The method returns the command receipt when available. Preparation errors appear
 in `chat.error`; errors and Stop after a turn starts appear on that command turn.
 An already busy or uninitialized chat returns `undefined`. Command turns cannot
 be edited/retried as prompts, including after reopening history. The Vue and
-React skins respect this distinction. See [explicit command requirements](tools.md#explicit-user-commands)
+React skins respect this distinction. See [Host commands and central policy](host-commands.md)
 for central compatibility and the host's native execution responsibilities.
 
