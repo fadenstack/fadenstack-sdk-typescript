@@ -79,6 +79,16 @@ export {
   type GrantPlaceResolver,
   type GrantVerdict,
 } from "./grants.js";
+export {
+  GrantLifecycle,
+  type GrantEnded,
+  type GrantEndingSoon,
+  type GrantEndReason,
+  type GrantLifecycleOptions,
+  type GrantResumeOutcome,
+  type GrantStopResult,
+  type ScreenLockState,
+} from "./grantLifecycle.js";
 export { isLocalPath, lies as placeLies, named as placeNamed, namesPath } from "./grantPaths.js";
 export {
   BypassSignInError,
