@@ -57,7 +57,9 @@ function renderBlock(block: MarkdownBlock, strings: UiStrings, actions: BlockAct
       return <Tag className={`fdn-md-h${block.level}`} dir="auto">{inlines(block.inlines, strings)}</Tag>;
     }
     case "code":
-      return <CodeBlock language={block.language} code={block.code} complete={block.complete} strings={strings} onCopy={actions.copyCode} />;
+      return <CodeBlock language={block.language} code={block.code} complete={block.complete} diagram={block.diagram} strings={strings} onCopy={actions.copyCode} />;
+    case "preview":
+      return <PreviewBlock block={block} strings={strings} actions={actions} />;
     case "list": {
       const items = block.items.map((item, i) => (
         <li key={i} className={item.checked === undefined ? undefined : "fdn-md-task"} dir="auto">
@@ -122,17 +124,36 @@ function TableView({ block, strings, onCopy }: { block: TableBlock; strings: UiS
   );
 }
 
-function CodeBlock({ language, code, complete, strings, onCopy }: {
+/** A `markdown` fence: its content rendered, or its source (a code block) by the switch in the header. */
+function PreviewBlock({ block, strings, actions }: { block: Extract<MarkdownBlock, { kind: "preview" }>; strings: UiStrings; actions: BlockActions }):
+  ReactElement {
+  const [source, setSource] = useState(false);
+  return (
+    <div className="fdn-md-preview">
+      <div className="fdn-md-preview-bar" role="group">
+        <button type="button" className="fdn-md-switch" aria-pressed={!source} onClick={() => setSource(false)}>{strings.markdownPreview}</button>
+        <button type="button" className="fdn-md-switch" aria-pressed={source} onClick={() => setSource(true)}>{strings.markdownSource}</button>
+      </div>
+      {source
+        ? <CodeBlock language={block.source.language} code={block.source.code} complete={block.source.complete} diagram={false} strings={strings} onCopy={actions.copyCode} />
+        : <div className="fdn-md-preview-body">{block.blocks.map((b) => <Block key={b.key} block={b} strings={strings} actions={actions} />)}</div>}
+    </div>
+  );
+}
+
+function CodeBlock({ language, code, complete, diagram, strings, onCopy }: {
   language: string | null;
   code: string;
   complete: boolean;
+  /** A diagram in text form (a `mermaid` fence): marked as one, not drawn. */
+  diagram: boolean;
   strings: UiStrings;
   onCopy: ((code: string) => void) | undefined;
 }): ReactElement {
   return (
     <div className="fdn-md-code" dir="ltr">
       <div className="fdn-md-code-bar">
-        <span>{language ?? ""}</span>
+        <span>{diagram ? strings.diagramMermaid : language ?? ""}</span>
         {onCopy && complete && <CopyButton label={strings.copyCode} strings={strings} onCopy={() => onCopy(code)} />}
       </div>
       <pre><code>{code}</code></pre>

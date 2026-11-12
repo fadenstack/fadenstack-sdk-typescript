@@ -8,6 +8,7 @@ import { headingTag } from "@fadenstack/ui-web";
 
 import CodeBlock from "./CodeBlock.vue";
 import Inlines from "./Inlines.js";
+import MarkdownPreview from "./MarkdownPreview.vue";
 import MarkdownTable from "./MarkdownTable.vue";
 
 type TableBlock = Extract<Block, { kind: "table" }>;
@@ -28,9 +29,11 @@ defineProps<{
     :language="block.language"
     :code="block.code"
     :complete="block.complete"
+    :diagram="block.diagram"
     :strings="strings"
     :copy="copyCode"
   />
+  <MarkdownPreview v-else-if="block.kind === 'preview'" :block="block" :strings="strings" :copy-code="copyCode" :copy-table="copyTable" />
   <component :is="block.ordered ? 'ol' : 'ul'" v-else-if="block.kind === 'list'" :start="block.ordered ? block.start : undefined">
     <li v-for="(item, i) in block.items" :key="i" v-bind="item.checked === undefined ? {} : { class: 'fdn-md-task' }" dir="auto">
       <input v-if="item.checked !== undefined" type="checkbox" :checked="item.checked" readonly disabled>

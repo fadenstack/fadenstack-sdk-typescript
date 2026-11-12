@@ -36,6 +36,18 @@ export interface UiStrings {
   /** The badge, and why it asks, for a tool that reaches outside the organisation (a web search, opening a page). */
   approvalOutside: string;
   approvalOutsideWhy: string;
+  /** The source line of a card for a local MCP server's tool: "From Files, an MCP server on this computer". */
+  approvalFromMcp(server: string): string;
+  /** Why a card asks about a local MCP server's tool nobody classified. */
+  approvalUnchecked: string;
+  /** What the server's own annotations say, after `approvalUnchecked`. */
+  approvalServerReadOnly: string;
+  approvalServerDestructive: string;
+  /** The switch of a `markdown` fence between its rendered content and its source. */
+  markdownPreview: string;
+  markdownSource: string;
+  /** The label of a diagram in text form (a `mermaid` fence), which is not drawn. */
+  diagramMermaid: string;
   allow: string;
   allowForChat: string;
   allowAlways: string;
@@ -337,6 +349,13 @@ export const englishStrings: UiStrings = {
   serverTool: "Server tool",
   approvalOutside: "Goes outside",
   approvalOutsideWhy: "What it is given leaves your organisation: it goes to another site.",
+  approvalFromMcp: (server) => `From ${server}, an MCP server on this computer`,
+  approvalUnchecked: "Your organisation has not checked this tool.",
+  approvalServerReadOnly: "The server says it only reads.",
+  approvalServerDestructive: "The server says it may delete or overwrite.",
+  markdownPreview: "Preview",
+  markdownSource: "Source",
+  diagramMermaid: "Diagram · Mermaid",
   allow: "Allow",
   allowForChat: "Allow for this chat",
   allowAlways: "Allow always",

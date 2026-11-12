@@ -18,12 +18,30 @@ export type Inline =
 export type MarkdownBlock =
   | { kind: "paragraph"; key: string; inlines: Inline[] }
   | { kind: "heading"; key: string; level: number; inlines: Inline[] }
-  /** `complete` is false while the closing fence has not arrived. */
-  | { kind: "code"; key: string; language: string | null; code: string; complete: boolean }
+  /**
+   * `complete` is false while the closing fence has not arrived. `diagram` marks a diagram in text form (a `mermaid` fence):
+   * a skin labels it as one ("Diagram - Mermaid"); drawing it is up to the host. .NET: `CodeBlock.IsDiagram`.
+   */
+  | { kind: "code"; key: string; language: string | null; code: string; complete: boolean; diagram: boolean }
+  /**
+   * A `markdown` (or `md`) fence: its content is Markdown to show rendered (`blocks`), with the fence itself (`source`, a
+   * code block) one switch away. It counts as one level of nesting. .NET: `PreviewBlock`.
+   */
+  | { kind: "preview"; key: string; source: CodeBlock; blocks: MarkdownBlock[] }
   | { kind: "list"; key: string; ordered: boolean; start: number; items: ListItem[] }
   | { kind: "quote"; key: string; blocks: MarkdownBlock[] }
   | { kind: "table"; key: string; header: Inline[][]; rows: Inline[][][]; align: ("left" | "center" | "right" | null)[] }
   | { kind: "rule"; key: string };
+
+export type CodeBlock = Extract<MarkdownBlock, { kind: "code" }>;
+
+/**
+ * How many containers (a quote, a list item, a Markdown preview) may sit inside each other: quote > list > quote is the
+ * deepest that still parses. The content of a container at this depth is one plain-text block, the raw lines, not parsed
+ * again. Model output nests a level or two; a hostile or runaway answer (a thousand ">") must not make the parser or a skin
+ * pay for it. .NET: `MarkdownParser.MaxNestingDepth`.
+ */
+export const MAX_NESTING_DEPTH = 3;
 
 export interface ListItem {
   /** For a task list item: whether it is ticked; undefined for a plain item. */
