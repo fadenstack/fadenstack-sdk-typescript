@@ -109,6 +109,13 @@ function SettingsMenu({ chat, extra }: { chat: AgentChatViewModel; extra?: React
               {chat.isLanguageLocked && <div className="fdn-menu-note">{s.languageLocked}</div>}
             </div>
           )}
+          <div role="group" aria-label={s.settingsUnmarked} className={languages ? "fdn-menu-extra" : undefined}>
+            <button type="button" role="menuitemcheckbox" aria-checked={chat.showUnmarkedNotice} className="fdn-menu-item"
+              onClick={() => void chat.setShowUnmarkedNotice(!chat.showUnmarkedNotice)}>
+              <span className="fdn-menu-check">{chat.showUnmarkedNotice && <Icon name="check" size={14} />}</span>
+              <span className="fdn-menu-label">{s.settingsUnmarked}</span>
+            </button>
+          </div>
           <ApprovalsSection grants={chat.grants} />
           {extra && <div className={languages ? "fdn-menu-extra" : undefined}>{extra}</div>}
           <div className={languages || extra ? "fdn-menu-extra" : undefined}>

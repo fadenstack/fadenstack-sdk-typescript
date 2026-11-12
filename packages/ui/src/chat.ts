@@ -11,7 +11,7 @@ import { formatWhen } from "./format.js";
 import { markdownToHtml } from "./markdown/serialize.js";
 import { Observable } from "./observable.js";
 import { NoticePart, type PartContext } from "./parts.js";
-import { citationsRenderer, fallbackRenderer, piiRenderer, type AgentEventRenderer } from "./renderers.js";
+import { citationsRenderer, fallbackRenderer, piiRenderer, unmarkedRenderer, type AgentEventRenderer } from "./renderers.js";
 import { browserClipboard, timeoutScheduler, writeClipboard, type Clipboard, type UiScheduler } from "./services.js";
 import { builtInStrings, stringsFor } from "./languages/index.js";
 import { browserPreferences, type PreferenceStore } from "./preferences.js";
@@ -156,6 +156,8 @@ export interface LanguageOption {
 /** The settings' pick that follows the host's language. */
 export const AUTOMATIC_LANGUAGE = "auto";
 const LANGUAGE_PREFERENCE = "language";
+/** The preference that turns on the notice for an answer without an AI mark: "1" when on, absent (off) otherwise. */
+export const UNMARKED_PREFERENCE = "unmarkedNotice";
 const primaryTag = (tag: string): string => tag.split("-")[0]!.toLowerCase();
 
 /** A mode in the picker, with what it means; above the ceiling it cannot be picked. */
@@ -237,6 +239,7 @@ export class AgentChatViewModel extends Observable implements TurnHost {
   #language = AUTOMATIC_LANGUAGE;
   #languageLoaded = false;
   #languagePicked = false;
+  #unmarkedPicked = false;
   #settingsOpen = false;
   #aboutOpen = false;
   readonly #untitled = new Set<string>();
@@ -267,7 +270,7 @@ export class AgentChatViewModel extends Observable implements TurnHost {
     this.#locked = options.lockedLanguage === undefined ? undefined : this.#keyOf(stringsFor(options.lockedLanguage, this.#languages));
     this.#preferences = options.preferences ?? browserPreferences();
     this.#batcher = new RenderBatcher(options.scheduler ?? timeoutScheduler, options.renderIntervalMs ?? 33);
-    this.#renderers = [...(options.renderers ?? []), citationsRenderer, piiRenderer, fallbackRenderer];
+    this.#renderers = [...(options.renderers ?? []), citationsRenderer, piiRenderer, unmarkedRenderer, fallbackRenderer];
     this.#initialTurns = options.initialTurns ?? 30;
     this.#pageSize = options.pageSize ?? 30;
     this.#context = {
@@ -276,6 +279,7 @@ export class AgentChatViewModel extends Observable implements TurnHost {
       locale: options.locale,
       previewLength: options.previewLength ?? 4000,
       now: options.now ?? (() => new Date()),
+      showUnmarked: false,
     };
     this.#beforeSend = options.beforeSend;
     this.#turnGate = options.turnGate;
@@ -303,6 +307,29 @@ export class AgentChatViewModel extends Observable implements TurnHost {
       if (!(saved instanceof Promise)) this.#adopt(saved);
     } catch {
       // the store failed: the automatic language
+    }
+    try {
+      const unmarked = this.#preferences.get(UNMARKED_PREFERENCE);
+      if (!(unmarked instanceof Promise)) this.#context.showUnmarked = unmarked === "1";
+    } catch {
+      // the store failed: the notice stays off
+    }
+  }
+
+  /** The person wants to hear of an answer without an AI mark (`faden.unmarked`): off by default, kept per user in the preferences. */
+  get showUnmarkedNotice(): boolean {
+    return this.#context.showUnmarked === true;
+  }
+
+  /** Turns that notice on or off and remembers it. It applies to answers that come after. */
+  async setShowUnmarkedNotice(on: boolean): Promise<void> {
+    this.#unmarkedPicked = true;
+    this.#context.showUnmarked = on;
+    this.notify();
+    try {
+      await this.#preferences.set(UNMARKED_PREFERENCE, on ? "1" : undefined);
+    } catch {
+      // not remembered: still this chat's choice
     }
   }
 
@@ -614,6 +641,13 @@ export class AgentChatViewModel extends Observable implements TurnHost {
         this.#adopt(await this.#preferences.get(LANGUAGE_PREFERENCE));
       } catch {
         // the store failed: the automatic language
+      }
+    }
+    if (!this.#unmarkedPicked) {
+      try {
+        this.#context.showUnmarked = (await this.#preferences.get(UNMARKED_PREFERENCE)) === "1";
+      } catch {
+        // the store failed: the notice stays off
       }
     }
     this.#error = undefined;

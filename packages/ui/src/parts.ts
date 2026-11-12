@@ -21,6 +21,8 @@ export interface PartContext {
   locale: string | undefined;
   previewLength: number;
   now: () => Date;
+  /** The person turned on the notice for an answer without an AI mark (`faden.unmarked`); off when absent. */
+  showUnmarked?: boolean;
 }
 
 /**

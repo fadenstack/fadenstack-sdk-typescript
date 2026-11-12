@@ -102,3 +102,13 @@ describe("the approval texts", () => {
     for (const word of words) for (const source of files) expect(source).not.toContain(`>${word}<`);
   });
 });
+
+describe("the unmarked-answer setting", () => {
+  it("has no English text in a skin", async () => {
+    const { readFileSync } = await import("node:fs");
+    const files = ["ui-react/src/Header.tsx", "ui-vue/src/SettingsMenu.vue"].map((f) => readFileSync(new URL(`../../${f}`, import.meta.url), "utf8"));
+    for (const word of [englishStrings.settingsUnmarked, englishStrings.unmarkedTitle, englishStrings.unmarkedMessage]) {
+      for (const source of files) expect(source).not.toContain(word);
+    }
+  });
+});

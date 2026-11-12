@@ -73,6 +73,11 @@ export interface UiStrings {
   decision(id: string): string;
   piiTitle: string;
   piiMessage(total: number, list: string): string;
+  /** The notice for an answer without a machine-readable AI mark (`faden.unmarked`), shown only when the person turned it on. */
+  unmarkedTitle: string;
+  unmarkedMessage: string;
+  /** The settings item that turns that notice on; its accessible name. */
+  settingsUnmarked: string;
   /** A model call ended with no text and no tool call (`empty_answer`): what the notice says, and that Retry may help. */
   emptyAnswer: string;
   /** The same when the model ran out of tokens first (`empty_answer`, `length`), often while thinking. */
@@ -397,6 +402,9 @@ export const englishStrings: UiStrings = {
   decision: (id) => `Decision ${id}`,
   piiTitle: "Personal data protected",
   piiMessage: (total, list) => `${total} value${total === 1 ? "" : "s"} kept from the model: ${list}`,
+  unmarkedTitle: "Answer without an AI mark",
+  unmarkedMessage: "This answer carries no machine-readable AI mark. Your organisation allowed this model to answer without one.",
+  settingsUnmarked: "Tell me when an answer carries no AI mark",
   emptyAnswer: "The model ended without writing an answer. You can try again.",
   emptyAnswerLength: "The model reached its length limit before it wrote an answer, for example while thinking. You can try again.",
   thinking: "Thinking...",

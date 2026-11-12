@@ -2,6 +2,7 @@ export { Observable, type Listener } from "./observable.js";
 export {
   AgentChatViewModel,
   AUTOMATIC_LANGUAGE,
+  UNMARKED_PREFERENCE,
   type AgentChatOptions,
   type TurnLease,
   type LanguageOption,
@@ -75,7 +76,7 @@ export {
 } from "./grants.js";
 export { evidenceLevel, grantMay, period, shortPlace } from "./period.js";
 export { AttachmentViewModel, type AttachmentChip, type AttachmentOptions } from "./attachments.js";
-export { citationsRenderer, fallbackRenderer, piiRenderer, type AgentEventRenderer } from "./renderers.js";
+export { citationsRenderer, fallbackRenderer, piiRenderer, unmarkedRenderer, type AgentEventRenderer } from "./renderers.js";
 export { buildTurn, groupTurns } from "./transcriptTurns.js";
 export { RenderBatcher } from "./batcher.js";
 export {
