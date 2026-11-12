@@ -126,3 +126,14 @@ export {
   type StepUpStage,
 } from "./stepUp.js";
 export { userStoreName } from "./userData.js";
+export {
+  IndexedDbKeyStore,
+  SecretProtectionError,
+  WebCryptoSecretProtector,
+  type IndexedDbKeyStoreOptions,
+  type KeySource,
+  type SecretProtector,
+} from "./secretProtection.js";
+export type { ListsAgents, StoreName, StoreProblem, StoreProblemHandler } from "./storeSupport.js";
+export { withinServerRetention } from "./sessionStore.js";
+export type { DataDeletion, ExportedSession, MyDataExport } from "./dataRights.js";

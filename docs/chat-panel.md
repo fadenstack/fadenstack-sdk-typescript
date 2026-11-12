@@ -103,6 +103,14 @@ Call `chat.dispose()` when you remove the panel. It stops a running turn and sto
 - **The answer streams as Markdown**: headings, lists, code blocks with a copy button, tables with a copy button,
   quotes and links. It is built as elements, never as HTML: HTML in an answer shows as text. Links open only for
   `http`, `https` and `mailto` addresses.
+- **Quotes and list items hold blocks**, three levels deep: a table, a list or a code block inside a quote or an item
+  is drawn as one. A quote, a list item or a Markdown preview inside three others does not nest further: the content of
+  a container at the third level is one block of plain text, with its markup as typed (a thousand `>` cost three levels,
+  and the text is kept, not dropped). The cap sits in the parser (`MAX_NESTING_DEPTH`), so lexing is bounded too.
+- **A `markdown` (or `md`) fence is a preview**: its content drawn, with a Preview / Source switch above it. It counts as
+  one level of nesting. In the view model it is a block of kind `preview` (`source` is the fence as a code block,
+  `blocks` its content). A `mermaid` fence is a code block with `diagram: true`, labelled "Diagram - Mermaid"; it is shown
+  as text, not drawn.
 - **Remote images are never loaded**: no image in an answer is, because a remote image can carry data out. An image
   shows as its alternative text in brackets, with its address as the tooltip.
 - **Text and tool calls interleave** in the order they happened.
@@ -110,7 +118,10 @@ Call `chat.dispose()` when you remove the panel. It stops a running turn and sto
   are not `read` show their class, and server tools a badge. The line expands to the tool's input and output.
 - **Approvals are cards** with Allow, Allow for this chat, Allow always and Deny, above their tool's line. A tool
   that cannot be undone or that nobody classified, and a call an administrator's rule asks about, offer Allow and Deny
-  only: they ask every time.
+  only: they ask every time. The title has a row of its own, with the tool's name in code; under it are the class and,
+  for a tool from a local MCP server, where it comes from ("From Files, an MCP server on this computer") with the
+  server's own hint (only reads, may delete or overwrite). A chat opened again draws the same cards. In the view model:
+  `ApprovalPart.titleParts`, `sourceLine`, `hasSourceLine` and `reason`.
 - **Refusals and limits are notices.** A refused prompt is marked "Not sent", with Edit and resend.
 - **Reasoning and citations** are collapsible. A PII notice says how many values of which kind were kept from the
   model.

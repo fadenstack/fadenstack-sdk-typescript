@@ -19,7 +19,9 @@ import {
   type PermissionMode,
 } from "./approvals.js";
 import type { ApprovalStore } from "./approvalStore.js";
-import type { SessionStore } from "./sessionStore.js";
+import type { SecretProtector } from "./secretProtection.js";
+import type { StoreProblemHandler } from "./storeSupport.js";
+import type { SessionRetention, SessionStore } from "./sessionStore.js";
 import { isStepUpHandler, type StepUpHandler } from "./stepUp.js";
 import type { ChatStage, FadenstackModule, ToolServiceFactory, ToolSource, ToolStage } from "./stages.js";
 import type { AgentTool, ToolServiceKey } from "./tools.js";
@@ -63,6 +65,12 @@ export interface AgentSettings {
   readonly logger?: FadenstackLogger;
   /** The app the agent runs in, for the manifest it reports when it starts. */
   readonly app: AppDescription;
+  /** The app's limits for the sessions the SDK keeps (default 50 sessions, 90 days); the server's can only lower them. */
+  readonly sessionRetention?: SessionRetention;
+  /** What encrypts the stores the SDK keeps; undefined: a WebCrypto key per signed-in user in a browser, none elsewhere. */
+  readonly secretProtector?: SecretProtector;
+  /** Told of a stored record that does not decrypt (never its contents); undefined: nobody. */
+  readonly onStoreProblem?: StoreProblemHandler;
 }
 
 /** The app's name when the host did not describe it (`describeApp`). */
@@ -109,6 +117,9 @@ export class AgentBuilder {
   #reasoningStore: ReasoningStore | undefined;
   #logger: FadenstackLogger | undefined;
   #app: AppDescription = { name: UNDESCRIBED_APP_NAME };
+  #sessionRetention: SessionRetention | undefined;
+  #secretProtector: SecretProtector | undefined;
+  #onStoreProblem: StoreProblemHandler | undefined;
 
   /** The server, and how the agent signs in (usually an `AgentTokenProvider`). */
   useServer(serverUrl: string | URL, credentials: TokenProvider, options: Omit<FadenstackClientOptions, "serverUrl" | "credentials"> = {}): this {
@@ -357,6 +368,38 @@ export class AgentBuilder {
       ...(this.#reasoningStore ? { reasoningStore: this.#reasoningStore } : {}),
       ...(this.#logger ? { logger: this.#logger } : {}),
       app: this.#app,
+      ...(this.#sessionRetention ? { sessionRetention: this.#sessionRetention } : {}),
+      ...(this.#secretProtector ? { secretProtector: this.#secretProtector } : {}),
+      ...(this.#onStoreProblem ? { onStoreProblem: this.#onStoreProblem } : {}),
     });
+  }
+
+  /**
+   * How many sessions, and how old, the default session store keeps (default 50 and 90 days). If the server sets limits too
+   * (`local_retention` in the profile), the stricter of each applies; a limit the server leaves out stays. .NET:
+   * `AgentBuilder.UseSessionRetention`.
+   */
+  useSessionRetention(retention: SessionRetention): this {
+    if (!Number.isInteger(retention.maxSessions) || !Number.isInteger(retention.maxAgeDays) || retention.maxSessions < 1 || retention.maxAgeDays < 1) {
+      throw new RangeError("Retention needs at least one session and one day.");
+    }
+    this.#sessionRetention = { ...retention };
+    return this;
+  }
+
+  /**
+   * What encrypts the sessions and "Allow always" the SDK keeps in IndexedDB. By default a non-extractable WebCrypto key per
+   * signed-in user, in a database of its own, in a browser; where there is no IndexedDB (Node) the SDK keeps nothing and
+   * writes no key. A host with its own key store passes a protector over it here. Data one protector wrote another cannot read.
+   */
+  useSecretProtector(protector: SecretProtector): this {
+    this.#secretProtector = protector;
+    return this;
+  }
+
+  /** Called when a stored record does not decrypt or cannot be read: the record is treated as absent. Gets no contents. */
+  useStoreProblemHandler(handler: StoreProblemHandler): this {
+    this.#onStoreProblem = handler;
+    return this;
   }
 }

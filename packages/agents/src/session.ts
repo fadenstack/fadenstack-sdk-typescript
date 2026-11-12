@@ -1043,6 +1043,9 @@ class Turn {
           : `'${tool.name}' is ${toolClass}; the tool mode is ${this.#mode}.`,
         arguments: args,
         ...(tool.openWorld ? { openWorld: true } : {}),
+        ...(tool.server ? { server: tool.server } : {}),
+        ...(tool.readOnlyHint !== undefined ? { readOnlyHint: tool.readOnlyHint } : {}),
+        ...(tool.destructiveHint !== undefined ? { destructiveHint: tool.destructiveHint } : {}),
       }, rule, undefined, signal, tool.describe ? () => describeTarget(tool, args, signal) : undefined);
       waited = settled.waitedMs ?? 0;
       unanswered = settled.scope === "grant" && settled.grantId !== undefined && settled.grantId === this.#bypassGrant;
@@ -1294,6 +1297,8 @@ class Turn {
       call_id: request.callId,
       name: request.toolName,
       source: request.source,
+      tool_class: request.toolClass, // so a reopened chat's card says what the tool does
+      ...(request.server ? { server: request.server } : {}), // a local MCP server's name, for the card's source line
       approved: how.approved,
       for_session: how.asked && how.scope === "chat",
       scope: how.scope ?? null,

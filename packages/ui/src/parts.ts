@@ -278,6 +278,34 @@ export class ApprovalPart extends ResponsePart {
     return this.#context.strings.approvalTitle(this.request.toolName);
   }
 
+  /**
+   * The title as parts, the tool's name apart from the words around it, so a skin sets the name in its mono font and the
+   * title stands on a row of its own (a narrow panel no longer breaks the name mid-word). .NET: `TitleInlines`.
+   */
+  get titleParts(): readonly { text: string; code: boolean }[] {
+    const MARK = "";
+    const parts = this.#context.strings.approvalTitle(MARK).split(MARK);
+    const out: { text: string; code: boolean }[] = [];
+    parts.forEach((text, i) => {
+      if (i > 0) out.push({ text: this.request.toolName, code: true });
+      if (text) out.push({ text, code: false });
+    });
+    return out;
+  }
+
+  /** For a tool from a local MCP server: "From Files, an MCP server on this computer"; else "". */
+  get sourceLine(): string {
+    return this.isMcpTool ? this.#context.strings.approvalFromMcp(this.request.server!) : "";
+  }
+
+  get hasSourceLine(): boolean {
+    return this.isMcpTool;
+  }
+
+  get isMcpTool(): boolean {
+    return this.request.source === "mcp" && !!this.request.server;
+  }
+
   /** What the call acts on, as the tool describes it (`button "Send" on mail.example.com`), or "". */
   get target(): string {
     return this.request.target ?? "";
@@ -302,7 +330,16 @@ export class ApprovalPart extends ResponsePart {
   get reason(): string {
     if (this.request.source === "gateway" || this.request.requiredByRule) return this.request.reason;
     if (this.request.openWorld && this.request.toolClass !== "destructive") return this.#context.strings.approvalOutsideWhy;
+    if (this.isMcpTool && this.request.toolClass === "unknown") return this.#mcpReason();
     return this.#context.strings.approvalWhy[this.request.toolClass];
+  }
+
+  /** An MCP tool nobody classified: that the organisation has not checked it, then what the server itself says (the warning wins). */
+  #mcpReason(): string {
+    const strings = this.#context.strings;
+    return this.request.destructiveHint === true ? `${strings.approvalUnchecked} ${strings.approvalServerDestructive}`
+      : this.request.readOnlyHint === true ? `${strings.approvalUnchecked} ${strings.approvalServerReadOnly}`
+      : strings.approvalUnchecked;
   }
 
   /** Whether the card offers "Allow for this chat". */

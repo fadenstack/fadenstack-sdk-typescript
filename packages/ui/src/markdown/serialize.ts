@@ -34,6 +34,8 @@ function plainBlock(b: MarkdownBlock): string {
       return inlineText(b.inlines);
     case "code":
       return b.code;
+    case "preview":
+      return b.source.code;
     case "list":
       return b.items.map((item, i) => {
         const box = item.checked === undefined ? "" : item.checked ? "☑ " : "☐ ";
@@ -63,7 +65,7 @@ export function tablesOf(source: string): Extract<MarkdownBlock, { kind: "table"
   const visit = (blocks: readonly MarkdownBlock[]) => {
     for (const b of blocks) {
       if (b.kind === "table") found.push(b);
-      else if (b.kind === "quote") visit(b.blocks);
+      else if (b.kind === "quote" || b.kind === "preview") visit(b.blocks);
       else if (b.kind === "list") b.items.forEach((item) => visit(item.blocks));
     }
   };
@@ -79,6 +81,8 @@ function block(b: MarkdownBlock): string {
       return `<h${b.level}>${inlines(b.inlines)}</h${b.level}>`;
     case "code":
       return `<pre><code>${escape(b.code)}</code></pre>`;
+    case "preview":
+      return `<pre><code>${escape(b.source.code)}</code></pre>`;
     case "list": {
       const tag = b.ordered ? "ol" : "ul";
       const start = b.ordered && b.start !== 1 ? ` start="${b.start}"` : "";

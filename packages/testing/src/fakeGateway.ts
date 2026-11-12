@@ -59,6 +59,8 @@ export interface FakeAgent {
   /** The agent version's highest level (`tool_modes.max`; not sent unless set, as an older server). Any string. */
   maxLevel?: string;
   requiredClientModules?: string[];
+  /** The profile's `local_retention`, as the wire carries it (any JSON: a test may send an invalid one). */
+  localRetention?: unknown;
   /** Whether its model sees pictures (`vision` in the profile); not said by default, as an older server. */
   vision?: boolean;
   /**
@@ -827,6 +829,7 @@ export class FakeGateway {
       tool_modes: { default: agent.defaultLevel ?? "ask", ceiling: agent.ceiling ?? null,
         ...(agent.maxLevel !== undefined ? { max: agent.maxLevel } : {}), open_world_enforced: false },
       ui: agent.ui ?? {}, extensions: {}, required_client_modules: agent.requiredClientModules ?? [],
+      ...(agent.localRetention !== undefined ? { local_retention: agent.localRetention } : {}),
       edition: "community", features: this.grants ? ["agents", "approval_scopes.grant"] : ["agents"], user: { language: user.language ?? null },
       ...(this.grants || this.#options.principal
         ? { principal: { tenant_id: "tenant-1", user_id: user.id, agent_id: agent.id, device_id: signIn.deviceId } } : {}),

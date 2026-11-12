@@ -74,6 +74,7 @@ export {
 export { isRefusal, readNotice, type ChatOutcome, type GovernanceNotice } from "./governance.js";
 export {
   toAgentProfile,
+  toLocalRetention,
   toWireEvent,
   type AgentClientEvent,
   type AgentProfile,
@@ -85,6 +86,7 @@ export {
   type AnswerScope,
   type StandingApproval,
   type AgentPrincipal,
+  type LocalRetention,
   type ApprovalDecidedEvent,
   type LocalMcpAttachedEvent,
   type ServerFeatures,

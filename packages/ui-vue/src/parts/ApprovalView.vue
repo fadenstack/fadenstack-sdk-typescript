@@ -14,8 +14,11 @@ const part = useViewModel(() => props.part);
   <div :class="part.isDangerous ? 'fdn-approval fdn-approval-danger' : 'fdn-approval'" role="group" :aria-label="part.title">
     <div class="fdn-approval-head">
       <Icon :name="approvalIcon(part)" />
-      <strong>{{ part.title }}</strong>
+      <strong><template v-for="(p, i) in part.titleParts" :key="i"><code v-if="p.code">{{ p.text }}</code><template v-else>{{ p.text }}</template></template></strong>
+    </div>
+    <div class="fdn-approval-source">
       <span :class="`fdn-badge fdn-class-${part.request.toolClass}`">{{ part.classLabel }}</span>
+      <span v-if="part.hasSourceLine" class="fdn-approval-from"><Icon name="extension" :size="14" /><span>{{ part.sourceLine }}</span></span>
     </div>
     <p v-if="part.reason" class="fdn-approval-reason" dir="auto">{{ part.reason }}</p>
     <p v-if="part.target" class="fdn-approval-target" dir="auto">{{ part.target }}</p>

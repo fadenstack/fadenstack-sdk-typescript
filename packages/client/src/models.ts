@@ -51,6 +51,27 @@ export interface AgentProfile {
   features: string[];
   /** The signed-in user's own settings, shared by all their clients and the console. */
   user: UserSettings;
+  /** How long and how many sessions the server lets a device keep (`local_retention`); absent when it sets none. */
+  localRetention?: LocalRetention;
+}
+
+/** The limits on local sessions a server sets; a limit it leaves out, or states invalidly, is absent (none). .NET: `LocalRetention`. */
+export interface LocalRetention {
+  maxAgeDays?: number;
+  maxSessions?: number;
+}
+
+/** Reads `local_retention`: only positive whole numbers count; undefined when no limit is left. */
+export function toLocalRetention(value: unknown): LocalRetention | undefined {
+  const r = obj(value);
+  const limit = (name: string): number | undefined => {
+    const n = r[name];
+    return typeof n === "number" && Number.isInteger(n) && n > 0 && n <= 2_147_483_647 ? n : undefined;
+  };
+  const maxAgeDays = limit("max_age_days");
+  const maxSessions = limit("max_sessions");
+  if (maxAgeDays === undefined && maxSessions === undefined) return undefined;
+  return { ...(maxAgeDays !== undefined ? { maxAgeDays } : {}), ...(maxSessions !== undefined ? { maxSessions } : {}) };
 }
 
 export interface AgentPrincipal {
@@ -188,6 +209,7 @@ export function toAgentProfile(json: unknown): AgentProfile {
     edition: str(p["edition"]) ?? "community",
     features: strings(p["features"]),
     user: { language: str(obj(p["user"])["language"]) || null },
+    ...(toLocalRetention(p["local_retention"]) ? { localRetention: toLocalRetention(p["local_retention"])! } : {}),
   };
 }
 

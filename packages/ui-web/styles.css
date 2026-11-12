@@ -549,7 +549,8 @@
 .fdn-md ol,
 .fdn-md blockquote,
 .fdn-md .fdn-md-table,
-.fdn-md .fdn-md-code {
+.fdn-md .fdn-md-code,
+.fdn-md .fdn-md-preview {
   margin: 0 0 8px;
 }
 
@@ -658,6 +659,45 @@
   overflow-x: auto;
   scrollbar-width: thin;
   font: 12px/1.55 var(--fdn-mono);
+}
+
+/* A `markdown` fence: its content rendered, its source one switch away. */
+.fdn-md-preview {
+  border: 1px solid var(--fdn-border);
+  border-radius: var(--fdn-radius);
+  overflow: hidden;
+}
+
+.fdn-md-preview-bar {
+  display: flex;
+  gap: 2px;
+  padding: 4px 4px 0;
+}
+
+.fdn-md-switch {
+  padding: 2px 8px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--fdn-text-muted);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+  opacity: 0.6;
+}
+
+.fdn-md-switch[aria-pressed="true"] {
+  opacity: 1;
+  color: inherit;
+}
+
+.fdn-md-preview-body {
+  padding: 4px 12px 2px;
+}
+
+.fdn-md-preview > .fdn-md-code {
+  margin: 0;
+  border-radius: 0;
 }
 
 .fdn-md-table-scroll {
@@ -857,6 +897,29 @@
 .fdn-approval-head strong {
   flex: 1;
   min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.fdn-approval-head strong code {
+  font: 12px var(--fdn-mono);
+}
+
+/* The class under the title, and for a local MCP tool where it comes from: the row wraps in a narrow panel. */
+.fdn-approval-source {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 8px;
+  margin-top: 6px;
+}
+
+.fdn-approval-from {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  color: var(--fdn-text-muted);
+  font-size: 12px;
   overflow-wrap: anywhere;
 }
 

@@ -1,6 +1,6 @@
-import { Lexer, type Token, type Tokens } from "marked";
+import { Lexer, type Token, type Tokens, type TokensList } from "marked";
 
-import type { Inline, ListItem, MarkdownBlock } from "./model.js";
+import { MAX_NESTING_DEPTH, type CodeBlock, type Inline, type ListItem, type MarkdownBlock } from "./model.js";
 
 /** A parsed block and where it starts in the source. */
 export interface PlacedBlock {
@@ -12,11 +12,11 @@ const SAFE_LINK = /^(https?:|mailto:)/i;
 
 /** Markdown (GitHub's flavour) as blocks, with each block's offset in `source`. */
 export function parseBlocks(source: string, keyPrefix = "b"): PlacedBlock[] {
-  const tokens = Lexer.lex(source, { gfm: true, breaks: false });
+  const tokens = new CappedLexer(0).lex(source);
   const placed: PlacedBlock[] = [];
   let offset = 0;
   for (const token of tokens) {
-    const block = toBlock(token, `${keyPrefix}${offset}`);
+    const block = toBlock(token, `${keyPrefix}${offset}`, 0);
     if (block) placed.push({ block, offset });
     offset += token.raw.length;
   }
@@ -28,7 +28,42 @@ export function parseMarkdown(source: string): MarkdownBlock[] {
   return parseBlocks(source).map((p) => p.block);
 }
 
-function toBlock(token: Token, key: string): MarkdownBlock | undefined {
+/**
+ * marked's lexer, with a cap on how deep containers nest: the content of a container at `MAX_NESTING_DEPTH` is one plain-text
+ * block, never lexed. The cap is in the lexer, not in what is done with its tokens, so a thousand ">" costs three levels of
+ * lexing, not a thousand. .NET: `MarkdownParser.ParseLines` / `PlainText`.
+ */
+class CappedLexer extends Lexer {
+  #depth: number;
+
+  constructor(depth: number) {
+    super({ gfm: true, breaks: false });
+    this.#depth = depth;
+  }
+
+  override blockTokens(src: string, tokens?: Token[], lastParagraphClipped?: boolean): Token[];
+  override blockTokens(src: string, tokens?: TokensList, lastParagraphClipped?: boolean): TokensList;
+  override blockTokens(src: string, tokens: Token[] | TokensList = [], lastParagraphClipped = false): Token[] | TokensList {
+    if (this.#depth >= MAX_NESTING_DEPTH) {
+      const text = src.split("\n").map((line) => line.trimEnd()).join("\n").replace(/^\n+|\n+$/g, "");
+      if (text) tokens.push({ type: "paragraph", raw: src, text, tokens: [{ type: "text", raw: text, text }] } as Tokens.Paragraph);
+      this.state.top = true;
+      return tokens;
+    }
+    this.#depth++;
+    try {
+      return super.blockTokens(src, tokens as Token[], lastParagraphClipped);
+    } finally {
+      this.#depth--;
+    }
+  }
+}
+
+function isMarkdown(language: string | null): boolean {
+  return language !== null && /^(markdown|md)$/i.test(language);
+}
+
+function toBlock(token: Token, key: string, depth: number): MarkdownBlock | undefined {
   switch (token.type) {
     case "paragraph":
       return { kind: "paragraph", key, inlines: inlines((token as Tokens.Paragraph).tokens) };
@@ -44,7 +79,12 @@ function toBlock(token: Token, key: string): MarkdownBlock | undefined {
       const c = token as Tokens.Code;
       const indented = c.codeBlockStyle === "indented";
       const complete = indented || /\n\s{0,3}(`{3,}|~{3,})\s*$/.test(c.raw.trimEnd());
-      return { kind: "code", key, language: c.lang?.trim() ? c.lang.trim().split(/\s+/)[0]! : null, code: c.text, complete };
+      const language = c.lang?.trim() ? c.lang.trim().split(/\s+/)[0]! : null;
+      const code: CodeBlock = { kind: "code", key, language, code: c.text, complete, diagram: language?.toLowerCase() === "mermaid" };
+      if (!isMarkdown(language)) return code;
+      // The fence's content is Markdown, one level deeper (and plain text when that is the cap).
+      const inner = new CappedLexer(depth + 1).lex(c.text);
+      return { kind: "preview", key, source: code, blocks: children(inner, key, depth + 1) };
     }
     case "list": {
       const l = token as Tokens.List;
@@ -53,12 +93,12 @@ function toBlock(token: Token, key: string): MarkdownBlock | undefined {
         key,
         ordered: l.ordered,
         start: typeof l.start === "number" ? l.start : 1,
-        items: l.items.map((item, i) => listItem(item, `${key}.${i}`)),
+        items: l.items.map((item, i) => listItem(item, `${key}.${i}`, depth + 1)),
       };
     }
     case "blockquote": {
       const q = token as Tokens.Blockquote;
-      return { kind: "quote", key, blocks: children(q.tokens, key) };
+      return { kind: "quote", key, blocks: children(q.tokens, key, depth + 1) };
     }
     case "table": {
       const t = token as Tokens.Table;
@@ -80,15 +120,16 @@ function toBlock(token: Token, key: string): MarkdownBlock | undefined {
   }
 }
 
-function listItem(item: Tokens.ListItem, key: string): ListItem {
+function listItem(item: Tokens.ListItem, key: string, depth: number): ListItem {
   const tokens = item.tokens.filter((t) => t.type !== "checkbox");
-  return { checked: item.task ? item.checked === true : undefined, blocks: children(tokens, key) };
+  return { checked: item.task ? item.checked === true : undefined, blocks: children(tokens, key, depth) };
 }
 
-function children(tokens: Token[], key: string): MarkdownBlock[] {
+/** The blocks of a container's tokens; `depth` is how many containers they are inside. */
+function children(tokens: Token[], key: string, depth: number): MarkdownBlock[] {
   const blocks: MarkdownBlock[] = [];
   tokens.forEach((token, i) => {
-    const block = toBlock(token, `${key}.${i}`);
+    const block = toBlock(token, `${key}.${i}`, depth);
     if (block) blocks.push(block);
   });
   return blocks;

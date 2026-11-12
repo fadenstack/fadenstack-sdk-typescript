@@ -8,6 +8,8 @@ const props = defineProps<{
   language: string | null;
   code: string;
   complete: boolean;
+  /** A diagram in text form (a `mermaid` fence): marked as one, not drawn. */
+  diagram?: boolean;
   strings: UiStrings;
   copy?: ((code: string) => void) | undefined;
 }>();
@@ -17,7 +19,7 @@ const copyThis = () => props.copy?.(props.code);
 <template>
   <div class="fdn-md-code" dir="ltr">
     <div class="fdn-md-code-bar">
-      <span>{{ language ?? "" }}</span>
+      <span>{{ diagram ? strings.diagramMermaid : language ?? "" }}</span>
       <CopyButton v-if="copy && complete" :label="strings.copyCode" :strings="strings" :copy="copyThis" />
     </div>
     <pre><code>{{ code }}</code></pre>
