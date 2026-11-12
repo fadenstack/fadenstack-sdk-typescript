@@ -74,8 +74,8 @@ describe("the card of a local MCP tool", () => {
     const { request } = await cardFor(mcpTool("long_report", { readOnlyHint: true, destructiveHint: false }));
     expect(request).toMatchObject({ source: "mcp", server: "Files", readOnlyHint: true, destructiveHint: false });
     // a contract entry re-classifies the tool (withToolClass): the hints survive it
-    const { request: classified } = await cardFor(mcpTool("write_it", { readOnlyHint: true }), {}, "write");
-    expect(classified).toMatchObject({ toolClass: "write", server: "Files", readOnlyHint: true });
+    const { request: classified } = await cardFor(mcpTool("write_it", { readOnlyHint: true, destructiveHint: false }), {}, "write");
+    expect(classified).toMatchObject({ toolClass: "write", server: "Files", readOnlyHint: true, destructiveHint: false });
   });
 
   it("follows the language", async () => {
@@ -121,6 +121,20 @@ describe("a reopened chat's cards", () => {
     expect(card!.request.toolClass).toBe("write");
     expect(card!.classLabel).toBe(builtInStrings["en"]!.approvalClass.write);
     expect(card!.reason).toBe(builtInStrings["en"]!.approvalWhy.write);
+  });
+
+  it("keep the class in the card's own entry, not only in the call's start", async () => {
+    const { vm, agent } = await cardFor(mcpTool("write_it"), {}, "write");
+    const id = vm.currentSessionId!;
+    const withoutStarts = new MemorySessionStore();
+    for (const e of await agent.sessionStore.read(agent.slug, id)) if (e.type !== "tool.execution_start") await withoutStarts.append(agent.slug, id, e);
+    const bare = FadenstackAgent.createBuilder().useClient(agent.client).useSessionStore(withoutStarts).build();
+    const again = new AgentChatViewModel(bare, new ApprovalBroker(), { scheduler: immediateScheduler });
+    await again.initialize();
+    await again.openSession(id);
+    const [card] = again.turns.flatMap((t) => t.parts.filter((p): p is ApprovalPart => p instanceof ApprovalPart));
+    expect(card!.request).toMatchObject({ toolClass: "write", server: "Files", source: "mcp" });
+    expect(card!.sourceLine).toBe("From Files, an MCP server on this computer");
   });
 
   it("name a local MCP server's tool's server", async () => {
