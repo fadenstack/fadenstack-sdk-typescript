@@ -10,6 +10,7 @@ export {
   type OutgoingCommand,
   type ChatCommandOptions,
   type PictureInput,
+  type PromptSaveResult,
   type ReasoningOption,
   type SessionItem,
   type ToolModeOption,
@@ -34,7 +35,20 @@ export {
 export { CSV_BOM, csvField, csvFileName, rowsToCsv, tableToCsv } from "./csv.js";
 export { chatFileName, chatToMarkdown, type ChatExportInput } from "./export.js";
 export { browserSaveFile, type FileToSave, type SaveFile } from "./files.js";
-export { SkillPickerViewModel, matchSkills, skillToken } from "./skills.js";
+export { SkillPickerViewModel, matchSkills, skillToken, type PickerEntry, type PickerPrompts } from "./skills.js";
+export {
+  MAX_PROMPTS,
+  MAX_PROMPT_LENGTH,
+  MemoryPromptStore,
+  PROMPTS_STORAGE_KEY,
+  PromptStoreError,
+  browserPromptStore,
+  matchPrompts,
+  promptTitle,
+  type PromptStore,
+  type PromptStoreErrorCode,
+  type SavedPrompt,
+} from "./prompts.js";
 export { TurnViewModel, type TurnHost, type TurnState } from "./turn.js";
 export {
   ApprovalPart,

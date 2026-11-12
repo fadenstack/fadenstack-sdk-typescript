@@ -9,7 +9,7 @@ import { AttachmentViewModel, type AttachmentChip } from "./attachments.js";
 import { chatFileName, chatToMarkdown } from "./export.js";
 import { browserSaveFile, type SaveFile } from "./files.js";
 import { RenderBatcher } from "./batcher.js";
-import { formatWhen } from "./format.js";
+import { formatNumber, formatWhen } from "./format.js";
 import { markdownToHtml } from "./markdown/serialize.js";
 import { Observable } from "./observable.js";
 import { NoticePart, type PartContext } from "./parts.js";
@@ -19,6 +19,7 @@ import { builtInStrings, stringsFor } from "./languages/index.js";
 import { browserPreferences, type PreferenceStore } from "./preferences.js";
 import { GrantsViewModel } from "./grants.js";
 import { period } from "./period.js";
+import { MAX_PROMPTS, MAX_PROMPT_LENGTH, PromptStoreError, type PromptStore, type SavedPrompt } from "./prompts.js";
 import { SkillPickerViewModel, skillToken } from "./skills.js";
 import { withStrings, type UiStrings } from "./strings.js";
 import { buildTurn, groupTurns } from "./transcriptTurns.js";
@@ -60,6 +61,11 @@ export interface AgentChatOptions {
    * browser's download (a temporary link); a host that saves its own way (an extension's `chrome.downloads`, Office) passes its own.
    */
   saveFile?: SaveFile;
+  /**
+   * The user's own saved prompts (`browserPromptStore()`, `MemoryPromptStore`, or the host's): with a store the skill picker also
+   * lists them under "My prompts", and a sent message offers "Save as prompt". Without one the feature is absent.
+   */
+  prompts?: PromptStore;
   /**
    * Texts fixed by the host instead of a language the user picks: the panel then offers no choice. What a partial
    * set leaves out is English. Most hosts leave it out and pass `automaticLanguage`.
@@ -151,6 +157,12 @@ export interface PictureInput {
   kind?: string;
 }
 
+/** What saving a prompt came to: whether it was kept, and what to tell the user, in the panel's language. */
+export interface PromptSaveResult {
+  saved: boolean;
+  message: string;
+}
+
 /** A language in the panel's settings: `"auto"` (the host's) or a tag, named in itself ("Deutsch"). */
 export interface LanguageOption {
   id: string;
@@ -227,6 +239,7 @@ export class AgentChatViewModel extends Observable implements TurnHost {
   readonly #refSource: string;
   readonly #footerLink: PanelLink | undefined;
   readonly #saveFile: SaveFile;
+  readonly #promptStore: PromptStore | undefined;
   readonly #openLink: (url: string) => void;
   // Approvals arrive twice: as an event, in order with the turn's other events, and as the broker's request,
   // which carries the answer. Whichever comes second adds the card, so it sits where the event put it.
@@ -291,6 +304,7 @@ export class AgentChatViewModel extends Observable implements TurnHost {
       saveFile: options.saveFile ?? browserSaveFile,
     };
     this.#saveFile = options.saveFile ?? browserSaveFile;
+    this.#promptStore = options.prompts;
     this.#beforeSend = options.beforeSend;
     this.#turnGate = options.turnGate;
     this.#afterSend = options.afterSend;
@@ -302,6 +316,11 @@ export class AgentChatViewModel extends Observable implements TurnHost {
     this.skillPicker = new SkillPickerViewModel({
       load: (signal) => agent.listSkills(undefined, signal),
       onPick: (skill) => this.#pickSkill(skill),
+      skillsAvailable: () => this.canPickSkills,
+      ...(options.prompts ? {
+        prompts: { list: () => options.prompts!.list(), remove: (id: string) => options.prompts!.remove(id) },
+        onPickPrompt: (prompt: SavedPrompt) => this.#pickPrompt(prompt),
+      } : {}),
     });
     this.#unsubscribe = approvals.onRequested((pending) => this.#onApprovalRequested(pending), () => this.#session?.id);
     this.grants = new GrantsViewModel(agent, approvals, this.#context, {
@@ -443,6 +462,38 @@ export class AgentChatViewModel extends Observable implements TurnHost {
   /** The server offers skills: typing `$` in the composer lists them. */
   get canPickSkills(): boolean {
     return this.#agent.isStarted && this.#agent.profile.skills;
+  }
+
+  /** The host gave the chat a prompt store (`prompts`): the picker lists the user's prompts and sent messages can be saved as prompts. */
+  get canSavePrompts(): boolean {
+    return this.#promptStore !== undefined;
+  }
+
+  /** The composer can open its list: the server offers skills, or the user has a prompt store. Typing `$` (or `/` at the start) opens it. */
+  get canPick(): boolean {
+    return this.canPickSkills || this.canSavePrompts;
+  }
+
+  /**
+   * Keeps a sent message's text as one of the user's prompts. Never throws: the result says whether it was kept and what to
+   * tell the user -- "Saved as a prompt", or why not (empty, longer than `MAX_PROMPT_LENGTH`, more than `MAX_PROMPTS`).
+   */
+  async savePrompt(text: string): Promise<PromptSaveResult> {
+    const s = this.strings;
+    const store = this.#promptStore;
+    if (!store) return { saved: false, message: s.promptNotSaved };
+    try {
+      await store.save(text);
+      return { saved: true, message: s.promptSaved };
+    } catch (error) {
+      const code = error instanceof PromptStoreError ? error.code : undefined;
+      return {
+        saved: false,
+        message: code === "too_long" ? s.promptTooLong(formatNumber(MAX_PROMPT_LENGTH, this.#context.locale))
+          : code === "too_many" ? s.promptsFull(formatNumber(MAX_PROMPTS, this.#context.locale))
+          : s.promptNotSaved,
+      };
+    }
   }
 
   /** The agent's model sees pictures: a picture can go with a message (`attachPicture`). */
@@ -729,7 +780,7 @@ export class AgentChatViewModel extends Observable implements TurnHost {
   setInput(text: string): void {
     if (this.#input === text) return;
     this.#input = text;
-    const token = this.canPickSkills ? skillToken(text) : undefined;
+    const token = this.canPick ? skillToken(text) : undefined;
     if (token) this.skillPicker.show(token.query);
     else this.skillPicker.close();
     this.notify();
@@ -1207,6 +1258,15 @@ export class AgentChatViewModel extends Observable implements TurnHost {
     const token = skillToken(this.#input);
     if (token) this.#input = this.#input.slice(0, token.start).replace(/\s+$/, (space) => (token.start > 0 ? space.slice(0, 1) : ""));
     if (!this.#skills.some((s) => s.slug === skill.slug)) this.#skills = [...this.#skills, skill];
+    this.notify();
+    this.requestComposerFocus();
+  }
+
+  /** The picker's choice of a prompt: its text takes the place of the `$...` the user typed (it is not a skill chip). */
+  #pickPrompt(prompt: SavedPrompt): void {
+    const token = skillToken(this.#input);
+    const before = token ? this.#input.slice(0, token.start) : this.#input;
+    this.#input = before + prompt.text;
     this.notify();
     this.requestComposerFocus();
   }

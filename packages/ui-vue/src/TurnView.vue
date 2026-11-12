@@ -1,7 +1,9 @@
 <script setup lang="ts">
 /** One exchange: the user's message, then the answer's parts in order. Drawn again only when this turn changes. */
+import { onBeforeUnmount, ref } from "vue";
+
 import type { TurnViewModel, UiStrings } from "@fadenstack/ui";
-import { turnMeta } from "@fadenstack/ui-web";
+import { COPIED_MS, turnMeta } from "@fadenstack/ui-web";
 
 import { useViewModel } from "./composables.js";
 import Icon from "./Icon.vue";
@@ -11,6 +13,18 @@ import type { PartRenderer } from "./types.js";
 
 const props = defineProps<{ turn: TurnViewModel; strings: UiStrings; renderers?: readonly PartRenderer[] | undefined }>();
 const turn = useViewModel(() => props.turn);
+// "Saved as a prompt" shows for a moment, as "Copied" does.
+const saveNote = ref<{ saved: boolean; message: string } | undefined>(undefined);
+let timer: ReturnType<typeof setTimeout> | undefined;
+onBeforeUnmount(() => clearTimeout(timer));
+
+function savePrompt(): void {
+  void props.turn.savePrompt().then((result) => {
+    saveNote.value = result;
+    clearTimeout(timer);
+    timer = setTimeout(() => (saveNote.value = undefined), COPIED_MS);
+  });
+}
 </script>
 
 <template>
@@ -47,6 +61,17 @@ const turn = useViewModel(() => props.turn);
         <button v-if="turn.canEdit" type="button" class="fdn-icon-button fdn-small" :title="strings.edit" :aria-label="strings.edit" @click="turn.edit()">
           <Icon name="edit" :size="14" />
         </button>
+        <button
+          v-if="turn.canSavePrompt"
+          type="button"
+          class="fdn-icon-button fdn-small"
+          :title="saveNote?.saved ? saveNote.message : strings.savePrompt"
+          :aria-label="strings.savePrompt"
+          @click="savePrompt"
+        >
+          <Icon :name="saveNote?.saved ? 'check' : 'bookmark'" :size="14" />
+        </button>
+        <span v-if="saveNote" :class="saveNote.saved ? 'fdn-muted' : 'fdn-muted fdn-error-text'" role="status">{{ saveNote.message }}</span>
         <span class="fdn-muted">{{ turnMeta(turn) }}</span>
       </div>
     </div>

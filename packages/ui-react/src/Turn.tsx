@@ -1,7 +1,7 @@
-import { memo, type ReactElement } from "react";
+import { memo, useEffect, useRef, useState, type ReactElement } from "react";
 
 import type { TurnViewModel, UiStrings } from "@fadenstack/ui";
-import { turnMeta } from "@fadenstack/ui-web";
+import { COPIED_MS, turnMeta } from "@fadenstack/ui-web";
 
 import { useViewModel } from "./hooks.js";
 import { Icon, Spinner } from "./icons.js";
@@ -15,6 +15,17 @@ export const TurnView = memo(function TurnView({ turn, strings, renderers }: {
 }): ReactElement {
   useViewModel(turn);
   const done = !turn.isRunning;
+  // "Saved as a prompt" shows for a moment, as "Copied" does.
+  const [saveNote, setSaveNote] = useState<{ saved: boolean; message: string } | undefined>(undefined);
+  const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  useEffect(() => () => clearTimeout(timer.current), []);
+  const savePrompt = () => {
+    void turn.savePrompt().then((result) => {
+      setSaveNote(result);
+      clearTimeout(timer.current);
+      timer.current = setTimeout(() => setSaveNote(undefined), COPIED_MS);
+    });
+  };
   return (
     <article className="fdn-turn" aria-busy={turn.isRunning}>
       <div className={`fdn-user${turn.isPromptBlocked ? " fdn-user-blocked" : ""}`}>
@@ -62,6 +73,13 @@ export const TurnView = memo(function TurnView({ turn, strings, renderers }: {
             {turn.canEdit && <button type="button" className="fdn-icon-button fdn-small" title={strings.edit} aria-label={strings.edit} onClick={() => turn.edit()}>
               <Icon name="edit" size={14} />
             </button>}
+            {turn.canSavePrompt && (
+              <button type="button" className="fdn-icon-button fdn-small" title={saveNote?.saved ? saveNote.message : strings.savePrompt}
+                aria-label={strings.savePrompt} onClick={savePrompt}>
+                <Icon name={saveNote?.saved ? "check" : "bookmark"} size={14} />
+              </button>
+            )}
+            {saveNote && <span className={saveNote.saved ? "fdn-muted" : "fdn-muted fdn-error-text"} role="status">{saveNote.message}</span>}
             <span className="fdn-muted">{turnMeta(turn)}</span>
           </div>
         )}

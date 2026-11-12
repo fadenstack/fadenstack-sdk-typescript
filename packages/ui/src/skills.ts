@@ -1,6 +1,7 @@
 import type { SkillOption } from "@fadenstack/client";
 
 import { Observable } from "./observable.js";
+import { matchPrompts, type SavedPrompt } from "./prompts.js";
 
 let counter = 0;
 
@@ -39,17 +40,33 @@ export function matchSkills(skills: readonly SkillOption[], query: string): Skil
   return [...named, ...described];
 }
 
+/** One row of the picker: a saved prompt (when the chat has a prompt store) or a skill. Prompts come first. */
+export type PickerEntry = { kind: "prompt"; prompt: SavedPrompt } | { kind: "skill"; skill: SkillOption };
+
+/** What the picker needs of the user's own prompts. */
+export interface PickerPrompts {
+  list(): Promise<SavedPrompt[]>;
+  remove(id: string): Promise<void>;
+}
+
 /**
  * The list that opens when the user types `$` (or `/` at the start) in the composer: the skills they can pick for
  * the message, narrowed as they type; arrows move, Enter picks, Esc closes. The chat owns it (`chat.skillPicker`)
  * and opens and closes it as the text changes. It reads the list once and again after a few minutes.
+ *
+ * With a prompt store the list has two sections, "My prompts" first, then the skills; the arrows move across both and
+ * the same query narrows both. A prompt is read again whenever the list opens.
  */
 export class SkillPickerViewModel extends Observable {
   /** For the ids skins give the list and its options, unique on the page. */
   readonly key = `fdn-skills-${++counter}`;
   readonly #load: (signal: AbortSignal) => Promise<SkillOption[]>;
   readonly #onPick: (skill: SkillOption) => void;
+  readonly #onPickPrompt: (prompt: SavedPrompt) => void;
+  readonly #prompts: PickerPrompts | undefined;
+  readonly #skillsAvailable: () => boolean;
   readonly #now: () => number;
+  #savedPrompts: readonly SavedPrompt[] | undefined;
   #all: readonly SkillOption[] | undefined;
   #loadedAt = 0;
   #loading: Promise<void> | undefined;
@@ -61,11 +78,19 @@ export class SkillPickerViewModel extends Observable {
   constructor(options: {
     load: (signal: AbortSignal) => Promise<SkillOption[]>;
     onPick: (skill: SkillOption) => void;
+    /** The user's own prompts: with them the picker has a "My prompts" section. */
+    prompts?: PickerPrompts;
+    onPickPrompt?: (prompt: SavedPrompt) => void;
+    /** Whether the server offers skills; false: the list is not read and has no skills section. True by default. */
+    skillsAvailable?: () => boolean;
     now?: () => number;
   }) {
     super();
     this.#load = options.load;
     this.#onPick = options.onPick;
+    this.#prompts = options.prompts;
+    this.#onPickPrompt = options.onPickPrompt ?? (() => undefined);
+    this.#skillsAvailable = options.skillsAvailable ?? (() => true);
     this.#now = options.now ?? Date.now;
   }
 
@@ -86,9 +111,37 @@ export class SkillPickerViewModel extends Observable {
     return this.#failed;
   }
 
-  /** What the list shows: the matches, the best first, a few at most. */
+  /** What the list shows of the skills: the matches, the best first, a few at most. */
   get options(): readonly SkillOption[] {
-    return this.#all ? matchSkills(this.#all, this.#query).slice(0, SHOWN) : [];
+    return this.#all && this.#skillsAvailable() ? matchSkills(this.#all, this.#query).slice(0, SHOWN) : [];
+  }
+
+  /** The chat has a prompt store: the list has a "My prompts" section. */
+  get hasPromptStore(): boolean {
+    return this.#prompts !== undefined;
+  }
+
+  /** The server offers skills: the list has a skills section. */
+  get hasSkillSection(): boolean {
+    return this.#skillsAvailable();
+  }
+
+  /** The prompts the query leaves, titles first, a few at most. */
+  get promptOptions(): readonly SavedPrompt[] {
+    return this.#savedPrompts ? matchPrompts(this.#savedPrompts, this.#query).slice(0, SHOWN) : [];
+  }
+
+  /** Whether the user has saved any prompt at all, once the list is read. */
+  get hasPrompts(): boolean {
+    return (this.#savedPrompts?.length ?? 0) > 0;
+  }
+
+  /** Every row Enter and the arrows reach: the prompts, then the skills. */
+  get entries(): readonly PickerEntry[] {
+    return [
+      ...this.promptOptions.map((prompt): PickerEntry => ({ kind: "prompt", prompt })),
+      ...this.options.map((skill): PickerEntry => ({ kind: "skill", skill })),
+    ];
   }
 
   /** Whether the user can pick any skill at all, once the list is read. */
@@ -96,18 +149,23 @@ export class SkillPickerViewModel extends Observable {
     return (this.#all?.length ?? 0) > 0;
   }
 
-  /** The option Enter picks. */
+  /** The row Enter picks, counted over `entries`: the prompts first, then the skills. */
   get activeIndex(): number {
-    return Math.min(this.#active, Math.max(0, this.options.length - 1));
+    return Math.min(this.#active, Math.max(0, this.entries.length - 1));
   }
 
   /** Opens the list (or narrows it) for what follows the `$`. */
   show(query: string): void {
     const changed = !this.#open || query !== this.#query;
+    const opening = !this.#open;
     this.#open = true;
     if (query !== this.#query) this.#active = 0;
     this.#query = query;
-    if (!this.#all || this.#now() - this.#loadedAt > LIST_TTL_MS || this.#failed) void this.#read();
+    if (opening && this.#prompts) void this.#readPrompts();
+    if (!this.#skillsAvailable()) {
+      this.#all ??= [];
+      this.#failed = false;
+    } else if (!this.#all || this.#now() - this.#loadedAt > LIST_TTL_MS || this.#failed) void this.#read();
     if (changed) this.notify();
   }
 
@@ -121,17 +179,49 @@ export class SkillPickerViewModel extends Observable {
 
   /** Moves the choice down (1) or up (-1), round the list. */
   move(step: number): void {
-    const count = this.options.length;
+    const count = this.entries.length;
     if (count === 0) return;
     this.#active = (this.activeIndex + step + count) % count;
     this.notify();
   }
 
-  /** Picks a skill (the active one when none is given); the chat takes it for the message. */
-  pick(skill: SkillOption | undefined = this.options[this.activeIndex]): void {
+  /** Picks a skill (the active row when none is given, a prompt or a skill); the chat takes it for the message. */
+  pick(skill?: SkillOption): void {
+    if (!skill) {
+      const entry = this.entries[this.activeIndex];
+      if (entry?.kind === "prompt") return this.pickPrompt(entry.prompt);
+      skill = entry?.skill;
+    }
     if (!skill) return;
     this.close();
     this.#onPick(skill);
+  }
+
+  /** Picks a prompt: the chat puts its text in the composer where the `$` was. */
+  pickPrompt(prompt: SavedPrompt): void {
+    this.close();
+    this.#onPickPrompt(prompt);
+  }
+
+  /** Deletes a saved prompt from the store, without picking it; the list shows the rest. */
+  async removePrompt(id: string): Promise<void> {
+    if (!this.#prompts) return;
+    try {
+      await this.#prompts.remove(id);
+    } catch {
+      // the store failed: the list shows what is still saved
+    }
+    await this.#readPrompts();
+  }
+
+  async #readPrompts(): Promise<void> {
+    if (!this.#prompts) return;
+    try {
+      this.#savedPrompts = await this.#prompts.list();
+    } catch {
+      this.#savedPrompts ??= [];
+    }
+    this.notify();
   }
 
   async #read(): Promise<void> {

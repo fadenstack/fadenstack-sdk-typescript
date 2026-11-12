@@ -349,6 +349,28 @@ export interface UiStrings {
   exportSkills(list: string): string;
   /** Under a message in an exported chat: the attachments that went with it; list: their titles. */
   exportAttachments(list: string): string;
+  // my prompts (in the skill picker, saved from a sent message)
+  /** The picker's section of the user's own saved prompts. */
+  myPrompts: string;
+  /** The picker's section of the organisation's skills, when it also shows prompts. */
+  organisationSkills: string;
+  /** The picker's name for screen readers when it lists prompts and skills. */
+  promptsAndSkills: string;
+  /** Said under "My prompts" while none is saved. */
+  noPrompts: string;
+  noPromptMatches(query: string): string;
+  /** Under the picker when it lists prompts. */
+  promptPickerHint: string;
+  /** The small button on a saved prompt: removes it from the list without using it. */
+  deletePrompt: string;
+  /** The button on a sent message: keeps its text as a prompt. */
+  savePrompt: string;
+  promptSaved: string;
+  /** Said when a prompt is longer than allowed; max: the most characters. */
+  promptTooLong(max: string): string;
+  /** Said when the user already keeps the most prompts; max: how many. */
+  promptsFull(max: string): string;
+  promptNotSaved: string;
 }
 
 export const englishStrings: UiStrings = {
@@ -614,6 +636,18 @@ export const englishStrings: UiStrings = {
   exportYou: "You",
   exportSkills: (list) => `Skills: ${list}`,
   exportAttachments: (list) => `Attachments: ${list}`,
+  myPrompts: "My prompts",
+  organisationSkills: "Your organisation's skills",
+  promptsAndSkills: "Prompts and skills",
+  noPrompts: "No saved prompts yet. Use \"Save as prompt\" on a message you sent.",
+  noPromptMatches: (query) => `No prompt matches "${query}".`,
+  promptPickerHint: "Enter picks, Esc closes the list.",
+  deletePrompt: "Delete prompt",
+  savePrompt: "Save as prompt",
+  promptSaved: "Saved as a prompt",
+  promptTooLong: (max) => `A prompt can have at most ${max} characters.`,
+  promptsFull: (max) => `You can keep at most ${max} prompts. Delete one first.`,
+  promptNotSaved: "The prompt could not be saved.",
 };
 
 /**

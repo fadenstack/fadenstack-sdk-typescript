@@ -58,7 +58,7 @@ export function Composer({ chat, accessory, placeholder }: {
   };
 
   const listId = `${picker.key}-list`;
-  const open = picker.isOpen && chat.canPickSkills;
+  const open = picker.isOpen && chat.canPick;
 
   return (
     <div className="fdn-composer" onDrop={onDrop}>
@@ -87,7 +87,7 @@ export function Composer({ chat, accessory, placeholder }: {
         placeholder={placeholder ?? strings.composerPlaceholder}
         aria-label={placeholder ?? strings.composerPlaceholder}
         aria-controls={open ? listId : undefined}
-        aria-activedescendant={open && picker.options.length > 0 ? `${picker.key}-${picker.activeIndex}` : undefined}
+        aria-activedescendant={open && picker.entries.length > 0 ? `${picker.key}-${picker.activeIndex}` : undefined}
         onChange={(e) => chat.setInput(e.target.value)}
         onPaste={onPaste}
         onKeyDown={(e) => {
@@ -118,36 +118,91 @@ export function Composer({ chat, accessory, placeholder }: {
   );
 }
 
-/** The skills to pick from, above the composer, narrowed by what follows the `$`. */
+/**
+ * The skills to pick from, above the composer, narrowed by what follows the `$`. With a prompt store the user's own
+ * prompts come first, in a section of their own; the headings between the sections are presentational.
+ */
 function SkillPicker({ picker, strings, listId }: { picker: SkillPickerViewModel; strings: UiStrings; listId: string }): ReactElement {
   const options = picker.options;
+  const prompts = picker.promptOptions;
+  const sections = picker.hasPromptStore;
+  const active = picker.activeIndex;
+  const skillOption = (s: (typeof options)[number], i: number) => (
+    <div key={s.slug} id={`${picker.key}-${i}`} role="option" aria-selected={i === active} className="fdn-menu-item fdn-skill-option"
+      // Picked on press, before the text box loses the focus (and the caret its place).
+      onMouseDown={(e) => {
+        e.preventDefault();
+        picker.pick(s);
+      }}>
+      <span className="fdn-menu-check"><Icon name="sparkle" size={14} /></span>
+      <span>
+        <span className="fdn-menu-label" dir="auto">{s.name}</span>
+        {s.description && <span className="fdn-menu-description" dir="auto">{s.description}</span>}
+      </span>
+    </div>
+  );
+  const skillNotes = picker.hasSkillSection && (picker.isLoading ? (
+    <div className="fdn-menu-note" role="status">{strings.skillsLoading}</div>
+  ) : picker.failed ? (
+    <div className="fdn-menu-note" role="alert">{strings.skillsFailed}</div>
+  ) : options.length === 0 ? (
+    <div className="fdn-menu-note" role="status">{picker.hasSkills ? strings.noSkillMatches(picker.query) : strings.noSkills}</div>
+  ) : null);
+  if (!sections) {
+    return (
+      <div className="fdn-menu fdn-skill-picker">
+        <span className="fdn-menu-heading" id={`${picker.key}-label`}>{strings.skills}</span>
+        {skillNotes}
+        <div className="fdn-skill-list" role="listbox" id={listId} aria-labelledby={`${picker.key}-label`}>
+          {options.map((s, i) => skillOption(s, i))}
+        </div>
+        {options.length > 0 && <div className="fdn-menu-note fdn-skill-hint">{strings.skillPickerHint}</div>}
+      </div>
+    );
+  }
   return (
     <div className="fdn-menu fdn-skill-picker">
-      <span className="fdn-menu-heading" id={`${picker.key}-label`}>{strings.skills}</span>
-      {picker.isLoading ? (
-        <div className="fdn-menu-note" role="status">{strings.skillsLoading}</div>
-      ) : picker.failed ? (
-        <div className="fdn-menu-note" role="alert">{strings.skillsFailed}</div>
-      ) : options.length === 0 ? (
-        <div className="fdn-menu-note" role="status">{picker.hasSkills ? strings.noSkillMatches(picker.query) : strings.noSkills}</div>
-      ) : null}
-      <div className="fdn-skill-list" role="listbox" id={listId} aria-labelledby={`${picker.key}-label`}>
-        {options.map((s, i) => (
-          <div key={s.slug} id={`${picker.key}-${i}`} role="option" aria-selected={i === picker.activeIndex} className="fdn-menu-item fdn-skill-option"
-            // Picked on press, before the text box loses the focus (and the caret its place).
+      <div className="fdn-skill-list" role="listbox" id={listId}
+        aria-label={picker.hasSkillSection ? strings.promptsAndSkills : strings.myPrompts}>
+        <div className="fdn-menu-heading" role="presentation">{strings.myPrompts}</div>
+        {prompts.length === 0 && (
+          <div className="fdn-menu-note" role="presentation">{picker.hasPrompts ? strings.noPromptMatches(picker.query) : strings.noPrompts}</div>
+        )}
+        {prompts.map((p, i) => (
+          <div key={p.id} id={`${picker.key}-${i}`} role="option" aria-selected={i === active} className="fdn-menu-item fdn-skill-option fdn-prompt-option"
             onMouseDown={(e) => {
               e.preventDefault();
-              picker.pick(s);
+              picker.pickPrompt(p);
             }}>
-            <span className="fdn-menu-check"><Icon name="sparkle" size={14} /></span>
+            <span className="fdn-menu-check"><Icon name="page" size={14} /></span>
             <span>
-              <span className="fdn-menu-label" dir="auto">{s.name}</span>
-              {s.description && <span className="fdn-menu-description" dir="auto">{s.description}</span>}
+              <span className="fdn-menu-label" dir="auto">{p.title}</span>
+              {p.text !== p.title && <span className="fdn-menu-description" dir="auto">{p.text}</span>}
             </span>
+            <button type="button" className="fdn-icon-button fdn-small fdn-prompt-delete" tabIndex={-1} title={strings.deletePrompt}
+              aria-label={`${strings.deletePrompt}: ${p.title}`}
+              // Not a pick, and the text box keeps its focus.
+              onMouseDown={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+              }}
+              onClick={(e) => {
+                e.stopPropagation();
+                void picker.removePrompt(p.id);
+              }}>
+              <Icon name="trash" size={14} />
+            </button>
           </div>
         ))}
+        {picker.hasSkillSection && (
+          <>
+            <div className="fdn-menu-heading" role="presentation">{strings.organisationSkills}</div>
+            {skillNotes && <div role="presentation">{skillNotes}</div>}
+            {options.map((s, i) => skillOption(s, prompts.length + i))}
+          </>
+        )}
       </div>
-      {options.length > 0 && <div className="fdn-menu-note fdn-skill-hint">{strings.skillPickerHint}</div>}
+      {picker.entries.length > 0 && <div className="fdn-menu-note fdn-skill-hint">{strings.promptPickerHint}</div>}
     </div>
   );
 }

@@ -21,8 +21,8 @@ const picker = useViewModel(() => props.chat.skillPicker);
 const box = useTemplateRef<HTMLTextAreaElement>("box");
 
 const listId = computed(() => `${picker.value.key}-list`);
-const open = computed(() => picker.value.isOpen && chat.value.canPickSkills);
-const active = computed(() => (open.value && picker.value.options.length > 0 ? `${picker.value.key}-${picker.value.activeIndex}` : undefined));
+const open = computed(() => picker.value.isOpen && chat.value.canPick);
+const active = computed(() => (open.value && picker.value.entries.length > 0 ? `${picker.value.key}-${picker.value.activeIndex}` : undefined));
 
 watch(() => props.chat, (model, _previous, onCleanup) => {
   onCleanup(model.onComposerFocus(() => {

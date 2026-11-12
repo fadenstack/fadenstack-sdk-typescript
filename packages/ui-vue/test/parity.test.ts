@@ -6,7 +6,7 @@ import { flushPromises, mount, type VueWrapper } from "@vue/test-utils";
 import { createElement } from "react";
 import { afterEach, describe, expect, it } from "vitest";
 
-import { ApprovalPart, AttachmentViewModel, ToolCallPart, germanStrings, withStrings, type AgentChatViewModel, type TurnLease } from "@fadenstack/ui";
+import { ApprovalPart, AttachmentViewModel, MemoryPromptStore, ToolCallPart, germanStrings, withStrings, type AgentChatViewModel, type TurnLease } from "@fadenstack/ui";
 import { AgentAvatar as ReactAvatar, ChatPanel as ReactPanel } from "@fadenstack/ui-react";
 import { AgentAvatar as VueAvatar, ChatPanel as VuePanel } from "@fadenstack/ui-vue";
 
@@ -83,6 +83,39 @@ describe("the Vue panel draws what the React panel draws", () => {
     await panels.same();
     await chat.send();
     await panels.same();
+  });
+
+  it("for the prompt picker (prompts and skills, only prompts, none saved, no match), and Save as prompt on a sent message", async () => {
+    const prompts = new MemoryPromptStore();
+    const empty = await chatWith(() => ({ text: "ok" }), { prompts: new MemoryPromptStore() });
+    const emptyPanels = both(empty.chat);
+    empty.chat.setInput("$");
+    await waitUntil(() => empty.chat.skillPicker.hasPromptStore);
+    await emptyPanels.same();
+
+    await prompts.save("Summarise this page in five points");
+    await prompts.save("Antworte freundlich auf diese Mail\nund kurz");
+    const skills = [{ slug: "reply", name: "Reply in our style", description: "Answers a mail the way we write" }];
+    const { chat } = await chatWith(() => ({ text: "ok" }), { prompts }, "write", true, { skills });
+    const panels = both(chat);
+    chat.setInput("Answer $");
+    await waitUntil(() => chat.skillPicker.entries.length === 3);
+    await panels.same();
+    chat.skillPicker.move(-1);
+    await panels.same();
+    chat.setInput("Answer $nothing-like-it");
+    await panels.same();
+    chat.setInput("Answer $mail");
+    await panels.same();
+    chat.skillPicker.close();
+    await chat.send("Save me");
+    await panels.same();
+
+    const promptsOnly = await chatWith(() => ({ text: "ok" }), { prompts, strings: germanStrings, locale: "de-DE" });
+    const onlyPanels = both(promptsOnly.chat);
+    promptsOnly.chat.setInput("$");
+    await waitUntil(() => promptsOnly.chat.skillPicker.promptOptions.length === 2);
+    await onlyPanels.same();
   });
 
   it("for a refused message, a failed tool and history", async () => {

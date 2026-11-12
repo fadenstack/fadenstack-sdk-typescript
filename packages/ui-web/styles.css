@@ -1656,3 +1656,30 @@
 .fdn-skill-hint {
   padding-block-end: 2px;
 }
+
+/* A saved prompt: its text can be long, so two lines of it show; the delete button sits at the end of the row. */
+.fdn-prompt-option > span:nth-child(2) {
+  flex: 1;
+  min-width: 0;
+}
+
+.fdn-prompt-option .fdn-menu-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.fdn-prompt-option .fdn-menu-description {
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  overflow-wrap: anywhere;
+}
+
+.fdn-prompt-delete {
+  flex: none;
+  align-self: center;
+  margin-inline-start: auto;
+}

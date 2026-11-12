@@ -50,7 +50,8 @@ export function browserPreferences(): PreferenceStore {
   };
 }
 
-function localStorageOrUndefined(): Storage | undefined {
+/** @internal */
+export function localStorageOrUndefined(): Storage | undefined {
   try {
     const storage = (globalThis as { localStorage?: Storage }).localStorage;
     if (!storage) return undefined;

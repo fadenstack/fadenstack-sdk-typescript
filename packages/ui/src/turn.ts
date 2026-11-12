@@ -23,6 +23,9 @@ export interface TurnHost {
   edit(text: string): void;
   retry(turn: TurnViewModel): Promise<void>;
   copy(text: string): void;
+  /** The chat has a prompt store: a message can be saved as a prompt. */
+  readonly canSavePrompts?: boolean;
+  savePrompt?(text: string): Promise<{ saved: boolean; message: string }>;
 }
 
 type ToolStarted = Extract<AgentEvent, { type: "tool_started" }>;
@@ -141,6 +144,17 @@ export class TurnViewModel extends Observable {
 
   copy(): void {
     this.#host?.copy(this.answerText);
+  }
+
+  /** The message can be kept as one of the user's prompts: the chat has a prompt store, and this is a message the person wrote. */
+  get canSavePrompt(): boolean {
+    return this.#host?.canSavePrompts === true && this.#host.savePrompt !== undefined && this.userText.trim().length > 0;
+  }
+
+  /** Saves the message as a prompt; says whether it was kept and what to tell the user (translated). */
+  async savePrompt(): Promise<{ saved: boolean; message: string }> {
+    if (!this.canSavePrompt) return { saved: false, message: this.#context.strings.promptNotSaved };
+    return this.#host!.savePrompt!(this.userText);
   }
 
   /** Puts the message back into the composer (e.g. to rephrase a refused prompt). */
