@@ -192,8 +192,8 @@ describe("bypass mode", () => {
       (b) => b.usePermissionMode("bypass"));
     const session = await s.agent.startSession();
     expect(session.toolMode).toBe("ask");
-    expect(session.effectiveToolMode).toBe("auto");
     await session.send("write");
+    expect(session.effectiveToolMode).toBe("auto"); // settled before the turn: no Bypass to be had, so auto
     expect(s.asked).toEqual([]);
     expect(s.pages.pages.get(8)).toBe("x");
     expect(s.gateway.modelCalls[0]!.toolMode).toBe("auto");

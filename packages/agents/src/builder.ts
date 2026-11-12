@@ -1,4 +1,5 @@
 import {
+  BYPASS_SUPPORTS,
   FadenstackClient,
   type ChatStreamer,
   type FadenstackClientOptions,
@@ -17,12 +18,12 @@ import {
   type ApprovalRequest,
   type PermissionMode,
 } from "./approvals.js";
-import { IndexedDbApprovalStore, MemoryApprovalStore, type ApprovalStore } from "./approvalStore.js";
-import { IndexedDbSessionStore } from "./indexedDbSessionStore.js";
-import { MemorySessionStore, type SessionStore } from "./sessionStore.js";
+import type { ApprovalStore } from "./approvalStore.js";
+import type { SessionStore } from "./sessionStore.js";
+import { isStepUpHandler, type StepUpHandler } from "./stepUp.js";
 import type { ChatStage, FadenstackModule, ToolServiceFactory, ToolSource, ToolStage } from "./stages.js";
 import type { AgentTool, ToolServiceKey } from "./tools.js";
-import type { GrantPlaceResolver } from "./grants.js";
+import type { GrantHandler, GrantPlaceResolver } from "./grants.js";
 
 /** What an agent was built with. */
 export interface AgentSettings {
@@ -37,9 +38,14 @@ export interface AgentSettings {
   readonly toolServices: ReadonlyMap<ToolServiceKey<unknown>, ToolServiceFactory<unknown>>;
   readonly modules: readonly string[];
   readonly approvals: ApprovalHandler;
-  readonly sessions: SessionStore;
-  /** Where "Allow always" is kept. */
-  readonly approvalStore: ApprovalStore;
+  /** The host's own session store; undefined: the SDK keeps them in the signed-in user's own database (`FadenstackAgent.sessionStore`). */
+  readonly sessions?: SessionStore;
+  /** The host's own store for "Allow always"; undefined: the SDK keeps it in the signed-in user's own database. */
+  readonly approvalStore?: ApprovalStore;
+  /** Who opens the second sign-in for Bypass; undefined: the approval handler when it is one (`FadenstackAgent.stepUpHandler`). */
+  readonly stepUp?: StepUpHandler;
+  /** Who draws the grant card; undefined: the approval handler when it does (`FadenstackAgent.grantHandler`). */
+  readonly grantHandler?: GrantHandler;
   readonly permissionMode: PermissionMode;
   readonly requireHostToolPolicyChecks: boolean;
   readonly grantPlaceResolver?: GrantPlaceResolver;
@@ -84,6 +90,8 @@ export class AgentBuilder {
   #approvals: ApprovalHandler = denyAllApprovals;
   #sessions: SessionStore | undefined;
   #approvalStore: ApprovalStore | undefined;
+  #stepUp: StepUpHandler | undefined;
+  #grantHandler: GrantHandler | undefined;
   #permissionMode: PermissionMode = "ask";
   #requireHostToolPolicyChecks = false;
   #grantPlaceResolver: GrantPlaceResolver | undefined;
@@ -132,13 +140,16 @@ export class AgentBuilder {
     return this;
   }
 
-  /** Where sessions live; by default IndexedDB in a browser, memory elsewhere. */
+  /**
+   * Where sessions live. By default the signed-in user's own IndexedDB database in a browser (memory elsewhere), so two
+   * people in one browser profile never see each other's; a store passed here is used as it is and is the host's to keep apart.
+   */
   useSessionStore(store: SessionStore): this {
     this.#sessions = store;
     return this;
   }
 
-  /** Where "Allow always" is kept; by default IndexedDB in a browser, memory elsewhere. */
+  /** Where "Allow always" is kept; by default the signed-in user's own IndexedDB database in a browser, memory elsewhere. */
   useApprovalStore(store: ApprovalStore): this {
     this.#approvalStore = store;
     return this;
@@ -146,13 +157,35 @@ export class AgentBuilder {
 
   /**
    * `ask` (the default): calls the tool mode asks about wait for the user. `bypass`: the app's code asks for the
-   * server's Bypass, which needs a second sign-in and which this SDK does not offer yet -- until then its sessions run
-   * in `auto` instead of `ask`. Destructive and unclassified calls, an admin's "Ask first" rule and the gateway's own
-   * questions still ask; nothing is approved without the person. The agent warns once when it starts.
+   * server's Bypass, with no card but through the same grant: the person signs in a second time in the browser
+   * (`useStepUpHandler`) and the server makes the grant; where the server does not offer Bypass, or the app opens no
+   * second sign-in, its sessions run in `auto` instead of `ask`. An admin's "Ask first" rule and a tool that asks every
+   * time still ask, and so do the gateway's own questions. The agent warns once when it starts without the flow.
    */
   usePermissionMode(mode: PermissionMode): this {
     if (mode !== "ask" && mode !== "bypass") throw new TypeError(`A permission mode is ask or bypass, not '${String(mode)}'.`);
     this.#permissionMode = mode;
+    return this;
+  }
+
+  /**
+   * Who opens the second sign-in the server's Bypass needs (sdk/41): it opens the verification page in the system browser or
+   * a new window -- never an iframe of the app's page -- and shows that it waits (`browserStepUp()` does it in a browser). An
+   * approval handler that is one (`open` and `report`) is used when none is given. Without one there is no Bypass, and the
+   * agent announces none (`X-Faden-Client-Supports`): the server then offers none.
+   */
+  useStepUpHandler(handler: StepUpHandler): this {
+    if (!isStepUpHandler(handler)) throw new TypeError("A step-up handler has open() and report().");
+    this.#stepUp = handler;
+    return this;
+  }
+
+  /**
+   * Who draws the grant card (the Bypass confirmation, the work card): `requestGrant(offer, signal)`. An approval handler
+   * that has it is used when none is given. Without one, no grant card is offered.
+   */
+  useGrantHandler(handler: GrantHandler): this {
+    this.#grantHandler = handler;
     return this;
   }
 
@@ -265,6 +298,9 @@ export class AgentBuilder {
     // Lower order is further from the transport: wrap from the transport outwards.
     let chat: ChatStreamer = client.chat;
     for (const stage of [...this.#chatStages].sort((a, b) => b.order - a.order)) chat = stage.wrap(chat);
+    // The server offers Bypass only to a client that names the whole flow, so it is named only where the app can open the
+    // second sign-in.
+    if (this.#stepUp ?? (isStepUpHandler(this.#approvals) ? this.#approvals : undefined)) client.transport.announce(...BYPASS_SUPPORTS);
     return FadenstackAgent.create({
       client,
       agent,
@@ -275,8 +311,10 @@ export class AgentBuilder {
       toolServices: new Map(this.#toolServices),
       modules: [...this.#modules],
       approvals: this.#approvals,
-      sessions: this.#sessions ?? (globalThis.indexedDB ? new IndexedDbSessionStore() : new MemorySessionStore()),
-      approvalStore: this.#approvalStore ?? (globalThis.indexedDB ? new IndexedDbApprovalStore() : new MemoryApprovalStore()),
+      ...(this.#sessions ? { sessions: this.#sessions } : {}),
+      ...(this.#approvalStore ? { approvalStore: this.#approvalStore } : {}),
+      ...(this.#stepUp ? { stepUp: this.#stepUp } : {}),
+      ...(this.#grantHandler ? { grantHandler: this.#grantHandler } : {}),
       permissionMode: this.#permissionMode,
       requireHostToolPolicyChecks: this.#requireHostToolPolicyChecks,
       ...(this.#grantPlaceResolver ? { grantPlaceResolver: this.#grantPlaceResolver } : {}),
