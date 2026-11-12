@@ -294,7 +294,9 @@ export class AgentTokenProvider implements TokenProvider {
   }
 
   async #current(): Promise<TokenSet | undefined> {
-    if (!this.#loaded) {
+    // Nothing kept: read the store again, a pairing (AgentPairing saves to the same store) or another tab may have signed
+    // in since. A kept sign-in stays cached; renewing it goes through this provider.
+    if (!this.#loaded || this.#tokens === undefined) {
       this.#tokens = await this.#store.load(this.#key);
       this.#loaded = true;
     }

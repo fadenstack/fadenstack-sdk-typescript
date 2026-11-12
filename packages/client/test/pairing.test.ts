@@ -308,6 +308,19 @@ describe("pairing against the fake server", () => {
     expect(gateway.pairings[0]!.state).toBe("consumed");
   });
 
+  it("a provider that already said 'not signed in' sees the pairing's sign-in once it is saved", async () => {
+    const gateway = new FakeGateway(options());
+    const { pairing, store, start } = await pair(gateway);
+    const provider = new AgentTokenProvider({ apiUrl: gateway.serverUrl, agent: "docs", store, fetch: gateway.fetch });
+    expect(await provider.isSignedIn()).toBe(false);
+    const waiting = pairing.wait(start);
+    gateway.approvePairing("user@example.com");
+    await waiting;
+    // The app keeps its one provider (the browser extension built a new agent to get around this before).
+    expect(await provider.isSignedIn()).toBe(true);
+    expect(await provider.getAccessToken()).toBeTruthy();
+  });
+
   it("a denial and an expiry end the wait", async () => {
     const gateway = new FakeGateway(options());
     const a = await pair(gateway);
