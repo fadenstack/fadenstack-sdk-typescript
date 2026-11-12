@@ -25,6 +25,8 @@ import {
   type WatermarkStatus,
 } from "@fadenstack/client";
 
+import { FakeGrants, type FakeGrantsOptions } from "./fakeGrants.js";
+
 /** A user the fake server knows. */
 export interface FakeUser {
   email: string;
@@ -47,7 +49,7 @@ export interface FakeAgent {
   version?: number;
   model?: string;
   /** The host tool contract, as the server keeps it: `[{ name, risk }]`. Empty: no restriction. */
-  contract?: { name: string; risk?: "read" | "write" | "destructive"; approval?: string }[];
+  contract?: { name: string; risk?: "read" | "write" | "destructive"; approval?: string; target_type?: string; target_argument?: string }[];
   ui?: Record<string, unknown>;
   localMcpMode?: "disable" | "allow";
   /** A tool-mode ceiling, as an administrator's rules set it. */
@@ -115,6 +117,8 @@ export interface FakeReply {
    */
   gatewayTool?: {
     name: string;
+    /** The call's id (default `gw-<n>`), for a test that has a grant cover it. */
+    callId?: string;
     arguments?: Record<string, unknown>;
     result?: string;
     /**
@@ -170,6 +174,13 @@ export interface FakeGatewayOptions {
    */
   toolRules?: FakeToolRule[];
   provenance?: FakeProvenanceOptions;
+  /**
+   * Grants held by the server (`approval_scopes.grant`): the routes under `/v1/agents/{agent}/grants` and the second
+   * sign-in, for the first agent; `gateway.grants` is the server's side of them. Off by default: an older server.
+   */
+  grants?: FakeGrantsOptions | true;
+  /** The profile names the signed-in user and device (`principal`), as a 0.7 server does. On with `grants`. */
+  principal?: boolean;
 }
 
 /** A record the fake server signed, with the agent and the request it was signed for. */
@@ -239,6 +250,8 @@ export class FakeGateway {
   readonly placements: { agent: string; report: PlacementReport }[] = [];
   /** The receipts chat answers carried, in order. */
   readonly receipts: GenerationReceipt[] = [];
+  /** The server's grants, when `grants` is on. */
+  readonly grants: FakeGrants | undefined;
   #provenanceDown: boolean;
   readonly #agents: Map<string, Required<Pick<FakeAgent, "slug" | "name" | "id" | "version">> & FakeAgent>;
   readonly #users: (FakeUser & { id: string })[];
@@ -257,6 +270,22 @@ export class FakeGateway {
     this.#users = (options.users ?? [{ email: "user@example.com", password: "secret" }]).map((u, i) => ({ id: `user-${i + 1}`, ...u }));
     this.#model = options.model ?? (() => ({ text: "Hello from the fake gateway." }));
     this.#provenanceDown = options.provenance?.down ?? false;
+    if (options.grants) {
+      const first = this.#agents.get(agents[0]!.slug)!;
+      this.grants = new FakeGrants(first.id, first.version, options.grants === true ? {} : options.grants);
+    }
+  }
+
+  /** Changes what an agent is served as from now on (its ceiling, its contract...), as a new version or an admin would. */
+  updateAgent(slug: string, change: Partial<FakeAgent>): void {
+    const agent = this.#agents.get(slug);
+    if (!agent) throw new Error(`No agent ${slug}.`);
+    Object.assign(agent, change);
+  }
+
+  /** Makes the approval ids answerable (200) although no gateway tool waits on them, as a test that sends the events itself needs. */
+  acceptApprovals(...ids: string[]): void {
+    for (const id of ids) this.#pendingApprovals.set(id, () => undefined);
   }
 
   /** Replaces the model. */
@@ -357,6 +386,7 @@ export class FakeGateway {
     if (method === "POST" && path === "/api/agent-tokens") return this.#issue(request, body);
     if (method === "POST" && path === "/api/agents") return this.#createAgent(request, body);
     if (method === "POST" && path === "/api/agent-tokens/refresh") return this.#refresh(body);
+    if (path === "/api/agent-tokens/step-ups" || path === "/api/agent-tokens/step-ups/token") return this.#stepUp(request, path, body);
     if (method === "GET" && path === "/api/health") return json(200, { status: "ok" });
     if (method === "GET" && path === "/v1/features") return json(200, { edition: "community", features: ["agents"] });
     if (method === "GET" && path === "/v1/models") {
@@ -364,14 +394,14 @@ export class FakeGateway {
       return json(200, { object: "list", data: (this.#options.models ?? ["fake-model"]).map((id) => ({ id, object: "model" })) });
     }
     if (path === "/v1/provenance/anchors" || path === "/v1/provenance/verify") return this.#provenanceRoute(request, path, body);
-    const match = /^\/v1\/agents\/([^/]+)\/(profile|user|skills|chat\/completions|events|manifest|approvals\/([^/]+)|provenance\/(policy|records|placements|verify))$/
+    const match = /^\/v1\/agents\/([^/]+)\/(profile|user|skills|chat\/completions|events|manifest|approvals\/([^/]+)|provenance\/(policy|records|placements|verify)|grants((?:\/[^/]+){0,2}))$/
       .exec(path);
     if (!match) return json(404, { detail: "Not Found" });
     const agent = decodeURIComponent(match[1]!);
     const auth = this.#authorize(request, agent);
     if (auth instanceof Response) return auth;
     const route = match[2]!;
-    if (method === "GET" && route === "profile") return json(200, this.#profile(agent, auth));
+    if (method === "GET" && route === "profile") return json(200, this.#profile(agent, auth, request.headers.get("x-faden-client-supports")));
     if (method === "GET" && route === "skills") return json(200, this.#skills(agent, url));
     if (method === "PATCH" && route === "user") return this.#userSettings(auth, body);
     if (method === "POST" && route === "chat/completions") return this.#chat(request, agent, body);
@@ -379,7 +409,28 @@ export class FakeGateway {
     if (method === "PUT" && route === "manifest") return this.#manifest(agent, body);
     if (method === "POST" && route.startsWith("approvals/")) return this.#approve(decodeURIComponent(match[3]!), body);
     if (route.startsWith("provenance/")) return this.#agentProvenance(method, agent, match[4]!, body);
+    if (route.startsWith("grants") && this.grants && agent === [...this.#agents.keys()][0]) {
+      const answer = this.grants.handle(method, match[5] ?? "", (body ?? {}) as Record<string, unknown>, request.headers, auth.deviceId);
+      return json(answer.status, answer.body, answer.headers);
+    }
     return json(405, { detail: "Method Not Allowed" });
+  }
+
+  /** The second sign-in for Bypass (`/api/agent-tokens/step-ups`): started by a signed-in app, polled with the code. */
+  #stepUp(request: Request, path: string, body: unknown): Response {
+    if (!this.grants) return json(404, { detail: "Not Found" });
+    if (request.method !== "POST") return json(405, { detail: "Method Not Allowed" });
+    const b = (body ?? {}) as Record<string, unknown>;
+    if (path.endsWith("/token")) {
+      const answer = this.grants.pollStepUp(b);
+      return json(answer.status, answer.body, answer.headers);
+    }
+    const token = bearer(request);
+    if (!this.#signIns.some((s) => s.access === token && !s.revoked && s.accessExpires > this.#now())) {
+      return json(401, { detail: "Unauthorized" });
+    }
+    const answer = this.grants.startStepUp(b, new URL(request.url).origin);
+    return json(answer.status, answer.body, answer.headers);
   }
 
   // -- provenance -----------------------------------------------------------------------------------
@@ -603,7 +654,8 @@ export class FakeGateway {
     return signIn;
   }
 
-  #profile(slug: string, signIn: SignIn): Record<string, unknown> {
+  #profile(slug: string, signIn: SignIn, supports: string | null = null): Record<string, unknown> {
+    this.grants?.noteDevice(signIn.deviceId);
     const agent = this.#agents.get(slug)!;
     const user = this.#users.find((u) => u.id === signIn.userId)!;
     return {
@@ -615,7 +667,10 @@ export class FakeGateway {
       tool_modes: { default: agent.defaultLevel ?? "ask", ceiling: agent.ceiling ?? null,
         ...(agent.maxLevel !== undefined ? { max: agent.maxLevel } : {}), open_world_enforced: false },
       ui: agent.ui ?? {}, extensions: {}, required_client_modules: agent.requiredClientModules ?? [],
-      edition: "community", features: ["agents"], user: { language: user.language ?? null },
+      edition: "community", features: this.grants ? ["agents", "approval_scopes.grant"] : ["agents"], user: { language: user.language ?? null },
+      ...(this.grants || this.#options.principal
+        ? { principal: { tenant_id: "tenant-1", user_id: user.id, agent_id: agent.id, device_id: signIn.deviceId } } : {}),
+      ...(this.grants && slug === [...this.#agents.keys()][0] ? { approvals: this.grants.profileApprovals(supports) } : {}),
     };
   }
 
@@ -858,7 +913,7 @@ export class FakeGateway {
     send: (text: string) => Promise<void>,
     faden: (event: Record<string, unknown>) => string,
   ): Promise<void> {
-    const callId = `gw-${this.#next()}`;
+    const callId = tool.callId ?? `gw-${this.#next()}`;
     if (tool.approval) {
       const approvalId = `approval-${this.#next()}`;
       const answered = new Promise<boolean>((resolve) => {
