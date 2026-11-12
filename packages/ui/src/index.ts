@@ -51,7 +51,27 @@ export {
   type PartContext,
   type ToolCallState,
 } from "./parts.js";
-export { ApprovalBroker, PendingApproval } from "./approvalBroker.js";
+export { ApprovalBroker, PendingApproval, PendingGrant } from "./approvalBroker.js";
+export {
+  BypassPart,
+  GrantPart,
+  GrantPlaceItem,
+  type BypassCardState,
+  type BypassFailure,
+  type DurationOption,
+  type GrantCardState,
+} from "./grantCards.js";
+export {
+  AT_LONGEST_CODE,
+  GrantMarkerViewModel,
+  GrantSummary,
+  GrantsViewModel,
+  StandingApprovalItem,
+  type GrantMarkerEntry,
+  type GrantMarkerOptions,
+  type GrantsHost,
+} from "./grants.js";
+export { evidenceLevel, grantMay, period, shortPlace } from "./period.js";
 export { AttachmentViewModel, type AttachmentChip, type AttachmentOptions } from "./attachments.js";
 export { citationsRenderer, fallbackRenderer, piiRenderer, type AgentEventRenderer } from "./renderers.js";
 export { buildTurn, groupTurns } from "./transcriptTurns.js";

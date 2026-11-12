@@ -3,6 +3,7 @@ import { useCallback, useRef, type ReactElement, type ReactNode } from "react";
 import type { AgentChatViewModel } from "@fadenstack/ui";
 
 import { AboutPanel } from "./About.js";
+import { ApprovalsSection } from "./Grants.js";
 import { useDismiss, useViewModel } from "./hooks.js";
 import { Icon } from "./icons.js";
 
@@ -106,6 +107,7 @@ function SettingsMenu({ chat, extra }: { chat: AgentChatViewModel; extra?: React
               {chat.isLanguageLocked && <div className="fdn-menu-note">{s.languageLocked}</div>}
             </div>
           )}
+          <ApprovalsSection grants={chat.grants} />
           {extra && <div className={languages ? "fdn-menu-extra" : undefined}>{extra}</div>}
           <div className={languages || extra ? "fdn-menu-extra" : undefined}>
             <button type="button" role="menuitem" aria-haspopup="dialog" className="fdn-menu-item" onClick={() => chat.setAboutOpen(true)}>
@@ -140,6 +142,7 @@ function HistoryMenu({ chat }: { chat: AgentChatViewModel }): ReactElement {
                 onClick={() => void chat.openSession(session.id)}>
                 <span className="fdn-history-title" dir="auto">{session.title}</span>
                 <span className="fdn-history-when">{session.whenText}</span>
+                {session.bypassText && <span className="fdn-history-bypass">{session.bypassText}</span>}
               </button>
               <button type="button" className="fdn-icon-button fdn-small" title={s.deleteSession} aria-label={`${s.deleteSession}: ${session.title}`}
                 disabled={chat.isBusy && session.isCurrent} onClick={() => void chat.deleteSession(session.id)}>

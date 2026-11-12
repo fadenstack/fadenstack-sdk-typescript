@@ -2,6 +2,7 @@ export { ChatPanel, type ChatPanelProps, type ChatTheme } from "./ChatPanel.js";
 export { AgentAvatar, type AgentAvatarProps } from "./AgentAvatar.js";
 export { ChatHeader } from "./Header.js";
 export { Composer } from "./Composer.js";
+export { ApprovalsSection, BypassCardView, GrantCardView, GrantMarkerView, GrantsBar } from "./Grants.js";
 export { TurnView } from "./Turn.js";
 export {
   ApprovalView,

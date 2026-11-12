@@ -10,6 +10,7 @@ import ChatHeader from "./ChatHeader.vue";
 import Composer from "./Composer.vue";
 import { useViewModel } from "./composables.js";
 import Conversation from "./Conversation.vue";
+import GrantsBar from "./GrantsBar.vue";
 import NoticeLine from "./NoticeLine.vue";
 import type { ChatTheme, PartRenderer } from "./types.js";
 
@@ -53,6 +54,7 @@ const chat = useViewModel(() => props.chat);
         <template v-if="slots.avatar" #avatar><slot name="avatar" /></template>
       </Conversation>
       <div v-if="chat.error && !chat.signInRequired" class="fdn-banner" role="alert">{{ chat.error }}</div>
+      <GrantsBar :grants="chat.grants" :strings="chat.strings" />
       <slot name="context-bar" />
       <Composer :chat="chat" :placeholder="placeholder"><slot name="composer-accessory" /></Composer>
       <NoticeLine :chat="chat" />

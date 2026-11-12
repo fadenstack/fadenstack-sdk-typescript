@@ -57,6 +57,11 @@ export class FakeGrants {
   refuseResume: number | undefined;
   /** False: `GET .../grants/{id}` answers 404, as an older server that cannot say why a grant ended. */
   canSayWhy = true;
+  /** True: pauses and revokes answer 503, as when the server cannot be reached (the device cannot tell it). */
+  pauseOffline = false;
+  /** Who the server names as ending a Bypass whose resume it refuses (403, 404); undefined: `limit`, `kill_switch`. */
+  resumeEndsBy: string | undefined;
+  revokeOffline = false;
   /** Changes the grant the server is about to store, as a faulty or hostile server might. */
   tamper: ((grant: Wire) => void) | undefined;
   /** Changes every grant the server shows (made, read or listed). */
@@ -225,6 +230,7 @@ export class FakeGrants {
     if (action === undefined) {
       if (method === "GET") return this.canSayWhy ? this.#change(id, () => undefined) : reply(404, { detail: "Not Found" });
       if (method === "DELETE") {
+        if (this.revokeOffline) return error(503, "unavailable", "Out of reach.");
         return this.#change(id, (g) => {
           g["status"] = "revoked";
           g["revoked_at"] = new Date(this.serverNow).toISOString();
@@ -233,6 +239,7 @@ export class FakeGrants {
       }
     }
     if (method !== "POST") return reply(405, { detail: "Method Not Allowed" });
+    if (action === "pause" && this.pauseOffline) return error(503, "unavailable", "Out of reach.");
     if (action === "pause") return this.#change(id, (g) => { g["status"] = "paused"; g["paused_at"] = new Date(this.serverNow).toISOString(); });
     if (action === "resume") return this.#resume(id);
     if (action === "extend") return this.#extend(id, body, headers);
@@ -249,7 +256,7 @@ export class FakeGrants {
     if (this.refuseResume !== undefined && found?.["kind"] === "bypass") {
       if (this.refuseResume === 403 || this.refuseResume === 404) {
         found["status"] = "revoked";
-        found["revoked_by"] = this.refuseResume === 403 ? "limit" : "kill_switch";
+        found["revoked_by"] = this.resumeEndsBy ?? (this.refuseResume === 403 ? "limit" : "kill_switch");
       }
       const code = this.refuseResume === 403 ? "bypass_not_allowed" : this.refuseResume === 404 ? "grant_not_found" : "grant_limits_unavailable";
       return error(this.refuseResume, code, "Not now.");
