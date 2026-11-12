@@ -6,6 +6,7 @@ import { AboutPanel } from "./About.js";
 import { ApprovalsSection } from "./Grants.js";
 import { useDismiss, useViewModel } from "./hooks.js";
 import { Icon } from "./icons.js";
+import { ReasoningMenu } from "./ReasoningMenu.js";
 
 /**
  * The panel's top bar: the agent, the tool mode, the history, a new chat, the host's own buttons, and the settings
@@ -18,6 +19,7 @@ export function ChatHeader({ chat, extra, settingsExtra }: { chat: AgentChatView
     <header className="fdn-header">
       <div className="fdn-header-title" title={chat.title} dir="auto">{chat.title}</div>
       <ModeMenu chat={chat} />
+      <ReasoningMenu chat={chat} />
       <HistoryMenu chat={chat} />
       <button type="button" className="fdn-icon-button" title={s.newChat} aria-label={s.newChat} disabled={!chat.isReady || chat.isBusy}
         onClick={() => chat.newChat()}>

@@ -9,6 +9,7 @@ export {
   type OutgoingCommand,
   type ChatCommandOptions,
   type PictureInput,
+  type ReasoningOption,
   type SessionItem,
   type ToolModeOption,
 } from "./chat.js";

@@ -42,6 +42,39 @@ export function dismissOnOutside(anchor: HTMLElement, close: () => void): () => 
   };
 }
 
+const ITEMS = '[role="menuitem"]:not(:disabled), [role="menuitemradio"]:not(:disabled), [role="menuitemcheckbox"]:not(:disabled)';
+
+/**
+ * Puts the focus in a menu that just opened: on its checked item, else its first. A skin calls it when the menu appears, so a
+ * keyboard user who opened it with Enter or Space can move at once.
+ */
+export function focusCurrentItem(menu: HTMLElement): void {
+  const items = Array.from(menu.querySelectorAll<HTMLElement>(ITEMS));
+  (items.find((i) => i.getAttribute("aria-checked") === "true") ?? items[0])?.focus();
+}
+
+/**
+ * What a key does in an open menu: the arrows move the focus between its items (wrapping; Home and End jump), and Escape asks
+ * to close, so the skin returns the focus to the button that opened it. Returns "close" for Escape, nothing otherwise.
+ */
+export function menuKey(menu: HTMLElement, e: Pick<KeyboardEvent, "key" | "preventDefault">): "close" | undefined {
+  if (e.key === "Escape") return "close";
+  const items = Array.from(menu.querySelectorAll<HTMLElement>(ITEMS));
+  if (items.length === 0) return undefined;
+  const at = items.indexOf(menu.ownerDocument.activeElement as HTMLElement);
+  let next: number;
+  switch (e.key) {
+    case "ArrowDown": next = at < 0 ? 0 : (at + 1) % items.length; break;
+    case "ArrowUp": next = at < 0 ? items.length - 1 : (at - 1 + items.length) % items.length; break;
+    case "Home": next = 0; break;
+    case "End": next = items.length - 1; break;
+    default: return undefined;
+  }
+  e.preventDefault();
+  items[next]!.focus();
+  return undefined;
+}
+
 /** Grows a text box with its text, up to a third of the window (at least 120 px). */
 export function fitToContent(box: HTMLTextAreaElement): void {
   const view = box.ownerDocument.defaultView;

@@ -6,6 +6,8 @@ export {
   dismissOnOutside,
   fitToContent,
   focusAtEnd,
+  focusCurrentItem,
+  menuKey,
   picturesIn,
   readPicture,
   stickToBottom,
