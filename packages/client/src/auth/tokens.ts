@@ -12,6 +12,39 @@ export interface TokenSet {
   deviceId: string;
   agentId: string;
   agent: string;
+  /** Who signed in, as the server's answer names them; absent from a server that does not say. */
+  user?: SignedInUser;
+}
+
+/** Who signed in to an agent on this device: the server's word in its token answers (core 0.7.1). */
+export interface SignedInUser {
+  id: string;
+  email: string;
+  displayName?: string;
+}
+
+/**
+ * The token set a server's token answer (sign-in, renewal, pairing) stands for. Never throws on what the server wrote in
+ * `user`: a user without an e-mail is none.
+ */
+export function readTokenSet(issued: Record<string, unknown>, now: number, fallbackAgent: string): TokenSet {
+  const tokens: TokenSet = {
+    accessToken: String(issued["access_token"] ?? ""),
+    accessExpiresAt: now + Number(issued["expires_in"] ?? 0) * 1000,
+    refreshToken: String(issued["refresh_token"] ?? ""),
+    refreshExpiresAt: now + Number(issued["refresh_expires_in"] ?? 0) * 1000,
+    deviceId: String(issued["device_id"] ?? ""),
+    agentId: String(issued["agent_id"] ?? ""),
+    agent: String(issued["agent"] ?? fallbackAgent),
+  };
+  const user = issued["user"];
+  if (user !== null && typeof user === "object") {
+    const u = user as Record<string, unknown>;
+    if (typeof u["email"] === "string" && u["email"]) {
+      tokens.user = { id: String(u["id"] ?? ""), email: u["email"], ...(typeof u["display_name"] === "string" ? { displayName: u["display_name"] } : {}) };
+    }
+  }
+  return tokens;
 }
 
 /** Where a client's access tokens come from. */
@@ -141,6 +174,16 @@ export class AgentTokenProvider implements TokenProvider {
     return this.#tokens?.deviceId;
   }
 
+  /** Who signed in, once signed in (or loaded) and when the server said; for the app to show. */
+  get signedInUser(): SignedInUser | undefined {
+    return this.#tokens?.user;
+  }
+
+  /** Who signed in, read from the store when it is not loaded yet. */
+  async getSignedInUser(): Promise<SignedInUser | undefined> {
+    return (await this.#current())?.user;
+  }
+
   /**
    * Signs in to the agent with the user's login token (from `loginWithPassword`, or the organisation's single
    * sign-on). Refused with 403 when the user has no grant. The login token itself is not kept.
@@ -160,13 +203,34 @@ export class AgentTokenProvider implements TokenProvider {
   }
 
   /**
-   * Forgets the sign-in on this device. (Ending it on the server: the user's sign-ins in the console, or
-   * `DELETE /api/agent-tokens/{device}` with their login.)
+   * Signs out: asks the server to revoke the sign-in (`POST /api/agent-tokens/revoke` with the refresh token), then deletes
+   * the tokens on this device (OWASP ASVS 5.0 7.4.1: ending a session ends it at the server). The revoke is best effort: when
+   * the server cannot be reached or refuses (an older one has no such route), the tokens are deleted anyway and the sign-in
+   * ends at the server on its own, or in the console's list of sign-ins. The refresh token is never logged. Afterwards the
+   * provider reports that sign-in is required. .NET: `AgentTokenProvider.SignOutAsync`.
    */
-  async signOut(): Promise<void> {
-    this.#tokens = undefined;
-    this.#loaded = true;
-    await this.#store.delete(this.#key);
+  async signOut(signal?: AbortSignal): Promise<void> {
+    const current = this.#tokens ?? (this.#loaded ? undefined : await this.#store.load(this.#key));
+    try {
+      if (current?.refreshToken) await this.#revoke(current.refreshToken, signal);
+    } finally {
+      this.#tokens = undefined;
+      this.#loaded = true;
+      await this.#store.delete(this.#key);
+    }
+  }
+
+  async #revoke(refreshToken: string, signal?: AbortSignal): Promise<void> {
+    try {
+      const limit = AbortSignal.timeout(15_000);
+      await this.#fetch(new URL("api/agent-tokens/revoke", this.#apiUrl), {
+        method: "POST", credentials: "omit", signal: signal ? AbortSignal.any([signal, limit]) : limit,
+        headers: { "content-type": "application/json", accept: "application/json" }, body: JSON.stringify({ refresh_token: refreshToken }),
+      });
+    } catch (error) {
+      if (signal?.aborted) throw signal.reason ?? error;
+      // best effort: the tokens go from this device either way
+    }
   }
 
   async getAccessToken(signal?: AbortSignal): Promise<string> {
@@ -203,6 +267,8 @@ export class AgentTokenProvider implements TokenProvider {
       }
       throw error;
     }
+    // A renewal may leave out who signed in: it is still the same person.
+    if (renewed.user === undefined && current.user !== undefined) renewed = { ...renewed, user: current.user };
     await this.#remember(renewed);
     return renewed;
   }
@@ -235,17 +301,7 @@ export class AgentTokenProvider implements TokenProvider {
     }
     const text = await response.text();
     if (!response.ok) throw toApiError(response, text);
-    const issued = JSON.parse(text) as Record<string, unknown>;
-    const now = this.#now();
-    return {
-      accessToken: String(issued["access_token"] ?? ""),
-      accessExpiresAt: now + Number(issued["expires_in"] ?? 0) * 1000,
-      refreshToken: String(issued["refresh_token"] ?? ""),
-      refreshExpiresAt: now + Number(issued["refresh_expires_in"] ?? 0) * 1000,
-      deviceId: String(issued["device_id"] ?? ""),
-      agentId: String(issued["agent_id"] ?? ""),
-      agent: String(issued["agent"] ?? this.agent),
-    };
+    return readTokenSet(JSON.parse(text) as Record<string, unknown>, this.#now(), this.agent);
   }
 }
 

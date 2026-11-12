@@ -4,6 +4,7 @@ import { toApiError } from "../http/errorReader.js";
 import { toWireManifest, type AppManifest } from "../manifest.js";
 import { toAgentPrincipal, toAgentProfile, toSkillList, toWireEvent, type AgentClientEvent, type AgentPrincipal, type AgentProfile, type SkillList, type AnswerScope } from "../models.js";
 import type { ToolClass, ToolMode } from "../tools/toolModes.js";
+import { toAgentToolList, type AgentToolInfo } from "../serverTools.js";
 import { AgentProvenanceResource } from "./provenance.js";
 import { grantObject, grantString, grantNumber, toAgentGrant, toAgentGrants, toWireGrant,
   type GrantRequest, type GrantExtension, type AgentGrant, type GrantList, type GrantReport, type StepUpStarted, type StepUpPoll } from "../grants.js";
@@ -58,6 +59,20 @@ export class AgentResource {
   /** The agent's current version: model, tool contract, local MCP mode, tool modes; never its instructions. */
   async getProfile(signal?: AbortSignal): Promise<AgentProfile> {
     return toAgentProfile(await this.#transport.get<unknown>(this.#route("profile"), signal));
+  }
+
+  /**
+   * The tools of the organisation's MCP servers for the signed-in user and this agent, each with whether it is allowed and
+   * switched on (`GET /v1/agents/{agent}/tools`). Null when the server does not list them (an older one, without the route:
+   * a 404 whose code is not `agent_not_found`); an unknown agent stays an error. .NET: `AgentResource.ListToolsAsync`.
+   */
+  async listTools(signal?: AbortSignal): Promise<AgentToolInfo[] | null> {
+    try {
+      return toAgentToolList(await this.#transport.get<unknown>(this.#route("tools"), signal));
+    } catch (error) {
+      if (error instanceof FadenstackApiError && error.status === 404 && error.code !== "agent_not_found") return null;
+      throw error;
+    }
   }
 
   /** Current policy for a device's explicit user command. Never invokes a native/gateway tool or a model. */

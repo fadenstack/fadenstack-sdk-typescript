@@ -15,12 +15,28 @@ export {
   MemoryTokenStore,
   StaticTokenProvider,
   loginWithPassword,
+  readTokenSet,
   type AgentTokenProviderOptions,
   type PasswordLoginOptions,
+  type SignedInUser,
   type TokenProvider,
   type TokenSet,
   type TokenStore,
 } from "./auth/tokens.js";
+export {
+  AgentPairing,
+  FadenstackPairingDeniedError,
+  FadenstackPairingExpiredError,
+  FadenstackPairingUnsupportedError,
+  PairingStart,
+  type AgentPairingOptions,
+  type PairingClient,
+  type PairingProgress,
+  type PairingResult,
+  type PairingState,
+  type PairingWaitOptions,
+} from "./auth/pairing.js";
+export { toAgentToolList, type AgentToolInfo } from "./serverTools.js";
 export { BYPASS_SUPPORTS, CLIENT_SUPPORTS_HEADER, FadenstackTransport, jsonRequest, type FetchLike, type RequestSpec, type TransportOptions } from "./http/transport.js";
 export { parseError, toApiError, retryAfterMs, type ParsedError } from "./http/errorReader.js";
 export { FadenstackChatClient, requestBody, toolCall, toFadenstackEvent, type ChatClientSettings } from "./chat/chatClient.js";

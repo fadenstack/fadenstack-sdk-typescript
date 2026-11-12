@@ -66,6 +66,11 @@ export interface FakeAgent {
    * skills module: the route answers `available: false`.
    */
   skills?: { slug: string; name?: string; description?: string; activation?: string }[];
+  /**
+   * The organisation's MCP tools the server lists for this agent (`GET /v1/agents/{agent}/tools`: names, servers,
+   * whether allowed and switched on). Without it the route answers 404, as a server from before the list does.
+   */
+  serverTools?: { name: string; server?: string; description?: string; allowed?: boolean; enabled?: boolean }[];
   /** Its marking policy, over the server's (`provenance.policy`): `GET .../provenance/policy` answers with both. */
   provenancePolicy?: ProvenancePolicy;
 }
@@ -181,6 +186,41 @@ export interface FakeGatewayOptions {
   grants?: FakeGrantsOptions | true;
   /** The profile names the signed-in user and device (`principal`), as a 0.7 server does. On with `grants`. */
   principal?: boolean;
+  /**
+   * Sign-in by pairing (RFC 8628: `POST /api/agent-tokens/pairings`, `.../pairings/token`), as core 0.7.1 serves it. Off by
+   * default: an older server answers 404; `{ unsupported: 405 }` is core 0.7.0, whose route of the same path takes another
+   * method. `gateway.pairings` is the server's side; `approvePairing` is the person in the console.
+   */
+  pairing?: FakePairingOptions | true;
+}
+
+/** How the fake server pairs. */
+export interface FakePairingOptions {
+  /** An older server: the status the pairing routes answer (404 or 405). */
+  unsupported?: 404 | 405;
+  /** Seconds between polls the server asks for (default 5). */
+  interval?: number;
+  /** Seconds a code lives (default 600). */
+  expiresIn?: number;
+  /** The polls (counted from 1, per pairing) the server answers `slow_down`. */
+  slowDown?: number[];
+  /** Names this origin for the console page instead of the server's own: a hostile or misconfigured server. */
+  pageOrigin?: string;
+  /** The starts one address may make before the server answers 429 (default: no limit). */
+  startLimit?: number;
+}
+
+/** A pairing the fake server started, for assertions. */
+export interface FakePairing {
+  /** The secret the app polls with; a test checks it never reaches a log or a page. */
+  readonly pairingCode: string;
+  readonly userCode: string;
+  readonly agent: string;
+  readonly deviceLabel: string | null;
+  readonly client: { name: string; version: string; os: string };
+  readonly state: "pending" | "approved" | "denied" | "consumed";
+  /** How often the app polled. */
+  readonly polls: number;
 }
 
 /** A record the fake server signed, with the agent and the request it was signed for. */
@@ -196,6 +236,14 @@ export interface CapturedRequest {
   path: string;
   headers: Record<string, string>;
   body: unknown;
+}
+
+interface PairingRow extends FakePairing {
+  expiresAt: number;
+  userId?: string;
+  // the row is changed in place by the routes; the public view is a copy
+  state: FakePairing["state"];
+  polls: number;
 }
 
 interface SignIn {
@@ -256,6 +304,8 @@ export class FakeGateway {
   readonly #agents: Map<string, Required<Pick<FakeAgent, "slug" | "name" | "id" | "version">> & FakeAgent>;
   readonly #users: (FakeUser & { id: string })[];
   readonly #signIns: SignIn[] = [];
+  readonly #pairings: PairingRow[] = [];
+  #pairingStarts = 0;
   readonly #logins = new Map<string, string>();
   readonly #pendingApprovals = new Map<string, (approved: boolean) => void>();
   readonly #options: FakeGatewayOptions;
@@ -311,6 +361,37 @@ export class FakeGateway {
   /** The devices signed in, for assertions. */
   get signIns(): readonly { deviceId: string; agent: string; userId: string; label: string | null; revoked: boolean }[] {
     return this.#signIns.map(({ deviceId, agent, userId, label, revoked }) => ({ deviceId, agent, userId, label, revoked }));
+  }
+
+  /** The pairings started, in order (see `FakeGatewayOptions.pairing`). */
+  get pairings(): readonly FakePairing[] {
+    return this.#pairings.map((p) => ({ pairingCode: p.pairingCode, userCode: p.userCode, agent: p.agent, deviceLabel: p.deviceLabel,
+      client: p.client, state: p.state, polls: p.polls }));
+  }
+
+  /** The person approves the newest pending pairing (or the one with `userCode`) in the console, as `email`. */
+  approvePairing(email = this.#users[0]!.email, userCode?: string): void {
+    const user = this.#users.find((u) => u.email === email);
+    if (!user) throw new Error(`No user ${email}.`);
+    const row = this.#pendingPairing(userCode);
+    row.state = "approved";
+    row.userId = user.id;
+  }
+
+  /** The person denies the newest pending pairing (or the one with `userCode`). */
+  denyPairing(userCode?: string): void {
+    this.#pendingPairing(userCode).state = "denied";
+  }
+
+  /** Every pending pairing's code runs out now. */
+  expirePairings(): void {
+    for (const p of this.#pairings) p.expiresAt = 0;
+  }
+
+  #pendingPairing(userCode?: string): PairingRow {
+    const row = [...this.#pairings].reverse().find((p) => p.state === "pending" && (userCode === undefined || p.userCode === userCode));
+    if (!row) throw new Error("No pending pairing.");
+    return row;
   }
 
   /** An in-process `fetch` that answers for `serverUrl`. */
@@ -386,6 +467,8 @@ export class FakeGateway {
     if (method === "POST" && path === "/api/agent-tokens") return this.#issue(request, body);
     if (method === "POST" && path === "/api/agents") return this.#createAgent(request, body);
     if (method === "POST" && path === "/api/agent-tokens/refresh") return this.#refresh(body);
+    if (path === "/api/agent-tokens/revoke") return method === "POST" ? this.#revokeTokens(body) : json(405, { detail: "Method Not Allowed" });
+    if (path === "/api/agent-tokens/pairings" || path === "/api/agent-tokens/pairings/token") return this.#pairingRoute(request, path, body);
     if (path === "/api/agent-tokens/step-ups" || path === "/api/agent-tokens/step-ups/token") return this.#stepUp(request, path, body);
     if (method === "GET" && path === "/api/health") return json(200, { status: "ok" });
     if (method === "GET" && path === "/v1/features") return json(200, { edition: "community", features: ["agents"] });
@@ -394,7 +477,7 @@ export class FakeGateway {
       return json(200, { object: "list", data: (this.#options.models ?? ["fake-model"]).map((id) => ({ id, object: "model" })) });
     }
     if (path === "/v1/provenance/anchors" || path === "/v1/provenance/verify") return this.#provenanceRoute(request, path, body);
-    const match = /^\/v1\/agents\/([^/]+)\/(profile|user|skills|chat\/completions|events|manifest|approvals\/([^/]+)|provenance\/(policy|records|placements|verify)|grants((?:\/[^/]+){0,2}))$/
+    const match = /^\/v1\/agents\/([^/]+)\/(profile|user|skills|tools|chat\/completions|events|manifest|approvals\/([^/]+)|provenance\/(policy|records|placements|verify)|grants((?:\/[^/]+){0,2}))$/
       .exec(path);
     if (!match) return json(404, { detail: "Not Found" });
     const agent = decodeURIComponent(match[1]!);
@@ -403,6 +486,7 @@ export class FakeGateway {
     const route = match[2]!;
     if (method === "GET" && route === "profile") return json(200, this.#profile(agent, auth, request.headers.get("x-faden-client-supports")));
     if (method === "GET" && route === "skills") return json(200, this.#skills(agent, url));
+    if (method === "GET" && route === "tools") return this.#serverTools(agent);
     if (method === "PATCH" && route === "user") return this.#userSettings(auth, body);
     if (method === "POST" && route === "chat/completions") return this.#chat(request, agent, body);
     if (method === "POST" && route === "events") return this.#events(body);
@@ -414,6 +498,75 @@ export class FakeGateway {
       return json(answer.status, answer.body, answer.headers);
     }
     return json(405, { detail: "Method Not Allowed" });
+  }
+
+  // -- pairing --------------------------------------------------------------------------------------
+
+  /** `POST /api/agent-tokens/revoke`: ends the sign-in the refresh token belongs to; 204 whatever it names, as core does. */
+  #revokeTokens(body: unknown): Response {
+    const token = String(((body ?? {}) as Record<string, unknown>)["refresh_token"] ?? "");
+    for (const s of this.#signIns) if (s.refresh === token || s.spent.has(token)) s.revoked = true;
+    return new Response(null, { status: 204 });
+  }
+
+  #pairingRoute(request: Request, path: string, body: unknown): Response {
+    const options = this.#options.pairing === true ? {} : this.#options.pairing;
+    if (!options) return json(404, { detail: "Not Found" });
+    if (options.unsupported) return json(options.unsupported, { detail: options.unsupported === 404 ? "Not Found" : "Method Not Allowed" });
+    if (request.method !== "POST") return json(405, { detail: "Method Not Allowed" });
+    const b = (body ?? {}) as Record<string, unknown>;
+    const noStore = { "cache-control": "no-store" };
+    if (path.endsWith("/token")) {
+      const row = this.#pairings.find((p) => p.pairingCode === b["pairing_code"]);
+      const error = (code: string, extra: Record<string, unknown> = {}) =>
+        json(400, { error: code, error_description: code, ...extra }, noStore);
+      if (!row || row.state === "consumed") return error("invalid_grant");
+      if (row.expiresAt <= this.#now()) return error("expired_token");
+      row.polls += 1;
+      if (row.state === "denied") return error("access_denied");
+      if (row.state === "approved") {
+        const agent = this.#agents.get(row.agent);
+        const signIn: SignIn = {
+          deviceId: `device-${this.#next()}`, userId: row.userId!, agent: agent?.slug ?? row.agent, access: "", accessExpires: 0, refresh: "",
+          refreshExpires: 0, revoked: false, label: row.deviceLabel, spent: new Set(),
+        };
+        this.#signIns.push(signIn);
+        row.state = "consumed";
+        return json(201, this.#tokens(signIn, agent?.id ?? ""), noStore);
+      }
+      if (options.slowDown?.includes(row.polls)) return error("slow_down", { interval: (options.interval ?? 5) + 5 });
+      return error("authorization_pending");
+    }
+    const client = (b["client"] ?? {}) as Record<string, unknown>;
+    if (typeof b["agent"] !== "string" || !b["agent"] || [client["name"], client["version"], client["os"]].some((v) => typeof v !== "string")) {
+      return json(422, { detail: [{ msg: "agent and client (name, version, os) are required" }] });
+    }
+    this.#pairingStarts += 1;
+    if (options.startLimit !== undefined && this.#pairingStarts > options.startLimit) {
+      return json(429, { detail: { code: "too_many_requests", message: "Too many sign-in requests from this address; try again later." } },
+        { "retry-after": "60" });
+    }
+    const n = this.#next();
+    const userCode = `ABCD-${String(1000 + Number(n)).slice(-4)}`;
+    const row: PairingRow = {
+      pairingCode: `pairing-secret-${n}`, userCode, agent: b["agent"] as string, deviceLabel: typeof b["device_label"] === "string" ? b["device_label"] : null,
+      client: { name: String(client["name"]), version: String(client["version"]), os: String(client["os"]) },
+      state: "pending", polls: 0, expiresAt: this.#now() + (options.expiresIn ?? 600) * 1000,
+    };
+    this.#pairings.push(row);
+    const page = `${options.pageOrigin ?? this.serverUrl}/pair`;
+    return json(201, {
+      pairing_code: row.pairingCode, user_code: userCode, verification_uri: page, verification_uri_complete: `${page}#code=${userCode}`,
+      expires_in: options.expiresIn ?? 600, interval: options.interval ?? 5,
+    }, noStore);
+  }
+
+  /** `GET /v1/agents/{agent}/tools`: the organisation's MCP tools, or 404 as a server from before the list. */
+  #serverTools(slug: string): Response {
+    const tools = this.#agents.get(slug)?.serverTools;
+    if (!tools) return json(404, { detail: "Not Found" });
+    return json(200, { tools: tools.map((t) => ({ name: t.name, server: t.server ?? "", description: t.description ?? "",
+      allowed: t.allowed ?? true, enabled: t.enabled ?? true })) });
   }
 
   /** The second sign-in for Bypass (`/api/agent-tokens/step-ups`): started by a signed-in app, polled with the code. */
@@ -640,7 +793,14 @@ export class FakeGateway {
     return {
       access_token: signIn.access, token_type: "bearer", expires_in: access, refresh_token: signIn.refresh,
       refresh_expires_in: refresh, device_id: signIn.deviceId, agent_id: agentId, agent: signIn.agent,
+      // As core 0.7.1 answers: who signed in.
+      user: this.#userOf(signIn),
     };
+  }
+
+  #userOf(signIn: SignIn): Record<string, unknown> | null {
+    const user = this.#users.find((u) => u.id === signIn.userId);
+    return user ? { id: user.id, email: user.email, display_name: user.email.split("@")[0] } : null;
   }
 
   #authorize(request: Request, agent: string): SignIn | Response {

@@ -7,6 +7,8 @@ export {
   type FakeGatewayOptions,
   type FakeModel,
   type FakeModelRequest,
+  type FakePairing,
+  type FakePairingOptions,
   type FakeProvenanceOptions,
   type FakeReply,
   type FakeSignedRecord,
