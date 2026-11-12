@@ -10,14 +10,14 @@ import { FakeGateway } from "@fadenstack/testing";
 
 const unmarked = { type: "CUSTOM", name: "faden.unmarked", value: { reason: "allowed-by-administrator" } };
 
-async function chat(events: Record<string, unknown>[], options: AgentChatOptions = {}) {
+async function chat(events: Record<string, unknown>[], options: AgentChatOptions = {}, start = true) {
   const gateway = new FakeGateway({ agents: [{ slug: "page", name: "Page" }], model: () => ({ text: "Answer.", events }) });
   const { client, tokens } = FadenstackClient.forAgent({ serverUrl: gateway.serverUrl, agent: "page", fetch: gateway.fetch });
   await tokens.signIn(await loginWithPassword({ apiUrl: gateway.serverUrl, email: "user@example.com", password: "secret", fetch: gateway.fetch }));
   const approvals = new ApprovalBroker();
   const agent = FadenstackAgent.createBuilder().useClient(client).useSessionStore(new MemorySessionStore()).useApprovals(approvals).build();
   const vm = new AgentChatViewModel(agent, approvals, { scheduler: immediateScheduler, preferences: new MemoryPreferenceStore(), automaticLanguage: "en", ...options });
-  await vm.initialize();
+  if (start) await vm.initialize();
   return vm;
 }
 
@@ -54,6 +54,13 @@ describe("the notice for an answer without an AI mark (faden.unmarked)", () => {
     await second.setShowUnmarkedNotice(false);
     expect(preferences.get(UNMARKED_PREFERENCE)).toBeUndefined();
     expect((await chat([unmarked], { preferences })).showUnmarkedNotice).toBe(false);
+  });
+
+  it("is off from the first paint, and a store that answers at once is read at once", async () => {
+    expect((await chat([unmarked], {}, false)).showUnmarkedNotice).toBe(false);
+    const preferences = new MemoryPreferenceStore();
+    preferences.set(UNMARKED_PREFERENCE, "1");
+    expect((await chat([unmarked], { preferences }, false)).showUnmarkedNotice).toBe(true);
   });
 
   it("reads a store that answers later", async () => {
