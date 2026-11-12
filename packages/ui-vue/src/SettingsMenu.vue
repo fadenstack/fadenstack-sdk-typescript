@@ -61,6 +61,18 @@ function closeAbout(returnFocus: boolean): void {
         </button>
         <div v-if="chat.isLanguageLocked" class="fdn-menu-note">{{ chat.strings.languageLocked }}</div>
       </div>
+      <div role="group" :aria-label="chat.strings.settingsUnmarked" v-bind="languages ? { class: 'fdn-menu-extra' } : {}">
+        <button
+          type="button"
+          role="menuitemcheckbox"
+          :aria-checked="chat.showUnmarkedNotice"
+          class="fdn-menu-item"
+          @click="chat.setShowUnmarkedNotice(!chat.showUnmarkedNotice)"
+        >
+          <span class="fdn-menu-check"><Icon v-if="chat.showUnmarkedNotice" name="check" :size="14" /></span>
+          <span class="fdn-menu-label">{{ chat.strings.settingsUnmarked }}</span>
+        </button>
+      </div>
       <ApprovalsSection :grants="chat.grants" />
       <div v-if="slots.default" v-bind="languages ? { class: 'fdn-menu-extra' } : {}"><slot /></div>
       <div v-bind="languages || slots.default ? { class: 'fdn-menu-extra' } : {}">

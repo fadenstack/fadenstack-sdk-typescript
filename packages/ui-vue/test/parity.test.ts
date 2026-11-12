@@ -130,6 +130,30 @@ describe("the settings draw the same in both panels", () => {
   });
 });
 
+describe("the unmarked-answer setting and notice draw the same in both panels", () => {
+  it("off, on, with the notice, and in German", async () => {
+    const unmarked = { type: "CUSTOM", name: "faden.unmarked", value: { reason: "allowed-by-administrator" } };
+    const { chat } = await chatWith(() => ({ text: "ok", events: [unmarked] }));
+    const panels = both(chat);
+    chat.setSettingsOpen(true);
+    await panels.same();
+    expect(document.querySelectorAll('[role="menuitemcheckbox"][aria-checked="false"]')).toHaveLength(2); // one per panel
+    await chat.setShowUnmarkedNotice(true);
+    await panels.same();
+    expect(document.querySelectorAll('[role="menuitemcheckbox"][aria-checked="true"]')).toHaveLength(2);
+    await chat.send("Hi");
+    await panels.same();
+    expect(document.body.textContent).toContain("Answer without an AI mark");
+
+    const german = await chatWith(() => ({ text: "ok", events: [unmarked] }), { strings: germanStrings });
+    const germanPanels = both(german.chat);
+    await german.chat.setShowUnmarkedNotice(true);
+    await german.chat.send("Hallo");
+    german.chat.setSettingsOpen(true);
+    await germanPanels.same();
+  });
+});
+
 describe("About and the Fadenstack link draw the same in both panels", () => {
   it("with About open, the footer link, a host's refSource, and without branding", async () => {
     const { chat } = await chatWith(() => ({ text: "ok" }), { refSource: "office" });
