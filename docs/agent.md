@@ -84,9 +84,43 @@ short code, the person approves it in the web console, and the app receives the 
 import { AgentPairing } from "@fadenstack/client";
 
 const pairing = new AgentPairing({ apiUrl: "https://ai.example.internal", store });
-const start = await pairing.start("docs", "Viewer on PC-7", { name: "Viewer", version: "1.0", os: "Windows 11" });
+const app = { name: "Viewer", version: "1.0", os: "Windows 11" }; // what the approval page shows as the app's own word
+const start = await pairing.start("docs", "Viewer on PC-7", app);
 show(start.userCode, start.verificationUriComplete);
 await pairing.wait(start, { onProgress, signal }); // saved in the store for "docs"
+```
+
+`wait` polls until the person approves, and returns a `PairingResult` (`agentSlug`, `deviceId`, `signedInUser`, and
+`ignoredAgents` when there are any). It throws a `FadenstackPairingDeniedError` when the person denies the pairing and
+a `FadenstackPairingExpiredError` when the code expires; `start` throws a `FadenstackRateLimitedError` when too many
+pairings were started from one address. Open `verificationUriComplete` in the person's browser, for example with
+`openInBrowser` from `@fadenstack/agents`: opening it approves nothing.
+
+### The page is on the server's own address
+
+The page the person opens (`verificationUri` and `verificationUriComplete`) must be on the origin of `apiUrl`. The
+server may name it with a relative address, which is resolved against `apiUrl`. A page on another origin, or with a
+user name or password in its address, is refused with a `FadenstackError` before anything is shown or opened. The
+pairing code the SDK polls with stays inside the `PairingStart`: it is not a property, and `toString()` and
+`toJSON()` leave it out.
+
+### A server that is too old
+
+A server without the pairing routes answers 404, or 405 from core 0.7.0. `start`, `wait` and `redeem` then throw a
+`FadenstackPairingUnsupportedError`. Fall back to the password for that server:
+
+```ts
+import { FadenstackPairingUnsupportedError, loginWithPassword } from "@fadenstack/client";
+
+try {
+  const start = await pairing.start("docs", "Viewer on PC-7", app);
+  show(start.userCode, start.verificationUriComplete);
+  await pairing.wait(start);
+} catch (error) {
+  if (!(error instanceof FadenstackPairingUnsupportedError)) throw error;
+  const login = await loginWithPassword({ apiUrl: "https://ai.example.internal", email, password });
+  await tokens.signIn(login, "Viewer on PC-7");
+}
 ```
 
 ### One approval for several agents
@@ -98,7 +132,7 @@ approval, without waiting. Each agent can be collected once, and each is a sign-
 that agent.
 
 ```ts
-const start = await pairing.start("word", "Office on PC-7", client, { agents: ["excel", "outlook"] });
+const start = await pairing.start("word", "Office on PC-7", app, { agents: ["excel", "outlook"] });
 show(start.userCode, start.verificationUriComplete);
 await pairing.wait(start);                 // the approval; tokens for "word"
 await pairing.redeem(start, "excel");      // one request each, no waiting
@@ -197,7 +231,7 @@ const agent = FadenstackAgent.createBuilder()
 | `useServer(serverUrl, credentials, options?)` | Instead of `useClient`: the builder creates the client. Needs `useAgent`. |
 | `useAgent(slug)` | The agent's slug or id. Not needed with `useClient`. |
 | `addTools(...tools)` | Host tools, from `defineTool`. See [Tools and approvals](tools.md). |
-| `addToolSource(source)` | Tools that are added once the agent's profile is known. |
+| `addToolSource(source)` | Tools that are added once the agent's profile is known. A source that can change its tools while the agent runs is a `ChangingToolSource`. See [Tools from other sources](tools.md#tools-from-other-sources). |
 | `useApprovals(handler)` | Who decides on tool calls that need approval. Without one, every such call is declined. |
 | `useSessionStore(store)` | Where sessions live. By default the signed-in user's own IndexedDB database in a browser and memory elsewhere. See [Sessions on the device](sessions.md). |
 | `useApprovalStore(store)` | Where "Allow always" is kept. By default the signed-in user's own IndexedDB database in a browser and memory elsewhere. See [Tools and approvals](tools.md#allow-always). |
@@ -211,8 +245,11 @@ const agent = FadenstackAgent.createBuilder()
 | `useDefaultToolMode(mode)` | A cap on the mode new sessions start in (the agent's default level from the server). It narrows, never widens. |
 | `useMaxRounds(rounds)` | Model calls per turn before the loop stops. Default 16. |
 | `useHistoryBudget(tokens)` | About how many tokens of history a request carries. Older turns are left out. Default 24 000. |
-| `useReasoning(effort)` | How much a reasoning model thinks before it answers: `none`, `minimal`, `low`, `medium`, `high` or `xhigh`. Models without the setting ignore it. |
+| `useReasoning(effort)` | How much a reasoning model thinks before it answers, when the person has not picked: `none`, `minimal`, `low`, `medium`, `high` or `xhigh` (the values of `ReasoningEffort`). Models without the setting ignore it. See [How long the agent thinks](#how-long-the-agent-thinks). |
+| `useReasoningStore(store)` | Where the level of thinking a person picked is kept, per person and agent. By default the signed-in user's own IndexedDB database in a browser, and memory elsewhere. |
 | `useEventReporting(enabled)` | Whether the agent reports its tool runs, approvals and the app's manifest to the server. Default on. |
+| `useLogging(logger)` | Where the SDK logs: a `FadenstackLogger`. Names, ids, counts and durations, never content. Nowhere by default. See [Logging](#logging). |
+| `requireHostToolPolicyChecks()` | Refuses to start against a server that does not offer the fresh policy check for host tools. See [Host commands and central policy](host-commands.md#requiring-the-check). |
 | `describeApp(app)` | The application the agent runs in, for the manifest. See [Tools and approvals](tools.md#the-app-manifest). |
 | `addChatStage(order, wrap)` | Wraps the chat, for example to mask what goes out. |
 | `addToolStage(order, stage)` | Wraps each tool call: sees the arguments before and the result after. |
@@ -371,6 +408,99 @@ const result = await session.send("Check this paragraph for errors.", {
 
 Attachments are sent with the message, ahead of its text, and kept with it in the session, so later turns still see
 what the question was about.
+
+## How long the agent thinks
+
+The chat panel shows a "thinking" pill in its header, where the person picks how long the agent thinks before it
+answers. The levels are `ReasoningLevel`: `auto`, `off`, `low`, `medium` and `high`. `off` goes on the wire as `none`.
+The pick is kept per person and per agent on the device, in the signed-in user's own IndexedDB database
+(`fadenstack-preferences:<tenant>:<user>`), and a change applies from the next message.
+
+In code:
+
+```ts
+agent.reasoningChoices.levels; // the levels the agent offers, in menu order
+agent.reasoningChoices.max;    // the most the server allows, or undefined
+agent.reasoning;               // the level new messages think at
+await agent.setReasoning("low"); // keeps the pick; undefined forgets it; a level the agent does not offer is ignored
+session.reasoning = "high";      // this chat only, from the next message; a level above the maximum sends the maximum
+```
+
+In the view model the pill is `chat.reasoningOptions` (each with `level`, `label`, `description` and `selected`),
+`chat.reasoningLevel`, `chat.selectedReasoning`, `chat.reasoningPillText`, `chat.reasoningToolTip`,
+`chat.isReasoningMenuOpen` and `chat.setReasoningMenuOpen(open)`, and `await chat.selectReasoning(level)` takes the pick.
+Both skins draw it. See [The chat panel](chat-panel.md).
+
+### The server's maximum
+
+The server can only set a maximum, in the agent version's `ui`:
+
+```json
+{ "reasoning": { "max": "low" } }
+```
+
+`max` is optional and is one of the gateway's names: `none`, `minimal`, `low`, `medium`, `high`, `xhigh` or `max`.
+Anything else is ignored, and the agent offers every level.
+
+- The pill hides the levels above the maximum. Off is always offered.
+- `minimal` lies between none and low. The SDK has no level there, so `minimal` caps at `none`: the pill offers Auto
+  and Off.
+- `max` is the top of the gateway's scale. It sets no cap.
+- With a maximum, Auto means the maximum, and it is sent. Without one, Auto sends no field.
+- A pick above a later, lower maximum shows and sends the maximum. The profile is read again at the start of a session
+  once it is a minute old, so a maximum an administrator lowers reaches the next message.
+- The order is: the person's pick, then `useReasoning`, then Auto, each lowered to the maximum.
+
+`useReasoning` goes out as the app set it, so `xhigh` stays `xhigh`, unless the maximum is lower. The panel shows
+`minimal` as Low and `xhigh` as High. `max` is not a value for `useReasoning`; it only names a server maximum.
+
+The turn's start entry in the session records `reasoning_effort`: the effort the request carried, or `auto` when it
+carried none.
+
+## Logging
+
+`useLogging(logger)` gives the agent a place to write what it does. A `FadenstackLogger` has one method,
+`log(event: LogEvent)`:
+
+```ts
+import { consoleLogger } from "@fadenstack/client";
+
+const agent = FadenstackAgent.createBuilder()
+  .useClient(client)
+  .useLogging(consoleLogger("information")) // or { log: (event) => myLogger.write(event) }
+  .build();
+```
+
+A `LogEvent` has a `category`, an `eventId`, an `eventName`, a `level` (`debug`, `information`, `warning` or `error`),
+the `message` with its fields put in, the `fields` as a plain object, and the `scope` (`ConversationId`, `TurnId`) of a
+turn's entries. The ids, names and field names are the .NET SDK's, so one dashboard reads both. There is no file sink in
+a browser; forward the events to the logger your application has. `consoleLogger(minimum?, sink?)` writes them to a
+console, for development. A logger that throws never fails a turn or a request. The default is no logging.
+
+**Logs hold no content.** The SDK writes names, ids, counts, durations and outcomes. It never writes a prompt, an
+answer, reasoning, attachment text, tool arguments or results, a token or a secret, or who the user is. A field is a
+string, a number, a boolean or null: a structure is cut to its type name, and text is cut at 200 characters. The name of
+a tool the model made up is logged as `(unknown)`.
+
+The client gets the logger too, unless it has one: `useLogging` reaches a client made elsewhere. A client made with
+`forAgent` or `new FadenstackClient` can take a `logger` option of its own.
+
+| Category | Id | Event | Level |
+|---|---|---|---|
+| `Fadenstack.Client` | 1000, 1001 | `Request`, `RequestFailed` | information, warning |
+| | 1010-1013 | `TokenRefreshed`, `TokenRefreshFailed`, `SignedOut`, `SignOutRevokeFailed` | information, warning |
+| | 1020 | `EventSkipped` | warning |
+| | 1030-1033 | `PairingStarted`, `PairingSlowedDown`, `PairingRetrying`, `PairingEnded` | information, warning |
+| `Fadenstack.Agents` | 2000-2003 | `ProfileLoaded`, `ToolsSettled`, `ToolDropped`, `BypassMode` | information, warning |
+| | 2009 | `ProfileRereadFailed` | warning |
+| | 2010-2012 | `TurnStarted`, `TurnEnded`, `ModelRequest` | information, debug |
+| | 2013, 2014 | `ToolsRefreshed`, `ToolsRefreshFailed` | information, warning |
+| | 2020, 2021 | `ToolCall`, `Approval` | information |
+| | 2030 | `Notice` | information |
+
+The agent's events are the `AgentLog` entries of `@fadenstack/agents`; the client's are `ClientLog` in
+`@fadenstack/client`. The .NET events about files on a disk (data export, adoption) have no use in a browser and are not
+here.
 
 ## What the agent reports
 
