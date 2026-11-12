@@ -19,11 +19,11 @@ import {
 } from "@fadenstack/client";
 
 import type { PermissionMode } from "./approvals.js";
-import { IndexedDbApprovalStore, MemoryApprovalStore, type ApprovalStore, type StoredApproval } from "./approvalStore.js";
-import { IndexedDbSessionStore } from "./indexedDbSessionStore.js";
-import { MemorySessionStore, type SessionStore } from "./sessionStore.js";
+import { type ApprovalStore, type StoredApproval } from "./approvalStore.js";
+import { DefaultStores, buildExport, deleteUserDatabases, type DataDeletion, type MyDataExport } from "./dataRights.js";
+import { DEFAULT_RETENTION, withinServerRetention, type SessionStore } from "./sessionStore.js";
+import type { StoreProblem } from "./storeSupport.js";
 import { StepUpProofs, isStepUpHandler, type StepUpHandler } from "./stepUp.js";
-import { userStoreName } from "./userData.js";
 
 import { AgentBuilder, UNDESCRIBED_APP_NAME, type AgentSettings, type AppDescription } from "./builder.js";
 import { EventReporter } from "./reporter.js";
@@ -59,6 +59,8 @@ export class FadenstackAgent {
   #sessions: SessionStore | undefined;
   #approvalStore: ApprovalStore | undefined;
   #storesFor: string | undefined;
+  #defaults: DefaultStores | undefined;
+  #problems = 0;
   #starting: Promise<void> | undefined;
   #warned = false;
   #hostPolicySeen = false;
@@ -155,6 +157,7 @@ export class FadenstackAgent {
     if (who(before) !== who(fresh)) throw new FadenstackError("The agent or the signed-in user changed. Reconnect before starting a session.");
     this.#tools = this.#compose(this.#settleHostTools(fresh), this.#sourceTools);
     this.#profile = fresh;
+    this.#applyRetention(fresh);
     this.#profileRead = this.clock();
     if (this.#context) this.#context = { ...this.#context, profile: fresh };
   }
@@ -310,6 +313,7 @@ export class FadenstackAgent {
     this.#profileRead = this.clock();
     this.#context = context;
     this.#settleStores(profile.principal);
+    this.#applyRetention(profile);
     if (this.settings.permissionMode === "bypass" && !this.#warned) {
       if (!this.bypassOffered) {
         this.#warned = true;
@@ -333,13 +337,18 @@ export class FadenstackAgent {
   #settleStores(principal: AgentPrincipal | undefined): void {
     const key = principal ? `${principal.tenantId}\n${principal.userId}` : "";
     if (this.#storesFor === key) return;
-    (this.#sessions as { close?: () => void } | undefined)?.close?.();
-    (this.#approvalStore as { close?: () => void } | undefined)?.close?.();
-    const indexed = !!globalThis.indexedDB;
-    this.#sessions = this.settings.sessions ? undefined
-      : indexed ? new IndexedDbSessionStore({ name: userStoreName("fadenstack-sessions", principal) }) : new MemorySessionStore();
-    this.#approvalStore = this.settings.approvalStore ? undefined
-      : indexed ? new IndexedDbApprovalStore({ name: userStoreName("fadenstack-approvals", principal) }) : new MemoryApprovalStore();
+    this.#defaults?.close();
+    const defaults = new DefaultStores({
+      principal,
+      retention: this.settings.sessionRetention ?? DEFAULT_RETENTION,
+      ...(this.settings.secretProtector ? { protector: this.settings.secretProtector } : {}),
+      onProblem: (problem) => this.#storeProblem(problem),
+      sessions: !this.settings.sessions,
+      approvals: !this.settings.approvalStore,
+    });
+    this.#defaults = defaults;
+    this.#sessions = defaults.sessions;
+    this.#approvalStore = defaults.approvals;
     this.#storesFor = key;
   }
 
@@ -460,9 +469,58 @@ export class FadenstackAgent {
 
   async dispose(): Promise<void> {
     await this.flush();
-    (this.#sessions as { close?: () => void } | undefined)?.close?.();
-    (this.#approvalStore as { close?: () => void } | undefined)?.close?.();
+    this.#defaults?.close();
     for (const source of this.settings.sources) await source.dispose?.();
+  }
+
+  /** The stricter of the app's limits and the server's (`local_retention`) for the sessions the SDK keeps; a limit the server leaves out stays. */
+  #applyRetention(profile: AgentProfile): void {
+    this.#defaults?.setRetention(withinServerRetention(this.settings.sessionRetention ?? DEFAULT_RETENTION, profile.localRetention));
+  }
+
+  #storeProblem(problem: StoreProblem): void {
+    this.#problems++;
+    try {
+      this.settings.onStoreProblem?.(problem);
+    } catch {
+      // a host's handler never breaks a read
+    }
+  }
+
+  /**
+   * The signed-in user's data on this device as one JSON document (an access request, GDPR Art. 15 and 20): every session of
+   * every agent the SDK's stores hold, decrypted, and the "Allow always" approvals. Without a user from the gateway these
+   * are the shared databases of an older SDK. Sign-in tokens are never included, nor is what the server keeps. A store the
+   * host passed is read for this agent only. .NET: `ExportMyDataAsync` (a ZIP there; a document here, which the host saves
+   * or offers as a download as it likes).
+   */
+  async exportMyData(signal?: AbortSignal): Promise<MyDataExport> {
+    await this.start(signal);
+    return buildExport(this.sessionStore, this.approvalStore, this.slug, () => this.#problems);
+  }
+
+  /**
+   * Deletes the signed-in user's data on this device (an erasure request, GDPR Art. 17): the user's IndexedDB databases --
+   * sessions, "Allow always" -- and their key, so that no copy left anywhere (a backup of the profile) can ever be read.
+   * Afterwards the stores start empty. It does not sign out (that is the host's call). It leaves stores the host passed to
+   * their owner -- they may hold other people's data -- but says so in the result, so a host never believes a person's data
+   * gone that its own store still keeps. What the server keeps is for its operator to erase. .NET: `DeleteMyDataAsync`.
+   */
+  async deleteMyData(signal?: AbortSignal): Promise<DataDeletion> {
+    await this.start(signal);
+    const principal = this.profile.principal;
+    await this.#defaults?.closeAsync();
+    let storesCleared = 0;
+    try {
+      storesCleared = await deleteUserDatabases(principal);
+    } finally {
+      this.#storesFor = undefined; // new, empty stores (and a new key) at the next use
+      this.#settleStores(principal);
+      this.#applyRetention(this.profile);
+    }
+    const hostSessionStoreLeft = this.settings.sessions !== undefined;
+    const hostApprovalStoreLeft = this.settings.approvalStore !== undefined;
+    return { storesCleared, hostSessionStoreLeft, hostApprovalStoreLeft, hostStoresLeft: hostSessionStoreLeft || hostApprovalStoreLeft };
   }
 
   /** The tools a mode offers the model. */

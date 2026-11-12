@@ -20,6 +20,18 @@ export interface SessionRetention {
 
 export const DEFAULT_RETENTION: SessionRetention = { maxSessions: 50, maxAgeDays: 90 };
 
+/**
+ * The stricter of the device's limits and the server's (`local_retention` in the profile); a limit the server leaves out
+ * stays. .NET: `SessionRetention.Within`.
+ */
+export function withinServerRetention(own: SessionRetention, server: { maxSessions?: number; maxAgeDays?: number } | undefined): SessionRetention {
+  if (!server) return own;
+  return {
+    maxSessions: Math.min(own.maxSessions, server.maxSessions ?? own.maxSessions),
+    maxAgeDays: Math.min(own.maxAgeDays, server.maxAgeDays ?? own.maxAgeDays),
+  };
+}
+
 /** Sessions in memory only: gone with the page or process. */
 export class MemorySessionStore implements SessionStore {
   readonly #sessions = new Map<string, TranscriptEntry[]>();

@@ -40,7 +40,7 @@ describe("stores per signed-in user", () => {
     await (await anna.startSession("ask")).send("write");
     await anna.dispose();
 
-    expect(await names()).toEqual(["fadenstack-approvals:tenant-1:user-1", "fadenstack-sessions:tenant-1:user-1"]);
+    expect(await names()).toEqual(["fadenstack-approvals:tenant-1:user-1", "fadenstack-keys:tenant-1:user-1", "fadenstack-sessions:tenant-1:user-1"]);
   });
 
   it("never lets two people in one browser profile see each other's chats or what they allowed always", async () => {
@@ -74,7 +74,7 @@ describe("stores per signed-in user", () => {
     const old = await agentFor(gateway, "anna@example.com");
     await (await old.startSession("ask")).send("write");
     await old.dispose();
-    expect(await names()).toEqual(["fadenstack-approvals", "fadenstack-sessions"]);
+    expect(await names()).toEqual(["fadenstack-approvals", "fadenstack-keys", "fadenstack-sessions"]);
 
     // The same browser profile, now against a gateway that names its users: nobody inherits what was kept before.
     const named = new FakeGateway({ users, principal: true, model, agents: [{ slug: "docs", contract: [...PAGE_CONTRACT] }] });
