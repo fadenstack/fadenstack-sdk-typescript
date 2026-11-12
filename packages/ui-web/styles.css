@@ -255,6 +255,14 @@
   color: var(--fdn-text);
 }
 
+/* The thinking pill beside the tool mode: the same pill, its level cut short when the panel is narrow. */
+.fdn-reasoning-button > span {
+  max-width: 150px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .fdn-menu-anchor {
   position: relative;
 }

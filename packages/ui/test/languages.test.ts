@@ -77,6 +77,20 @@ describe("a chat in German", () => {
   });
 });
 
+describe("the thinking pill's texts", () => {
+  it("are in no skin: the pill, its menu and the slot line take every word from the chat's strings", async () => {
+    const { readFileSync } = await import("node:fs");
+    const files = ["ui-react/src/ReasoningMenu.tsx", "ui-vue/src/ReasoningMenu.vue", "ui-react/src/Turn.tsx", "ui-vue/src/TurnView.vue"]
+      .map((f) => readFileSync(new URL(`../../${f}`, import.meta.url), "utf8"));
+    const words = [englishStrings.reasoningMenu, englishStrings.waitingForSlot, ...Object.values(englishStrings.reasoningLabel),
+      ...Object.values(englishStrings.reasoningDescription), englishStrings.reasoningPill("")];
+    for (const word of words) for (const source of files) {
+      expect(source).not.toContain(`>${word}<`);
+      expect(source).not.toContain(`"${word}"`);
+    }
+  });
+});
+
 describe("the approval texts", () => {
   it("are in no skin: the cards, markers and Settings section take every word from the chat's strings", async () => {
     const { readFileSync } = await import("node:fs");

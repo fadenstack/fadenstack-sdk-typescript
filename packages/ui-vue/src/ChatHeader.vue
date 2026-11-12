@@ -9,6 +9,7 @@ import { useViewModel } from "./composables.js";
 import HistoryMenu from "./HistoryMenu.vue";
 import Icon from "./Icon.vue";
 import ModeMenu from "./ModeMenu.vue";
+import ReasoningMenu from "./ReasoningMenu.vue";
 import SettingsMenu from "./SettingsMenu.vue";
 
 const props = defineProps<{ chat: AgentChatViewModel }>();
@@ -20,6 +21,7 @@ const chat = useViewModel(() => props.chat);
   <header class="fdn-header">
     <div class="fdn-header-title" :title="chat.title" dir="auto">{{ chat.title }}</div>
     <ModeMenu :chat="chat" />
+    <ReasoningMenu :chat="chat" />
     <HistoryMenu :chat="chat" />
     <button
       type="button"

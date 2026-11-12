@@ -6,7 +6,7 @@ import { flushPromises, mount, type VueWrapper } from "@vue/test-utils";
 import { createElement } from "react";
 import { afterEach, describe, expect, it } from "vitest";
 
-import { ApprovalPart, AttachmentViewModel, ToolCallPart, germanStrings, withStrings, type AgentChatViewModel } from "@fadenstack/ui";
+import { ApprovalPart, AttachmentViewModel, ToolCallPart, germanStrings, withStrings, type AgentChatViewModel, type TurnLease } from "@fadenstack/ui";
 import { AgentAvatar as ReactAvatar, ChatPanel as ReactPanel } from "@fadenstack/ui-react";
 import { AgentAvatar as VueAvatar, ChatPanel as VuePanel } from "@fadenstack/ui-vue";
 
@@ -148,6 +148,45 @@ describe("About and the Fadenstack link draw the same in both panels", () => {
 
     const alone = await chatWith(() => ({ text: "ok" }), { strings: { aiNotice: "" } });
     await both(alone.chat).same();
+  });
+});
+
+describe("the thinking pill and the slot line draw the same in both panels", () => {
+  it("closed, with its menu open, after a pick, under a maximum, and in German", async () => {
+    const { chat } = await chatWith(() => ({ text: "ok" }));
+    const panels = both(chat);
+    await panels.same();
+    chat.setReasoningMenuOpen(true);
+    await panels.same();
+    await chat.selectReasoning("medium");
+    await panels.same();
+    chat.setReasoningMenuOpen(true);
+    await panels.same();
+    expect(document.querySelectorAll('.fdn-reasoning [role="menuitemradio"][aria-checked="true"]')).toHaveLength(2); // one per panel
+
+    const capped = await chatWith(() => ({ text: "ok" }), {}, "write", true, { ui: { reasoning: { max: "low" } } });
+    const cappedPanels = both(capped.chat);
+    capped.chat.setReasoningMenuOpen(true);
+    await cappedPanels.same();
+
+    const german = await chatWith(() => ({ text: "ok" }), { strings: germanStrings });
+    const germanPanels = both(german.chat);
+    german.chat.setReasoningMenuOpen(true);
+    await germanPanels.same();
+  });
+
+  it("while the turn gate holds a turn", async () => {
+    let release!: (lease: TurnLease) => void;
+    let entered = false;
+    const { chat } = await chatWith(() => ({ text: "ok" }), { turnGate: () => { entered = true; return new Promise<TurnLease>((r) => { release = r; }); } });
+    const panels = both(chat);
+    const sending = chat.send("Go");
+    await waitUntil(() => entered);
+    await panels.same();
+    expect(document.body.textContent).toContain("Waiting for a free slot");
+    release(() => undefined);
+    await sending;
+    await panels.same();
   });
 });
 
