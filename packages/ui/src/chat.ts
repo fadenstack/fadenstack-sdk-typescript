@@ -13,6 +13,8 @@ import { citationsRenderer, fallbackRenderer, piiRenderer, type AgentEventRender
 import { browserClipboard, timeoutScheduler, writeClipboard, type Clipboard, type UiScheduler } from "./services.js";
 import { builtInStrings, stringsFor } from "./languages/index.js";
 import { browserPreferences, type PreferenceStore } from "./preferences.js";
+import { GrantsViewModel } from "./grants.js";
+import { period } from "./period.js";
 import { SkillPickerViewModel, skillToken } from "./skills.js";
 import { withStrings, type UiStrings } from "./strings.js";
 import { buildTurn, groupTurns } from "./transcriptTurns.js";
@@ -82,6 +84,11 @@ export interface AgentChatOptions {
    * a host that opens links its own way (Office's dialogs, an extension's tabs) passes its own.
    */
   openLink?: (url: string) => void;
+  /**
+   * How often the grant markers look again, in milliseconds (default 15 000): the time left, a paused or ending grant, a
+   * Bypass the server ended. 0: never, and the host calls `chat.grants.tick()`.
+   */
+  grantTickMs?: number;
 }
 
 /** A message on its way, for `beforeSend` and `afterSend`. */
@@ -142,6 +149,8 @@ export interface SessionItem {
   lastActivity: Date;
   whenText: string;
   isCurrent: boolean;
+  /** "Bypass · 12 min left" while the chat runs in Bypass (by the server's clock); empty otherwise. */
+  bypassText: string;
 }
 
 /**
@@ -153,6 +162,11 @@ export interface SessionItem {
 export class AgentChatViewModel extends Observable implements TurnHost {
   /** The skills list the composer opens on `$` (or `/` at the start); skins draw it while it is open. */
   readonly skillPicker: SkillPickerViewModel;
+  /**
+   * What the person let the agent do for longer than one call, in this chat: the grant cards, the Bypass confirmation and
+   * its sign-in, the markers, Stop, and Settings -> Approvals with Revoke.
+   */
+  readonly grants: GrantsViewModel;
   readonly #agent: FadenstackAgent;
   readonly #approvals: ApprovalBroker;
   readonly #batcher: RenderBatcher;
@@ -203,6 +217,7 @@ export class AgentChatViewModel extends Observable implements TurnHost {
   #signInRequired = false;
   #error: string | undefined;
   #mode: ToolMode = "ask";
+  #bypassAsk: AbortController | undefined;
 
   constructor(agent: FadenstackAgent, approvals: ApprovalBroker, options: AgentChatOptions = {}) {
     super();
@@ -236,6 +251,13 @@ export class AgentChatViewModel extends Observable implements TurnHost {
       onPick: (skill) => this.#pickSkill(skill),
     });
     this.#unsubscribe = approvals.onRequested((pending) => this.#onApprovalRequested(pending));
+    this.grants = new GrantsViewModel(agent, approvals, this.#context, {
+      stopTurn: () => this.stop(),
+      session: () => this.#session,
+      switchOnAgain: () => this.startBypass(),
+    }, options.grantTickMs);
+    this.grants.onBypassEnded(() => void this.#onBypassEnded());
+    this.grants.onTicked(() => this.#showBypassTimes());
     // A store that answers at once (localStorage) gives the user's language from the first paint.
     try {
       const saved = this.#preferences.get(LANGUAGE_PREFERENCE);
@@ -369,6 +391,15 @@ export class AgentChatViewModel extends Observable implements TurnHost {
     return this.#session?.id;
   }
 
+  /**
+   * The session this chat shows; undefined before its first message and after "new chat". A host that offers a grant in
+   * this chat (`session.offerWork`, `session.startBypass`) uses this one, so the card lands in this chat and the grant
+   * belongs to its conversation.
+   */
+  get session(): AgentSession | undefined {
+    return this.#session;
+  }
+
   get input(): string {
     return this.#input;
   }
@@ -407,10 +438,15 @@ export class AgentChatViewModel extends Observable implements TurnHost {
     return this.#mode;
   }
 
-  /** The picker's modes; those above the ceiling the server sets cannot be picked. */
+  /**
+   * The picker's modes; those above the ceiling the server sets cannot be picked. Bypass is listed only where the server
+   * offers it to this agent now (and within the ceiling), or while this chat runs in it.
+   */
   get toolModes(): readonly ToolModeOption[] {
     const ceiling = this.#agent.ceiling;
-    return TOOL_MODES.map((mode) => ({
+    const modes: readonly ToolMode[] = this.#agent.isStarted && (this.#mode === "bypass"
+      || (this.#agent.bypassOffered && narrowestMode("bypass", ceiling) === "bypass")) ? [...TOOL_MODES, "bypass"] : TOOL_MODES;
+    return modes.map((mode) => ({
       mode,
       label: this.strings.modes[mode].label,
       description: this.strings.modes[mode].description,
@@ -418,9 +454,8 @@ export class AgentChatViewModel extends Observable implements TurnHost {
     }));
   }
 
-  // The texts of a mode. Bypass has none yet (its card, marker and texts are a later UI package): it reads as auto.
   #modeText(mode: ToolMode): { label: string; description: string } {
-    return this.strings.modes[mode === "bypass" ? "auto" : mode];
+    return this.strings.modes[mode];
   }
 
   /** What the current mode means, without a ceiling. */
@@ -428,11 +463,18 @@ export class AgentChatViewModel extends Observable implements TurnHost {
     return this.#modeText(this.#mode).description;
   }
 
-  /** What the pick means here, including a ceiling. */
+  /**
+   * What the pick means here, including a limit the server sets: the agent's own highest level (its author's word) or the
+   * organisation's ceiling, each said as what it is (38 §7).
+   */
   get toolModeHint(): string {
-    const effective = narrowestMode(this.#mode, this.#agent.ceiling);
+    const ceiling = this.#agent.ceiling;
+    const effective = narrowestMode(this.#mode, ceiling);
     const description = this.toolModeDescription;
-    return effective === this.#mode ? description : this.strings.limitedTo(description, this.#modeText(effective).label);
+    if (effective === this.#mode) return description;
+    const label = this.#modeText(effective).label;
+    const max = this.#agent.isStarted ? this.#agent.profile.toolModes?.max : undefined;
+    return max === ceiling ? this.strings.limitedByAgent(description, label) : this.strings.limitedTo(description, label);
   }
 
   // -- actions --------------------------------------------------------------------------------------
@@ -458,6 +500,7 @@ export class AgentChatViewModel extends Observable implements TurnHost {
       this.#mode = this.#startMode();
       await this.refreshSessions();
       this.#ready = true;
+      await this.#refreshGrants();
     } catch (error) {
       if (error instanceof FadenstackSignInRequiredError) this.#signInRequired = true;
       this.#error = error instanceof Error ? error.message : String(error);
@@ -582,6 +625,7 @@ export class AgentChatViewModel extends Observable implements TurnHost {
   /** Starts a new chat; the session is created with its first message. */
   newChat(): void {
     if (this.#busy) return;
+    this.#leaveBypass();
     this.#session = undefined;
     this.#history = [];
     this.#loadedFrom = 0;
@@ -590,6 +634,7 @@ export class AgentChatViewModel extends Observable implements TurnHost {
     this.#skills = [];
     this.#mode = this.#startMode();
     this.#sessions = this.#sessions.map((s) => ({ ...s, isCurrent: false }));
+    this.grants.tick();
     this.notify();
   }
 
@@ -599,15 +644,19 @@ export class AgentChatViewModel extends Observable implements TurnHost {
     this.#error = undefined;
     try {
       const session = await this.#agent.openSession(sessionId);
+      this.#leaveBypass();
       const grouped = groupTurns(session.transcript);
       const from = Math.max(0, grouped.length - this.#initialTurns);
       this.#session = session;
       this.#history = grouped;
       this.#loadedFrom = from;
       this.#turns = grouped.slice(from).map((t) => buildTurn(t, this.#context, this));
-      this.#mode = session.toolMode;
+      // Parallel chats never break: a chat opened again whose Bypass still lives is in Bypass; one whose Bypass is gone is not.
+      this.#mode = session.toolMode === "bypass" && !session.bypass ? this.#startMode() : session.toolMode;
+      if (this.#mode !== session.toolMode) session.toolMode = this.#mode;
       this.#historyOpen = false;
       this.#markCurrent();
+      this.grants.tick();
     } catch (error) {
       this.#error = error instanceof Error ? error.message : String(error);
     }
@@ -645,8 +694,10 @@ export class AgentChatViewModel extends Observable implements TurnHost {
         lastActivity,
         whenText: formatWhen(lastActivity, now, this.strings.yesterday, this.#context.locale),
         isCurrent: s.id === this.#session?.id,
+        bypassText: "",
       };
     });
+    this.#showBypassTimes();
     this.notify();
   }
 
@@ -665,7 +716,10 @@ export class AgentChatViewModel extends Observable implements TurnHost {
   setSettingsOpen(open: boolean): void {
     if (this.#settingsOpen === open && !(open && this.#aboutOpen)) return;
     this.#settingsOpen = open;
-    if (open) this.#aboutOpen = false;
+    if (open) {
+      this.#aboutOpen = false;
+      void this.grants.load().catch(() => undefined); // Settings -> Approvals as it is now
+    }
     this.notify();
   }
 
@@ -736,15 +790,120 @@ export class AgentChatViewModel extends Observable implements TurnHost {
     await this.#agent.resetApprovals();
   }
 
-  /** The user's pick for this chat; the next turn runs in it. New chats start in `ask`. */
+  /**
+   * The user's pick for this chat; the next turn runs in it. New chats start in the agent's default, never in Bypass.
+   * Bypass is not set here: the pick only opens its confirmation (`startBypass`), and only the person's click on it,
+   * then the server's grant, switch the chat to Bypass (sdk/09 L-58, L-59). Picking another mode while in Bypass ends it.
+   */
   selectToolMode(mode: ToolMode): void {
     const option = this.toolModes.find((o) => o.mode === mode);
     this.#modeMenuOpen = false;
+    if (option?.available && mode === "bypass") {
+      this.notify();
+      void this.startBypass();
+      return;
+    }
     if (option?.available) {
       this.#mode = mode;
-      if (this.#session) this.#session.toolMode = mode;
+      const session = this.#session;
+      if (session) {
+        const bypass = session.bypass;
+        session.toolMode = mode;
+        if (bypass) void session.stopBypass().catch(() => undefined); // leaving Bypass ends it (L-63), not only before the next turn
+      }
     }
     this.notify();
+  }
+
+  /**
+   * Asks for Bypass in this chat (the mode picker's Bypass entry): the confirmation shows above the composer, and only
+   * the person's click on it, then the server's grant, switch the chat to Bypass. A chat without a conversation yet gets
+   * one, which goes again when nothing came of it. True once Bypass is on.
+   */
+  async startBypass(): Promise<boolean> {
+    this.#modeMenuOpen = false;
+    const available = this.toolModes.find((o) => o.mode === "bypass")?.available === true;
+    if (!this.#ready || !available || this.#session?.bypass) {
+      this.notify();
+      return false;
+    }
+    this.#bypassAsk?.abort(abortError());
+    const ask = new AbortController();
+    this.#bypassAsk = ask;
+    let made: AgentSession | undefined;
+    try {
+      if (!this.#session) {
+        made = this.#session = await this.#agent.startSession(this.#mode);
+        this.notify();
+      }
+      const session = this.#session;
+      const { on, unsaid } = await this.grants.startBypass(session, ask.signal);
+      if (on && this.#session === session) {
+        this.#mode = "bypass";
+        this.notify();
+        return true;
+      }
+      if (unsaid !== undefined) this.#error = unsaid instanceof Error ? unsaid.message : String(unsaid);
+      return false;
+    } catch (error) {
+      if (!ask.signal.aborted) this.#error = error instanceof Error ? error.message : String(error);
+      return false;
+    } finally {
+      if (made && this.#session === made && !made.bypass && this.#turns.length === 0) {
+        this.#session = undefined; // a declined confirmation leaves no conversation
+        void this.#agent.deleteSession(made.id).catch(() => undefined);
+      }
+      if (this.#bypassAsk === ask) this.#bypassAsk = undefined;
+      this.notify();
+    }
+  }
+
+  // This chat's Bypass ended (its time, a Stop, the server): the chat goes back to the mode it had before.
+  async #onBypassEnded(): Promise<void> {
+    const session = this.#session;
+    if (session?.toolMode === "bypass") {
+      try {
+        await session.stopBypass(); // nothing left to end: only the mode it had before
+      } catch {
+        session.toolMode = this.#startMode(); // what is left ends before its next turn
+      }
+    }
+    if (this.#mode === "bypass") {
+      const back = session?.toolMode;
+      this.#mode = back && back !== "bypass" && this.toolModes.find((o) => o.mode === back)?.available ? back : this.#startMode();
+    }
+    this.notify();
+  }
+
+  // Leaving a chat (a new one, another one) stops a Bypass confirmation still waiting for the person. A Bypass that runs stays.
+  #leaveBypass(): void {
+    this.#bypassAsk?.abort(abortError());
+    this.grants.leave();
+  }
+
+  /** The device's grants at start, for the marker; a server that cannot say leaves it off. */
+  async #refreshGrants(): Promise<void> {
+    try {
+      await this.#agent.grants.refresh();
+    } catch {
+      // the marker shows once a stream or a grant says more
+    }
+    this.grants.tick();
+  }
+
+  // The chat list says which chats run in Bypass, and for how long, by the server's clock.
+  #showBypassTimes(): void {
+    const grants = this.#agent.grants;
+    const live = grants.available ? grants.live.filter((g) => g.kind === "bypass" && g.status === "active") : [];
+    let changed = false;
+    this.#sessions = this.#sessions.map((s) => {
+      const grant = live.find((g) => g.conversationId === s.id);
+      const bypassText = grant ? this.strings.bypassListMarker(period(this.strings, grants.remaining(grant))) : "";
+      if (bypassText === s.bypassText) return s;
+      changed = true;
+      return { ...s, bypassText };
+    });
+    if (changed) this.notify();
   }
 
   /** Adds context for the next message (a chip in the composer). An implicit chip stays until removed; change it with `update`. */
@@ -827,6 +986,8 @@ export class AgentChatViewModel extends Observable implements TurnHost {
 
   dispose(): void {
     this.#unsubscribe();
+    this.#bypassAsk?.abort(abortError());
+    this.grants.dispose();
     this.#stop?.abort(abortError());
   }
 
@@ -1005,6 +1166,8 @@ export class AgentChatViewModel extends Observable implements TurnHost {
         whenText: formatWhen(s.lastActivity, now, strings.yesterday, this.#context.locale),
       }));
       for (const turn of this.#turns) turn.retext();
+      this.grants.retext();
+      this.#showBypassTimes();
     }
     this.notify();
   }
@@ -1044,9 +1207,10 @@ export class AgentChatViewModel extends Observable implements TurnHost {
     const existing = this.#sessions.find((s) => s.id === session.id);
     const item: SessionItem = existing
       ? { ...existing, lastActivity: now, whenText }
-      : { id: session.id, title: text.length <= 60 ? text : `${text.slice(0, 57)}...`, lastActivity: now, whenText, isCurrent: true };
+      : { id: session.id, title: text.length <= 60 ? text : `${text.slice(0, 57)}...`, lastActivity: now, whenText, isCurrent: true, bypassText: "" };
     this.#sessions = [item, ...this.#sessions.filter((s) => s.id !== session.id)];
     this.#markCurrent();
+    this.#showBypassTimes();
   }
 
   #markCurrent(): void {

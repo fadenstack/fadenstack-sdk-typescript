@@ -1,4 +1,15 @@
-import { ApprovalDecision, type ApprovalHandler, type ApprovalRequest } from "@fadenstack/agents";
+import {
+  ApprovalDecision,
+  GrantAnswer,
+  openInBrowser,
+  type ApprovalHandler,
+  type ApprovalRequest,
+  type GrantHandler,
+  type GrantOffer,
+  type StepUpHandler,
+  type StepUpRequest,
+  type StepUpStage,
+} from "@fadenstack/agents";
 
 /** A call waiting for the user; resolved by the approval card's buttons. */
 export class PendingApproval {
@@ -38,12 +49,72 @@ export class PendingApproval {
 }
 
 /**
- * The agent's approval handler for a UI: each request becomes an approval card in the chat, and the user's
- * click is the decision. Give the same broker to the builder and to the chat view model. Without a chat
- * listening, requests are declined.
+ * A grant card waiting for the person: the work card, the extension card or the Bypass confirmation. Resolved by the
+ * card's buttons. .NET: `Fadenstack.UI.Services.PendingGrant`.
  */
-export class ApprovalBroker implements ApprovalHandler {
+export class PendingGrant {
+  readonly offer: GrantOffer;
+  /** Aborted when the turn is stopped or the wait runs out. */
+  readonly signal: AbortSignal;
+  readonly answer: Promise<GrantAnswer>;
+  #resolve!: (answer: GrantAnswer) => void;
+  #settled = false;
+  #claimed = false;
+
+  constructor(offer: GrantOffer, signal: AbortSignal) {
+    this.offer = offer;
+    this.signal = signal;
+    this.answer = new Promise<GrantAnswer>((resolve, reject) => {
+      this.#resolve = resolve;
+      signal.addEventListener("abort", () => {
+        if (!this.#settled) {
+          this.#settled = true;
+          reject(signal.reason);
+        }
+      }, { once: true });
+    });
+    this.answer.catch(() => undefined);
+  }
+
+  get isResolved(): boolean {
+    return this.#settled;
+  }
+
+  /** Whether a chat took the card to draw (a Bypass confirmation is drawn only by its conversation's chat). */
+  get isClaimed(): boolean {
+    return this.#claimed;
+  }
+
+  /** A chat draws this card: call it from `onGrantRequested`, before it returns. */
+  claim(): void {
+    this.#claimed = true;
+  }
+
+  /** The person's answer; false when it came too late. */
+  resolve(answer: GrantAnswer): boolean {
+    if (this.#settled) return false;
+    this.#settled = true;
+    this.#resolve(answer);
+    return true;
+  }
+}
+
+/**
+ * The agent's approval handler for a UI: each request becomes a card in the chat, and the user's click is the answer --
+ * an approval card, a grant card to work alongside the person (`GrantHandler`), the Bypass confirmation, and the
+ * second sign-in's page and states (`StepUpHandler`). Give the same broker to the builder and to the chat view model.
+ * Without a chat listening, requests are declined. .NET: `Fadenstack.UI.Services.ApprovalBroker`.
+ */
+export class ApprovalBroker implements ApprovalHandler, GrantHandler, StepUpHandler {
   readonly #listeners = new Set<(pending: PendingApproval) => void>();
+  readonly #grantListeners = new Set<(pending: PendingGrant) => void>();
+  readonly #stepUpListeners = new Set<(request: StepUpRequest, stage: StepUpStage) => void>();
+
+  /**
+   * Opens a page in the person's browser; false when it could not. A new tab of the browser (never an iframe, no
+   * opener) unless an app (an extension, a shell) or a test sets its own.
+   */
+  openBrowser: (link: URL) => boolean = openInBrowser;
 
   /** Calls `listener` for each request; returns the unsubscribe. */
   onRequested(listener: (pending: PendingApproval) => void): () => void {
@@ -53,10 +124,46 @@ export class ApprovalBroker implements ApprovalHandler {
     };
   }
 
+  /**
+   * Calls `listener` for each grant card to show (`AgentSession.offerWork`, an extension) and for the Bypass
+   * confirmation (`offer.bypass`), which only the chat of its conversation draws: it `claim()`s it.
+   */
+  onGrantRequested(listener: (pending: PendingGrant) => void): () => void {
+    this.#grantListeners.add(listener);
+    return () => {
+      this.#grantListeners.delete(listener);
+    };
+  }
+
+  /** Calls `listener` as the second sign-in stands: in the browser, approved, denied, timed out, failed or cancelled. */
+  onStepUpChanged(listener: (request: StepUpRequest, stage: StepUpStage) => void): () => void {
+    this.#stepUpListeners.add(listener);
+    return () => {
+      this.#stepUpListeners.delete(listener);
+    };
+  }
+
   request(request: ApprovalRequest, signal: AbortSignal): Promise<ApprovalDecision> {
     if (this.#listeners.size === 0) return Promise.resolve(ApprovalDecision.deny("Nobody is here to approve it."));
     const pending = new PendingApproval(request, signal);
     for (const listener of [...this.#listeners]) listener(pending);
     return pending.decision;
+  }
+
+  requestGrant(offer: GrantOffer, signal: AbortSignal): Promise<GrantAnswer> {
+    if (this.#grantListeners.size === 0) return Promise.resolve(GrantAnswer.notNow);
+    const pending = new PendingGrant(offer, signal);
+    for (const listener of [...this.#grantListeners]) listener(pending);
+    // No chat of its conversation draws a Bypass confirmation: nobody can confirm it (sdk/09 L-58).
+    if (offer.bypass && !pending.isClaimed) return Promise.resolve(GrantAnswer.notNow);
+    return pending.answer;
+  }
+
+  open(request: StepUpRequest): Promise<boolean> {
+    return Promise.resolve(this.openBrowser(request.link));
+  }
+
+  report(request: StepUpRequest, stage: StepUpStage): void {
+    for (const listener of [...this.#stepUpListeners]) listener(request, stage);
   }
 }

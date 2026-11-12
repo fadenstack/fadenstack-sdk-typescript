@@ -1,6 +1,7 @@
 import { ApprovalDecision, type ApprovalRequest } from "@fadenstack/agents";
 import type { GovernanceNotice, ToolClass } from "@fadenstack/client";
 
+import type { BypassPart, GrantPart } from "./grantCards.js";
 import type { PendingApproval } from "./approvalBroker.js";
 import { formatDuration, preview } from "./format.js";
 import { MarkdownDocument } from "./markdown/document.js";
@@ -8,7 +9,7 @@ import type { MarkdownBlock } from "./markdown/model.js";
 import { tableToTsv, toHtml } from "./markdown/serialize.js";
 import { Observable } from "./observable.js";
 import { writeClipboard, type Clipboard } from "./services.js";
-import { englishStrings, type UiStrings } from "./strings.js";
+import type { UiStrings } from "./strings.js";
 
 /**
  * What every part can reach: the texts, the clipboard, the locale, the preview length. The chat's parts share one,
@@ -243,7 +244,7 @@ export class ToolCallPart extends ResponsePart {
   }
 }
 
-export type ApprovalState = "pending" | "confirming" | "approved" | "approved_for_time" | "approved_for_session" | "approved_always" | "denied" | "expired";
+export type ApprovalState = "pending" | "confirming" | "approved" | "approved_for_time" | "approved_by_grant" | "approved_for_session" | "approved_always" | "denied" | "expired";
 
 /**
  * "Run delete_page?" with Allow, Allow for this chat, Allow always and Deny -- answered in place, like Copilot.
@@ -317,10 +318,10 @@ export class ApprovalPart extends ResponsePart {
   get timeGrantChoices(): readonly { minutes: number; label: string }[] {
     if (this.isDangerous || this.request.requiredByRule) return [];
     const values = [...new Set(this.request.grantDurations ?? [])].filter(n => Number.isSafeInteger(n) && n > 0 && n <= 1440 * 60_000).map(duration => Math.ceil(duration / 60_000));
-    return values.map(minutes => ({ minutes, label: (this.#context.strings.allowForTime ?? englishStrings.allowForTime!)(minutes) }));
+    return values.map(minutes => ({ minutes, label: this.#context.strings.allowForTime(minutes) }));
   }
 
-  get timeGrantHint(): string { return this.#context.strings.timeGrantHint ?? englishStrings.timeGrantHint!; }
+  get timeGrantHint(): string { return this.#context.strings.timeGrantHint; }
 
   get state(): ApprovalState {
     return this.#state;
@@ -336,9 +337,11 @@ export class ApprovalPart extends ResponsePart {
     const s = this.#context.strings;
     switch (this.#state) {
       case "confirming":
-        return s.confirmingGrant ?? englishStrings.confirmingGrant!;
+        return s.confirmingGrant;
       case "approved_for_time":
-        return this.#confirmedMinutes === undefined ? s.allowed : (s.allowedForTime ?? englishStrings.allowedForTime!)(this.#confirmedMinutes);
+        return this.#confirmedMinutes === undefined ? s.allowed : s.allowedForTime(this.#confirmedMinutes);
+      case "approved_by_grant":
+        return s.allowedByGrant;
       case "approved":
         return s.allowed;
       case "approved_for_session":
@@ -579,4 +582,6 @@ export type AnyPart =
   | CardPart
   | TablePart
   | ProgressPart
-  | DiffPart;
+  | DiffPart
+  | GrantPart
+  | BypassPart;
