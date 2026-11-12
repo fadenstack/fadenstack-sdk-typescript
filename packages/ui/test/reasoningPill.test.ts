@@ -105,6 +105,16 @@ describe("the thinking pill", () => {
     expect([chat.reasoningLevel, chat.reasoningPillText]).toEqual(["auto", "Auto"]);
   });
 
+  it("a pick above the maximum is not taken in a chat that already has a conversation either", async () => {
+    const { chat, agent, gateway } = await chatWith(ui({ max: "low" }));
+    await chat.initialize();
+    await chat.send("First");
+    await chat.selectReasoning("high");
+    expect([chat.reasoningLevel, chat.reasoningPillText, agent.reasoningChoice]).toEqual(["auto", "Auto", undefined]);
+    await chat.send("Second");
+    expect(efforts(gateway)).toEqual(["low", "low"]); // Auto means the maximum
+  });
+
   it("a new chat starts from the pick", async () => {
     const { chat, gateway } = await chatWith();
     await chat.initialize();
