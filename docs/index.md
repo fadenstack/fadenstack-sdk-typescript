@@ -3,8 +3,11 @@
 Build agents that run in a browser, a web page or Node and are governed by a Fadenstack server.
 
 !!! note "Server version"
-    Agents need a Fadenstack server 0.4.2 or later. With 0.4.1 and older, only
-    [plain chat completions](plain-api.md) work, without tool modes, rules and the gateway's events.
+    This version of the SDK (0.3.0) is built against Fadenstack server 0.7.1. Agents need a server 0.4.2 or later;
+    with 0.4.1 and older, only [plain chat completions](plain-api.md) work, without tool modes, rules and the
+    gateway's events. Where a server lacks a route that a newer feature uses, the SDK says so where it can:
+    `listTools` answers `null`, signing in by pairing throws a `FadenstackPairingUnsupportedError`, and an agent built
+    with `requireHostToolPolicyChecks()` refuses to start.
 
 ## What the SDK does
 
@@ -28,13 +31,14 @@ The SDK also powers Fadenstack's browser agent.
 | `@fadenstack/agents` | The agent: the builder, the tool loop, tool classes and modes, approvals, sessions on the device, outcomes, stages and modules | `Fadenstack.Agents` |
 | `@fadenstack/ui` | View models for a chat with an agent, with no UI framework | `Fadenstack.UI` |
 | `@fadenstack/ui-web` | The web look every skin shares: the stylesheet, icons, the agent's avatar, the panel's browser behaviours | `Fadenstack.UI.Wpf` (its themes) |
-| `@fadenstack/ui-react` | The React skin for those view models: a chat panel | `Fadenstack.UI.Wpf` |
-| `@fadenstack/ui-vue` | The Vue skin for the same view models: the same chat panel | `Fadenstack.UI.Wpf` |
+| `@fadenstack/ui-react` | The React skin for those view models: a chat panel | `Fadenstack.UI.Wpf`, `Fadenstack.UI.Avalonia` |
+| `@fadenstack/ui-vue` | The Vue skin for the same view models: the same chat panel | `Fadenstack.UI.Wpf`, `Fadenstack.UI.Avalonia` |
 | `@fadenstack/testing` | A fake Fadenstack server for tests and demos | — |
 | `@fadenstack/provenance` | Marks content the agent's tools place as made with AI: `place()`, markers for the hosts, signed records and placement reports | `Fadenstack.Provenance` |
 
 The packages follow the [.NET SDK](../dotnet/index.md): the same concepts, the same tool classes and modes, and the
-same transcript format for sessions.
+same transcript format for sessions. [Libraries](libraries.md) says what each package is for, and the
+[parity table](parity.md) lists the features of both SDKs side by side.
 
 ## Runtimes
 
@@ -99,8 +103,10 @@ Then add the packages you need to your project, in one of two ways.
     npm pack --workspaces --pack-destination ../fadenstack-packages
 
     # in your project
-    npm install ../fadenstack-packages/fadenstack-client-0.2.0.tgz ../fadenstack-packages/fadenstack-agents-0.2.0.tgz
+    npm install ../fadenstack-packages/fadenstack-client-<version>.tgz ../fadenstack-packages/fadenstack-agents-<version>.tgz
     ```
+
+    `<version>` is the `version` in the packages' `package.json`; `npm pack` names each file after it.
 
     Install packages that depend on each other in one command. npm then finds `@fadenstack/client` among the files
     instead of looking for it on npm.
@@ -169,8 +175,16 @@ approval handler the SDK declines it. See [Tools and approvals](tools.md).
 
 - [Build an agent](agent.md): the client, signing in, the builder, sessions and streaming.
 - [Tools and approvals](tools.md): host tools, tool classes, tool modes and approvals.
+- [Host commands and central policy](host-commands.md): host tools the person starts, and the fresh policy check
+  around every host tool call.
 - [Outcomes and errors](outcomes.md): how a turn ends, and what is thrown.
 - [Sessions on the device](sessions.md): where conversations are kept, and for how long.
 - [The chat panel](chat-panel.md): a ready-made chat UI for React, and view models for other frameworks.
 - [Testing without a server](testing.md): the fake server in `@fadenstack/testing`.
 - [Plain chat completions](plain-api.md): the gateway's chat without an agent.
+- [Hosting](hosting.md): where the SDK runs, a web page, a browser extension or Node, and what differs.
+- [Extending](extending.md): modules, stages, tool sources, tool services and renderers.
+- [Local tools](local-tools.md): tools on request, and `find_tool`, where a browser has no local MCP process.
+- [Libraries](libraries.md): what each package is for.
+- [Samples](samples.md): the live check against a server.
+- [Parity with the .NET SDK](parity.md): each feature, by its name in both SDKs.
