@@ -161,9 +161,12 @@ const agent = FadenstackAgent.createBuilder()
 | `addTools(...tools)` | Host tools, from `defineTool`. See [Tools and approvals](tools.md). |
 | `addToolSource(source)` | Tools that are added once the agent's profile is known. |
 | `useApprovals(handler)` | Who decides on tool calls that need approval. Without one, every such call is declined. |
-| `useSessionStore(store)` | Where sessions live. By default IndexedDB in a browser and memory elsewhere. See [Sessions on the device](sessions.md). |
-| `useApprovalStore(store)` | Where "Allow always" is kept. By default IndexedDB in a browser and memory elsewhere. See [Tools and approvals](tools.md#allow-always). |
-| `usePermissionMode(mode)` | `ask` (the default), or `bypass`, which asks for the server's Bypass; this SDK does not offer it yet, so such sessions run in `auto` instead of `ask`. See [Tools and approvals](tools.md#bypass-mode). |
+| `useSessionStore(store)` | Where sessions live. By default the signed-in user's own IndexedDB database in a browser and memory elsewhere. See [Sessions on the device](sessions.md). |
+| `useApprovalStore(store)` | Where "Allow always" is kept. By default the signed-in user's own IndexedDB database in a browser and memory elsewhere. See [Tools and approvals](tools.md#allow-always). |
+| `useStepUpHandler(handler)` | Who opens the second sign-in the server's Bypass needs: the verification page in the system browser or a new window, never an iframe (`browserStepUp()` for a web page). An approval handler with `open` and `report` is used when none is given. **Bypass is announced to the server, and so offered, only with one.** See [Server-held grants and Bypass](server-grants.md#bypass). |
+| `useGrantHandler(handler)` | Who draws the grant card (the Bypass confirmation, the work card): `requestGrant(offer, signal)`. An approval handler that has it is used when none is given. |
+| `useGrantPlaceResolver(resolver)` | Native, canonical resolution of the places a work grant covers; without it work grants cover nothing. See [Server-held grants and Bypass](server-grants.md#a-grant-for-a-stretch-of-work). |
+| `usePermissionMode(mode)` | `ask` (the default), or `bypass`, which asks for the server's Bypass in your code: no card, the same second sign-in and grant. Where Bypass cannot be had, such sessions run in `auto` instead of `ask`. See [Tools and approvals](tools.md#bypass-mode). |
 | `useDefaultToolMode(mode)` | A cap on the mode new sessions start in (the agent's default level from the server). It narrows, never widens. |
 | `useMaxRounds(rounds)` | Model calls per turn before the loop stops. Default 16. |
 | `useHistoryBudget(tokens)` | About how many tokens of history a request carries. Older turns are left out. Default 24 000. |
@@ -198,7 +201,8 @@ The agent starts the first time you open a session, or when you call `agent.star
 - checks that the builder has every module the profile requires, and throws a `FadenstackError` if not;
 - settles the tools: host tools outside a non-empty contract are dropped, the others run under the stricter of your
   class and the contract's; without a contract, or for an entry without a `risk`, a tool is `unknown` and asks;
-- warns once, on the console, when the app set bypass mode;
+- warns once, on the console, when the app set bypass mode and the server does not offer Bypass for the agent, or the app opens
+  no second sign-in (`useStepUpHandler`);
 - reports the app's manifest to the server, unless event reporting is off.
 
 After that, `agent.profile` is the `AgentProfile` and `agent.tools` lists the tools with the classes they run under.
@@ -212,6 +216,11 @@ A session is one conversation, kept on the device:
 const session = await agent.startSession();          // the agent's default level: "ask" unless set otherwise
 const again = await agent.openSession(session.id);   // a session from this device's store
 ```
+
+A session starts and opens with a profile no older than a minute: it is read again when it is older, so a ceiling an
+administrator lowered reaches the next session without a restart. A chat whose Bypass grant still lives opens in
+Bypass (`session.bypass` is the grant, with its time left); see [Server-held grants and Bypass](server-grants.md#bypass).
+`agent.listSessions()`, `agent.listApprovals()` and `agent.resetApprovals()` are the signed-in user's own.
 
 | Method | What it does |
 |---|---|
@@ -326,7 +335,7 @@ With event reporting on, the agent tells the server what happened on the device:
 session counts. A report holds names, durations, outcomes and counts, never arguments, results or messages. Reports go
 out after each turn. A report that fails is dropped and never fails the turn; `agent.lastReportError` holds the
 last failure. Each approval is reported with what let the call through (`scope`: `once`, `chat`, `always` or
-`bypass`), also when nobody was asked.
+`grant`, which a grant for a time, a stretch of work or Bypass is), also when nobody was asked.
 
 | Method | What it does |
 |---|---|
