@@ -92,6 +92,22 @@ describe("ChatPanel", () => {
     expect(clipboard.lastHtml).toContain("<td>Seal check</td>");
   });
 
+  it("downloads a table of an answer as CSV through the host's saveFile, the second one as table-2.csv", async () => {
+    const saved: { name: string; type: string; content: string }[] = [];
+    await panel(() => ({ text: "| Name |\n|---|\n| Müller, A |\n\n| N |\n|---|\n| -5 |" }), "write", { saveFile: (f) => void saved.push(f) });
+    fireEvent.change(screen.getByRole("textbox"), { target: { value: "Table?" } });
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Send" }));
+    });
+    const buttons = await screen.findAllByRole("button", { name: "Download CSV" });
+    expect(buttons.length).toBe(2);
+    fireEvent.click(buttons[0]!);
+    fireEvent.click(buttons[1]!);
+    expect(saved.map((f) => f.name)).toEqual(["table.csv", "table-2.csv"]);
+    expect(saved[0]!.content).toBe(String.fromCharCode(0xfeff) + "Name\r\n\"Müller, A\"\r\n");
+    expect(saved[1]!.content.endsWith("\r\n'-5\r\n")).toBe(true);
+  });
+
   it("asks with a card and runs the tool when Allow is clicked", async () => {
     const { filled } = await panel((r) => (lastToolResults(r).size ? { text: "Filled in." }
       : { toolCalls: [{ name: "fill_field", arguments: { value: "Jane" } }] }));

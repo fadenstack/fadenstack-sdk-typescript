@@ -6,7 +6,9 @@ import type { PendingApproval } from "./approvalBroker.js";
 import { formatDuration, preview } from "./format.js";
 import { MarkdownDocument } from "./markdown/document.js";
 import type { MarkdownBlock } from "./markdown/model.js";
-import { tableToTsv, toHtml } from "./markdown/serialize.js";
+import { tableToTsv, tablesIn, toHtml } from "./markdown/serialize.js";
+import { csvFileName, tableToCsv } from "./csv.js";
+import type { SaveFile } from "./files.js";
 import { Observable } from "./observable.js";
 import { writeClipboard, type Clipboard } from "./services.js";
 import type { UiStrings } from "./strings.js";
@@ -23,6 +25,8 @@ export interface PartContext {
   now: () => Date;
   /** The person turned on the notice for an answer without an AI mark (`faden.unmarked`); off when absent. */
   showUnmarked?: boolean;
+  /** Saves a file (a table as CSV); the host's, else the browser's download. */
+  saveFile?: SaveFile;
 }
 
 /**
@@ -88,6 +92,21 @@ export class MarkdownPart extends ResponsePart {
   /** Copies a table: tab-separated for spreadsheets, and as an HTML table for mail and documents. */
   copyTable(table: Extract<MarkdownBlock, { kind: "table" }>): void {
     void Promise.resolve(writeClipboard(this.#context.clipboard, { text: tableToTsv(table), html: toHtml([table]) })).catch(() => undefined);
+  }
+
+  /**
+   * Saves a table as a CSV file (RFC 4180, UTF-8 with a byte order mark) through the host's `saveFile`: `table.csv`, or
+   * `table-2.csv` for the second table of this text.
+   */
+  downloadTableCsv(table: Extract<MarkdownBlock, { kind: "table" }>): void {
+    const save = this.#context.saveFile;
+    if (!save) return;
+    const position = tablesIn(this.document.blocks).indexOf(table) + 1;
+    try {
+      void Promise.resolve(save({ name: csvFileName(position), type: "text/csv", content: tableToCsv(table) })).catch(() => undefined);
+    } catch {
+      // a host that fails to save must not break the chat
+    }
   }
 }
 

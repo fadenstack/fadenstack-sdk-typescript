@@ -18,6 +18,7 @@ defineProps<{
   strings: UiStrings;
   copyCode?: ((code: string) => void) | undefined;
   copyTable?: ((table: TableBlock) => void) | undefined;
+  downloadTable?: ((table: TableBlock) => void) | undefined;
 }>();
 </script>
 
@@ -33,19 +34,19 @@ defineProps<{
     :strings="strings"
     :copy="copyCode"
   />
-  <MarkdownPreview v-else-if="block.kind === 'preview'" :block="block" :strings="strings" :copy-code="copyCode" :copy-table="copyTable" />
+  <MarkdownPreview v-else-if="block.kind === 'preview'" :block="block" :strings="strings" :copy-code="copyCode" :copy-table="copyTable" :download-table="downloadTable" />
   <component :is="block.ordered ? 'ol' : 'ul'" v-else-if="block.kind === 'list'" :start="block.ordered ? block.start : undefined">
     <li v-for="(item, i) in block.items" :key="i" v-bind="item.checked === undefined ? {} : { class: 'fdn-md-task' }" dir="auto">
       <input v-if="item.checked !== undefined" type="checkbox" :checked="item.checked" readonly disabled>
       <template v-for="b in item.blocks" :key="b.key">
         <span v-if="b.kind === 'paragraph'" class="fdn-md-li"><Inlines :inlines="b.inlines" :strings="strings" /></span>
-        <MarkdownBlock v-else :block="b" :strings="strings" :copy-code="copyCode" :copy-table="copyTable" />
+        <MarkdownBlock v-else :block="b" :strings="strings" :copy-code="copyCode" :copy-table="copyTable" :download-table="downloadTable" />
       </template>
     </li>
   </component>
   <blockquote v-else-if="block.kind === 'quote'" dir="auto">
-    <MarkdownBlock v-for="b in block.blocks" :key="b.key" :block="b" :strings="strings" :copy-code="copyCode" :copy-table="copyTable" />
+    <MarkdownBlock v-for="b in block.blocks" :key="b.key" :block="b" :strings="strings" :copy-code="copyCode" :copy-table="copyTable" :download-table="downloadTable" />
   </blockquote>
-  <MarkdownTable v-else-if="block.kind === 'table'" :block="block" :strings="strings" :copy="copyTable" />
+  <MarkdownTable v-else-if="block.kind === 'table'" :block="block" :strings="strings" :copy="copyTable" :download="downloadTable" />
   <hr v-else-if="block.kind === 'rule'">
 </template>

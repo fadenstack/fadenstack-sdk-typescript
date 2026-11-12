@@ -14,6 +14,7 @@ defineProps<{
   strings: UiStrings;
   copyCode?: ((code: string) => void) | undefined;
   copyTable?: ((table: TableBlock) => void) | undefined;
+  downloadTable?: ((table: TableBlock) => void) | undefined;
 }>();
 const source = ref(false);
 </script>
@@ -33,7 +34,7 @@ const source = ref(false);
       :copy="copyCode"
     />
     <div v-else class="fdn-md-preview-body">
-      <MarkdownBlockView v-for="b in block.blocks" :key="b.key" :block="b" :strings="strings" :copy-code="copyCode" :copy-table="copyTable" />
+      <MarkdownBlockView v-for="b in block.blocks" :key="b.key" :block="b" :strings="strings" :copy-code="copyCode" :copy-table="copyTable" :download-table="downloadTable" />
     </div>
   </div>
 </template>

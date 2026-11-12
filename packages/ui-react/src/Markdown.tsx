@@ -15,6 +15,8 @@ export interface MarkdownProps {
   onCopyCode?: (code: string) => void;
   /** Copies a table (tab-separated and as HTML); without it tables have no copy button. */
   onCopyTable?: (table: TableBlock) => void;
+  /** Saves a table as a CSV file; without it tables have no download button. */
+  onDownloadTable?: (table: TableBlock) => void;
   /** A cursor after the last block while the answer streams. */
   streaming?: boolean;
 }
@@ -23,14 +25,15 @@ export interface MarkdownProps {
 interface BlockActions {
   copyCode: ((code: string) => void) | undefined;
   copyTable: ((table: TableBlock) => void) | undefined;
+  downloadTable: ((table: TableBlock) => void) | undefined;
 }
 
 /**
  * Markdown blocks as React elements -- never as HTML. Each block is memoized: while streaming, only the last one
  * re-renders. Text blocks take their direction from their own text (`dir="auto"`), code runs left to right.
  */
-export function Markdown({ blocks, strings, onCopyCode, onCopyTable, streaming }: MarkdownProps): ReactElement {
-  const actions = useMemo<BlockActions>(() => ({ copyCode: onCopyCode, copyTable: onCopyTable }), [onCopyCode, onCopyTable]);
+export function Markdown({ blocks, strings, onCopyCode, onCopyTable, onDownloadTable, streaming }: MarkdownProps): ReactElement {
+  const actions = useMemo<BlockActions>(() => ({ copyCode: onCopyCode, copyTable: onCopyTable, downloadTable: onDownloadTable }), [onCopyCode, onCopyTable, onDownloadTable]);
   return (
     <div className={streaming ? "fdn-md fdn-md-streaming" : "fdn-md"}>
       {blocks.map((block) => (
@@ -73,7 +76,7 @@ function renderBlock(block: MarkdownBlock, strings: UiStrings, actions: BlockAct
     case "quote":
       return <blockquote dir="auto">{block.blocks.map((b) => <Block key={b.key} block={b} strings={strings} actions={actions} />)}</blockquote>;
     case "table":
-      return <TableView block={block} strings={strings} onCopy={actions.copyTable} />;
+      return <TableView block={block} strings={strings} onCopy={actions.copyTable} onDownload={actions.downloadTable} />;
     case "rule":
       return <hr />;
   }
@@ -99,8 +102,8 @@ function CopyButton({ label, strings, onCopy }: { label: string; strings: UiStri
   );
 }
 
-function TableView({ block, strings, onCopy }: { block: TableBlock; strings: UiStrings; onCopy: ((table: TableBlock) => void) | undefined }):
-  ReactElement {
+function TableView({ block, strings, onCopy, onDownload }: { block: TableBlock; strings: UiStrings; onCopy: ((table: TableBlock) => void) | undefined;
+  onDownload: ((table: TableBlock) => void) | undefined }): ReactElement {
   return (
     <div className="fdn-md-table">
       <div className="fdn-md-table-scroll">
@@ -115,9 +118,15 @@ function TableView({ block, strings, onCopy }: { block: TableBlock; strings: UiS
           </tbody>
         </table>
       </div>
-      {onCopy && (
+      {(onCopy || onDownload) && (
         <div className="fdn-md-table-bar">
-          <CopyButton label={strings.copyTable} strings={strings} onCopy={() => onCopy(block)} />
+          {onCopy && <CopyButton label={strings.copyTable} strings={strings} onCopy={() => onCopy(block)} />}
+          {onDownload && (
+            <button type="button" className="fdn-icon-button fdn-small" aria-label={strings.downloadCsv} title={strings.downloadCsv}
+              onClick={() => onDownload(block)}>
+              <Icon name="download" size={14} />
+            </button>
+          )}
         </div>
       )}
     </div>

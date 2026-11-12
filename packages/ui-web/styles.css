@@ -715,6 +715,7 @@
 
 .fdn-md-table-bar {
   display: flex;
+  gap: 2px;
   justify-content: flex-end;
   margin-top: 2px;
 }

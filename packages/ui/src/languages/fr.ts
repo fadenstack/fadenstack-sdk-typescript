@@ -266,4 +266,5 @@ export const frenchStrings: UiStrings = {
     limit: "Il a pris fin parce que votre organisation a restreint qui peut l'utiliser.",
     host: "L'application y a mis fin.",
   },
+  downloadCsv: "Télécharger en CSV",
 };

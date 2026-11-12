@@ -31,6 +31,8 @@ export {
   type AboutView,
   type PanelLink,
 } from "./about.js";
+export { CSV_BOM, csvField, csvFileName, rowsToCsv, tableToCsv } from "./csv.js";
+export { browserSaveFile, type FileToSave, type SaveFile } from "./files.js";
 export { SkillPickerViewModel, matchSkills, skillToken } from "./skills.js";
 export { TurnViewModel, type TurnHost, type TurnState } from "./turn.js";
 export {
@@ -103,4 +105,4 @@ export { formatDuration, formatNumber, formatWhen, preview } from "./format.js";
 export { MarkdownDocument } from "./markdown/document.js";
 export { parseBlocks, parseMarkdown, type PlacedBlock } from "./markdown/parse.js";
 export { inlineText, type Inline, type ListItem, type MarkdownBlock } from "./markdown/model.js";
-export { markdownToHtml, markdownToPlainText, tableToTsv, tablesOf, toHtml, toPlainText } from "./markdown/serialize.js";
+export { markdownToHtml, markdownToPlainText, tableCellText, tableToTsv, tablesIn, tablesOf, toHtml, toPlainText } from "./markdown/serialize.js";

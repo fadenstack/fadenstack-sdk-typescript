@@ -6,6 +6,7 @@ import { FadenstackSignInRequiredError, TOOL_MODES, narrowestMode, type SkillOpt
 import { aboutView, footerLink, refSource, type AboutView, type PanelLink } from "./about.js";
 import type { ApprovalBroker, PendingApproval } from "./approvalBroker.js";
 import { AttachmentViewModel, type AttachmentChip } from "./attachments.js";
+import { browserSaveFile, type SaveFile } from "./files.js";
 import { RenderBatcher } from "./batcher.js";
 import { formatWhen } from "./format.js";
 import { markdownToHtml } from "./markdown/serialize.js";
@@ -53,6 +54,11 @@ export interface AgentChatOptions {
   lockedLanguage?: string;
   /** Where the user's pick is kept: the browser's localStorage by default (`browserPreferences()`), memory where there is none. */
   preferences?: PreferenceStore;
+  /**
+   * Saves a file the panel makes (a table as CSV, a chat as Markdown): `{ name, type, content }`, UTF-8 text. By default the
+   * browser's download (a temporary link); a host that saves its own way (an extension's `chrome.downloads`, Office) passes its own.
+   */
+  saveFile?: SaveFile;
   /**
    * Texts fixed by the host instead of a language the user picks: the panel then offers no choice. What a partial
    * set leaves out is English. Most hosts leave it out and pass `automaticLanguage`.
@@ -280,6 +286,7 @@ export class AgentChatViewModel extends Observable implements TurnHost {
       previewLength: options.previewLength ?? 4000,
       now: options.now ?? (() => new Date()),
       showUnmarked: false,
+      saveFile: options.saveFile ?? browserSaveFile,
     };
     this.#beforeSend = options.beforeSend;
     this.#turnGate = options.turnGate;

@@ -265,4 +265,5 @@ export const germanStrings: UiStrings = {
     limit: "Sie endete, weil Ihre Organisation eingeschränkt hat, wer sie nutzen darf.",
     host: "Die App hat sie beendet.",
   },
+  downloadCsv: "CSV herunterladen",
 };

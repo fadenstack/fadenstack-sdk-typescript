@@ -52,7 +52,8 @@ export function MarkdownView({ part, strings }: { part: MarkdownPart; strings: U
   // Stable callbacks, so blocks that did not change are not rendered again while the answer streams.
   const copyCode = useCallback((code: string) => part.copyCode(code), [part]);
   const copyTable = useCallback((table: Parameters<MarkdownPart["copyTable"]>[0]) => part.copyTable(table), [part]);
-  return <Markdown blocks={part.blocks} strings={strings} streaming={part.isStreaming} onCopyCode={copyCode} onCopyTable={copyTable} />;
+  const downloadTable = useCallback((table: Parameters<MarkdownPart["downloadTableCsv"]>[0]) => part.downloadTableCsv(table), [part]);
+  return <Markdown blocks={part.blocks} strings={strings} streaming={part.isStreaming} onCopyCode={copyCode} onCopyTable={copyTable} onDownloadTable={downloadTable} />;
 }
 
 export function ToolCallView({ part, strings }: { part: ToolCallPart; strings: UiStrings }): ReactElement {

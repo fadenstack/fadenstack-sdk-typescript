@@ -9,8 +9,9 @@ const part = useViewModel(() => props.part);
 // The same functions for the part's life, so blocks that did not change are not drawn again while it streams.
 const copyCode = (code: string) => props.part.copyCode(code);
 const copyTable = (table: Extract<MarkdownBlock, { kind: "table" }>) => props.part.copyTable(table);
+const downloadTable = (table: Extract<MarkdownBlock, { kind: "table" }>) => props.part.downloadTableCsv(table);
 </script>
 
 <template>
-  <Markdown :blocks="part.blocks" :strings="strings" :streaming="part.isStreaming" :copy-code="copyCode" :copy-table="copyTable" />
+  <Markdown :blocks="part.blocks" :strings="strings" :streaming="part.isStreaming" :copy-code="copyCode" :copy-table="copyTable" :download-table="downloadTable" />
 </template>

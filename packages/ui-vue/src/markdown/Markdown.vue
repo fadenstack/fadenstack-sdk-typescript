@@ -13,6 +13,8 @@ defineProps<{
   copyCode?: ((code: string) => void) | undefined;
   /** Copies a table (tab-separated and as HTML); without it tables have no copy button. */
   copyTable?: ((table: TableBlock) => void) | undefined;
+  /** Saves a table as a CSV file; without it tables have no download button. */
+  downloadTable?: ((table: TableBlock) => void) | undefined;
   /** A cursor after the last block while the answer streams. */
   streaming?: boolean;
 }>();
@@ -20,6 +22,6 @@ defineProps<{
 
 <template>
   <div :class="streaming ? 'fdn-md fdn-md-streaming' : 'fdn-md'">
-    <MarkdownBlockView v-for="block in blocks" :key="block.key" :block="block" :strings="strings" :copy-code="copyCode" :copy-table="copyTable" />
+    <MarkdownBlockView v-for="block in blocks" :key="block.key" :block="block" :strings="strings" :copy-code="copyCode" :copy-table="copyTable" :download-table="downloadTable" />
   </div>
 </template>

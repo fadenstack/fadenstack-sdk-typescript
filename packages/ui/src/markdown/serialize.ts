@@ -55,12 +55,21 @@ function plainBlock(b: MarkdownBlock): string {
  * Tabs and line breaks inside a cell become spaces.
  */
 export function tableToTsv(table: Extract<MarkdownBlock, { kind: "table" }>): string {
-  const cell = (inlines: Inline[]) => inlineText(inlines).replace(/[\t\r\n]+/g, " ").trim();
-  return [table.header, ...table.rows].map((row) => row.map(cell).join("\t")).join("\n");
+  return [table.header, ...table.rows].map((row) => row.map(tableCellText).join("\t")).join("\n");
+}
+
+/** A cell's text as the copy button and the CSV download take it: no marks, tabs and line breaks as spaces, trimmed. */
+export function tableCellText(inlines: readonly Inline[]): string {
+  return inlineText(inlines).replace(/[\t\r\n]+/g, " ").trim();
 }
 
 /** The tables of Markdown, in order. */
 export function tablesOf(source: string): Extract<MarkdownBlock, { kind: "table" }>[] {
+  return tablesIn(parseMarkdown(source));
+}
+
+/** The tables among blocks, in order, also those inside quotes, lists and previews. */
+export function tablesIn(blocks: readonly MarkdownBlock[]): Extract<MarkdownBlock, { kind: "table" }>[] {
   const found: Extract<MarkdownBlock, { kind: "table" }>[] = [];
   const visit = (blocks: readonly MarkdownBlock[]) => {
     for (const b of blocks) {
@@ -69,7 +78,7 @@ export function tablesOf(source: string): Extract<MarkdownBlock, { kind: "table"
       else if (b.kind === "list") b.items.forEach((item) => visit(item.blocks));
     }
   };
-  visit(parseMarkdown(source));
+  visit(blocks);
   return found;
 }
 

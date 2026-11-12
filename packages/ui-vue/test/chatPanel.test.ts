@@ -79,6 +79,21 @@ describe("ChatPanel (Vue)", () => {
     expect(button(wrapper, "Copy table").attributes("title")).toBe("Copied");
   });
 
+  it("downloads a table of an answer as CSV through the host's saveFile, the second one as table-2.csv", async () => {
+    const saved: { name: string; type: string; content: string }[] = [];
+    const { wrapper, chat } = await panel(() => ({ text: "| Name |\n|---|\n| Müller, A |\n\n| N |\n|---|\n| -5 |" }), { saveFile: (f) => void saved.push(f) });
+    await wrapper.find("textarea").setValue("Table?");
+    await button(wrapper, "Send").trigger("click");
+    await settle(chat);
+    const buttons = wrapper.findAll("button").filter((b) => b.attributes("aria-label") === "Download CSV");
+    expect(buttons.length).toBe(2);
+    await buttons[0]!.trigger("click");
+    await buttons[1]!.trigger("click");
+    expect(saved.map((f) => f.name)).toEqual(["table.csv", "table-2.csv"]);
+    expect(saved[0]!.content).toBe(String.fromCharCode(0xfeff) + "Name\r\n\"Müller, A\"\r\n");
+    expect(saved[1]!.content.endsWith("\r\n'-5\r\n")).toBe(true);
+  });
+
   it("asks with a card and runs the tool when Allow is clicked", async () => {
     const { wrapper, chat, filled } = await panel(fillsThenAnswers);
     await wrapper.find("textarea").setValue("Fill my name");

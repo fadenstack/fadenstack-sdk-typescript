@@ -265,4 +265,5 @@ export const spanishStrings: UiStrings = {
     limit: "Terminó porque su organización restringió quién puede usarlo.",
     host: "La aplicación lo terminó.",
   },
+  downloadCsv: "Descargar CSV",
 };

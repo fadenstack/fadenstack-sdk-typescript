@@ -261,4 +261,5 @@ export const chineseSimplifiedStrings: UiStrings = {
     limit: "因您的组织已限制可使用它的人员而结束。",
     host: "应用已将其结束。",
   },
+  downloadCsv: "下载 CSV",
 };

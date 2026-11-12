@@ -335,6 +335,9 @@ export interface UiStrings {
   grantsSummaryCalls(count: number): string;
   /** Why a grant ended, by reason (time, stopped, elsewhere, spent, locked, away, admin, kill_switch, limit, host). */
   grantsEnded: Record<"time" | "stopped" | "elsewhere" | "spent" | "locked" | "away" | "admin" | "kill_switch" | "limit" | "host", string>;
+  // saving files
+  /** The button beside "Copy table": saves the table as a CSV file. */
+  downloadCsv: string;
 }
 
 export const englishStrings: UiStrings = {
@@ -594,6 +597,7 @@ export const englishStrings: UiStrings = {
     limit: "It ended because your organisation narrowed who may use it.",
     host: "The app ended it.",
   },
+  downloadCsv: "Download CSV",
 };
 
 /**
