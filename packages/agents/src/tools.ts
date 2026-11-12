@@ -1,4 +1,7 @@
-import type { EditKind, JsonSchema, ToolClass, ToolDefinition } from "@fadenstack/client";
+import { effectiveToolClass, parseToolClass } from "@fadenstack/client";
+import type { AgentProfile, EditKind, JsonSchema, ToolClass, ToolDefinition } from "@fadenstack/client";
+
+import type { AgentSession } from "./session.js";
 
 /** What a running tool knows about its call. */
 export interface ToolCallContext {
@@ -63,6 +66,20 @@ export function outputEditKind(output: ToolOutput, args: Record<string, unknown>
   return typeof output.edit === "function" ? output.edit(args) : output.edit;
 }
 
+/**
+ * Lets a tool source choose, per conversation, which of its tools the model is offered: tools that come in only when the
+ * model asks for them (`OnRequestTools`). .NET: `IToolScope`.
+ */
+export interface ToolScope {
+  /** Whether the model is offered `tool` in `session` now. */
+  offers(tool: AgentTool, session: AgentSession): boolean;
+  /**
+   * Called before a call of `tool` is approved or run. Returns the text that answers the call instead (the tool was not in
+   * scope and is now), or undefined to run it.
+   */
+  beforeCall(tool: AgentTool, session: AgentSession): string | undefined;
+}
+
 /** A tool the agent can run: what it is, what it does, where it runs, and its body. */
 export interface AgentTool {
   /** The name the model calls it by: letters, digits, `_` and `-`, up to 64. */
@@ -86,8 +103,31 @@ export interface AgentTool {
    * shows the arguments alone.
    */
   describe?(args: Record<string, unknown>, signal: AbortSignal): string | undefined | Promise<string | undefined>;
+  /**
+   * Decides per conversation whether the model is offered this tool; undefined: always offered. A tool it does not offer
+   * can still be called by name: `ToolScope.beforeCall` answers.
+   */
+  readonly scope?: ToolScope;
   /** Runs the tool. A string goes to the model as it is; anything else as JSON. */
   invoke(args: Record<string, unknown>, context: ToolCallContext): unknown;
+}
+
+/**
+ * The host tools `profile`'s contract allows, with the stricter of their own class and the contract's. A tool the contract
+ * leaves out is dropped (the gateway refuses it anyway; not offering it keeps the model from trying). Without a contract
+ * entry -- or an entry without a risk -- nobody on the server vouched for a tool: it is unclassified and always asks.
+ */
+export function settleHostTools(tools: readonly AgentTool[], profile: AgentProfile): AgentTool[] {
+  const contract = new Map(profile.hostToolContract.map((t) => [t.name, t]));
+  const settled: AgentTool[] = [];
+  for (const tool of tools) {
+    const entry = contract.get(tool.name);
+    if (contract.size > 0 && !entry) continue;
+    const risk: ToolClass = entry ? parseToolClass(entry.risk) : "unknown";
+    const toolClass = risk === "unknown" ? "unknown" : effectiveToolClass(tool.toolClass, risk);
+    settled.push(toolClass === tool.toolClass ? tool : withToolClass(tool, toolClass));
+  }
+  return settled;
 }
 
 export interface ToolSpec<A extends Record<string, unknown>> {
@@ -160,6 +200,7 @@ export function withToolClass(tool: AgentTool, toolClass: ToolClass): AgentTool 
     ...(tool.server !== undefined ? { server: tool.server } : {}),
     ...(tool.openWorld !== undefined ? { openWorld: tool.openWorld } : {}),
     ...(tool.output !== undefined ? { output: tool.output } : {}),
+    ...(tool.scope !== undefined ? { scope: tool.scope } : {}),
     ...(tool.describe ? { describe: (args: Record<string, unknown>, signal: AbortSignal) => tool.describe!(args, signal) } : {}),
     invoke: (args, context) => tool.invoke(args, context),
   };

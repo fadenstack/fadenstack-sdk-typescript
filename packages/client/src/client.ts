@@ -4,6 +4,7 @@ import { FadenstackTransport, type FetchLike, type TransportOptions } from "./ht
 import type { ServerFeatures } from "./models.js";
 import { AgentResource } from "./resources/agent.js";
 import { ProvenanceResource } from "./resources/provenance.js";
+import type { FadenstackLogger } from "./logging.js";
 import type { ToolMode } from "./tools/toolModes.js";
 
 /** How a `FadenstackClient` reaches its server, and as whom. */
@@ -30,6 +31,8 @@ export interface FadenstackClientOptions {
   fetch?: FetchLike;
   /** How long one request may take, in ms (default 5 min); a stream is not cut by it once it started. */
   timeoutMs?: number;
+  /** Where the client logs: method, route, status and time of each request, never content or a token (see `FadenstackLogger`). */
+  logger?: FadenstackLogger;
 }
 
 /**
@@ -56,6 +59,7 @@ export class FadenstackClient {
     if (options.allowInsecureHttp !== undefined) transport.allowInsecureHttp = options.allowInsecureHttp;
     if (options.fetch !== undefined) transport.fetch = options.fetch;
     if (options.timeoutMs !== undefined) transport.timeoutMs = options.timeoutMs;
+    if (options.logger !== undefined) transport.logger = options.logger;
     this.transport = new FadenstackTransport(transport);
     const chat: ChatClientSettings = {
       toolMode: options.toolMode ?? "ask",
@@ -86,6 +90,7 @@ export class FadenstackClient {
     if (options.fetch) tokenOptions.fetch = options.fetch;
     // The same rule for the sign-in as for the client: a development server over http only where the app allows it.
     if (options.allowInsecureHttp !== undefined) tokenOptions.allowInsecureHttp = options.allowInsecureHttp;
+    if (options.logger) tokenOptions.logger = options.logger;
     const tokens = new AgentTokenProvider(tokenOptions);
     return { client: new FadenstackClient({ ...rest, credentials: tokens }), tokens };
   }

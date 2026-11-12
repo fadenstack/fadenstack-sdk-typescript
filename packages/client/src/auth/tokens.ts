@@ -1,6 +1,7 @@
 import { FadenstackApiError, FadenstackError, FadenstackSignInRequiredError, FadenstackUnreachableError } from "../errors.js";
 import { toApiError } from "../http/errorReader.js";
 import { requireSecureUrl, type FetchLike } from "../http/transport.js";
+import { ClientLog, writeLog, type FadenstackLogger } from "../logging.js";
 
 /** An agent sign-in on one device: a short access token and the refresh token that renews it. Times in ms since the epoch. */
 export interface TokenSet {
@@ -12,6 +13,39 @@ export interface TokenSet {
   deviceId: string;
   agentId: string;
   agent: string;
+  /** Who signed in, as the server's answer names them; absent from a server that does not say. */
+  user?: SignedInUser;
+}
+
+/** Who signed in to an agent on this device: the server's word in its token answers (core 0.7.1). */
+export interface SignedInUser {
+  id: string;
+  email: string;
+  displayName?: string;
+}
+
+/**
+ * The token set a server's token answer (sign-in, renewal, pairing) stands for. Never throws on what the server wrote in
+ * `user`: a user without an e-mail is none.
+ */
+export function readTokenSet(issued: Record<string, unknown>, now: number, fallbackAgent: string): TokenSet {
+  const tokens: TokenSet = {
+    accessToken: String(issued["access_token"] ?? ""),
+    accessExpiresAt: now + Number(issued["expires_in"] ?? 0) * 1000,
+    refreshToken: String(issued["refresh_token"] ?? ""),
+    refreshExpiresAt: now + Number(issued["refresh_expires_in"] ?? 0) * 1000,
+    deviceId: String(issued["device_id"] ?? ""),
+    agentId: String(issued["agent_id"] ?? ""),
+    agent: String(issued["agent"] ?? fallbackAgent),
+  };
+  const user = issued["user"];
+  if (user !== null && typeof user === "object") {
+    const u = user as Record<string, unknown>;
+    if (typeof u["email"] === "string" && u["email"]) {
+      tokens.user = { id: String(u["id"] ?? ""), email: u["email"], ...(typeof u["display_name"] === "string" ? { displayName: u["display_name"] } : {}) };
+    }
+  }
+  return tokens;
 }
 
 /** Where a client's access tokens come from. */
@@ -103,6 +137,8 @@ export interface AgentTokenProviderOptions {
   now?: () => number;
   /** Allow `http://` to another machine. Off: tokens go over https, or plain http only to this machine. */
   allowInsecureHttp?: boolean;
+  /** Where renewals and sign-outs are logged (the agent only; never a token). None by default. */
+  logger?: FadenstackLogger;
 }
 
 /**
@@ -116,6 +152,7 @@ export class AgentTokenProvider implements TokenProvider {
   readonly #fetch: FetchLike;
   readonly #now: () => number;
   readonly #key: string;
+  readonly #logger: FadenstackLogger | undefined;
   #tokens: TokenSet | undefined;
   #loaded = false;
   #refreshing: Promise<TokenSet> | undefined;
@@ -128,6 +165,7 @@ export class AgentTokenProvider implements TokenProvider {
     this.#fetch = options.fetch ?? ((input, init) => globalThis.fetch(input, init));
     this.#now = options.now ?? Date.now;
     this.#key = AgentTokenProvider.storeKey(this.#apiUrl, options.agent);
+    this.#logger = options.logger;
   }
 
   /** The key a sign-in is kept under: the backend and the agent. */
@@ -139,6 +177,16 @@ export class AgentTokenProvider implements TokenProvider {
   /** The device's sign-in id, once signed in (or loaded). */
   get deviceId(): string | undefined {
     return this.#tokens?.deviceId;
+  }
+
+  /** Who signed in, once signed in (or loaded) and when the server said; for the app to show. */
+  get signedInUser(): SignedInUser | undefined {
+    return this.#tokens?.user;
+  }
+
+  /** Who signed in, read from the store when it is not loaded yet. */
+  async getSignedInUser(): Promise<SignedInUser | undefined> {
+    return (await this.#current())?.user;
   }
 
   /**
@@ -160,13 +208,39 @@ export class AgentTokenProvider implements TokenProvider {
   }
 
   /**
-   * Forgets the sign-in on this device. (Ending it on the server: the user's sign-ins in the console, or
-   * `DELETE /api/agent-tokens/{device}` with their login.)
+   * Signs out: asks the server to revoke the sign-in (`POST /api/agent-tokens/revoke` with the refresh token), then deletes
+   * the tokens on this device (OWASP ASVS 5.0 7.4.1: ending a session ends it at the server). The revoke is best effort: when
+   * the server cannot be reached or refuses (an older one has no such route), the tokens are deleted anyway and the sign-in
+   * ends at the server on its own, or in the console's list of sign-ins. The refresh token is never logged. Afterwards the
+   * provider reports that sign-in is required. .NET: `AgentTokenProvider.SignOutAsync`.
    */
-  async signOut(): Promise<void> {
-    this.#tokens = undefined;
-    this.#loaded = true;
-    await this.#store.delete(this.#key);
+  async signOut(signal?: AbortSignal): Promise<void> {
+    const current = this.#tokens ?? (this.#loaded ? undefined : await this.#store.load(this.#key));
+    let revoked = false;
+    try {
+      if (current?.refreshToken) revoked = await this.#revoke(current.refreshToken, signal);
+    } finally {
+      this.#tokens = undefined;
+      this.#loaded = true;
+      await this.#store.delete(this.#key);
+    }
+    writeLog(this.#logger, ClientLog.signedOut, { Agent: this.agent, Revoked: revoked });
+  }
+
+  /** Whether the server confirmed (any 2xx); a failure of any kind is not an error here. */
+  async #revoke(refreshToken: string, signal?: AbortSignal): Promise<boolean> {
+    try {
+      const limit = AbortSignal.timeout(15_000);
+      const response = await this.#fetch(new URL("api/agent-tokens/revoke", this.#apiUrl), {
+        method: "POST", credentials: "omit", signal: signal ? AbortSignal.any([signal, limit]) : limit,
+        headers: { "content-type": "application/json", accept: "application/json" }, body: JSON.stringify({ refresh_token: refreshToken }),
+      });
+      return response.ok;
+    } catch (error) {
+      if (signal?.aborted) throw signal.reason ?? error;
+      writeLog(this.#logger, ClientLog.signOutRevokeFailed, { Agent: this.agent, Reason: error instanceof Error ? error.name : typeof error });
+      return false; // best effort: the tokens go from this device either way
+    }
   }
 
   async getAccessToken(signal?: AbortSignal): Promise<string> {
@@ -196,15 +270,27 @@ export class AgentTokenProvider implements TokenProvider {
       renewed = await this.#issue("api/agent-tokens/refresh", { refresh_token: current.refreshToken }, undefined,
         AbortSignal.timeout(REFRESH_TIMEOUT_MS));
     } catch (error) {
+      writeLog(this.#logger, ClientLog.tokenRefreshFailed, { Agent: this.agent,
+        Reason: error instanceof FadenstackApiError ? `status ${error.status}` : error instanceof Error ? error.name : typeof error });
       if (error instanceof FadenstackApiError && (error.status === 401 || error.status === 403)) {
         // Revoked, reused elsewhere (the whole sign-in ended), or the user lost access.
-        await this.signOut();
+        await this.#forget();
         throw new FadenstackSignInRequiredError(`The sign-in to '${this.agent}' ended: ${error.message}`, { cause: error });
       }
       throw error;
     }
+    // A renewal may leave out who signed in: it is still the same person.
+    if (renewed.user === undefined && current.user !== undefined) renewed = { ...renewed, user: current.user };
     await this.#remember(renewed);
+    writeLog(this.#logger, ClientLog.tokenRefreshed, { Agent: this.agent });
     return renewed;
+  }
+
+  /** The sign-in is gone on this device (the server ended it): no call to the server. */
+  async #forget(): Promise<void> {
+    this.#tokens = undefined;
+    this.#loaded = true;
+    await this.#store.delete(this.#key);
   }
 
   async #current(): Promise<TokenSet | undefined> {
@@ -235,17 +321,7 @@ export class AgentTokenProvider implements TokenProvider {
     }
     const text = await response.text();
     if (!response.ok) throw toApiError(response, text);
-    const issued = JSON.parse(text) as Record<string, unknown>;
-    const now = this.#now();
-    return {
-      accessToken: String(issued["access_token"] ?? ""),
-      accessExpiresAt: now + Number(issued["expires_in"] ?? 0) * 1000,
-      refreshToken: String(issued["refresh_token"] ?? ""),
-      refreshExpiresAt: now + Number(issued["refresh_expires_in"] ?? 0) * 1000,
-      deviceId: String(issued["device_id"] ?? ""),
-      agentId: String(issued["agent_id"] ?? ""),
-      agent: String(issued["agent"] ?? this.agent),
-    };
+    return readTokenSet(JSON.parse(text) as Record<string, unknown>, this.#now(), this.agent);
   }
 }
 

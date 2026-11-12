@@ -106,7 +106,7 @@ export class PendingGrant {
  * Without a chat listening, requests are declined. .NET: `Fadenstack.UI.Services.ApprovalBroker`.
  */
 export class ApprovalBroker implements ApprovalHandler, GrantHandler, StepUpHandler {
-  readonly #listeners = new Set<(pending: PendingApproval) => void>();
+  readonly #listeners = new Set<{ listener: (pending: PendingApproval) => void; session: (() => string | undefined) | undefined }>();
   readonly #grantListeners = new Set<(pending: PendingGrant) => void>();
   readonly #stepUpListeners = new Set<(request: StepUpRequest, stage: StepUpStage) => void>();
 
@@ -116,11 +116,16 @@ export class ApprovalBroker implements ApprovalHandler, GrantHandler, StepUpHand
    */
   openBrowser: (link: URL) => boolean = openInBrowser;
 
-  /** Calls `listener` for each request; returns the unsubscribe. */
-  onRequested(listener: (pending: PendingApproval) => void): () => void {
-    this.#listeners.add(listener);
+  /**
+   * Calls `listener` for each request; returns the unsubscribe. A chat gives `session`, the id of the session it shows
+   * now: it then gets only the requests of that session (and those that name none), so several chats share one broker.
+   * A listener without `session` gets every request.
+   */
+  onRequested(listener: (pending: PendingApproval) => void, session?: () => string | undefined): () => void {
+    const entry = { listener, session };
+    this.#listeners.add(entry);
     return () => {
-      this.#listeners.delete(listener);
+      this.#listeners.delete(entry);
     };
   }
 
@@ -144,9 +149,10 @@ export class ApprovalBroker implements ApprovalHandler, GrantHandler, StepUpHand
   }
 
   request(request: ApprovalRequest, signal: AbortSignal): Promise<ApprovalDecision> {
-    if (this.#listeners.size === 0) return Promise.resolve(ApprovalDecision.deny("Nobody is here to approve it."));
+    const owners = [...this.#listeners].filter((l) => !l.session || !request.sessionId || l.session() === request.sessionId);
+    if (owners.length === 0) return Promise.resolve(ApprovalDecision.deny("Nobody is here to approve it."));
     const pending = new PendingApproval(request, signal);
-    for (const listener of [...this.#listeners]) listener(pending);
+    for (const { listener } of owners) listener(pending);
     return pending.decision;
   }
 

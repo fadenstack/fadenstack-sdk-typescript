@@ -159,6 +159,7 @@ export class TurnViewModel extends Observable {
   /** @internal */
   appendText(text: string): void {
     if (!this.#text) {
+      this.#closeReasoning();
       this.#text = new MarkdownPart(this.#context, undefined, true);
       this.#parts = [...this.#parts, this.#text];
       this.notify();
@@ -325,7 +326,16 @@ export class TurnViewModel extends Observable {
       this.#text.setStreaming(false);
       this.#text = undefined;
     }
+    this.#closeReasoning();
+  }
+
+  /**
+   * Thinking ends where an answer, a tool call or a part starts; thinking after it is a block of its own, below it, so
+   * "Thought for" never counts a tool's run, an approval's wait or the answer's streaming (.NET `CloseReasoning`).
+   */
+  #closeReasoning(): void {
     if (this.#reasoning?.isStreaming) this.#reasoning.complete(this.#context.now());
+    this.#reasoning = undefined;
   }
 }
 

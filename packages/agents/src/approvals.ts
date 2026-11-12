@@ -2,6 +2,13 @@ import type { ToolClass } from "@fadenstack/client";
 
 /** A tool call that waits for the user. */
 export interface ApprovalRequest {
+  /**
+   * The session (`AgentSession.id`) the call belongs to. The SDK always sets it; it is absent only on a request a caller
+   * made by hand. A screen that shows several chats at once hands the request to the chat that owns it.
+   */
+  sessionId?: string;
+  /** The turn within that session the call belongs to. */
+  turnId?: string;
   callId: string;
   toolName: string;
   toolClass: ToolClass;

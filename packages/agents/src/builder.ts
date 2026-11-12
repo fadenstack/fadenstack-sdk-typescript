@@ -24,6 +24,8 @@ import { isStepUpHandler, type StepUpHandler } from "./stepUp.js";
 import type { ChatStage, FadenstackModule, ToolServiceFactory, ToolSource, ToolStage } from "./stages.js";
 import type { AgentTool, ToolServiceKey } from "./tools.js";
 import type { GrantHandler, GrantPlaceResolver } from "./grants.js";
+import type { ReasoningStore } from "./reasoning.js";
+import type { FadenstackLogger } from "@fadenstack/client";
 
 /** What an agent was built with. */
 export interface AgentSettings {
@@ -55,6 +57,10 @@ export interface AgentSettings {
   readonly historyTokens: number;
   readonly report: boolean;
   readonly reasoning: ReasoningEffort | undefined;
+  /** The host's own store for the person's thinking level; undefined: the browser's IndexedDB, per signed-in user. */
+  readonly reasoningStore?: ReasoningStore;
+  /** Where the agent and its sessions log; undefined: nowhere. */
+  readonly logger?: FadenstackLogger;
   /** The app the agent runs in, for the manifest it reports when it starts. */
   readonly app: AppDescription;
 }
@@ -100,6 +106,8 @@ export class AgentBuilder {
   #historyTokens = 24_000;
   #report = true;
   #reasoning: ReasoningEffort | undefined;
+  #reasoningStore: ReasoningStore | undefined;
+  #logger: FadenstackLogger | undefined;
   #app: AppDescription = { name: UNDESCRIBED_APP_NAME };
 
   /** The server, and how the agent signs in (usually an `AgentTokenProvider`). */
@@ -232,6 +240,28 @@ export class AgentBuilder {
   }
 
   /**
+   * Where the agent logs: profile, tools, each turn, tool and approval, as names, ids, counts, durations and outcomes -- never a
+   * prompt, an answer, reasoning, attachment text, tool arguments or results, a token or who the user is. The same events and
+   * fields as the .NET SDK's. The client gets the logger too unless it has one (its requests: method, route, status, time).
+   * Nowhere by default; there is no file sink in a browser.
+   */
+  useLogging(logger: FadenstackLogger): this {
+    if (typeof logger?.log !== "function") throw new TypeError("A logger has a log(event) method.");
+    this.#logger = logger;
+    return this;
+  }
+
+  /**
+   * Where the level of thinking a person picked is kept, per person and agent (`FadenstackAgent.setReasoning`). By default
+   * the signed-in user's own IndexedDB database in a browser -- unless the host keeps both the sessions and the approvals
+   * itself, which leaves the pick in memory for the run.
+   */
+  useReasoningStore(store: ReasoningStore): this {
+    this.#reasoningStore = store;
+    return this;
+  }
+
+  /**
    * Whether tool runs and approvals (names and counts only), and the app's manifest, are reported to the server.
    * Default on.
    */
@@ -300,6 +330,7 @@ export class AgentBuilder {
     for (const stage of [...this.#chatStages].sort((a, b) => b.order - a.order)) chat = stage.wrap(chat);
     // The server offers Bypass only to a client that names the whole flow, so it is named only where the app can open the
     // second sign-in.
+    if (this.#logger) client.transport.useLogger(this.#logger);
     if (this.#stepUp ?? (isStepUpHandler(this.#approvals) ? this.#approvals : undefined)) client.transport.announce(...BYPASS_SUPPORTS);
     return FadenstackAgent.create({
       client,
@@ -323,6 +354,8 @@ export class AgentBuilder {
       historyTokens: this.#historyTokens,
       report: this.#report,
       reasoning: this.#reasoning,
+      ...(this.#reasoningStore ? { reasoningStore: this.#reasoningStore } : {}),
+      ...(this.#logger ? { logger: this.#logger } : {}),
       app: this.#app,
     });
   }

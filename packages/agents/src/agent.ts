@@ -1,19 +1,18 @@
 import {
   FadenstackError,
   HOST_TOOL_DISPATCH_FEATURE,
+  writeLog,
   SDK_LANGUAGE,
   SDK_VERSION,
   decideTool,
-  effectiveToolClass,
   narrowestMode,
-  parseToolClass,
   type AgentPrincipal,
   type AgentProfile,
   type AppManifest,
   type FadenstackClient,
   type ManifestTool,
+  type ReasoningEffort,
   type SkillOption,
-  type ToolClass,
   type ToolDefinition,
   type ToolMode,
 } from "@fadenstack/client";
@@ -24,12 +23,17 @@ import { IndexedDbSessionStore } from "./indexedDbSessionStore.js";
 import { MemorySessionStore, type SessionStore } from "./sessionStore.js";
 import { StepUpProofs, isStepUpHandler, type StepUpHandler } from "./stepUp.js";
 import { userStoreName } from "./userData.js";
+import {
+  IndexedDbReasoningStore, MemoryReasoningStore, ReasoningChoices, reasoningEffort, reasoningLevelOf, reasoningStoreName,
+  type ReasoningLevel, type ReasoningStore,
+} from "./reasoning.js";
 
 import { AgentBuilder, UNDESCRIBED_APP_NAME, type AgentSettings, type AppDescription } from "./builder.js";
 import { EventReporter } from "./reporter.js";
 import { AgentSession } from "./session.js";
-import type { AgentContext } from "./stages.js";
-import { toDefinition, withToolClass, type AgentTool, type ToolOutput } from "./tools.js";
+import { isChangingToolSource, type AgentContext, type ToolSource } from "./stages.js";
+import { AgentLog } from "./log.js";
+import { settleHostTools, toDefinition, type AgentTool, type ToolOutput } from "./tools.js";
 import { newId, type SessionInfo } from "./transcript.js";
 import { AgentGrants, isGrantHandler, type GrantHandler } from "./grants.js";
 
@@ -54,11 +58,20 @@ export class FadenstackAgent {
   #profileRead = 0;
   #context: AgentContext | undefined;
   #tools: readonly AgentTool[] = [];
-  #sourceTools: readonly AgentTool[] = [];
+  // Each source's tools in the builder's order, and the sources that said they changed since the last turn began.
+  #sourceTools: { source: ToolSource; tools: readonly AgentTool[] }[] = [];
+  readonly #changed = new Set<ToolSource>();
+  readonly #unsubscribe: (() => void)[] = [];
+  // Names that were offered and went away: a call of one is refused as such, not as unknown.
+  readonly #gone = new Set<string>();
+  #refreshing: Promise<void> = Promise.resolve();
   // The stores the host did not pass: in the signed-in user's own database (`userStoreName`).
   #sessions: SessionStore | undefined;
   #approvalStore: ApprovalStore | undefined;
   #storesFor: string | undefined;
+  #reasoningStore: ReasoningStore | undefined;
+  #reasoningChoices: ReasoningChoices = ReasoningChoices.everything;
+  #reasoningPick: ReasoningLevel | undefined;
   #starting: Promise<void> | undefined;
   #warned = false;
   #hostPolicySeen = false;
@@ -148,12 +161,16 @@ export class FadenstackAgent {
       this.#checkModules(fresh);
     } catch (error) {
       if (signal?.aborted) throw signal.reason ?? error;
+      writeLog(this.settings.logger, AgentLog.profileRereadFailed, { Agent: this.slug, ErrorType: error instanceof Error ? error.name : typeof error });
       return; // the profile held stays
     }
     this.#assertHostPolicySupport(fresh); // not swallowed above: a server that dropped the checks is not trusted with the old ones
     const who = (p: AgentProfile) => JSON.stringify({ id: p.id, slug: p.slug, principal: p.principal });
     if (who(before) !== who(fresh)) throw new FadenstackError("The agent or the signed-in user changed. Reconnect before starting a session.");
-    this.#tools = this.#compose(this.#settleHostTools(fresh), this.#sourceTools);
+    const offered = this.#tools;
+    this.#tools = this.#compose(settleHostTools(this.settings.tools, fresh), this.#sourceTools.map((s) => s.tools));
+    this.#markGone(offered, this.#tools);
+    this.#reasoningChoices = ReasoningChoices.fromUi(fresh.ui); // a maximum the server lowered counts from the next message
     this.#profile = fresh;
     this.#profileRead = this.clock();
     if (this.#context) this.#context = { ...this.#context, profile: fresh };
@@ -267,52 +284,94 @@ export class FadenstackAgent {
     }
   }
 
-  /** The host tools the profile's contract allows, with the stricter of their own class and the contract's. */
-  #settleHostTools(profile: AgentProfile): AgentTool[] {
-    const contract = new Map(profile.hostToolContract.map((t) => [t.name, t]));
-    const tools: AgentTool[] = [];
-    for (const tool of this.settings.tools) {
-      const entry = contract.get(tool.name);
-      if (contract.size > 0 && !entry) continue; // the gateway refuses it anyway; not offering it keeps the model from trying
-      const risk: ToolClass = entry ? parseToolClass(entry.risk) : "unknown";
-      const toolClass = risk === "unknown" ? "unknown" : effectiveToolClass(tool.toolClass, risk);
-      tools.push(toolClass === tool.toolClass ? tool : withToolClass(tool, toolClass));
+  /** The host tools, then each source's tools in the builder's order; a host tool wins over a source's of the same name, the first source over a later one. */
+  #compose(hosts: readonly AgentTool[], fromSources: readonly (readonly AgentTool[])[]): AgentTool[] {
+    const tools = [...hosts];
+    const names = new Set(tools.map((t) => t.name));
+    for (const list of fromSources) for (const tool of list) if (!names.has(tool.name)) {
+      names.add(tool.name);
+      tools.push(tool);
     }
     return tools;
   }
 
-  // A host tool wins over a source's of the same name.
-  #compose(hosts: readonly AgentTool[], fromSources: readonly AgentTool[]): AgentTool[] {
-    const tools = [...hosts];
-    for (const tool of fromSources) if (!tools.some((t) => t.name === tool.name)) tools.push(tool);
-    return tools;
+  /** Keeps the names of the tools that were offered and are no more; a name offered again is taken off. */
+  #markGone(before: readonly AgentTool[], after: readonly AgentTool[]): void {
+    const now = new Set(after.map((t) => t.name));
+    for (const tool of before) if (!now.has(tool.name)) this.#gone.add(tool.name);
+    for (const name of now) this.#gone.delete(name);
+  }
+
+  /** Whether a tool of this name was offered and went away: a call to it is refused as such, not as unknown. */
+  isGone(name: string): boolean {
+    return this.#gone.has(name);
+  }
+
+  /**
+   * @internal Asks the sources that said they changed (`ChangingToolSource`) for their tools again, and settles them as at
+   * start. Called at the start of a turn, never inside one, so a turn's tools do not change under it. A tool that went away
+   * stays refused by name. A source that fails keeps the tools it had.
+   */
+  refreshTools(signal?: AbortSignal): Promise<void> {
+    if (this.#changed.size === 0 || !this.#context) return Promise.resolve();
+    const run = this.#refreshing.then(async () => {
+      const changed = [...this.#changed];
+      this.#changed.clear();
+      if (changed.length === 0 || !this.#context) return;
+      const before = this.#tools;
+      for (const source of changed) {
+        let fresh: readonly AgentTool[];
+        try {
+          fresh = await source.getTools(this.#context, signal);
+        } catch (error) {
+          if (signal?.aborted) throw signal.reason ?? error;
+          writeLog(this.settings.logger, AgentLog.toolsRefreshFailed, { Agent: this.slug, ErrorType: error instanceof Error ? error.name : typeof error });
+          continue; // it keeps the tools it had
+        }
+        const at = this.#sourceTools.findIndex((s) => s.source === source);
+        if (at >= 0) this.#sourceTools[at] = { source, tools: fresh };
+      }
+      this.#tools = this.#compose(settleHostTools(this.settings.tools, this.profile), this.#sourceTools.map((s) => s.tools));
+      this.#markGone(before, this.#tools);
+      writeLog(this.settings.logger, AgentLog.toolsRefreshed, { Agent: this.slug, Sources: changed.length, Tools: this.#tools.length });
+    });
+    this.#refreshing = run.catch(() => undefined);
+    return run;
   }
 
   async #start(signal?: AbortSignal): Promise<void> {
     const profile = await this.client.agent!.getProfile(signal);
     this.#assertHostPolicySupport(profile);
     this.#checkModules(profile);
-    const hosts = this.#settleHostTools(profile);
+    const hosts = settleHostTools(this.settings.tools, profile);
     const context: AgentContext = {
       client: this.client,
       profile,
       report: (event) => this.reporter.reportNow([event]),
     };
-    const fromSources: AgentTool[] = [];
+    const fromSources: { source: ToolSource; tools: readonly AgentTool[] }[] = [];
     for (const source of this.settings.sources) {
-      for (const tool of await source.getTools(context, signal)) {
-        if (!hosts.some((t) => t.name === tool.name) && !fromSources.some((t) => t.name === tool.name)) fromSources.push(tool);
-      }
+      if (isChangingToolSource(source)) this.#unsubscribe.push(source.onChanged(() => { this.#changed.add(source); }));
+      fromSources.push({ source, tools: await source.getTools(context, signal) });
     }
     this.#sourceTools = fromSources;
-    this.#tools = this.#compose(hosts, fromSources);
+    this.#tools = this.#compose(hosts, fromSources.map((s) => s.tools));
+    this.#settleStores(profile.principal);
+    this.#reasoningChoices = ReasoningChoices.fromUi(profile.ui);
+    this.#reasoningPick = await this.#picks?.get(this.slug).catch(() => undefined);
     this.#profile = profile;
     this.#profileRead = this.clock();
     this.#context = context;
-    this.#settleStores(profile.principal);
+    const dropped = this.settings.tools.filter((t) => !hosts.some((h) => h.name === t.name));
+    for (const tool of dropped) writeLog(this.settings.logger, AgentLog.toolDropped, { Tool: tool.name });
+    writeLog(this.settings.logger, AgentLog.profileLoaded, { Agent: this.slug, Version: profile.version ?? null, Edition: profile.edition,
+      FeatureCount: profile.features.length, UserPartition: profile.principal !== undefined });
+    writeLog(this.settings.logger, AgentLog.toolsSettled, { Agent: this.slug, HostTools: hosts.length,
+      SourceTools: this.#tools.length - hosts.length, Dropped: dropped.length });
     if (this.settings.permissionMode === "bypass" && !this.#warned) {
       if (!this.bypassOffered) {
         this.#warned = true;
+        writeLog(this.settings.logger, AgentLog.bypassMode, { Agent: this.slug });
         console.warn(`The agent '${this.slug}' is set to bypass mode, which this server does not offer for it: its sessions ` +
           "run in auto instead. Destructive and unclassified calls, an admin's \"Ask first\" rule and the gateway's own questions still ask.");
       } else if (!this.stepUpHandler) {
@@ -335,12 +394,85 @@ export class FadenstackAgent {
     if (this.#storesFor === key) return;
     (this.#sessions as { close?: () => void } | undefined)?.close?.();
     (this.#approvalStore as { close?: () => void } | undefined)?.close?.();
+    (this.#reasoningStore as { close?: () => void } | undefined)?.close?.();
     const indexed = !!globalThis.indexedDB;
+    // A host that keeps both stores itself has taken over the device's storage: the pick then lasts for the run only.
+    this.#reasoningStore = this.settings.reasoningStore ? undefined
+      : this.settings.sessions && this.settings.approvalStore ? new MemoryReasoningStore()
+      : indexed ? new IndexedDbReasoningStore({ name: reasoningStoreName(principal) }) : new MemoryReasoningStore();
     this.#sessions = this.settings.sessions ? undefined
       : indexed ? new IndexedDbSessionStore({ name: userStoreName("fadenstack-sessions", principal) }) : new MemorySessionStore();
     this.#approvalStore = this.settings.approvalStore ? undefined
       : indexed ? new IndexedDbApprovalStore({ name: userStoreName("fadenstack-approvals", principal) }) : new MemoryApprovalStore();
     this.#storesFor = key;
+  }
+
+  // -- thinking -----------------------------------------------------------------------------------------------
+
+  /**
+   * The levels of thinking the agent offers: Auto, Off, and Low, Medium and High up to the maximum the profile's
+   * `ui.reasoning.max` sets, if any (`minimal` caps at none, `max` sets no cap). .NET: `ReasoningChoices`.
+   */
+  get reasoningChoices(): ReasoningChoices {
+    return this.#reasoningChoices;
+  }
+
+  /**
+   * The level this person picked for this agent, if any, kept per person and agent (in the signed-in user's own IndexedDB
+   * database, unless the host keeps both stores itself: then for the run only). A pick above a maximum the server set later
+   * still counts, and is lowered to it.
+   */
+  get reasoningChoice(): ReasoningLevel | undefined {
+    return this.#reasoningPick;
+  }
+
+  /**
+   * How long new messages think: the person's pick, else what the app set with `useReasoning`, else Auto -- each lowered to
+   * the server's maximum, if it sets one.
+   */
+  get reasoning(): ReasoningLevel {
+    return this.#resolveReasoning().level;
+  }
+
+  /** @internal What a request carries when nothing else was set for the session; undefined (no field) for Auto without a maximum. */
+  get requestEffort(): ReasoningEffort | undefined {
+    return this.#resolveReasoning().effort;
+  }
+
+  /** @internal What a request carries for a level the session was given: Auto is the maximum, if there is one. */
+  effortFor(level: ReasoningLevel): ReasoningEffort | undefined {
+    return level === "auto" ? this.#reasoningChoices.max : this.#reasoningChoices.cap(reasoningEffort(level));
+  }
+
+  get #picks(): ReasoningStore | undefined {
+    return this.settings.reasoningStore ?? this.#reasoningStore;
+  }
+
+  #resolveReasoning(): { level: ReasoningLevel; effort: ReasoningEffort | undefined } {
+    const choices = this.#reasoningChoices;
+    const capped = (effort: ReasoningEffort | undefined) => ({ level: reasoningLevelOf(effort), effort });
+    if (this.#reasoningPick) {
+      return this.#reasoningPick === "auto" ? { level: "auto", effort: choices.max } : capped(choices.cap(reasoningEffort(this.#reasoningPick)));
+    }
+    // The app's own effort goes out exactly as it set it (extra high stays extra high) unless the maximum is lower.
+    return this.settings.reasoning ? capped(choices.cap(this.settings.reasoning)) : { level: "auto", effort: choices.max };
+  }
+
+  /**
+   * Keeps the person's pick for this agent (undefined forgets it), from the next message on; a running turn is not changed.
+   * A level the agent does not offer is ignored. Returns the level new messages think at.
+   */
+  async setReasoning(level: ReasoningLevel | undefined, signal?: AbortSignal): Promise<ReasoningLevel> {
+    await this.start(signal);
+    if (level === undefined || this.#reasoningChoices.offers(level)) {
+      this.#reasoningPick = level;
+      try {
+        await this.#picks?.set(this.slug, level);
+      } catch {
+        // the pick still holds for this run; it is just not remembered
+      }
+    }
+    return this.reasoning;
   }
 
   /** The host's session store, or the default one once `start` knows whose it is. */
@@ -372,7 +504,9 @@ export class FadenstackAgent {
     const manifest: AppManifest = {
       app: { name: app.name, ...(app.version !== undefined ? { version: app.version } : {}) },
       sdk: { language: SDK_LANGUAGE, version: SDK_VERSION },
-      tools: tools.filter((t) => t.source === "host").map((t) => ({
+      // The host's tools, and those of its tool sources that are host tools (on request): the server learns of them the same way.
+      tools: [...tools, ...this.settings.sources.flatMap((s) => s.declared?.() ?? []).filter((t) => !tools.some((h) => h.name === t.name))]
+        .filter((t) => t.source === "host").map((t) => ({
         name: t.name,
         parameters: t.parameters,
         toolClass: t.toolClass,
@@ -462,12 +596,16 @@ export class FadenstackAgent {
     await this.flush();
     (this.#sessions as { close?: () => void } | undefined)?.close?.();
     (this.#approvalStore as { close?: () => void } | undefined)?.close?.();
+    (this.#reasoningStore as { close?: () => void } | undefined)?.close?.();
+    for (const stop of this.#unsubscribe.splice(0)) stop();
     for (const source of this.settings.sources) await source.dispose?.();
   }
 
-  /** The tools a mode offers the model. */
-  offer(mode: ToolMode): ToolDefinition[] {
-    return this.#tools.filter((t) => decideTool(mode, t.toolClass) !== "hidden").map(toDefinition);
+  /** The tools a mode offers the model in `session` (when given): the mode's, and those the tool's scope offers. */
+  offer(mode: ToolMode, session?: AgentSession): ToolDefinition[] {
+    return this.#tools
+      .filter((t) => (!t.scope || (session !== undefined && t.scope.offers(t, session))) && decideTool(mode, t.toolClass) !== "hidden")
+      .map(toDefinition);
   }
 
   find(name: string): AgentTool | undefined {

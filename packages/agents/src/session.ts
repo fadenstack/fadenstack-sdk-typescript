@@ -1,15 +1,19 @@
 import {
   FadenstackRateLimitedError,
+  writeLog,
   decideTool,
   eventKind,
+  isRefusal,
   narrowestMode,
   parseToolClass,
   parseToolMode,
+  readNotice,
   receiptIdOf,
   type ChatMessage,
   type ChatOptions,
   type AgentGrant,
   type ChatOutcome,
+  type ReasoningEffort,
   type FadenstackEvent,
   type FinishReason,
   type GovernanceNotice,
@@ -22,7 +26,7 @@ import {
 } from "@fadenstack/client";
 
 import type { FadenstackAgent } from "./agent.js";
-import { ApprovalDecision, type ApprovalRequest, type ApprovalScope } from "./approvals.js";
+import { ApprovalDecision, type ApprovalHandler, type ApprovalRequest, type ApprovalScope } from "./approvals.js";
 import { BypassSignInError } from "./stepUp.js";
 import { attachmentData, type MessageAttachment } from "./attachments.js";
 import { ContextBuilder, isBlank } from "./contextBuilder.js";
@@ -32,6 +36,8 @@ import type { ToolInvocation, ToolInvoker, ToolServiceCall } from "./stages.js";
 import { checkArguments, type AgentTool, type ToolServiceKey, type ToolServices } from "./tools.js";
 import { EntryTypes, TurnStatus, newId, type TranscriptEntry } from "./transcript.js";
 import { commandJson, commandSchemaHash } from "./commands.js";
+import { AgentLog } from "./log.js";
+import { reasoningLevelOf, reasoningRecord, type ReasoningLevel } from "./reasoning.js";
 import { AgentGrants, cutReason, type GrantCall, type GrantPlace, type GrantVerdict } from "./grants.js";
 
 /** A skill the user picked for a message: its slug for the server, its name for the transcript. */
@@ -85,6 +91,41 @@ interface GatewayMark {
   message: string;
 }
 
+/**
+ * Which call of a round a word of the gateway (`faden.tool_denied`, `faden.approval_required`) is about: the call's index in the
+ * stream when the gateway gives one, else its id, else (no id) the tool's name.
+ */
+interface Aim {
+  callId: string;
+  toolName: string;
+  index: number | undefined;
+}
+
+function aimOf(value: unknown): Aim {
+  const index = value && typeof value === "object" ? (value as Data)["toolCallIndex"] : undefined;
+  return {
+    callId: str(value, "toolCallId") ?? "", toolName: str(value, "toolCallName") ?? "",
+    index: typeof index === "number" && Number.isInteger(index) ? index : undefined,
+  };
+}
+
+/** A call of a round ready to run: under an id of its own, with what the gateway said of it. */
+interface PlannedCall {
+  call: ToolCall;
+  denied: boolean;
+  hidden: boolean;
+  mark: GatewayMark | undefined;
+}
+
+/** Two marks on one call: a rule wins, the stricter class wins. */
+function mergeMarks(a: GatewayMark, b: GatewayMark): GatewayMark {
+  return {
+    rule: a.rule || b.rule,
+    toolClass: a.toolClass === undefined ? b.toolClass : stricterClass(a.toolClass, b.toolClass),
+    message: b.rule && !a.rule ? b.message : a.message,
+  };
+}
+
 /** The stricter of two classes; unclassified when either is. */
 function stricterClass(own: ToolClass, other: ToolClass | undefined): ToolClass {
   if (!other || other === own) return own;
@@ -116,6 +157,12 @@ export class AgentSession {
   /** The mode the user picked for this session. New sessions start in `ask`. */
   toolMode: ToolMode;
   readonly agent: FadenstackAgent;
+  /**
+   * The handler asked for this session's approvals; the agent's own when not set. A host that gives each chat its own
+   * handler sets it; one that shares a handler tells the chats apart by `ApprovalRequest.sessionId`.
+   */
+  approvals: ApprovalHandler | undefined;
+  #reasoning: ReasoningLevel | undefined;
   readonly #entries: TranscriptEntry[];
   /** "Allow for this chat": this object's only, in memory. A session opened again starts asking again. */
   readonly #approvedForSession = new Set<string>();
@@ -146,6 +193,25 @@ export class AgentSession {
 
   // The mode before Bypass, to go back to when it ends.
   #beforeBypass: ToolMode | undefined;
+
+  /**
+   * How long the model thinks on the next message. Until it is set, the agent's level (`FadenstackAgent.reasoning`: the
+   * person's pick, the app's) -- so a new conversation starts from the person's pick. A turn that already started keeps the
+   * level it started with. A level above the server's maximum shows and sends the maximum.
+   */
+  get reasoning(): ReasoningLevel {
+    const level = this.#reasoning;
+    return level !== undefined && level !== "auto" ? reasoningLevelOf(this.agent.effortFor(level)) : level ?? this.agent.reasoning;
+  }
+
+  set reasoning(level: ReasoningLevel) {
+    this.#reasoning = level;
+  }
+
+  /** @internal What a turn started now would send: the session's level, or -- while it follows the agent -- the agent's own effort. */
+  get requestEffort(): ReasoningEffort | undefined {
+    return this.#reasoning !== undefined ? this.agent.effortFor(this.#reasoning) : this.agent.requestEffort;
+  }
 
   /** The transcript, as kept on this device. */
   get transcript(): readonly TranscriptEntry[] {
@@ -503,8 +569,11 @@ class Turn {
   readonly #emit: (event: AgentEvent) => void;
   readonly #access: SessionAccess;
   readonly #notices: GovernanceNotice[] = [];
-  readonly #deniedByGateway = new Set<string>();
-  readonly #marks = new Map<string, GatewayMark>();
+  // The gateway's words on the round's calls, kept until the round's calls are planned (the call ids may be empty or shared).
+  #denials: Aim[] = [];
+  #marks: { aim: Aim; mark: GatewayMark }[] = [];
+  /** Tools the gateway hides in this turn's tool mode (`faden.tool_mode`): refused here too. */
+  readonly #hidden = new Set<string>();
   readonly #grantUsed = new Map<string, { grantId: string; toolName: string }>();
   readonly #receipts: ReceiptNote[] = [];
   #text = "";
@@ -520,6 +589,17 @@ class Turn {
   #bypassGrant: string | undefined;
   readonly #bypassRan: string[] = [];
   #bypassEnded = false;
+  // What this turn asks the model to think, fixed when it starts: a change of the level applies from the next message.
+  #effort: ReasoningEffort | undefined;
+  // For the log: when the turn began, how many model calls it made, and what let the tool call in hand through.
+  readonly #began = performance.now();
+  #rounds = 0;
+  #approvalKind: string | undefined;
+
+  /** The log's scope: the conversation and the turn (.NET `Log.TurnScope`). */
+  get #scope(): { ConversationId: string; TurnId: string } {
+    return { ConversationId: this.#session.id, TurnId: this.#id };
+  }
 
   /** The Bypass grant the turn ran under; undefined when it did not run in Bypass. */
   get bypassGrant(): string | undefined {
@@ -543,6 +623,7 @@ class Turn {
   }
 
   async runCommand(name: string, args: Record<string, unknown>, origin: "user_command" | "user_history", signal: AbortSignal, label?: string): Promise<void> {
+    await this.#agent.refreshTools(signal);
     this.#mode = this.#session.effectiveToolMode;
     this.#commandOrigin = origin;
     this.#commandInputJson = commandJson(args);
@@ -553,7 +634,8 @@ class Turn {
       signal.throwIfAborted();
       const tool = this.#agent.find(name);
       if (tool && tool.source !== "host") throw new Error("Explicit commands are available for host tools only.");
-      await this.#runTool({ id: newId(), name, arguments: args, argumentsJson: commandJson(args) }, signal);
+      await this.#runTool({ call: { id: newId(), name, arguments: args, argumentsJson: commandJson(args) },
+        denied: false, hidden: false, mark: undefined }, signal);
       await this.#end(TurnStatus.ok, this.#toolDenied ? "tool_denied" : "completed");
     } catch (error) {
       await this.#end(signal.aborted ? TurnStatus.cancelled : TurnStatus.error, undefined);
@@ -563,8 +645,10 @@ class Turn {
 
   async run(message: string, attachments: readonly MessageAttachment[], skills: readonly PickedSkill[], signal: AbortSignal): Promise<void> {
     await Promise.resolve(); // the caller gets the stream before the first request goes out
+    await this.#agent.refreshTools(signal); // tools that changed since the last turn, never inside one
     await this.#session.settleBypass(signal);
     this.#mode = this.#session.effectiveToolMode;
+    this.#effort = this.#session.requestEffort;
     this.#bypassGrant = this.#mode === "bypass" ? this.#session.bypass?.id : undefined;
     // The last turn ran in Bypass and this one does not: the model hears it ended (from the transcript, so an app started
     // again tells it too).
@@ -577,8 +661,11 @@ class Turn {
     await this.#access.append(EntryTypes.turnStart, this.#id, {
       tool_mode: this.#session.toolMode,
       effective_tool_mode: this.#mode,
+      reasoning_effort: reasoningRecord(this.#effort),
     });
     this.#emit({ type: "turn_started", turnId: this.#id, toolMode: this.#mode });
+    writeLog(this.#agent.settings.logger, AgentLog.turnStarted, { ConversationId: this.#session.id, TurnId: this.#id, ToolMode: this.#mode,
+      Attachments: attachments.length }, this.#scope);
     try {
       for (let round = 0; ; round++) {
         if (round === this.#agent.settings.maxRounds) {
@@ -586,9 +673,9 @@ class Turn {
           break;
         }
         signal.throwIfAborted();
-        const calls = await this.#request(signal);
+        const calls = await this.#request(signal, round);
         if (this.#blocked || calls.length === 0) break;
-        for (const call of calls) await this.#runTool(call, signal);
+        for (const planned of calls) await this.#runTool(planned, signal);
       }
     } catch (error) {
       if (signal.aborted) {
@@ -614,21 +701,24 @@ class Turn {
   }
 
   /** One model call; returns the calls of the agent's own tools to run. */
-  async #request(signal: AbortSignal): Promise<ToolCall[]> {
+  async #request(signal: AbortSignal, round: number): Promise<PlannedCall[]> {
     // The gateway's word on a call holds for its round only: a later call with the same id is judged anew.
     this.#grantUsed.clear();
-    this.#marks.clear();
+    this.#marks = [];
+    this.#denials = [];
+    this.#rounds++;
+    const requested = performance.now();
     const options: ChatOptions = {
       conversationId: this.#session.id,
       turnId: this.#id,
       toolMode: this.#mode,
       signal,
     };
-    const tools = this.#agent.offer(this.#mode);
+    const tools = this.#agent.offer(this.#mode, this.#session);
     if (tools.length) options.tools = tools;
     // On every call of the turn, not the first only: the gateway gives a request the skills it names.
     if (this.#skills.length) options.skills = this.#skills;
-    if (this.#agent.settings.reasoning) options.reasoningEffort = this.#agent.settings.reasoning;
+    if (this.#effort) options.reasoningEffort = this.#effort;
     let text = "";
     let finish: FinishReason | undefined;
     const calls: ToolCall[] = [];
@@ -672,12 +762,15 @@ class Turn {
       }
     }
     if (this.#blocked) calls.length = 0; // a refused answer's tool calls never run
+    const planned = this.#plan(calls, round);
+    writeLog(this.#agent.settings.logger, AgentLog.modelRequest, { TurnId: this.#id, Round: round, ToolCalls: planned.length,
+      DurationMs: Math.round(performance.now() - requested) }, this.#scope);
     this.#text += text;
     this.#receipts.push(...receipts);
     if (text || calls.length) {
       await this.#access.append(EntryTypes.assistantMessage, this.#id, {
         text,
-        tool_calls: calls.map((c) => ({ id: c.id, name: c.name, arguments: c.argumentsJson || "{}" })),
+        tool_calls: planned.map((p) => ({ id: p.call.id, name: p.call.name, arguments: p.call.argumentsJson || "{}" })),
         origin: "model",
         // What made the answer, by the receipts' ids: never more of them than that.
         ...(receipts.length ? { receipts: receipts.map(receiptData) } : {}),
@@ -686,7 +779,33 @@ class Turn {
     if (this.#blocked) await this.#notice(this.#blocked);
     // A model that thought and then wrote nothing would leave the user with nothing at all on screen.
     else if (calls.length === 0 && isBlank(text) && !signal.aborted) await this.#notice(emptyAnswer(finish));
-    return calls;
+    return planned;
+  }
+
+  /**
+   * The round's calls, each under an id of its own and with the gateway's word on it. A call with no id, or an id another call
+   * of the round has, gets `fs-{turn}-{round}-{index}`. A word that cannot tell calls apart (no id, or one id on several
+   * calls) covers every call of its tool: a refusal is never lost, and a mark asks (.NET `AgentSession.Plan`).
+   */
+  #plan(calls: readonly ToolCall[], round: number): PlannedCall[] {
+    const model = calls.map((call, i) => ({ call, modelId: call.id, index: call.index ?? i }));
+    const denied = model.map(() => false);
+    const marks: (GatewayMark | undefined)[] = model.map(() => undefined);
+    for (const aim of this.#denials) for (const i of aimed(aim, model).places) denied[i] = true;
+    for (const { aim, mark } of this.#marks) {
+      const { places, byName } = aimed(aim, model);
+      for (const i of places) {
+        const word = byName ? { ...mark, rule: true } : mark;
+        const earlier = marks[i];
+        marks[i] = earlier ? mergeMarks(earlier, word) : word;
+      }
+    }
+    return model.map((c, i) => {
+      const shared = c.modelId === "" || model.filter((o) => o.modelId === c.modelId).length > 1;
+      const call: ToolCall = shared ? { ...c.call, id: `fs-${this.#id}-${round}-${c.index}` } : c.call;
+      const hidden = this.#hidden.has(c.call.name);
+      return { call, denied: denied[i]! || hidden, hidden, mark: marks[i] };
+    });
   }
 
   async #onGatewayEvent(event: FadenstackEvent, signal: AbortSignal): Promise<void> {
@@ -711,8 +830,7 @@ class Turn {
         break;
       case "faden.tool_denied": {
         this.#toolDenied = true;
-        const callId = str(value, "toolCallId");
-        if (callId) this.#deniedByGateway.add(callId);
+        this.#denials.push(aimOf(value));
         const notice: GovernanceNotice = {
           outcome: "tool_denied",
           stage: "tool",
@@ -723,6 +841,13 @@ class Turn {
         await this.#notice(notice);
         break;
       }
+      case "faden.governance":
+        // A refusal arrives as a `refused` update; any other outcome only informs, and the turn goes on.
+        if (value && typeof value === "object" && !isRefusal(str(value, "outcome"))) await this.#notice(readNotice(value));
+        break;
+      case "faden.tool_mode":
+        this.#followToolMode(value);
+        break;
       case "TOOL_CALL_START":
         this.#emit({
           type: "tool_started", turnId: this.#id, callId: str(event.raw, "toolCallId") ?? "",
@@ -790,22 +915,32 @@ class Turn {
     if (!settled.approved) this.#toolDenied = true;
   }
 
-  /** The gateway's word on a call of the agent's own tool, kept until the call runs. */
+  /** The gateway's word on a call of the agent's own tool, kept until the round's calls are planned. */
   #mark(value: unknown): void {
-    const callId = str(value, "toolCallId");
-    if (!callId) return;
     const toolClass = str(value, "toolClass");
-    this.#marks.set(callId, {
+    this.#marks.push({ aim: aimOf(value), mark: {
       rule: (value as Data)["rule"] !== false,
       toolClass: toolClass === undefined ? undefined : parseToolClass(toolClass),
       message: str(value, "message") ?? "",
-    });
+    } });
   }
 
-  async #runTool(call: ToolCall, signal: AbortSignal): Promise<void> {
+  /**
+   * The gateway's tool mode for this turn: the turn's mode is never widened by it, an unknown mode is ignored, and the tools
+   * it hides are refused here too.
+   */
+  #followToolMode(value: unknown): void {
+    const effective = parseToolMode(str(value, "effective_tool_mode"));
+    if (effective) this.#mode = narrowestMode(this.#mode, effective);
+    const hidden = value && typeof value === "object" ? (value as Data)["hidden"] : undefined;
+    if (Array.isArray(hidden)) for (const name of hidden) if (typeof name === "string") this.#hidden.add(name);
+  }
+
+  async #runTool(planned: PlannedCall, signal: AbortSignal): Promise<void> {
+    const { call, mark } = planned;
+    this.#approvalKind = undefined;
     const tool = this.#agent.find(call.name);
     const source = tool?.source ?? "host";
-    const mark = this.#marks.get(call.id);
     const toolClass: ToolClass = tool ? stricterClass(tool.toolClass, mark?.toolClass) : "unknown";
     const args = call.arguments ?? {};
     await this.#access.append(EntryTypes.toolStart, this.#id, { call_id: call.id, name: call.name, source, tool_class: toolClass });
@@ -814,12 +949,22 @@ class Turn {
     let result: string;
     let outcome: ToolOutcome;
     let waited = 0;
+    // Asked once, and only for a call that would run: a tool the scope has not switched on answers instead of running.
+    const answered = tool && !planned.denied && call.argumentsError === undefined && !this.#commandOrigin
+      ? tool.scope?.beforeCall(tool, this.#session) : undefined;
     if (!tool) {
-      [result, outcome] = [`Tool '${call.name}' does not exist here.`, "error"];
-    } else if (this.#deniedByGateway.has(call.id)) {
+      [result, outcome] = [this.#agent.isGone(call.name) ? `${call.name} is no longer available.` : `Tool '${call.name}' does not exist here.`, "error"];
+    } else if (planned.denied) {
+      if (planned.hidden) {
+        this.#toolDenied = true;
+        await this.#notice({ outcome: "tool_denied", stage: "tool", category: "mode",
+          message: `'${call.name}' is not allowed: the gateway hides it in this tool mode.` });
+      }
       [result, outcome] = [`Tool '${call.name}' is not allowed here.`, "denied"];
     } else if (call.argumentsError !== undefined) {
       [result, outcome] = [`Error: the arguments are not valid JSON (${call.argumentsError}).`, "error"];
+    } else if (answered !== undefined) {
+      [result, outcome] = [answered, "ok"]; // a tool outside the conversation's scope, now switched on
     } else {
       ({ result, outcome, waited } = await this.#decideAndRun(tool, toolClass, mark, call, args, signal));
     }
@@ -829,6 +974,9 @@ class Turn {
       call_id: call.id, name: call.name, source, result, outcome, duration_ms: Math.round(ran), origin: "client",
     });
     this.#emit({ type: "tool_completed", turnId: this.#id, callId: call.id, name: call.name, source, outcome, result, durationMs: ran });
+    // A name the model made up is its words, not ours: only the agent's own tools are named in logs.
+    writeLog(this.#agent.settings.logger, AgentLog.toolCall, { Tool: tool?.name ?? "(unknown)", ToolClass: toolClass, Source: source,
+      Outcome: outcome, Approval: this.#approvalKind ?? "none", DurationMs: Math.round(ran) }, this.#scope);
     if (tool) {
       this.#agent.reporter.add({
         type: "tool.executed", conversationId: this.#session.id, tool: call.name,
@@ -1045,6 +1193,8 @@ class Turn {
    */
   async #approve(base: ApprovalRequest, rule: boolean, timeoutMs: number | undefined, signal: AbortSignal,
     target?: () => Promise<string | undefined>, individual = false, gatewayWait = false): Promise<Settled> {
+    // Every request names its session and turn: a screen with several chats hands it to the one that owns it.
+    base = { ...base, sessionId: this.#session.id, turnId: this.#id };
     const { toolName: name, toolClass } = base;
     const open = !individual && !rule && !asksEveryTime(toolClass);
     const allowed = (kind: "chat" | "always") => this.#agent.profile.approvals?.standing == null
@@ -1087,7 +1237,7 @@ class Turn {
     let decision: ApprovalDecision | undefined;
     try {
       // Raced against the signal: a handler that ignores it cannot hold a stopped or timed-out turn.
-      decision = await untilAborted(this.#agent.settings.approvals.request(request, limit), limit);
+      decision = await untilAborted((this.#session.approvals ?? this.#agent.settings.approvals).request(request, limit), limit);
     } catch (error) {
       if (signal.aborted) throw signal.reason ?? error;
       if (!limit.aborted) throw error;
@@ -1158,6 +1308,10 @@ class Turn {
       ...(how.grantMinutes !== undefined ? { grant_minutes: how.grantMinutes } : {}),
       ...(how.confirmedMinutes !== undefined ? { grant_confirmed_minutes: how.confirmedMinutes } : {}),
     });
+    const kind = how.scope === undefined ? undefined : how.rule ? "rule" : how.scope;
+    this.#approvalKind = kind;
+    writeLog(this.#agent.settings.logger, AgentLog.approval, { Tool: request.toolName, ToolClass: request.toolClass,
+      Approval: kind ?? (how.timedOut ? "timeout" : "declined"), Asked: how.asked, WaitMs: Math.round(how.waitedMs ?? 0) }, this.#scope);
     this.#agent.reporter.add({
       type: "approval.decided", conversationId: this.#session.id, tool: request.toolName,
       decision: how.timedOut ? "timeout" : how.approved ? "approved" : "denied",
@@ -1193,6 +1347,8 @@ class Turn {
     if (notice.decisionId) data["decision_id"] = notice.decisionId;
     if (notice.retryAfterMs !== undefined) data["retry_after_ms"] = notice.retryAfterMs;
     await this.#access.append(EntryTypes.governanceNotice, this.#id, data);
+    writeLog(this.#agent.settings.logger, AgentLog.notice, { Outcome: notice.outcome, Stage: notice.stage ?? null, Category: notice.category ?? null,
+      Code: null, DecisionId: notice.decisionId ?? null }, this.#scope);
     this.#emit({ type: "notice", turnId: this.#id, notice });
   }
 
@@ -1204,6 +1360,8 @@ class Turn {
         ? { input_tokens: this.#usage.promptTokens, output_tokens: this.#usage.completionTokens, total_tokens: this.#usage.totalTokens }
         : null,
     }, status);
+    writeLog(this.#agent.settings.logger, AgentLog.turnEnded, { ConversationId: this.#session.id, TurnId: this.#id, ToolMode: this.#mode,
+      Rounds: this.#rounds, Status: status, Outcome: outcome ?? null, DurationMs: Math.round(performance.now() - this.#began) }, this.#scope);
     if (outcome) {
       this.#emit({
         type: "turn_completed",
@@ -1332,6 +1490,18 @@ async function describeTarget(tool: AgentTool, args: Record<string, unknown>, si
   const line = typeof text === "string" ? text.replace(/\s+/g, " ").trim() : "";
   if (!line) return undefined;
   return line.length > MAX_TARGET_CHARS ? `${line.slice(0, MAX_TARGET_CHARS - 1)}…` : line;
+}
+
+/** The places in the round a word of the gateway covers; `byName` when it could only go by the tool's name. */
+function aimed(aim: Aim, round: readonly { call: ToolCall; modelId: string; index: number }[]): { places: number[]; byName: boolean } {
+  const where = (match: (c: { call: ToolCall; modelId: string; index: number }) => boolean) =>
+    round.map((c, i) => (match(c) ? i : -1)).filter((i) => i >= 0);
+  if (aim.index !== undefined) return { places: where((c) => c.index === aim.index), byName: false };
+  if (aim.callId !== "") {
+    const same = where((c) => c.modelId === aim.callId);
+    if (same.length <= 1) return { places: same, byName: false };
+  }
+  return { places: where((c) => aim.toolName === "" || c.call.name === aim.toolName), byName: true };
 }
 
 function untilAborted<T>(promise: Promise<T>, signal: AbortSignal): Promise<T> {

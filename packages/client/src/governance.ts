@@ -44,3 +44,11 @@ export function readNotice(value: unknown, retryAfterMs?: number): GovernanceNot
   if (retryAfterMs !== undefined) notice.retryAfterMs = retryAfterMs;
   return notice;
 }
+
+/**
+ * Only these two outcomes refuse a turn (the prompt, or the answer). Any other outcome the gateway may send later
+ * informs and the turn goes on; an outcome nobody knows is not a refusal.
+ */
+export function isRefusal(outcome: string | undefined): boolean {
+  return outcome === "prompt_blocked" || outcome === "response_blocked";
+}

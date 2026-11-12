@@ -25,17 +25,29 @@ export {
   outputEditKind,
   toDefinition,
   toolServiceKey,
+  settleHostTools,
   withToolClass,
   type AgentTool,
   type ToolCallContext,
   type ToolOutput,
+  type ToolScope,
   type ToolServiceKey,
   type ToolServices,
   type ToolSpec,
 } from "./tools.js";
 export {
+  FIND_TOOL_NAME,
+  MAX_FOUND,
+  MAX_TOOLS_IN_SCOPE,
+  OnRequestTools,
+  rank as rankTools,
+  type OnRequestToolsOptions,
+} from "./toolSearch.js";
+export {
   StageOrder,
+  isChangingToolSource,
   type AgentContext,
+  type ChangingToolSource,
   type ChatStage,
   type FadenstackModule,
   type ToolInvocation,
@@ -45,6 +57,20 @@ export {
   type ToolSource,
   type ToolStage,
 } from "./stages.js";
+export {
+  IndexedDbReasoningStore,
+  MemoryReasoningStore,
+  REASONING_LEVELS,
+  ReasoningChoices,
+  parseReasoningLevel,
+  reasoningEffort,
+  reasoningLevelOf,
+  reasoningWire,
+  type IndexedDbReasoningStoreOptions,
+  type ReasoningLevel,
+  type ReasoningStore,
+} from "./reasoning.js";
+export { AGENT_LOG_CATEGORY, AgentLog } from "./log.js";
 export { attachmentData, isPicture, type MessageAttachment } from "./attachments.js";
 export { ContextBuilder, MAX_HISTORY_PICTURES, NO_TOOL_RESULT, toMessage, withAttachments } from "./contextBuilder.js";
 export {

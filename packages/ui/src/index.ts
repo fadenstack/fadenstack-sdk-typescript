@@ -3,6 +3,7 @@ export {
   AgentChatViewModel,
   AUTOMATIC_LANGUAGE,
   type AgentChatOptions,
+  type TurnLease,
   type LanguageOption,
   type OutgoingMessage,
   type OutgoingCommand,

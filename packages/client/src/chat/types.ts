@@ -48,6 +48,8 @@ export interface ToolCall {
   /** The parsed arguments; undefined when they are not a JSON object (see `argumentsError`). */
   arguments: Record<string, unknown> | undefined;
   argumentsError?: string;
+  /** The call's place in the model's answer (the stream's `index`): the gateway may name a call by it. */
+  index?: number;
 }
 
 export interface Usage {
