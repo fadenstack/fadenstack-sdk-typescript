@@ -2,9 +2,11 @@ import { useCallback, type ReactElement } from "react";
 
 import {
   ApprovalPart,
+  BypassPart,
   CardPart,
   CitationsPart,
   DiffPart,
+  GrantPart,
   MarkdownPart,
   NoticePart,
   ProgressPart,
@@ -16,6 +18,7 @@ import {
 } from "@fadenstack/ui";
 import { approvalIcon, diffMarker, noticeIcon, noticeRole, toolBadges, toolClassName, toolStatusIcon } from "@fadenstack/ui-web";
 
+import { BypassCardView, GrantCardView } from "./Grants.js";
 import { useViewModel } from "./hooks.js";
 import { Icon, Spinner } from "./icons.js";
 import { Markdown } from "./Markdown.js";
@@ -39,6 +42,8 @@ export function PartView({ part, strings, renderers }: { part: ResponsePart; str
   if (part instanceof TablePart) return <TableView part={part} />;
   if (part instanceof ProgressPart) return <ProgressView part={part} />;
   if (part instanceof DiffPart) return <DiffView part={part} />;
+  if (part instanceof GrantPart) return <GrantCardView part={part} />;
+  if (part instanceof BypassPart) return <BypassCardView part={part} />;
   return null;
 }
 

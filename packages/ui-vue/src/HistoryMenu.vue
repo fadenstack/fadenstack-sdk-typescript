@@ -33,6 +33,7 @@ useDismiss(() => chat.value.isHistoryOpen, () => chat.value.setHistoryOpen(false
         <button type="button" role="menuitem" class="fdn-history-open" :disabled="chat.isBusy" @click="chat.openSession(session.id)">
           <span class="fdn-history-title" dir="auto">{{ session.title }}</span>
           <span class="fdn-history-when">{{ session.whenText }}</span>
+          <span v-if="session.bypassText" class="fdn-history-bypass">{{ session.bypassText }}</span>
         </button>
         <button
           type="button"

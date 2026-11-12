@@ -76,3 +76,15 @@ describe("a chat in German", () => {
     expect(vm.sessions[0]!.title).toBe("Hallo");
   });
 });
+
+describe("the approval texts", () => {
+  it("are in no skin: the cards, markers and Settings section take every word from the chat's strings", async () => {
+    const { readFileSync } = await import("node:fs");
+    const files = ["ui-react/src/Grants.tsx", "ui-vue/src/GrantsBar.vue", "ui-vue/src/GrantMarker.vue", "ui-vue/src/ApprovalsSection.vue",
+      "ui-vue/src/parts/GrantCardView.vue", "ui-vue/src/parts/BypassCardView.vue"]
+      .map((f) => readFileSync(new URL(`../../${f}`, import.meta.url), "utf8"));
+    const words = [englishStrings.grantNotNow, englishStrings.bypassAllow, englishStrings.markerStop, englishStrings.revoke,
+      englishStrings.bypassOpenAgain, englishStrings.grantAllow, englishStrings.settingsApprovals, englishStrings.bypassSwitchOnAgain];
+    for (const word of words) for (const source of files) expect(source).not.toContain(`>${word}<`);
+  });
+});

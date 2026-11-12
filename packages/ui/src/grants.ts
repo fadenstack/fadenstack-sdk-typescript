@@ -547,6 +547,9 @@ export class GrantMarkerViewModel extends Observable {
   /** "Stop": a chip's button and a menu item. */
   get stopText(): string { return this.#strings().markerStop; }
 
+  /** "Close": the button that takes a summary away. */
+  get dismissText(): string { return this.#strings().close; }
+
   /** "Another 30 min": offered near the end. */
   get keepGoingText(): string {
     return this.#strings().markerKeepGoing(period(this.#strings(), GrantLifecycle.KEEP_GOING_BY));

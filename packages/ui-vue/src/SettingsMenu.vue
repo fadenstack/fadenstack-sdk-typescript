@@ -8,6 +8,7 @@ import { computed, useSlots, useTemplateRef } from "vue";
 import type { AgentChatViewModel } from "@fadenstack/ui";
 
 import AboutPanel from "./AboutPanel.vue";
+import ApprovalsSection from "./ApprovalsSection.vue";
 import { useDismiss, useViewModel } from "./composables.js";
 import Icon from "./Icon.vue";
 
@@ -60,6 +61,7 @@ function closeAbout(returnFocus: boolean): void {
         </button>
         <div v-if="chat.isLanguageLocked" class="fdn-menu-note">{{ chat.strings.languageLocked }}</div>
       </div>
+      <ApprovalsSection :grants="chat.grants" />
       <div v-if="slots.default" v-bind="languages ? { class: 'fdn-menu-extra' } : {}"><slot /></div>
       <div v-bind="languages || slots.default ? { class: 'fdn-menu-extra' } : {}">
         <button type="button" role="menuitem" aria-haspopup="dialog" class="fdn-menu-item" @click="chat.setAboutOpen(true)">

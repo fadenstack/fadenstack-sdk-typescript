@@ -2,9 +2,11 @@ import { defineComponent, h, type Component, type PropType } from "vue";
 
 import {
   ApprovalPart,
+  BypassPart,
   CardPart,
   CitationsPart,
   DiffPart,
+  GrantPart,
   MarkdownPart,
   NoticePart,
   ProgressPart,
@@ -17,9 +19,11 @@ import {
 
 import { useViewModel } from "./composables.js";
 import ApprovalView from "./parts/ApprovalView.vue";
+import BypassCardView from "./parts/BypassCardView.vue";
 import CardView from "./parts/CardView.vue";
 import CitationsView from "./parts/CitationsView.vue";
 import DiffView from "./parts/DiffView.vue";
+import GrantCardView from "./parts/GrantCardView.vue";
 import MarkdownView from "./parts/MarkdownView.vue";
 import NoticeView from "./parts/NoticeView.vue";
 import ProgressView from "./parts/ProgressView.vue";
@@ -39,6 +43,8 @@ const views: [abstract new (...args: never[]) => ResponsePart, Component][] = [
   [TablePart, TableView],
   [ProgressPart, ProgressView],
   [DiffPart, DiffView],
+  [GrantPart, GrantCardView],
+  [BypassPart, BypassCardView],
 ];
 
 /** One part of an answer: the host's renderers first, then the built-in view for its kind. */

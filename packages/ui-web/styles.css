@@ -910,6 +910,152 @@
   color: var(--fdn-success);
 }
 
+/* -- grants: the work card, the Bypass confirmation, the markers, Settings -> Approvals ---------------- */
+
+.fdn-grants {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 0 12px 8px;
+}
+
+.fdn-grants .fdn-approval:focus-visible {
+  outline: 2px solid var(--fdn-accent);
+  outline-offset: 2px;
+}
+
+.fdn-grant-durations,
+.fdn-grant-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 10px;
+}
+
+.fdn-chat .fdn-button.fdn-selected {
+  border-color: var(--fdn-accent);
+  background: var(--fdn-surface-hover);
+}
+
+.fdn-grant-places ul {
+  margin: 4px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.fdn-grant-place {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  overflow-wrap: anywhere;
+}
+
+.fdn-grant-place.fdn-removed > span {
+  text-decoration: line-through;
+  color: var(--fdn-text-faint);
+}
+
+.fdn-bypass-reason {
+  display: block;
+  margin-top: 8px;
+}
+
+.fdn-bypass-reason input {
+  display: block;
+  width: 100%;
+  box-sizing: border-box;
+  margin-top: 4px;
+  padding: 6px 8px;
+  border: 1px solid var(--fdn-border);
+  border-radius: 6px; /* concentric with the card's 12 */
+  background: var(--fdn-bg);
+  color: inherit;
+  font: inherit;
+}
+
+.fdn-grant-marker {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  border: 1px solid var(--fdn-border);
+  border-radius: var(--fdn-radius);
+  background: var(--fdn-surface);
+  font-size: 12.5px;
+}
+
+.fdn-grant-marker-text {
+  flex: 1;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.fdn-bypass-marker,
+.fdn-bypass-ended {
+  border-color: var(--fdn-danger);
+}
+
+.fdn-grant-summary {
+  position: relative;
+  padding: 8px 32px 8px 10px;
+  border: 1px solid var(--fdn-border);
+  border-radius: var(--fdn-radius);
+  background: var(--fdn-surface);
+  font-size: 12.5px;
+}
+
+.fdn-grant-summary > .fdn-icon-button {
+  position: absolute;
+  top: 4px;
+  inset-inline-end: 4px;
+}
+
+.fdn-grant-summary-detail {
+  margin-top: 2px;
+  color: var(--fdn-text-muted);
+  white-space: pre-line;
+}
+
+.fdn-grant-entries {
+  margin: 0;
+  padding: 0 10px;
+  list-style: none;
+  color: var(--fdn-text-muted);
+  font-size: 12px;
+}
+
+.fdn-standing {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 4px 12px;
+}
+
+.fdn-standing-title {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.fdn-history-bypass {
+  color: var(--fdn-danger);
+  font-size: 11.5px;
+}
+
+.fdn-sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  border: 0;
+}
+
 /* Text buttons (approval cards, About). Under `.fdn-chat`, so their colour and weight outrank the reset that has
    every button in the panel inherit its font and colour (`.fdn-chat button`). */
 .fdn-chat .fdn-button {

@@ -1,6 +1,11 @@
 export { default as ChatPanel } from "./ChatPanel.vue";
 export { default as ChatHeader } from "./ChatHeader.vue";
 export { default as Composer } from "./Composer.vue";
+export { default as GrantsBar } from "./GrantsBar.vue";
+export { default as ApprovalsSection } from "./ApprovalsSection.vue";
+export { default as GrantMarker } from "./GrantMarker.vue";
+export { default as GrantCardView } from "./parts/GrantCardView.vue";
+export { default as BypassCardView } from "./parts/BypassCardView.vue";
 export { default as SkillPicker } from "./SkillPicker.vue";
 export { default as TurnView } from "./TurnView.vue";
 export { default as PartView } from "./PartView.js";

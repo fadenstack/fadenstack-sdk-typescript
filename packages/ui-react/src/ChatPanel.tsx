@@ -4,6 +4,7 @@ import type { AgentChatViewModel } from "@fadenstack/ui";
 
 import { NoticeLine } from "./About.js";
 import { Composer } from "./Composer.js";
+import { GrantsBar } from "./Grants.js";
 import { ChatHeader } from "./Header.js";
 import { useStickToBottom, useViewModel } from "./hooks.js";
 import { AgentAvatar } from "./AgentAvatar.js";
@@ -57,6 +58,7 @@ export function ChatPanel(props: ChatPanelProps): ReactElement {
         <>
           <Conversation {...props} />
           {chat.error && !chat.signInRequired && <div className="fdn-banner" role="alert">{chat.error}</div>}
+          <GrantsBar grants={chat.grants} strings={chat.strings} />
           {props.contextBar}
           <Composer chat={chat} accessory={props.composerAccessory} placeholder={props.placeholder} />
           <NoticeLine chat={chat} />

@@ -229,7 +229,7 @@ export class BypassPart extends ResponsePart {
   readonly buttons: readonly ("notNow" | "allow")[] = Object.freeze(["notNow", "allow"] as const);
   /** The button that takes the focus when the card shows: never Allow. */
   readonly initialFocus: "notNow" = "notNow";
-  /** The keys that never press a button of this card, even a focused one. */
+  /** The keys that never press Allow (or "Open the page again"), even when it has the focus: a skin prevents their default. */
   static readonly ignoredKeys: readonly string[] = Object.freeze(["Enter", "Escape"]);
   readonly #context: PartContext;
   readonly #pending: PendingGrant;
@@ -333,7 +333,7 @@ export class BypassPart extends ResponsePart {
     }
   }
 
-  /** Whether `key` never presses a button of this card: Enter and Escape never switch Bypass on. */
+  /** Whether `key` never presses Allow, even a focused one: Enter and Escape never switch Bypass on. */
   ignoresKey(key: string): boolean {
     return BypassPart.ignoredKeys.includes(key);
   }
