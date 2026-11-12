@@ -235,7 +235,7 @@ export class AgentChatViewModel extends Observable implements TurnHost {
       load: (signal) => agent.listSkills(undefined, signal),
       onPick: (skill) => this.#pickSkill(skill),
     });
-    this.#unsubscribe = approvals.onRequested((pending) => this.#onApprovalRequested(pending));
+    this.#unsubscribe = approvals.onRequested((pending) => this.#onApprovalRequested(pending), () => this.#session?.id);
     // A store that answers at once (localStorage) gives the user's language from the first paint.
     try {
       const saved = this.#preferences.get(LANGUAGE_PREFERENCE);

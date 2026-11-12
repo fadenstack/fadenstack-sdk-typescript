@@ -24,7 +24,7 @@ import {
 } from "@fadenstack/client";
 
 import type { FadenstackAgent } from "./agent.js";
-import { ApprovalDecision, type ApprovalRequest, type ApprovalScope } from "./approvals.js";
+import { ApprovalDecision, type ApprovalHandler, type ApprovalRequest, type ApprovalScope } from "./approvals.js";
 import { BypassSignInError } from "./stepUp.js";
 import { attachmentData, type MessageAttachment } from "./attachments.js";
 import { ContextBuilder, isBlank } from "./contextBuilder.js";
@@ -153,6 +153,11 @@ export class AgentSession {
   /** The mode the user picked for this session. New sessions start in `ask`. */
   toolMode: ToolMode;
   readonly agent: FadenstackAgent;
+  /**
+   * The handler asked for this session's approvals; the agent's own when not set. A host that gives each chat its own
+   * handler sets it; one that shares a handler tells the chats apart by `ApprovalRequest.sessionId`.
+   */
+  approvals: ApprovalHandler | undefined;
   readonly #entries: TranscriptEntry[];
   /** "Allow for this chat": this object's only, in memory. A session opened again starts asking again. */
   readonly #approvedForSession = new Set<string>();
@@ -1134,6 +1139,8 @@ class Turn {
    */
   async #approve(base: ApprovalRequest, rule: boolean, timeoutMs: number | undefined, signal: AbortSignal,
     target?: () => Promise<string | undefined>, individual = false, gatewayWait = false): Promise<Settled> {
+    // Every request names its session and turn: a screen with several chats hands it to the one that owns it.
+    base = { ...base, sessionId: this.#session.id, turnId: this.#id };
     const { toolName: name, toolClass } = base;
     const open = !individual && !rule && !asksEveryTime(toolClass);
     const allowed = (kind: "chat" | "always") => this.#agent.profile.approvals?.standing == null
@@ -1176,7 +1183,7 @@ class Turn {
     let decision: ApprovalDecision | undefined;
     try {
       // Raced against the signal: a handler that ignores it cannot hold a stopped or timed-out turn.
-      decision = await untilAborted(this.#agent.settings.approvals.request(request, limit), limit);
+      decision = await untilAborted((this.#session.approvals ?? this.#agent.settings.approvals).request(request, limit), limit);
     } catch (error) {
       if (signal.aborted) throw signal.reason ?? error;
       if (!limit.aborted) throw error;

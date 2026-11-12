@@ -43,20 +43,26 @@ export class PendingApproval {
  * listening, requests are declined.
  */
 export class ApprovalBroker implements ApprovalHandler {
-  readonly #listeners = new Set<(pending: PendingApproval) => void>();
+  readonly #listeners = new Set<{ listener: (pending: PendingApproval) => void; session: (() => string | undefined) | undefined }>();
 
-  /** Calls `listener` for each request; returns the unsubscribe. */
-  onRequested(listener: (pending: PendingApproval) => void): () => void {
-    this.#listeners.add(listener);
+  /**
+   * Calls `listener` for each request; returns the unsubscribe. A chat gives `session`, the id of the session it shows
+   * now: it then gets only the requests of that session (and those that name none), so several chats share one broker.
+   * A listener without `session` gets every request.
+   */
+  onRequested(listener: (pending: PendingApproval) => void, session?: () => string | undefined): () => void {
+    const entry = { listener, session };
+    this.#listeners.add(entry);
     return () => {
-      this.#listeners.delete(listener);
+      this.#listeners.delete(entry);
     };
   }
 
   request(request: ApprovalRequest, signal: AbortSignal): Promise<ApprovalDecision> {
-    if (this.#listeners.size === 0) return Promise.resolve(ApprovalDecision.deny("Nobody is here to approve it."));
+    const owners = [...this.#listeners].filter((l) => !l.session || !request.sessionId || l.session() === request.sessionId);
+    if (owners.length === 0) return Promise.resolve(ApprovalDecision.deny("Nobody is here to approve it."));
     const pending = new PendingApproval(request, signal);
-    for (const listener of [...this.#listeners]) listener(pending);
+    for (const { listener } of owners) listener(pending);
     return pending.decision;
   }
 }
