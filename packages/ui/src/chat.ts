@@ -1,4 +1,6 @@
-import type { AgentEvent, AgentSession, FadenstackAgent, HostCommandResult, MessageAttachment, TranscriptEntry } from "@fadenstack/agents";
+import type {
+  AgentEvent, AgentSession, FadenstackAgent, HostCommandResult, MessageAttachment, ReasoningLevel, TranscriptEntry,
+} from "@fadenstack/agents";
 import { FadenstackSignInRequiredError, TOOL_MODES, narrowestMode, type SkillOption, type ToolMode } from "@fadenstack/client";
 
 import { aboutView, footerLink, refSource, type AboutView, type PanelLink } from "./about.js";
@@ -164,6 +166,17 @@ export interface ToolModeOption {
   available: boolean;
 }
 
+/** A level of thinking in the pill's menu, with what it means (.NET `ReasoningOption`). */
+export interface ReasoningOption {
+  level: ReasoningLevel;
+  /** "Low". */
+  label: string;
+  /** What the level means, in one line. */
+  description: string;
+  /** The level new messages think at: the menu marks it. */
+  selected: boolean;
+}
+
 /** A session in the history list. */
 export interface SessionItem {
   id: string;
@@ -238,6 +251,7 @@ export class AgentChatViewModel extends Observable implements TurnHost {
   readonly #turnGate: AgentChatOptions["turnGate"];
   #historyOpen = false;
   #modeMenuOpen = false;
+  #reasoningMenuOpen = false;
   #signInRequired = false;
   #error: string | undefined;
   #mode: ToolMode = "ask";
@@ -507,6 +521,90 @@ export class AgentChatViewModel extends Observable implements TurnHost {
     return max === ceiling ? this.strings.limitedByAgent(description, label) : this.strings.limitedTo(description, label);
   }
 
+  // -- how long the agent thinks (.NET `AgentChatViewModel.Reasoning*`) ----------------------------------
+
+  /**
+   * The levels of thinking the agent offers (Auto, Off, and Low, Medium and High up to the maximum its profile's
+   * `ui.reasoning` sets); empty until it started. Each carries its text in the panel's language.
+   */
+  get reasoningOptions(): readonly ReasoningOption[] {
+    if (!this.#agent.isStarted) return [];
+    const level = this.reasoningLevel;
+    return this.#agent.reasoningChoices.levels.map((l) => this.#reasoningOption(l, l === level));
+  }
+
+  /**
+   * The level new messages think at: this chat's (fixed at its turn's start, else the person's pick, kept for them and this agent
+   * on this device, else Auto), each lowered to the server's maximum. A change applies from the next message.
+   */
+  get reasoningLevel(): ReasoningLevel {
+    return this.#session ? this.#session.reasoning : this.#agent.reasoning;
+  }
+
+  /** The option for `reasoningLevel`; undefined until the agent started. A level the agent starts at but does not list still shows as it is. */
+  get selectedReasoning(): ReasoningOption | undefined {
+    if (!this.#agent.isStarted) return undefined;
+    return this.reasoningOptions.find((o) => o.selected) ?? this.#reasoningOption(this.reasoningLevel, true);
+  }
+
+  /** The thinking menu is open (presentation state, so a skin needs no state of its own). */
+  get isReasoningMenuOpen(): boolean {
+    return this.#reasoningMenuOpen;
+  }
+
+  /** The bare level beside the pill's icon: "Low". The full wording is `reasoningAutomationName` and `reasoningToolTip`. */
+  get reasoningPillText(): string {
+    return this.selectedReasoning?.label ?? "";
+  }
+
+  /** The pill's name for screen readers, in full: "Thinking: Off". */
+  get reasoningAutomationName(): string {
+    const option = this.selectedReasoning;
+    return option ? this.strings.reasoningPill(option.label) : this.strings.reasoningMenu;
+  }
+
+  /** The pill's tooltip: what it is, its state in full, and what the state means. */
+  get reasoningToolTip(): string {
+    const option = this.selectedReasoning;
+    return option ? `${this.strings.reasoningMenu}\n${this.strings.reasoningPill(option.label)}. ${option.description}` : this.strings.reasoningMenu;
+  }
+
+  /** What the pick means, in one line. */
+  get reasoningHint(): string {
+    return this.selectedReasoning?.description ?? "";
+  }
+
+  setReasoningMenuOpen(open: boolean): void {
+    if (this.#reasoningMenuOpen === open) return;
+    this.#reasoningMenuOpen = open;
+    this.notify();
+  }
+
+  /**
+   * The person's pick: new messages think at `level` from the next one on (a running turn is not changed); it is kept for them
+   * and this agent. The menu closes. A level the agent does not offer (above the server's maximum) changes nothing.
+   */
+  async selectReasoning(level: ReasoningLevel): Promise<void> {
+    this.#reasoningMenuOpen = false;
+    if (!this.reasoningOptions.some((o) => o.level === level) || level === this.reasoningLevel) {
+      this.notify();
+      return;
+    }
+    if (this.#session) this.#session.reasoning = level;
+    this.notify();
+    try {
+      await this.#agent.setReasoning(level);
+    } catch {
+      // the pick still holds for this chat; it is just not remembered
+    }
+    this.notify();
+  }
+
+  #reasoningOption(level: ReasoningLevel, selected: boolean): ReasoningOption {
+    const s = this.strings;
+    return { level, label: s.reasoningLabel[level], description: s.reasoningDescription[level], selected };
+  }
+
   // -- actions --------------------------------------------------------------------------------------
 
   /** Starts the agent (profile, tools) and reads the session list; first, the language the user picked before. */
@@ -589,6 +687,7 @@ export class AgentChatViewModel extends Observable implements TurnHost {
       this.notify();
       if (this.#turnGate) {
         this.#waitingForSlot = true;
+        turn.setWaitingForSlot(true);
         this.notify();
         try {
           lease = await this.#turnGate(stop.signal);
@@ -600,6 +699,7 @@ export class AgentChatViewModel extends Observable implements TurnHost {
           return;
         } finally {
           this.#waitingForSlot = false;
+          turn.setWaitingForSlot(false);
         }
       }
       await this.#runTurn(turn, message, attached, skills, this.#mode, stop.signal);
@@ -774,7 +874,10 @@ export class AgentChatViewModel extends Observable implements TurnHost {
   setAboutOpen(open: boolean): void {
     if (this.#aboutOpen === open && !(open && this.#settingsOpen)) return;
     this.#aboutOpen = open;
-    if (open) this.#settingsOpen = false;
+    if (open) {
+      this.#settingsOpen = false;
+      this.#reasoningMenuOpen = false;
+    }
     this.notify();
   }
 

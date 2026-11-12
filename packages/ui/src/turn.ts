@@ -51,6 +51,8 @@ export class TurnViewModel extends Observable {
   #durationText = "";
   /** A model call of the turn ended with nothing (`empty_answer`): Retry is offered, as for a failed turn. */
   #unanswered = false;
+  /** The host's turn gate holds this turn back: its line says so (.NET `SetWaitingForSlot`). */
+  #waitingForSlot = false;
 
   constructor(context: PartContext, host: TurnHost | undefined, userText: string, timestamp: Date,
     attachments: readonly AttachmentChip[] = [], state: TurnState = "running") {
@@ -93,6 +95,7 @@ export class TurnViewModel extends Observable {
     const s = this.#context.strings;
     switch (this.#state) {
       case "running":
+        if (this.#waitingForSlot) return s.waitingForSlot;
         return this.#parts.length === 0 ? s.working : "";
       case "stopped":
         return s.stopped;
@@ -101,6 +104,13 @@ export class TurnViewModel extends Observable {
       default:
         return "";
     }
+  }
+
+  /** @internal The chat says the host's turn gate holds this turn back (or lets it go). */
+  setWaitingForSlot(waiting: boolean): void {
+    if (this.#waitingForSlot === waiting) return;
+    this.#waitingForSlot = waiting;
+    this.notify();
   }
 
   get errorMessage(): string | undefined {

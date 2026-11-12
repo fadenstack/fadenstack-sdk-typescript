@@ -1,3 +1,4 @@
+import type { ReasoningLevel } from "@fadenstack/agents";
 import type { ToolClass, ToolMode } from "@fadenstack/client";
 
 /**
@@ -14,6 +15,8 @@ export interface UiStrings {
   languageName: string;
   // the turn
   working: string;
+  /** The turn's line while the host's turn gate holds it back (.NET `WaitingForSlot`). */
+  waitingForSlot: string;
   stopped: string;
   failed: string;
   tokens(count: string): string;
@@ -123,6 +126,14 @@ export interface UiStrings {
   noHistory: string;
   deleteSession: string;
   toolMode: string;
+  /** The thinking pill's menu: its caption and the pill's name for screen readers (.NET `ReasoningMenu`). */
+  reasoningMenu: string;
+  /** "Thinking: Low": the pill in full, for `level` as its label says it (.NET `ReasoningPill`). */
+  reasoningPill(level: string): string;
+  /** A level's name in the pill and its menu (.NET `Reasoning_<Level>_Label`). */
+  reasoningLabel: Record<ReasoningLevel, string>;
+  /** What a level means, in one line (.NET `Reasoning_<Level>_Description`). */
+  reasoningDescription: Record<ReasoningLevel, string>;
   showEarlier: string;
   copy: string;
   copyCode: string;
@@ -326,6 +337,7 @@ export const englishStrings: UiStrings = {
   direction: "ltr",
   languageName: "English",
   working: "Working...",
+  waitingForSlot: "Waiting for a free slot",
   stopped: "Stopped",
   failed: "Something went wrong",
   tokens: (count) => `${count} tokens`,
@@ -424,6 +436,16 @@ export const englishStrings: UiStrings = {
   noHistory: "No chats yet.",
   deleteSession: "Delete chat",
   toolMode: "Tool mode",
+  reasoningMenu: "How long it thinks",
+  reasoningPill: (level) => `Thinking: ${level}`,
+  reasoningLabel: { auto: "Auto", off: "Off", low: "Low", medium: "Medium", high: "High" },
+  reasoningDescription: {
+    auto: "The agent's own setting.",
+    off: "Answers at once.",
+    low: "Thinks briefly.",
+    medium: "Thinks for a while.",
+    high: "Thinks longest.",
+  },
   showEarlier: "Show earlier messages",
   copy: "Copy",
   copyCode: "Copy code",
