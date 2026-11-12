@@ -23,6 +23,7 @@ import { MAX_PROMPTS, MAX_PROMPT_LENGTH, PromptStoreError, type PromptStore, typ
 import { SkillPickerViewModel, skillToken } from "./skills.js";
 import { withStrings, type UiStrings } from "./strings.js";
 import { buildTurn, groupTurns } from "./transcriptTurns.js";
+import { ToolsViewModel } from "./tools.js";
 import { TurnViewModel, type TurnHost } from "./turn.js";
 
 /** How a chat view model behaves; the defaults suit a chat panel. */
@@ -223,6 +224,11 @@ export class AgentChatViewModel extends Observable implements TurnHost {
    * its sign-in, the markers, Stop, and Settings -> Approvals with Revoke.
    */
   readonly grants: GrantsViewModel;
+  /**
+   * What the agent can use, read only (settings -> Tools): the app's own tools, and the organisation's server's tools for this
+   * agent with whether each is available. Loaded when the view opens (`setToolsOpen`).
+   */
+  readonly tools: ToolsViewModel;
   readonly #agent: FadenstackAgent;
   readonly #approvals: ApprovalBroker;
   readonly #batcher: RenderBatcher;
@@ -263,6 +269,7 @@ export class AgentChatViewModel extends Observable implements TurnHost {
   #unmarkedPicked = false;
   #settingsOpen = false;
   #aboutOpen = false;
+  #toolsOpen = false;
   readonly #untitled = new Set<string>();
   #turns: readonly TurnViewModel[] = [];
   #attachments: readonly AttachmentViewModel[] = [];
@@ -321,6 +328,11 @@ export class AgentChatViewModel extends Observable implements TurnHost {
         prompts: { list: () => options.prompts!.list(), remove: (id: string) => options.prompts!.remove(id) },
         onPickPrompt: (prompt: SavedPrompt) => this.#pickPrompt(prompt),
       } : {}),
+    });
+    this.tools = new ToolsViewModel({
+      hostTools: () => (agent.isStarted ? agent.tools : []),
+      load: (signal) => agent.client.agent!.listTools(signal),
+      strings: () => this.strings,
     });
     this.#unsubscribe = approvals.onRequested((pending) => this.#onApprovalRequested(pending), () => this.#session?.id);
     this.grants = new GrantsViewModel(agent, approvals, this.#context, {
@@ -420,6 +432,11 @@ export class AgentChatViewModel extends Observable implements TurnHost {
   /** About is open (the settings' last item): the agent, the app, the SDK, the server, and links. */
   get isAboutOpen(): boolean {
     return this.#aboutOpen;
+  }
+
+  /** The Tools view is open (the settings' item before About): what the agent can use. It opens like About, below the settings' gear. */
+  get isToolsOpen(): boolean {
+    return this.#toolsOpen;
   }
 
   /** What About shows, in the panel's language. Links to fadenstack.com carry only `ref` and the SDK's major.minor. */
@@ -1005,6 +1022,7 @@ export class AgentChatViewModel extends Observable implements TurnHost {
     this.#settingsOpen = open;
     if (open) {
       this.#aboutOpen = false;
+      this.#closeTools();
       void this.grants.load().catch(() => undefined); // Settings -> Approvals as it is now
     }
     this.notify();
@@ -1017,8 +1035,30 @@ export class AgentChatViewModel extends Observable implements TurnHost {
     if (open) {
       this.#settingsOpen = false;
       this.#reasoningMenuOpen = false;
+      this.#closeTools();
     }
     this.notify();
+  }
+
+  /** Opens or closes Tools; opening closes the settings it is picked from (and About) and reads the server's list. */
+  setToolsOpen(open: boolean): void {
+    if (this.#toolsOpen === open && !(open && (this.#settingsOpen || this.#aboutOpen))) return;
+    if (open) {
+      this.#toolsOpen = true;
+      this.#settingsOpen = false;
+      this.#aboutOpen = false;
+      this.#reasoningMenuOpen = false;
+      void this.tools.load();
+    } else {
+      this.#closeTools();
+    }
+    this.notify();
+  }
+
+  #closeTools(): void {
+    if (!this.#toolsOpen) return;
+    this.#toolsOpen = false;
+    this.tools.cancel();
   }
 
   /** Copies About as text lines (the agent, its version and model, the app, the SDK, the server); false when the clipboard refused. */

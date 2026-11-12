@@ -208,11 +208,11 @@ describe("ChatPanel's settings", () => {
     await panel(() => ({ text: "ok" }), "write", { strings: { send: "Go" } });
     fireEvent.click(screen.getByRole("button", { name: "Settings" }));
     expect(screen.queryAllByRole("menuitemradio")).toEqual([]);
-    expect(screen.getAllByRole("menuitem").map((b) => b.textContent)).toEqual(["Export chat", "About"]);
+    expect(screen.getAllByRole("menuitem").map((b) => b.textContent)).toEqual(["Tools", "Export chat", "About"]);
     cleanup();
     await panel(() => ({ text: "ok" }), "write", {}, { settingsExtra: <button type="button" role="menuitem">Sign out</button> });
     fireEvent.click(screen.getByRole("button", { name: "Settings" }));
-    expect(screen.getAllByRole("menuitem").map((b) => b.textContent)).toEqual(["Sign out", "Export chat", "About"]);
+    expect(screen.getAllByRole("menuitem").map((b) => b.textContent)).toEqual(["Sign out", "Tools", "Export chat", "About"]);
   });
 
   it("exports the chat as Markdown from the settings: disabled while the chat is empty, then it saves through saveFile", async () => {

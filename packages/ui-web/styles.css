@@ -1470,6 +1470,90 @@
   gap: 6px;
 }
 
+/* Tools: an overlay like About, read only. Descriptions are server-written, so they are plain text and clamped. */
+.fdn-tools {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-width: min(320px, calc(100vw - 16px));
+  max-height: min(480px, 75vh);
+  padding-block: 6px 12px;
+  padding-inline: 12px 6px;
+  overflow-y: auto;
+}
+
+.fdn-tools-section,
+.fdn-tools-group,
+.fdn-tools-failed {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.fdn-tools .fdn-menu-heading,
+.fdn-tools .fdn-menu-note {
+  padding-inline: 0;
+}
+
+.fdn-tools-server {
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.fdn-tools-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.fdn-tools-row {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding-inline-end: 6px;
+}
+
+.fdn-tools-row-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.fdn-tools-name {
+  min-width: 0;
+  font-family: var(--fdn-mono);
+  font-size: 12.5px;
+  overflow-wrap: anywhere;
+}
+
+.fdn-tools-desc {
+  display: -webkit-box;
+  overflow: hidden;
+  color: var(--fdn-text-muted);
+  font-size: 12px;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+  line-clamp: 3;
+  overflow-wrap: anywhere;
+}
+
+.fdn-tools-status {
+  white-space: normal;
+}
+
+.fdn-tools-status.fdn-tools-available {
+  background: var(--fdn-accent-soft);
+  color: var(--fdn-on-accent-soft);
+}
+
+.fdn-tools .fdn-button {
+  align-self: flex-start;
+}
+
 .fdn-composer:focus-within {
   border-color: var(--fdn-accent);
   box-shadow: 0 0 0 1px var(--fdn-accent);

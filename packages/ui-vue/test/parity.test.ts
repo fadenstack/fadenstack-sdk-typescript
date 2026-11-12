@@ -146,6 +146,31 @@ describe("the Vue panel draws what the React panel draws", () => {
   });
 });
 
+describe("the Tools view and the settings' new items draw the same in both panels", () => {
+  const serverTools = [
+    { name: "mcp.github.search", server: "github", description: "Searches issues\nand <b>pull</b> requests", allowed: true, enabled: true },
+    { name: "mcp.github.merge", server: "github", description: "Merges", allowed: false, enabled: true },
+    { name: "mcp.wiki.read", server: "wiki", description: "Reads a page ".repeat(80), allowed: true, enabled: false },
+  ];
+
+  it("with the settings menu open, loading, loaded, empty, in German, and failed", async () => {
+    const { chat } = await chatWith(() => ({ text: "ok" }), {}, "write", true, { serverTools });
+    const panels = both(chat);
+    chat.setSettingsOpen(true);
+    await panels.same();
+    chat.setToolsOpen(true);
+    await panels.same(); // loading
+    await waitUntil(() => chat.tools.state === "ready");
+    await panels.same();
+
+    const old = await chatWith(() => ({ text: "ok" }), { strings: germanStrings, locale: "de-DE" });
+    const oldPanels = both(old.chat);
+    old.chat.setToolsOpen(true);
+    await waitUntil(() => old.chat.tools.state === "ready");
+    await oldPanels.same(); // an older server, German: the empty state
+  });
+});
+
 describe("the settings draw the same in both panels", () => {
   it("with a choice of languages, and with the language the organisation fixed", async () => {
     const { chat } = await chatWith(() => ({ text: "ok" }), { automaticLanguage: "de-DE" });

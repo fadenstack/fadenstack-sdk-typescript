@@ -41,12 +41,12 @@ describe("stringsFor", () => {
       expect(strings.language).toBe(tag);
       expect(Object.keys(strings).sort()).toEqual(Object.keys(englishStrings).sort());
       if (tag === "en") continue;
-      // Every text is translated, not left in English (a word may be the same in both, like "Source": French has it three times, as the .NET texts do).
+      // Every text is translated, not left in English (a word may be the same in both, like "Source": French has it three times, as the .NET texts do; German keeps the loanwords Skills, Skill, Chat and Tools).
       const same = Object.keys(englishStrings).filter((key) => {
         const a = englishStrings[key as keyof UiStrings], b = strings[key as keyof UiStrings];
         return typeof a === "string" && a === b && key !== "direction";
       });
-      expect(same.length, `${tag}: ${same.join(", ")}`).toBeLessThanOrEqual(3);
+      expect(same.length, `${tag}: ${same.join(", ")}`).toBeLessThanOrEqual(4);
     }
   });
 });

@@ -49,6 +49,16 @@ export {
   type PromptStoreErrorCode,
   type SavedPrompt,
 } from "./prompts.js";
+export {
+  ToolsViewModel,
+  serverToolStatus,
+  type HostToolInfo,
+  type HostToolRow,
+  type ServerToolGroup,
+  type ServerToolRow,
+  type ServerToolStatus,
+  type ToolsState,
+} from "./tools.js";
 export { TurnViewModel, type TurnHost, type TurnState } from "./turn.js";
 export {
   ApprovalPart,

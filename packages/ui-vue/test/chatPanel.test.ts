@@ -276,26 +276,26 @@ describe("ChatPanel's settings (Vue)", () => {
     await button(locked.wrapper, "Paramètres").trigger("click");
     expect(locked.wrapper.find(".fdn-menu-note").text()).toBe("Défini par votre organisation");
     expect(locked.wrapper.findAll("[role=menuitemradio]").every((b) => (b.element as HTMLButtonElement).disabled)).toBe(true);
-    expect(locked.wrapper.findAll(".fdn-settings [role=menuitem]").map((b) => b.text())).toEqual(["Exporter la conversation", "À propos"]);
+    expect(locked.wrapper.findAll(".fdn-settings [role=menuitem]").map((b) => b.text())).toEqual(["Outils", "Exporter la conversation", "À propos"]);
 
     const fixed = await panel(() => ({ text: "ok" }), { strings: { send: "Go" } });
     await button(fixed.wrapper, "Settings").trigger("click");
     expect(fixed.wrapper.findAll("[role=menuitemradio]")).toHaveLength(0);
-    expect(fixed.wrapper.findAll(".fdn-settings [role=menuitem]").map((b) => b.text())).toEqual(["Export chat", "About"]);
+    expect(fixed.wrapper.findAll(".fdn-settings [role=menuitem]").map((b) => b.text())).toEqual(["Tools", "Export chat", "About"]);
   });
 
   it("puts About after the host's items", async () => {
     const { wrapper } = await panel(() => ({ text: "ok" }), {}, "write",
       { slots: { "settings-extra": () => h("button", { type: "button", role: "menuitem" }, "Sign out") } });
     await button(wrapper, "Settings").trigger("click");
-    expect(wrapper.findAll(".fdn-settings [role=menuitem]").map((b) => b.text())).toEqual(["Sign out", "Export chat", "About"]);
+    expect(wrapper.findAll(".fdn-settings [role=menuitem]").map((b) => b.text())).toEqual(["Sign out", "Tools", "Export chat", "About"]);
   });
 
   it("exports the chat as Markdown from the settings: disabled while the chat is empty, then it saves through saveFile", async () => {
     const saved: { name: string; type: string; content: string }[] = [];
     const { wrapper, chat } = await panel(() => ({ text: "An answer." }), { saveFile: (f) => void saved.push(f) });
     await button(wrapper, "Settings").trigger("click");
-    expect((wrapper.find(".fdn-settings [role=menuitem]").element as HTMLButtonElement).disabled).toBe(true);
+    expect((wrapper.findAll(".fdn-settings [role=menuitem]").find((b) => b.text() === "Export chat")!.element as HTMLButtonElement).disabled).toBe(true);
     await button(wrapper, "Settings").trigger("click");
     await chat.send("Hello there");
     await nextTick();

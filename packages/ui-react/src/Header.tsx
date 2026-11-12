@@ -7,6 +7,7 @@ import { ApprovalsSection } from "./Grants.js";
 import { useDismiss, useViewModel } from "./hooks.js";
 import { Icon } from "./icons.js";
 import { ReasoningMenu } from "./ReasoningMenu.js";
+import { ToolsPanel } from "./Tools.js";
 
 /**
  * The panel's top bar: the agent, the tool mode, the history, a new chat, the host's own buttons, and the settings
@@ -80,17 +81,23 @@ function SettingsMenu({ chat, extra }: { chat: AgentChatViewModel; extra?: React
   const gear = useRef<HTMLButtonElement>(null);
   const close = useCallback(() => chat.setSettingsOpen(false), [chat]);
   const dismissAbout = useCallback(() => chat.setAboutOpen(false), [chat]);
+  const dismissTools = useCallback(() => chat.setToolsOpen(false), [chat]);
+  const closeTools = useCallback((returnFocus: boolean) => {
+    chat.setToolsOpen(false);
+    if (returnFocus) gear.current?.focus();
+  }, [chat]);
   const closeAbout = useCallback((returnFocus: boolean) => {
     chat.setAboutOpen(false);
     if (returnFocus) gear.current?.focus();
   }, [chat]);
   useDismiss(chat.isSettingsOpen, close, ref);
   useDismiss(chat.isAboutOpen, dismissAbout, ref);
+  useDismiss(chat.isToolsOpen, dismissTools, ref);
   const s = chat.strings;
   const languages = chat.canChangeLanguage || chat.isLanguageLocked;
   return (
     <div className="fdn-menu-anchor" ref={ref}>
-      <button ref={gear} type="button" className={chat.isAboutOpen ? "fdn-icon-button fdn-open" : "fdn-icon-button"} title={s.settings}
+      <button ref={gear} type="button" className={chat.isAboutOpen || chat.isToolsOpen ? "fdn-icon-button fdn-open" : "fdn-icon-button"} title={s.settings}
         aria-label={s.settings} aria-haspopup="menu" aria-expanded={chat.isSettingsOpen} onClick={() => chat.setSettingsOpen(!chat.isSettingsOpen)}>
         <Icon name="settings" />
       </button>
@@ -119,6 +126,10 @@ function SettingsMenu({ chat, extra }: { chat: AgentChatViewModel; extra?: React
           <ApprovalsSection grants={chat.grants} />
           {extra && <div className={languages ? "fdn-menu-extra" : undefined}>{extra}</div>}
           <div className={languages || extra ? "fdn-menu-extra" : undefined}>
+            <button type="button" role="menuitem" aria-haspopup="dialog" className="fdn-menu-item" onClick={() => chat.setToolsOpen(true)}>
+              <span className="fdn-menu-check" />
+              <span className="fdn-menu-label">{s.tools}</span>
+            </button>
             <button type="button" role="menuitem" className="fdn-menu-item" disabled={!chat.canExport} onClick={() => void chat.saveChatMarkdown()}>
               <span className="fdn-menu-check" />
               <span className="fdn-menu-label">{s.exportChat}</span>
@@ -131,6 +142,7 @@ function SettingsMenu({ chat, extra }: { chat: AgentChatViewModel; extra?: React
         </div>
       )}
       {chat.isAboutOpen && <AboutPanel chat={chat} onClose={closeAbout} />}
+      {chat.isToolsOpen && <ToolsPanel chat={chat} onClose={closeTools} />}
     </div>
   );
 }

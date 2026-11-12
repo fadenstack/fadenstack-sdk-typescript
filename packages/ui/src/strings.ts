@@ -371,6 +371,25 @@ export interface UiStrings {
   /** Said when the user already keeps the most prompts; max: how many. */
   promptsFull(max: string): string;
   promptNotSaved: string;
+  // what the agent can use (settings -> Tools)
+  /** The settings item, and the name of the view it opens. */
+  tools: string;
+  /** The section of the tools the app itself provides. */
+  toolsInApp: string;
+  /** The section of the tools the organisation's server offers this agent. */
+  toolsFromServer: string;
+  /** Said under "In this app" when the app brings no tools. */
+  toolsNoneInApp: string;
+  toolsLoading: string;
+  /** Said under the server's section when it lists nothing (or an older server cannot list). */
+  toolsNone: string;
+  toolsFailed: string;
+  /** A server tool this agent can use now. */
+  toolStatusAvailable: string;
+  /** A server tool an administrator switched off. */
+  toolStatusDisabled: string;
+  /** A server tool the agent's rules do not allow. */
+  toolStatusNotAllowed: string;
 }
 
 export const englishStrings: UiStrings = {
@@ -648,6 +667,16 @@ export const englishStrings: UiStrings = {
   promptTooLong: (max) => `A prompt can have at most ${max} characters.`,
   promptsFull: (max) => `You can keep at most ${max} prompts. Delete one first.`,
   promptNotSaved: "The prompt could not be saved.",
+  tools: "Tools",
+  toolsInApp: "In this app",
+  toolsFromServer: "From your organisation's server",
+  toolsNoneInApp: "This app brings no tools.",
+  toolsLoading: "Loading tools...",
+  toolsNone: "No tools from your server",
+  toolsFailed: "The tools could not be listed right now",
+  toolStatusAvailable: "Available to this agent",
+  toolStatusDisabled: "Switched off by your administrator",
+  toolStatusNotAllowed: "Not allowed for this agent",
 };
 
 /**

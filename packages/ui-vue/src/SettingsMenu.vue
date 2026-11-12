@@ -11,6 +11,7 @@ import AboutPanel from "./AboutPanel.vue";
 import ApprovalsSection from "./ApprovalsSection.vue";
 import { useDismiss, useViewModel } from "./composables.js";
 import Icon from "./Icon.vue";
+import ToolsPanel from "./ToolsPanel.vue";
 
 const props = defineProps<{ chat: AgentChatViewModel }>();
 defineSlots<{ default?(): unknown }>();
@@ -20,7 +21,13 @@ const anchor = useTemplateRef<HTMLDivElement>("anchor");
 const gear = useTemplateRef<HTMLButtonElement>("gear");
 useDismiss(() => chat.value.isSettingsOpen, () => chat.value.setSettingsOpen(false), anchor);
 useDismiss(() => chat.value.isAboutOpen, () => chat.value.setAboutOpen(false), anchor);
+useDismiss(() => chat.value.isToolsOpen, () => chat.value.setToolsOpen(false), anchor);
 const languages = computed(() => chat.value.canChangeLanguage || chat.value.isLanguageLocked);
+
+function closeTools(returnFocus: boolean): void {
+  chat.value.setToolsOpen(false);
+  if (returnFocus) gear.value?.focus();
+}
 
 function closeAbout(returnFocus: boolean): void {
   chat.value.setAboutOpen(false);
@@ -33,7 +40,7 @@ function closeAbout(returnFocus: boolean): void {
     <button
       ref="gear"
       type="button"
-      :class="chat.isAboutOpen ? 'fdn-icon-button fdn-open' : 'fdn-icon-button'"
+      :class="chat.isAboutOpen || chat.isToolsOpen ? 'fdn-icon-button fdn-open' : 'fdn-icon-button'"
       :title="chat.strings.settings"
       :aria-label="chat.strings.settings"
       aria-haspopup="menu"
@@ -76,6 +83,10 @@ function closeAbout(returnFocus: boolean): void {
       <ApprovalsSection :grants="chat.grants" />
       <div v-if="slots.default" v-bind="languages ? { class: 'fdn-menu-extra' } : {}"><slot /></div>
       <div v-bind="languages || slots.default ? { class: 'fdn-menu-extra' } : {}">
+        <button type="button" role="menuitem" aria-haspopup="dialog" class="fdn-menu-item" @click="chat.setToolsOpen(true)">
+          <span class="fdn-menu-check" />
+          <span class="fdn-menu-label">{{ chat.strings.tools }}</span>
+        </button>
         <button type="button" role="menuitem" class="fdn-menu-item" :disabled="!chat.canExport" @click="chat.saveChatMarkdown()">
           <span class="fdn-menu-check" />
           <span class="fdn-menu-label">{{ chat.strings.exportChat }}</span>
@@ -87,5 +98,6 @@ function closeAbout(returnFocus: boolean): void {
       </div>
     </div>
     <AboutPanel v-if="chat.isAboutOpen" :chat="chat" @close="closeAbout" />
+    <ToolsPanel v-if="chat.isToolsOpen" :chat="chat" @close="closeTools" />
   </div>
 </template>
