@@ -49,6 +49,12 @@ export function buildTurn(entries: readonly TranscriptEntry[], context: PartCont
   let state: TurnState = "stopped"; // a turn without an end was interrupted
   let outcome: ChatOutcome | undefined;
   let tokens: number | undefined;
+  // A card's class: from its own entry, or (written before entries kept it) from the call's start, which follows it.
+  const startedClass = new Map<string, ReturnType<typeof parseToolClass>>();
+  for (const e of entries) {
+    const callId = e.type === EntryTypes.toolStart ? str(e.data, "call_id") : undefined;
+    if (callId && !startedClass.has(callId)) startedClass.set(callId, parseToolClass(str(e.data, "tool_class")));
+  }
   for (const entry of entries) {
     const d = entry.data;
     switch (entry.type) {
@@ -72,9 +78,14 @@ export function buildTurn(entries: readonly TranscriptEntry[], context: PartCont
       }
       case EntryTypes.approvalDecision: {
         if (d["asked"] === false) break; // let through by this chat's, an always or a bypass approval: no card, as live
+        const callId = str(d, "call_id") ?? "";
+        const wireClass = str(d, "tool_class");
+        const server = str(d, "server");
         const request: ApprovalRequest = {
-          callId: str(d, "call_id") ?? "", toolName: str(d, "name") ?? "", toolClass: "unknown",
+          callId, toolName: str(d, "name") ?? "",
+          toolClass: wireClass !== undefined ? parseToolClass(wireClass) : startedClass.get(callId) ?? "unknown",
           source: str(d, "source") ?? "host", reason: "", arguments: {},
+          ...(server ? { server } : {}),
         };
         const decided: ApprovalState = d["timed_out"] === true ? "expired" : d["approved"] !== true ? "denied"
           : d["scope"] === "always" ? "approved_always" : d["for_session"] === true ? "approved_for_session" : "approved";

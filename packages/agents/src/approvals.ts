@@ -9,6 +9,12 @@ export interface ApprovalRequest {
   source: string;
   /** Why it asks: the tool mode, or the admin's message for a tool rule. */
   reason: string;
+  /** The MCP server's label, for a tool from a local MCP server (`AgentTool.server`): the card names it. */
+  server?: string;
+  /** The server's own hint that the tool only reads (`AgentTool.readOnlyHint`); absent when it gave none. */
+  readOnlyHint?: boolean;
+  /** The server's own hint that the tool may delete or overwrite (`AgentTool.destructiveHint`); absent when it gave none. */
+  destructiveHint?: boolean;
   /** The call's arguments, for the prompt (empty for gateway tools: the gateway keeps them). */
   arguments: Readonly<Record<string, unknown>>;
   /**

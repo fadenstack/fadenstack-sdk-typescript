@@ -100,7 +100,8 @@ describe("ChatPanel", () => {
       fireEvent.click(screen.getByRole("button", { name: "Send" }));
     });
     const allow = await screen.findByRole("button", { name: "Allow" });
-    expect(screen.getByText("Run fill_field?")).toBeTruthy();
+    expect(document.querySelector(".fdn-approval-head strong")!.textContent).toBe("Run fill_field?"); // the name in a <code> of its own
+    expect(screen.getByText("fill_field").tagName).toBe("CODE");
     expect(screen.getByText('textbox "Name" on example.com').className).toBe("fdn-approval-target");
     expect(screen.getByText("value: Jane")).toBeTruthy();
     await act(async () => {

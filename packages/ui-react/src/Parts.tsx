@@ -94,8 +94,13 @@ export function ApprovalView({ part, strings }: { part: ApprovalPart; strings: U
     <div className={`fdn-approval${part.isDangerous ? " fdn-approval-danger" : ""}`} role="group" aria-label={part.title}>
       <div className="fdn-approval-head">
         <Icon name={approvalIcon(part)} />
-        <strong>{part.title}</strong>
+        <strong>{part.titleParts.map((p, i) => (p.code ? <code key={i}>{p.text}</code> : p.text))}</strong>
+      </div>
+      <div className="fdn-approval-source">
         <span className={`fdn-badge fdn-class-${part.request.toolClass}`}>{part.classLabel}</span>
+        {part.hasSourceLine && (
+          <span className="fdn-approval-from"><Icon name="extension" size={14} /><span>{part.sourceLine}</span></span>
+        )}
       </div>
       {part.reason && <p className="fdn-approval-reason" dir="auto">{part.reason}</p>}
       {part.target && <p className="fdn-approval-target" dir="auto">{part.target}</p>}

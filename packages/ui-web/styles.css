@@ -900,6 +900,29 @@
   overflow-wrap: anywhere;
 }
 
+.fdn-approval-head strong code {
+  font: 12px var(--fdn-mono);
+}
+
+/* The class under the title, and for a local MCP tool where it comes from: the row wraps in a narrow panel. */
+.fdn-approval-source {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 8px;
+  margin-top: 6px;
+}
+
+.fdn-approval-from {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  color: var(--fdn-text-muted);
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+
 .fdn-approval-danger .fdn-approval-head .fdn-icon {
   color: var(--fdn-danger);
 }

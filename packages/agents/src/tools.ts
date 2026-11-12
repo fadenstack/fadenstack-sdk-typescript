@@ -78,6 +78,10 @@ export interface AgentTool {
   readonly server?: string;
   /** Reaches outside the organisation (recorded and shown; no mode acts on it yet). */
   readonly openWorld?: boolean;
+  /** What the MCP server's annotations say: the tool only reads. Absent when the server did not say; the card shows it, no mode acts on it. */
+  readonly readOnlyHint?: boolean;
+  /** What the MCP server's annotations say: the tool may delete or overwrite. Absent when the server did not say. */
+  readonly destructiveHint?: boolean;
   /** What it writes for people to read, if it writes such content (see `ToolOutput`). */
   readonly output?: ToolOutput;
   /**
@@ -159,6 +163,8 @@ export function withToolClass(tool: AgentTool, toolClass: ToolClass): AgentTool 
     ...(tool.description !== undefined ? { description: tool.description } : {}),
     ...(tool.server !== undefined ? { server: tool.server } : {}),
     ...(tool.openWorld !== undefined ? { openWorld: tool.openWorld } : {}),
+    ...(tool.readOnlyHint !== undefined ? { readOnlyHint: tool.readOnlyHint } : {}),
+    ...(tool.destructiveHint !== undefined ? { destructiveHint: tool.destructiveHint } : {}),
     ...(tool.output !== undefined ? { output: tool.output } : {}),
     ...(tool.describe ? { describe: (args: Record<string, unknown>, signal: AbortSignal) => tool.describe!(args, signal) } : {}),
     invoke: (args, context) => tool.invoke(args, context),
