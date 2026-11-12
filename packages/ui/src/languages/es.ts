@@ -66,6 +66,9 @@ export const spanishStrings: UiStrings = {
   decision: (id) => `Decisión ${id}`,
   piiTitle: "Datos personales protegidos",
   piiMessage: (total, list) => `${total} ${total === 1 ? "valor ocultado" : "valores ocultados"} al modelo: ${list}`,
+  unmarkedTitle: "Respuesta sin marca de IA",
+  unmarkedMessage: "Esta respuesta no lleva una marca de IA legible por máquina. Su organización permitió que este modelo responda sin ella.",
+  settingsUnmarked: "Avisarme cuando una respuesta no lleve marca de IA",
   emptyAnswer: "El modelo terminó sin escribir una respuesta. Puede volver a intentarlo.",
   emptyAnswerLength:
     "El modelo alcanzó su límite de longitud antes de escribir una respuesta, por ejemplo mientras pensaba. Puede volver a intentarlo.",

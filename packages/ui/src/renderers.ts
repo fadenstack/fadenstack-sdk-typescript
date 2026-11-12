@@ -52,8 +52,24 @@ export const piiRenderer: AgentEventRenderer = {
   },
 };
 
+const unmarkedShown = new WeakSet<TurnViewModel>();
+
 /**
- * Events the chat shows elsewhere or not at all, and a generic notice for anything else. An answer's receipt
+ * `faden.unmarked`: an administrator allowed this model route to answer without a machine-readable AI mark (EU AI Act
+ * Art. 50(2)). Hidden unless the person turned the setting on; then one quiet notice per answer.
+ */
+export const unmarkedRenderer: AgentEventRenderer = {
+  render(event, turn, context) {
+    if (eventKind(event) !== "faden.unmarked") return false;
+    if (!context.showUnmarked || unmarkedShown.has(turn)) return true;
+    unmarkedShown.add(turn);
+    turn.addPart(NoticePart.localized(context, "info", (s) => ({ title: s.unmarkedTitle, message: s.unmarkedMessage })));
+    return true;
+  },
+};
+
+/**
+ * Events the chat shows elsewhere or not at all, and a generic notice for anything else that has a message. An answer's receipt
  * (`faden.provenance`) is kept with the turn by the session; it is no message for the user.
  */
 const HANDLED = new Set(["TOOL_CALL_START", "TOOL_CALL_END", "faden.gateway_round", "faden.approval_required",
@@ -63,8 +79,8 @@ export const fallbackRenderer: AgentEventRenderer = {
   render(event, turn, context) {
     if (HANDLED.has(eventKind(event)) || event.type !== "CUSTOM") return true;
     const message = obj(event.value)?.["message"];
-    const text = typeof message === "string" ? message : eventKind(event);
-    turn.addPart(NoticePart.localized(context, "info", (s) => ({ title: s.noticeFallback, message: text })));
+    if (typeof message !== "string" || !message) return true; // never the raw event name
+    turn.addPart(NoticePart.localized(context, "info", (s) => ({ title: s.noticeFallback, message })));
     return true;
   },
 };

@@ -67,6 +67,9 @@ export const frenchStrings: UiStrings = {
   piiTitle: "Données personnelles protégées",
   piiMessage: (total, list) =>
     `${total} ${total <= 1 ? "valeur tenue" : "valeurs tenues"} à l'écart du modèle : ${list}`,
+  unmarkedTitle: "Réponse sans marque d'IA",
+  unmarkedMessage: "Cette réponse ne porte aucune marque d'IA lisible par machine. Votre organisation a autorisé ce modèle à répondre sans marque.",
+  settingsUnmarked: "M'avertir quand une réponse ne porte pas de marque d'IA",
   emptyAnswer: "Le modèle s'est arrêté sans écrire de réponse. Vous pouvez réessayer.",
   emptyAnswerLength:
     "Le modèle a atteint sa limite de longueur avant d'écrire une réponse, par exemple pendant sa réflexion. Vous pouvez réessayer.",

@@ -66,6 +66,9 @@ export const germanStrings: UiStrings = {
   decision: (id) => `Entscheidung ${id}`,
   piiTitle: "Personenbezogene Daten geschützt",
   piiMessage: (total, list) => `${total} ${total === 1 ? "Wert" : "Werte"} vom Modell ferngehalten: ${list}`,
+  unmarkedTitle: "Antwort ohne KI-Kennzeichen",
+  unmarkedMessage: "Diese Antwort trägt kein maschinenlesbares KI-Kennzeichen. Ihre Organisation hat diesem Modell erlaubt, ohne eines zu antworten.",
+  settingsUnmarked: "Hinweis, wenn eine Antwort kein KI-Kennzeichen trägt",
   emptyAnswer: "Das Modell hat aufgehört, ohne eine Antwort zu schreiben. Sie können es erneut versuchen.",
   emptyAnswerLength:
     "Das Modell hat seine maximale Länge erreicht, bevor es eine Antwort geschrieben hat, zum Beispiel beim Nachdenken. Sie können es erneut versuchen.",
