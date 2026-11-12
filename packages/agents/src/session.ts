@@ -588,6 +588,7 @@ class Turn {
   }
 
   async runCommand(name: string, args: Record<string, unknown>, origin: "user_command" | "user_history", signal: AbortSignal, label?: string): Promise<void> {
+    await this.#agent.refreshTools(signal);
     this.#mode = this.#session.effectiveToolMode;
     this.#commandOrigin = origin;
     this.#commandInputJson = commandJson(args);
@@ -609,6 +610,7 @@ class Turn {
 
   async run(message: string, attachments: readonly MessageAttachment[], skills: readonly PickedSkill[], signal: AbortSignal): Promise<void> {
     await Promise.resolve(); // the caller gets the stream before the first request goes out
+    await this.#agent.refreshTools(signal); // tools that changed since the last turn, never inside one
     await this.#session.settleBypass(signal);
     this.#mode = this.#session.effectiveToolMode;
     this.#bypassGrant = this.#mode === "bypass" ? this.#session.bypass?.id : undefined;
@@ -671,7 +673,7 @@ class Turn {
       toolMode: this.#mode,
       signal,
     };
-    const tools = this.#agent.offer(this.#mode);
+    const tools = this.#agent.offer(this.#mode, this.#session);
     if (tools.length) options.tools = tools;
     // On every call of the turn, not the first only: the gateway gives a request the skills it names.
     if (this.#skills.length) options.skills = this.#skills;
@@ -903,8 +905,11 @@ class Turn {
     let result: string;
     let outcome: ToolOutcome;
     let waited = 0;
+    // Asked once, and only for a call that would run: a tool the scope has not switched on answers instead of running.
+    const answered = tool && !planned.denied && call.argumentsError === undefined && !this.#commandOrigin
+      ? tool.scope?.beforeCall(tool, this.#session) : undefined;
     if (!tool) {
-      [result, outcome] = [`Tool '${call.name}' does not exist here.`, "error"];
+      [result, outcome] = [this.#agent.isGone(call.name) ? `${call.name} is no longer available.` : `Tool '${call.name}' does not exist here.`, "error"];
     } else if (planned.denied) {
       if (planned.hidden) {
         this.#toolDenied = true;
@@ -914,6 +919,8 @@ class Turn {
       [result, outcome] = [`Tool '${call.name}' is not allowed here.`, "denied"];
     } else if (call.argumentsError !== undefined) {
       [result, outcome] = [`Error: the arguments are not valid JSON (${call.argumentsError}).`, "error"];
+    } else if (answered !== undefined) {
+      [result, outcome] = [answered, "ok"]; // a tool outside the conversation's scope, now switched on
     } else {
       ({ result, outcome, waited } = await this.#decideAndRun(tool, toolClass, mark, call, args, signal));
     }

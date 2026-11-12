@@ -72,7 +72,27 @@ export type ToolServiceFactory<T> = (call: ToolServiceCall) => T;
 /** Adds tools once the agent's profile is known, e.g. MCP servers under the agent's policy. */
 export interface ToolSource {
   getTools(context: AgentContext, signal?: AbortSignal): Promise<readonly AgentTool[]>;
+  /**
+   * The host tools the source brings, before the agent's contract settles them: the app manifest reports them, which is how
+   * the server learns of tools its contract does not list yet.
+   */
+  declared?(): readonly AgentTool[];
   dispose?(): void | Promise<void>;
+}
+
+/**
+ * A tool source whose tools can change while the agent runs (a setting that switches a group of tools on or off, a list a
+ * host edits). The agent asks it again at the start of the next turn, never inside a turn, and settles its tools by the
+ * same rules as at start; a tool that went away is refused with "(name) is no longer available." .NET:
+ * `IChangingToolSource`.
+ */
+export interface ChangingToolSource extends ToolSource {
+  /** Calls `listener`, from anywhere, when `getTools` would now answer differently; returns the unsubscribe. */
+  onChanged(listener: () => void): () => void;
+}
+
+export function isChangingToolSource(source: ToolSource): source is ChangingToolSource {
+  return typeof (source as Partial<ChangingToolSource>).onChanged === "function";
 }
 
 /**
