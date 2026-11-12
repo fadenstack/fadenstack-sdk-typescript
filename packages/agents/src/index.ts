@@ -57,6 +57,19 @@ export {
   type ToolSource,
   type ToolStage,
 } from "./stages.js";
+export {
+  IndexedDbReasoningStore,
+  MemoryReasoningStore,
+  REASONING_LEVELS,
+  ReasoningChoices,
+  parseReasoningLevel,
+  reasoningEffort,
+  reasoningLevelOf,
+  reasoningWire,
+  type IndexedDbReasoningStoreOptions,
+  type ReasoningLevel,
+  type ReasoningStore,
+} from "./reasoning.js";
 export { attachmentData, isPicture, type MessageAttachment } from "./attachments.js";
 export { ContextBuilder, MAX_HISTORY_PICTURES, NO_TOOL_RESULT, toMessage, withAttachments } from "./contextBuilder.js";
 export {

@@ -12,6 +12,7 @@ import {
   type ChatOptions,
   type AgentGrant,
   type ChatOutcome,
+  type ReasoningEffort,
   type FadenstackEvent,
   type FinishReason,
   type GovernanceNotice,
@@ -34,6 +35,7 @@ import type { ToolInvocation, ToolInvoker, ToolServiceCall } from "./stages.js";
 import { checkArguments, type AgentTool, type ToolServiceKey, type ToolServices } from "./tools.js";
 import { EntryTypes, TurnStatus, newId, type TranscriptEntry } from "./transcript.js";
 import { commandJson, commandSchemaHash } from "./commands.js";
+import { reasoningLevelOf, reasoningRecord, type ReasoningLevel } from "./reasoning.js";
 import { AgentGrants, cutReason, type GrantCall, type GrantPlace, type GrantVerdict } from "./grants.js";
 
 /** A skill the user picked for a message: its slug for the server, its name for the transcript. */
@@ -158,6 +160,7 @@ export class AgentSession {
    * handler sets it; one that shares a handler tells the chats apart by `ApprovalRequest.sessionId`.
    */
   approvals: ApprovalHandler | undefined;
+  #reasoning: ReasoningLevel | undefined;
   readonly #entries: TranscriptEntry[];
   /** "Allow for this chat": this object's only, in memory. A session opened again starts asking again. */
   readonly #approvedForSession = new Set<string>();
@@ -188,6 +191,25 @@ export class AgentSession {
 
   // The mode before Bypass, to go back to when it ends.
   #beforeBypass: ToolMode | undefined;
+
+  /**
+   * How long the model thinks on the next message. Until it is set, the agent's level (`FadenstackAgent.reasoning`: the
+   * person's pick, the app's) -- so a new conversation starts from the person's pick. A turn that already started keeps the
+   * level it started with. A level above the server's maximum shows and sends the maximum.
+   */
+  get reasoning(): ReasoningLevel {
+    const level = this.#reasoning;
+    return level !== undefined && level !== "auto" ? reasoningLevelOf(this.agent.effortFor(level)) : level ?? this.agent.reasoning;
+  }
+
+  set reasoning(level: ReasoningLevel) {
+    this.#reasoning = level;
+  }
+
+  /** @internal What a turn started now would send: the session's level, or -- while it follows the agent -- the agent's own effort. */
+  get requestEffort(): ReasoningEffort | undefined {
+    return this.#reasoning !== undefined ? this.agent.effortFor(this.#reasoning) : this.agent.requestEffort;
+  }
 
   /** The transcript, as kept on this device. */
   get transcript(): readonly TranscriptEntry[] {
@@ -565,6 +587,8 @@ class Turn {
   #bypassGrant: string | undefined;
   readonly #bypassRan: string[] = [];
   #bypassEnded = false;
+  // What this turn asks the model to think, fixed when it starts: a change of the level applies from the next message.
+  #effort: ReasoningEffort | undefined;
 
   /** The Bypass grant the turn ran under; undefined when it did not run in Bypass. */
   get bypassGrant(): string | undefined {
@@ -613,6 +637,7 @@ class Turn {
     await this.#agent.refreshTools(signal); // tools that changed since the last turn, never inside one
     await this.#session.settleBypass(signal);
     this.#mode = this.#session.effectiveToolMode;
+    this.#effort = this.#session.requestEffort;
     this.#bypassGrant = this.#mode === "bypass" ? this.#session.bypass?.id : undefined;
     // The last turn ran in Bypass and this one does not: the model hears it ended (from the transcript, so an app started
     // again tells it too).
@@ -625,6 +650,7 @@ class Turn {
     await this.#access.append(EntryTypes.turnStart, this.#id, {
       tool_mode: this.#session.toolMode,
       effective_tool_mode: this.#mode,
+      reasoning_effort: reasoningRecord(this.#effort),
     });
     this.#emit({ type: "turn_started", turnId: this.#id, toolMode: this.#mode });
     try {
@@ -677,7 +703,7 @@ class Turn {
     if (tools.length) options.tools = tools;
     // On every call of the turn, not the first only: the gateway gives a request the skills it names.
     if (this.#skills.length) options.skills = this.#skills;
-    if (this.#agent.settings.reasoning) options.reasoningEffort = this.#agent.settings.reasoning;
+    if (this.#effort) options.reasoningEffort = this.#effort;
     let text = "";
     let finish: FinishReason | undefined;
     const calls: ToolCall[] = [];

@@ -24,6 +24,7 @@ import { isStepUpHandler, type StepUpHandler } from "./stepUp.js";
 import type { ChatStage, FadenstackModule, ToolServiceFactory, ToolSource, ToolStage } from "./stages.js";
 import type { AgentTool, ToolServiceKey } from "./tools.js";
 import type { GrantHandler, GrantPlaceResolver } from "./grants.js";
+import type { ReasoningStore } from "./reasoning.js";
 
 /** What an agent was built with. */
 export interface AgentSettings {
@@ -55,6 +56,8 @@ export interface AgentSettings {
   readonly historyTokens: number;
   readonly report: boolean;
   readonly reasoning: ReasoningEffort | undefined;
+  /** The host's own store for the person's thinking level; undefined: the browser's IndexedDB, per signed-in user. */
+  readonly reasoningStore?: ReasoningStore;
   /** The app the agent runs in, for the manifest it reports when it starts. */
   readonly app: AppDescription;
 }
@@ -100,6 +103,7 @@ export class AgentBuilder {
   #historyTokens = 24_000;
   #report = true;
   #reasoning: ReasoningEffort | undefined;
+  #reasoningStore: ReasoningStore | undefined;
   #app: AppDescription = { name: UNDESCRIBED_APP_NAME };
 
   /** The server, and how the agent signs in (usually an `AgentTokenProvider`). */
@@ -232,6 +236,16 @@ export class AgentBuilder {
   }
 
   /**
+   * Where the level of thinking a person picked is kept, per person and agent (`FadenstackAgent.setReasoning`). By default
+   * the signed-in user's own IndexedDB database in a browser -- unless the host keeps both the sessions and the approvals
+   * itself, which leaves the pick in memory for the run.
+   */
+  useReasoningStore(store: ReasoningStore): this {
+    this.#reasoningStore = store;
+    return this;
+  }
+
+  /**
    * Whether tool runs and approvals (names and counts only), and the app's manifest, are reported to the server.
    * Default on.
    */
@@ -323,6 +337,7 @@ export class AgentBuilder {
       historyTokens: this.#historyTokens,
       report: this.#report,
       reasoning: this.#reasoning,
+      ...(this.#reasoningStore ? { reasoningStore: this.#reasoningStore } : {}),
       app: this.#app,
     });
   }

@@ -10,6 +10,7 @@ import {
   type AppManifest,
   type FadenstackClient,
   type ManifestTool,
+  type ReasoningEffort,
   type SkillOption,
   type ToolDefinition,
   type ToolMode,
@@ -21,6 +22,10 @@ import { IndexedDbSessionStore } from "./indexedDbSessionStore.js";
 import { MemorySessionStore, type SessionStore } from "./sessionStore.js";
 import { StepUpProofs, isStepUpHandler, type StepUpHandler } from "./stepUp.js";
 import { userStoreName } from "./userData.js";
+import {
+  IndexedDbReasoningStore, MemoryReasoningStore, ReasoningChoices, reasoningEffort, reasoningLevelOf, reasoningStoreName,
+  type ReasoningLevel, type ReasoningStore,
+} from "./reasoning.js";
 
 import { AgentBuilder, UNDESCRIBED_APP_NAME, type AgentSettings, type AppDescription } from "./builder.js";
 import { EventReporter } from "./reporter.js";
@@ -62,6 +67,9 @@ export class FadenstackAgent {
   #sessions: SessionStore | undefined;
   #approvalStore: ApprovalStore | undefined;
   #storesFor: string | undefined;
+  #reasoningStore: ReasoningStore | undefined;
+  #reasoningChoices: ReasoningChoices = ReasoningChoices.everything;
+  #reasoningPick: ReasoningLevel | undefined;
   #starting: Promise<void> | undefined;
   #warned = false;
   #hostPolicySeen = false;
@@ -159,6 +167,7 @@ export class FadenstackAgent {
     const offered = this.#tools;
     this.#tools = this.#compose(settleHostTools(this.settings.tools, fresh), this.#sourceTools.map((s) => s.tools));
     this.#markGone(offered, this.#tools);
+    this.#reasoningChoices = ReasoningChoices.fromUi(fresh.ui); // a maximum the server lowered counts from the next message
     this.#profile = fresh;
     this.#profileRead = this.clock();
     if (this.#context) this.#context = { ...this.#context, profile: fresh };
@@ -342,10 +351,12 @@ export class FadenstackAgent {
     }
     this.#sourceTools = fromSources;
     this.#tools = this.#compose(hosts, fromSources.map((s) => s.tools));
+    this.#settleStores(profile.principal);
+    this.#reasoningChoices = ReasoningChoices.fromUi(profile.ui);
+    this.#reasoningPick = await this.#picks?.get(this.slug).catch(() => undefined);
     this.#profile = profile;
     this.#profileRead = this.clock();
     this.#context = context;
-    this.#settleStores(profile.principal);
     if (this.settings.permissionMode === "bypass" && !this.#warned) {
       if (!this.bypassOffered) {
         this.#warned = true;
@@ -371,12 +382,85 @@ export class FadenstackAgent {
     if (this.#storesFor === key) return;
     (this.#sessions as { close?: () => void } | undefined)?.close?.();
     (this.#approvalStore as { close?: () => void } | undefined)?.close?.();
+    (this.#reasoningStore as { close?: () => void } | undefined)?.close?.();
     const indexed = !!globalThis.indexedDB;
+    // A host that keeps both stores itself has taken over the device's storage: the pick then lasts for the run only.
+    this.#reasoningStore = this.settings.reasoningStore ? undefined
+      : this.settings.sessions && this.settings.approvalStore ? new MemoryReasoningStore()
+      : indexed ? new IndexedDbReasoningStore({ name: reasoningStoreName(principal) }) : new MemoryReasoningStore();
     this.#sessions = this.settings.sessions ? undefined
       : indexed ? new IndexedDbSessionStore({ name: userStoreName("fadenstack-sessions", principal) }) : new MemorySessionStore();
     this.#approvalStore = this.settings.approvalStore ? undefined
       : indexed ? new IndexedDbApprovalStore({ name: userStoreName("fadenstack-approvals", principal) }) : new MemoryApprovalStore();
     this.#storesFor = key;
+  }
+
+  // -- thinking -----------------------------------------------------------------------------------------------
+
+  /**
+   * The levels of thinking the agent offers: Auto, Off, and Low, Medium and High up to the maximum the profile's
+   * `ui.reasoning.max` sets, if any (`minimal` caps at none, `max` sets no cap). .NET: `ReasoningChoices`.
+   */
+  get reasoningChoices(): ReasoningChoices {
+    return this.#reasoningChoices;
+  }
+
+  /**
+   * The level this person picked for this agent, if any, kept per person and agent (in the signed-in user's own IndexedDB
+   * database, unless the host keeps both stores itself: then for the run only). A pick above a maximum the server set later
+   * still counts, and is lowered to it.
+   */
+  get reasoningChoice(): ReasoningLevel | undefined {
+    return this.#reasoningPick;
+  }
+
+  /**
+   * How long new messages think: the person's pick, else what the app set with `useReasoning`, else Auto -- each lowered to
+   * the server's maximum, if it sets one.
+   */
+  get reasoning(): ReasoningLevel {
+    return this.#resolveReasoning().level;
+  }
+
+  /** @internal What a request carries when nothing else was set for the session; undefined (no field) for Auto without a maximum. */
+  get requestEffort(): ReasoningEffort | undefined {
+    return this.#resolveReasoning().effort;
+  }
+
+  /** @internal What a request carries for a level the session was given: Auto is the maximum, if there is one. */
+  effortFor(level: ReasoningLevel): ReasoningEffort | undefined {
+    return level === "auto" ? this.#reasoningChoices.max : this.#reasoningChoices.cap(reasoningEffort(level));
+  }
+
+  get #picks(): ReasoningStore | undefined {
+    return this.settings.reasoningStore ?? this.#reasoningStore;
+  }
+
+  #resolveReasoning(): { level: ReasoningLevel; effort: ReasoningEffort | undefined } {
+    const choices = this.#reasoningChoices;
+    const capped = (effort: ReasoningEffort | undefined) => ({ level: reasoningLevelOf(effort), effort });
+    if (this.#reasoningPick) {
+      return this.#reasoningPick === "auto" ? { level: "auto", effort: choices.max } : capped(choices.cap(reasoningEffort(this.#reasoningPick)));
+    }
+    // The app's own effort goes out exactly as it set it (extra high stays extra high) unless the maximum is lower.
+    return this.settings.reasoning ? capped(choices.cap(this.settings.reasoning)) : { level: "auto", effort: choices.max };
+  }
+
+  /**
+   * Keeps the person's pick for this agent (undefined forgets it), from the next message on; a running turn is not changed.
+   * A level the agent does not offer is ignored. Returns the level new messages think at.
+   */
+  async setReasoning(level: ReasoningLevel | undefined, signal?: AbortSignal): Promise<ReasoningLevel> {
+    await this.start(signal);
+    if (level === undefined || this.#reasoningChoices.offers(level)) {
+      this.#reasoningPick = level;
+      try {
+        await this.#picks?.set(this.slug, level);
+      } catch {
+        // the pick still holds for this run; it is just not remembered
+      }
+    }
+    return this.reasoning;
   }
 
   /** The host's session store, or the default one once `start` knows whose it is. */
@@ -500,6 +584,7 @@ export class FadenstackAgent {
     await this.flush();
     (this.#sessions as { close?: () => void } | undefined)?.close?.();
     (this.#approvalStore as { close?: () => void } | undefined)?.close?.();
+    (this.#reasoningStore as { close?: () => void } | undefined)?.close?.();
     for (const stop of this.#unsubscribe.splice(0)) stop();
     for (const source of this.settings.sources) await source.dispose?.();
   }
