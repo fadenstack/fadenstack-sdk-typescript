@@ -57,14 +57,14 @@ describe("turnGate", () => {
     expect(lease.disposed).toBe(1);
   });
 
-  it("takes a lease that is a function or a Symbol.dispose object", async () => {
+  it("takes a lease that is a function or a dispose object", async () => {
     let calls = 0;
     const a = await chatWith(says, async () => () => { calls++; });
     await a.chat.send("Go.");
-    let symbol = 0;
-    const b = await chatWith(says, async () => ({ [Symbol.dispose]: () => { symbol++; } }));
+    let disposed = 0;
+    const b = await chatWith(says, async () => ({ dispose: () => { disposed++; } }));
     await b.chat.send("Go.");
-    expect([calls, symbol]).toEqual([1, 1]);
+    expect([calls, disposed]).toEqual([1, 1]);
   });
 
   it("releases the lease once when the turn fails", async () => {

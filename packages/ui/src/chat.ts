@@ -91,14 +91,16 @@ export interface AgentChatOptions {
   turnGate?: (signal: AbortSignal) => Promise<TurnLease>;
 }
 
-/** What a `turnGate` hands back: the slot a turn holds. Released (`dispose`, `[Symbol.dispose]` or called) once when the turn ends. */
-export type TurnLease = { dispose(): void } | { [Symbol.dispose](): void } | (() => void);
+/**
+ * What a `turnGate` hands back: the slot a turn holds, released (`dispose()` or called) once when the turn ends -- .NET's
+ * `IDisposable`. No `Symbol.dispose` form: the packages target ES2022, whose library does not have it.
+ */
+export type TurnLease = { dispose(): void } | (() => void);
 
 function releaseLease(lease: TurnLease | undefined): void {
   try {
     if (typeof lease === "function") lease();
-    else if (lease && "dispose" in lease) lease.dispose();
-    else if (lease && Symbol.dispose in lease) lease[Symbol.dispose]();
+    else if (lease && typeof lease.dispose === "function") lease.dispose();
   } catch {
     // a lease that fails to release must not break the chat
   }
