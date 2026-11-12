@@ -220,6 +220,8 @@ The handler gets an `ApprovalRequest`:
 | `requiredByRule` | An administrator's "Ask first" rule covers the call. |
 | `openWorld` | The tool reaches outside the organisation: what it is given goes to another site. |
 | `target` | What the call acts on, as the tool's `describe` says it, one line of at most 300 characters. Show it: the arguments alone (`ref: e12`) seldom tell the user what they allow. |
+| `server` | For a tool from a local MCP server (`source` is `mcp`), the server's label. Name it on the card: "From Files, an MCP server on this computer". |
+| `readOnlyHint`, `destructiveHint` | What the MCP server's own annotations say: the tool only reads, or may delete or overwrite. Absent when the server said nothing. The card shows them; no mode acts on them. A tool source sets them on its `AgentTool`. |
 
 It returns an `ApprovalDecision`:
 
@@ -246,6 +248,11 @@ A call the tool mode or an administrator's rule asks about is settled by the fir
 3. The user allowed the tool always, under the class it has now: it runs without asking.
 4. The user allowed the tool for this chat: it runs without asking.
 5. It asks, with Allow, Allow for this chat, Allow always and Deny.
+
+The chat panel's card for such a tool says where it comes from and, when nobody classified the tool, "Your organisation
+has not checked this tool." followed by the server's own hint (the warning wins when it gave both). The entry also keeps
+the tool's class (`tool_class`) and the server (`server`), so a chat opened again draws the same card; an entry written
+by an earlier version takes the class from the call's start.
 
 Every outcome goes in the session's transcript as an `approval.decision` entry, with what let the call through
 (`scope`: `once`, `chat`, `always` or `grant`; a grant for a time, a stretch of work and Bypass are all `grant`), and is

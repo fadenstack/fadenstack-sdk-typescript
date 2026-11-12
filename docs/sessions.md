@@ -26,24 +26,97 @@ name, as an older SDK did, and it never moves what is kept there to a user. A st
 What this protects, and what it does not:
 
 - IndexedDB belongs to one origin. Other websites and other extensions cannot read the sessions.
-- The sessions are not encrypted beyond what the browser does for its profile. Anyone who can read the browser profile
-  on disk can read them, and so can any script that runs in your origin. For a web page, that includes every page of
-  the same site.
-- A browser has no per-user secret store for the SDK to use, unlike the .NET SDK, which protects sessions with DPAPI on
-  Windows.
+- The sessions are encrypted (see [Encryption](#encryption)): a copy of the browser profile, a backup of it, or a file
+  found on disk holds ciphertext only. Script that runs in your origin can still ask the SDK for the sessions: it can use
+  the key, though not read it. For a web page, that includes every page of the same site.
 - Clearing the site's data in the browser, or removing the extension, deletes the sessions.
+
+### Encryption
+
+The stores the SDK keeps in IndexedDB (sessions and "Allow always") are encrypted with AES-GCM, the way the .NET SDK
+protects its files with DPAPI or the OS key store (`ISecretProtector`). The TypeScript form is the browser's:
+
+| | .NET | TypeScript |
+|---|---|---|
+| The key | DPAPI (Windows) or the OS key store | A WebCrypto key, **not extractable**, one per signed-in user, in a database of its own (`fadenstack-keys:<tenant>:<user>`) as a `CryptoKey` object. Script can use it, never read its bytes. |
+| A record | One protected blob per line or file | A fresh random 12-byte IV for every record, kept in front of the ciphertext; the database, the object store and the record's key are the additional data, so a record moved to another place does not decrypt. |
+| Where there is no OS key store | Owner-only files, not encrypted | In Node there is no IndexedDB: the SDK keeps sessions in memory, writes nothing and keeps no key. A host that keeps its own stores supplies a `SecretProtector` over its own key store. |
+| A record that does not decrypt | Counted as unreadable in an export | Treated as absent and reported through `useStoreProblemHandler`; never thrown at the person. The report names the store and the kind, never contents. |
+| A record of an earlier version | (never plain) | Earlier TypeScript versions wrote plain records. They are read once and written back encrypted, the first time the database is opened with a key. |
+
+Only the keys of a record stay in the clear (the agent, the session id and the sequence number; the tool's name for an
+approval): the text, the title, the times and a tool's class are inside the ciphertext. Where the page has no WebCrypto
+(an insecure page) the stores keep plain records, as before.
+
+```ts
+// A host with its own key store (Node, or an extension with a native helper):
+const protector: SecretProtector = {
+  encrypts: true,
+  protect: (data, context) => myKeyStore.seal(data, context),
+  unprotect: (data, context) => myKeyStore.open(data, context), // throws when it is not this key's record
+};
+FadenstackAgent.createBuilder().useClient(client)
+  .useSecretProtector(protector)
+  .useStoreProblemHandler((problem) => console.warn(problem.store, problem.kind)); // no contents
+```
+
+A protector used for the stores is one the person's data depends on: data one protector wrote another cannot read.
+
+## Export and delete my data
+
+An access request (GDPR Art. 15 and 20) and an erasure request (Art. 17) for what this device holds. .NET:
+`ExportMyDataAsync` and `DeleteMyDataAsync`.
+
+```ts
+const data = await agent.exportMyData();   // a JSON document, decrypted
+const result = await agent.deleteMyData(); // { storesCleared, hostSessionStoreLeft, hostApprovalStoreLeft, hostStoresLeft }
+```
+
+`exportMyData()` returns one plain JSON object (the .NET SDK writes a ZIP; a document is what a page can hand to the
+person as a download):
+
+| Field | What it is |
+|---|---|
+| `format`, `version`, `exportedAt` | `"fadenstack-my-data"`, `1`, and when. |
+| `sessions` | Every session of every agent the SDK's stores hold: `agent`, `id`, `started`, `lastActivity`, `title` and all `entries`, decrypted. |
+| `approvals` | Per agent, the tools allowed always. |
+| `counts` | `agents`, `sessions`, `approvals`, and `unreadable`: records that did not decrypt, which cannot be handed over. |
+| `notIncluded` | What is not in it: sign-in tokens and secrets (never exported) and what the server keeps (ask its operator). |
+
+A store you passed yourself is read for this agent only (it cannot name its agents).
+
+`deleteMyData()` deletes the signed-in user's databases (sessions, "Allow always") **and their key**, so that a copy
+of the profile restored later can never be read. Afterwards the stores start empty, with a new key. It does not sign out
+(sign-in tokens stay; that is the host's call) and it does not touch the server. From a gateway that names no user it
+clears the shared databases of an older SDK. The result:
+
+| Field | What it is |
+|---|---|
+| `storesCleared` | How many of the SDK's IndexedDB databases existed and were removed (at most three: sessions, approvals, key). Stores in memory are simply dropped. |
+| `hostSessionStoreLeft`, `hostApprovalStoreLeft` | A store you passed with `useSessionStore` / `useApprovalStore` is **not** deleted: it may hold other people's data. The flag says it was left. |
+| `hostStoresLeft` | Either of them: the person's data may still be in a store the host keeps. Delete their part there. |
+
+It throws when a database stays open in a tab that does not close it; the SDK's own tabs close theirs on request.
 
 ### Retention
 
 `IndexedDbSessionStore` keeps the newest 50 sessions of each agent, and none older than 90 days. Sessions beyond
-these limits are deleted when a new session is created. To change the limits, pass your own:
+these limits are deleted when a new session is created. To change the limits of the store the SDK keeps, use
+`useSessionRetention`; to change the limits of a store you create yourself, pass your own:
 
 ```ts
 import { FadenstackAgent, IndexedDbSessionStore } from "@fadenstack/agents";
 
+const agent = FadenstackAgent.createBuilder().useClient(client).useSessionRetention({ maxSessions: 20, maxAgeDays: 30 }).build();
+
 const sessions = new IndexedDbSessionStore({ retention: { maxSessions: 20, maxAgeDays: 30 } });
-const agent = FadenstackAgent.createBuilder().useClient(client).useSessionStore(sessions).build();
+const own = FadenstackAgent.createBuilder().useClient(client).useSessionStore(sessions).build();
 ```
+
+**The server's limits.** A server may set `local_retention` in the agent's profile (`maxSessions`, `maxAgeDays`; only
+positive whole numbers count). The SDK takes the stricter of the app's limits and the server's for each; a limit the
+server leaves out stays the app's, and the server cannot raise a limit above the app's (`withinServerRetention`; .NET:
+`SessionRetention.Within`). It applies to the store the SDK keeps, not to one you passed.
 
 | Option | What it is |
 |---|---|

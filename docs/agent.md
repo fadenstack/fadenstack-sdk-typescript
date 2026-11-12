@@ -163,6 +163,9 @@ const agent = FadenstackAgent.createBuilder()
 | `useApprovals(handler)` | Who decides on tool calls that need approval. Without one, every such call is declined. |
 | `useSessionStore(store)` | Where sessions live. By default the signed-in user's own IndexedDB database in a browser and memory elsewhere. See [Sessions on the device](sessions.md). |
 | `useApprovalStore(store)` | Where "Allow always" is kept. By default the signed-in user's own IndexedDB database in a browser and memory elsewhere. See [Tools and approvals](tools.md#allow-always). |
+| `useSessionRetention({ maxSessions, maxAgeDays })` | How many sessions, and how old, the default store keeps (50 and 90 days); the server's `local_retention` can only lower them. See [Retention](sessions.md#retention). |
+| `useSecretProtector(protector)` | What encrypts the default stores: by default a non-extractable WebCrypto key per user in a browser, none elsewhere. See [Encryption](sessions.md#encryption). |
+| `useStoreProblemHandler(handler)` | Told of a stored record that does not decrypt (the store and the kind, never contents). |
 | `useStepUpHandler(handler)` | Who opens the second sign-in the server's Bypass needs: the verification page in the system browser or a new window, never an iframe (`browserStepUp()` for a web page). An approval handler with `open` and `report` is used when none is given. **Bypass is announced to the server, and so offered, only with one.** See [Server-held grants and Bypass](server-grants.md#bypass). |
 | `useGrantHandler(handler)` | Who draws the grant card (the Bypass confirmation, the work card): `requestGrant(offer, signal)`. An approval handler that has it is used when none is given. |
 | `useGrantPlaceResolver(resolver)` | Native, canonical resolution of the places a work grant covers; without it work grants cover nothing. See [Server-held grants and Bypass](server-grants.md#a-grant-for-a-stretch-of-work). |
@@ -228,6 +231,8 @@ Bypass (`session.bypass` is the grant, with its time left); see [Server-held gra
 | `agent.openSession(sessionId)` | A session from the store, to continue in the mode it was last in. |
 | `agent.listSessions()` | This agent's sessions on the device, newest first. |
 | `agent.deleteSession(sessionId)` | Deletes a session from the store. |
+| `agent.exportMyData()` | The signed-in user's sessions and approvals on this device as one decrypted JSON document. See [Export and delete my data](sessions.md#export-and-delete-my-data). |
+| `agent.deleteMyData()` | Deletes the user's databases and their key; says when a store you passed was left. |
 
 A session runs one turn at a time. Starting a second turn while one runs throws; `session.isRunning` says whether a
 turn is running. See [Sessions on the device](sessions.md) for where sessions are kept and for how long.
