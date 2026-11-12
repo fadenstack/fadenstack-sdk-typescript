@@ -47,7 +47,7 @@ const current = computed(() => chat.value.toolModes.find((o) => o.mode === chat.
           <span class="fdn-menu-description">{{ o.description }}</span>
         </span>
       </button>
-      <div v-if="chat.toolModeHint !== chat.strings.modes[chat.toolMode].description" class="fdn-menu-note">{{ chat.toolModeHint }}</div>
+      <div v-if="chat.toolModeHint !== chat.toolModeDescription" class="fdn-menu-note">{{ chat.toolModeHint }}</div>
       <button type="button" role="menuitem" class="fdn-menu-item" @click="chat.resetApprovals()">
         <span class="fdn-menu-check" />
         <span class="fdn-menu-label">{{ chat.strings.resetApprovals }}</span>

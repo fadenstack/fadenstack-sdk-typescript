@@ -80,7 +80,7 @@ export class AgentResource {
     const digest = (v: unknown): v is string => typeof v === "string" && /^[0-9a-f]{64}$/.test(v);
     if (!["deny", "ask", "run"].includes(String(p["decision"]))
       || !["read", "write", "destructive", "unknown"].includes(String(p["tool_class"]))
-      || !["off", "read_only", "ask", "auto"].includes(String(p["effective_tool_mode"]))
+      || !["off", "read_only", "ask", "auto", "bypass"].includes(String(p["effective_tool_mode"]))
       || !digest(p["profile_stamp"]) || !digest(p["arguments_stamp"]) || !digest(p["decision_stamp"])
       || typeof p["required_by_rule"] !== "boolean" || typeof p["message"] !== "string" || !principal) {
       throw new FadenstackError("The gateway did not return a valid host-command policy decision.");
@@ -194,9 +194,8 @@ export class AgentResource {
     const value = grantObject(await this.#transport.post<unknown>(this.#transport.api("api/agent-tokens/step-ups"),
       { ...(longestMinutes !== undefined ? { longest_minutes: longestMinutes } : {}), ...(clientVersion !== undefined ? { client_version: clientVersion } : {}) }, signal));
     const uri = grantString(value["verification_uri"]), complete = grantString(value["verification_uri_complete"]);
-    // A malformed/compromised response cannot redirect the second sign-in to another origin.
-    if (new URL(uri).origin !== this.#transport.apiUrl.origin || new URL(complete).origin !== this.#transport.apiUrl.origin)
-      throw new FadenstackError("The step-up sign-in origin changed.");
+    // A malformed/compromised response cannot redirect the second sign-in to another origin (ASVS 5.0 V3.7).
+    if (!this.#onApiOrigin(uri) || !this.#onApiOrigin(complete)) throw new FadenstackError("The step-up sign-in origin changed.");
     const interval = grantNumber(value["interval"]), expiresIn = grantNumber(value["expires_in"]);
     if (!interval || !expiresIn) throw new FadenstackError("Invalid step-up timing.");
     return { stepUpCode: grantString(value["step_up_code"]), userCode: grantString(value["user_code"]), verificationUri: uri,
@@ -217,6 +216,18 @@ export class AgentResource {
     const value = grantObject(JSON.parse(text));
     return { proof: { proof: grantString(value["proof"]), expiresIn: grantNumber(value["expires_in"]),
       signedInAt: grantString(value["signed_in_at"]), method: grantString(value["method"]) }, error: null, interval: null };
+  }
+
+  // An absolute http(s) address with the API's scheme, host and port, and no sign-in in the address.
+  #onApiOrigin(page: string): boolean {
+    let url: URL;
+    try {
+      url = new URL(page);
+    } catch {
+      return false;
+    }
+    return (url.protocol === "https:" || url.protocol === "http:") && !url.username && !url.password
+      && url.origin === this.#transport.apiUrl.origin;
   }
 
   async #grantRequest(method: string, rest: string, body: unknown, options: { conversationId?: string; stepUpProof?: string; signal?: AbortSignal }): Promise<unknown> {

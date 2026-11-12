@@ -19,6 +19,9 @@ The builder picks a store unless you pass one with `useSessionStore`:
 
 `IndexedDbSessionStore` keeps each agent's sessions in an IndexedDB database named `fadenstack-sessions`: the
 transcript entry by entry, and a small list entry per session so the history opens without reading every transcript.
+An agent that keeps its sessions itself uses a database of the signed-in user (`fadenstack-sessions:<tenant>:<user>`),
+so two people in one browser profile never see each other's; against a gateway that names no user it uses the plain
+name, as an older SDK did, and it never moves what is kept there to a user. A store you pass yourself is used as it is.
 
 What this protects, and what it does not:
 
@@ -120,7 +123,7 @@ The entry types, as `EntryTypes` names them:
 | `assistant.message` | A model's answer: its text and tool calls. |
 | `tool.execution_start` | A tool started. |
 | `tool.execution_complete` | A tool ended: its result and outcome. |
-| `approval.decision` | How a call that needed approval was decided: `approved`, what let it through (`scope`: `once`, `chat`, `always` or `bypass`), whether the user was `asked`, whether an administrator's `rule` asked, `timed_out`, `wait_ms`. |
+| `approval.decision` | How a call that needed approval was decided: `approved`, what let it through (`scope`: `once`, `chat`, `always` or `grant`), whether the user was `asked`, whether an administrator's `rule` asked, `timed_out`, `wait_ms`. |
 | `governance.notice` | A refusal or a limit. |
 | `compaction` | The history was compacted. This SDK does not write such entries. |
 | `assistant.turn_end` | The turn ended: its status, outcome and usage. |

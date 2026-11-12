@@ -32,6 +32,11 @@ export interface ApprovalRequest {
    * user sees what they allow, not only the arguments. None for a tool that does not say.
    */
   target?: string;
+  /**
+   * A link, a junction or a mount point led the place this call acts on out of the places of a work grant the gateway said
+   * covers it: this is where it really leads (`outside_grant` in the record). The card says so; the person is asked.
+   */
+  leadsOutside?: string;
 }
 
 /** What the user decided. */
@@ -60,13 +65,15 @@ export const ApprovalDecision = {
   deny: (reason?: string): ApprovalDecision => (reason === undefined ? { approved: false } : { approved: false, reason }),
 };
 
-/** What let a call that needed approval through: the user for this call, this chat, always, or bypass mode. */
+/** What let a call that needed approval through: the user for this call, this chat, always, or a grant the server holds (Bypass too). */
 export type ApprovalScope = "once" | "chat" | "always" | "bypass" | "grant";
 
 /**
- * Whether the SDK asks (`ask`, the default) or approves every call it would ask about (`bypass`), destructive ones
- * too. Bypass is for development and trusted automation, set in the app's code, never by a user; an admin's
- * "Ask first" rule still asks.
+ * Whether the SDK asks (`ask`, the default) or asks the server for its Bypass (`bypass`): approvals off in the
+ * conversation, destructive and unclassified calls too, for a while, held by the server after a second sign-in
+ * (`AgentBuilder.useStepUpHandler`). Set in the app's code for development and trusted automation, never by a user; an
+ * admin's "Ask first" rule and a tool that asks every time still ask. Where the server does not offer Bypass, or there is
+ * no second sign-in, a session that would ask runs in `auto`.
  */
 export type PermissionMode = "ask" | "bypass";
 

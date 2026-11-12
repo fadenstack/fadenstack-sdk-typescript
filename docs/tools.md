@@ -248,28 +248,36 @@ A call the tool mode or an administrator's rule asks about is settled by the fir
 5. It asks, with Allow, Allow for this chat, Allow always and Deny.
 
 Every outcome goes in the session's transcript as an `approval.decision` entry, with what let the call through
-(`scope`: `once`, `chat`, `always` or `grant`), and is reported to the server the same way. A call a grant let
-through also records `grant_id`, and, where the person picked a time, `grant_minutes` (what they picked) and
-`grant_confirmed_minutes` (what the server confirmed): the same keys as the .NET SDK's.
+(`scope`: `once`, `chat`, `always` or `grant`; a grant for a time, a stretch of work and Bypass are all `grant`), and is
+reported to the server the same way. A call a grant let through also records `grant_id`, and, where the person picked a
+time, `grant_minutes` (what they picked) and `grant_confirmed_minutes` (what the server confirmed); `outside_grant` says
+a link led the call's place out of a work grant's places and the person was asked: the same keys as the .NET SDK's.
 
 ### Allow always
 
-What the user allows always is kept per agent on this device, by tool name and class, in an `ApprovalStore`: IndexedDB
-in a browser and memory elsewhere unless you pass your own to `useApprovalStore`. It is checked at every call: a tool
+What the user allows always is kept per signed-in user and agent on this device, by tool name and class, in an
+`ApprovalStore`: the user's own IndexedDB database in a browser and memory elsewhere unless you pass your own to
+`useApprovalStore`, so two people in one browser profile never see each other's. It is checked at every call: a tool
 that became `destructive` or `unknown`, or that an administrator's rule now covers, asks again.
 
-`agent.resetApprovals()` forgets every tool's, `agent.resetApprovals("write_page")` one tool's.
+`agent.listApprovals()` lists them, for a settings page. `agent.resetApprovals()` forgets every tool's,
+`agent.resetApprovals("write_page")` one tool's.
 `session.resetApprovals()` forgets what was allowed for that chat.
 
 ### Bypass mode
 
 Bypass is the server's: a person switches approvals off for one conversation after signing in again in the browser,
-where the organisation allows it, and the server records every call under it. This SDK does not offer it yet.
+where the organisation allows it, and the server records every call under it. The SDK offers it when the app can open
+that second sign-in (`useStepUpHandler`) and announces it to the server only then: `session.startBypass()` draws the
+confirmation, runs the sign-in and asks the server for the grant; `session.stopBypass()` ends it. Under it, `destructive`
+and `unknown` calls the gateway says the grant covers run without asking; an administrator's "Ask first" rule, a tool
+that asks every time and the server's own questions still ask, and a tool the mode hides stays hidden. The whole flow
+is in [Server-held grants and Bypass](server-grants.md#bypass).
 
-`usePermissionMode("bypass")` asks for it in your code. Until this SDK offers the server's Bypass, a session that
-would run in `ask` runs in `auto` instead, never above `useDefaultToolMode` or the agent's ceiling. Nothing is
-approved without the person: `destructive` and `unknown` calls, an administrator's "Ask first" rule and the server's
-own questions still ask, and a tool the mode hides stays hidden. The agent warns once on the console when it starts.
+`usePermissionMode("bypass")` asks for it in your code, with no card but the same sign-in and grant. Where Bypass cannot
+be had -- the server does not offer it, or the app opens no second sign-in -- a session that would run in `ask` runs in
+`auto` instead, never above `useDefaultToolMode` or the agent's ceiling. Nothing is approved without the person: the
+agent warns once on the console when it starts.
 
 ### Rules from the administrator
 

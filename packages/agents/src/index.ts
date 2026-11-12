@@ -1,6 +1,6 @@
 export { FadenstackAgent } from "./agent.js";
 export { AgentBuilder, type AgentSettings, type AppDescription } from "./builder.js";
-export { AgentSession, resultText, type PickedSkill, type SendOptions, type HostCommandOptions, type HostCommandResult } from "./session.js";
+export { AgentSession, BYPASS_ENDED_NOTE, resultText, type PickedSkill, type SendOptions, type HostCommandOptions, type HostCommandResult } from "./session.js";
 export {
   ApprovalDecision,
   approvalsFrom,
@@ -65,4 +65,28 @@ export {
 export { IndexedDbSessionStore, type IndexedDbSessionStoreOptions } from "./indexedDbSessionStore.js";
 export { EventReporter } from "./reporter.js";
 export { EventQueue } from "./eventQueue.js";
-export { AgentGrants, GrantPlace, type GrantCall, type GrantPlaceResolver } from "./grants.js";
+export {
+  AgentGrants,
+  GrantAnswer,
+  GrantPlace,
+  REASON_LENGTH,
+  STEP_UP_REQUIRED,
+  cutReason,
+  isGrantHandler,
+  type GrantCall,
+  type GrantHandler,
+  type GrantOffer,
+  type GrantPlaceResolver,
+  type GrantVerdict,
+} from "./grants.js";
+export { isLocalPath, lies as placeLies, named as placeNamed, namesPath } from "./grantPaths.js";
+export {
+  BypassSignInError,
+  browserStepUp,
+  isStepUpHandler,
+  openInBrowser,
+  type StepUpHandler,
+  type StepUpRequest,
+  type StepUpStage,
+} from "./stepUp.js";
+export { userStoreName } from "./userData.js";

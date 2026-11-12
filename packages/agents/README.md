@@ -42,6 +42,14 @@ for await (const event of session.stream("What is ticket T-1042 about?")) {
 A read tool runs without asking. A tool that changes something asks the user first, and without an approval
 handler the SDK declines it. The agent `my-assistant` is registered on the server first.
 
+Approvals can be given more time. Where the server holds grants, a person can allow a tool for a while or a stretch of
+work in some places, and switch approvals off in one conversation (Bypass) after signing in again in the browser:
+`agent.grants` and `session.startBypass()` do it on the same wire as the .NET SDK, and the app gives
+`useStepUpHandler(...)` to open that second sign-in -- Bypass is announced to the server, and so offered, only with
+it. Chats and "Allow always" are kept per signed-in user, so two people in one browser profile never see each other's;
+`agent.listApprovals()` lists what a person allowed always. See
+[Server-held grants and Bypass](https://developers.fadenstack.com/sdk/typescript/server-grants/).
+
 Related packages: [`@fadenstack/ui`](https://www.npmjs.com/package/@fadenstack/ui) and
 [`@fadenstack/ui-react`](https://www.npmjs.com/package/@fadenstack/ui-react) for a chat panel,
 [`@fadenstack/testing`](https://www.npmjs.com/package/@fadenstack/testing) for tests without a server.

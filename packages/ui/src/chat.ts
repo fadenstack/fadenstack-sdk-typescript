@@ -418,11 +418,21 @@ export class AgentChatViewModel extends Observable implements TurnHost {
     }));
   }
 
+  // The texts of a mode. Bypass has none yet (its card, marker and texts are a later UI package): it reads as auto.
+  #modeText(mode: ToolMode): { label: string; description: string } {
+    return this.strings.modes[mode === "bypass" ? "auto" : mode];
+  }
+
+  /** What the current mode means, without a ceiling. */
+  get toolModeDescription(): string {
+    return this.#modeText(this.#mode).description;
+  }
+
   /** What the pick means here, including a ceiling. */
   get toolModeHint(): string {
     const effective = narrowestMode(this.#mode, this.#agent.ceiling);
-    const description = this.strings.modes[this.#mode].description;
-    return effective === this.#mode ? description : this.strings.limitedTo(description, this.strings.modes[effective].label);
+    const description = this.toolModeDescription;
+    return effective === this.#mode ? description : this.strings.limitedTo(description, this.#modeText(effective).label);
   }
 
   // -- actions --------------------------------------------------------------------------------------

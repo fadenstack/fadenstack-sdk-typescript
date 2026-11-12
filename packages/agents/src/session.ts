@@ -8,6 +8,7 @@ import {
   receiptIdOf,
   type ChatMessage,
   type ChatOptions,
+  type AgentGrant,
   type ChatOutcome,
   type FadenstackEvent,
   type FinishReason,
@@ -22,6 +23,7 @@ import {
 
 import type { FadenstackAgent } from "./agent.js";
 import { ApprovalDecision, type ApprovalRequest, type ApprovalScope } from "./approvals.js";
+import { BypassSignInError } from "./stepUp.js";
 import { attachmentData, type MessageAttachment } from "./attachments.js";
 import { ContextBuilder, isBlank } from "./contextBuilder.js";
 import { EventQueue } from "./eventQueue.js";
@@ -30,7 +32,7 @@ import type { ToolInvocation, ToolInvoker, ToolServiceCall } from "./stages.js";
 import { checkArguments, type AgentTool, type ToolServiceKey, type ToolServices } from "./tools.js";
 import { EntryTypes, TurnStatus, newId, type TranscriptEntry } from "./transcript.js";
 import { commandJson, commandSchemaHash } from "./commands.js";
-import type { GrantCall } from "./grants.js";
+import { AgentGrants, cutReason, type GrantCall, type GrantPlace, type GrantVerdict } from "./grants.js";
 
 /** A skill the user picked for a message: its slug for the server, its name for the transcript. */
 export interface PickedSkill {
@@ -129,12 +131,21 @@ export class AgentSession {
   }
 
   /**
-   * The mode turns run in: the user's pick (`auto` for `ask` in an app set to bypass mode, as `agent.modeFor` says),
-   * narrowed by the ceiling the server sets, if any.
+   * The mode turns run in: the user's pick, narrowed by the ceiling the server sets, if any. Bypass only while the server
+   * holds the conversation's Bypass grant (`startBypass`): no grant, no Bypass -- it is `auto` (sdk/09 L-59).
    */
   get effectiveToolMode(): ToolMode {
-    return narrowestMode(this.agent.modeFor(this.toolMode), this.agent.ceiling);
+    const mode = narrowestMode(this.toolMode, this.agent.ceiling);
+    return mode === "bypass" && this.bypass === undefined ? "auto" : mode;
   }
+
+  /** The conversation's live Bypass grant (the marker shows its time left); undefined when it is not in Bypass. */
+  get bypass(): AgentGrant | undefined {
+    return this.agent.grants.bypassFor(this.id);
+  }
+
+  // The mode before Bypass, to go back to when it ends.
+  #beforeBypass: ToolMode | undefined;
 
   /** The transcript, as kept on this device. */
   get transcript(): readonly TranscriptEntry[] {
@@ -159,6 +170,169 @@ export class AgentSession {
 
   get isRunning(): boolean {
     return this.#running;
+  }
+
+  /**
+   * Asks the person to let the agent work alongside them in this chat (desktop 37 §5.3): read and write in `places`, for a
+   * while, without asking -- never for anything destructive, unclassified, or an admin's "Ask first" rule. The card is drawn
+   * by the app's grant handler (`useGrantHandler`); the person may remove places and picks the time. Returns the grant the
+   * server confirmed, or null: declined, not offered (no grants on the server, the agent does not offer them, no handler),
+   * or no place left. A refusal by the server is thrown: no answer, no grant (L-59).
+   */
+  async offerWork(places: readonly GrantPlace[], reason?: string, signal?: AbortSignal): Promise<AgentGrant | null> {
+    const grants = this.agent.grants;
+    const handler = this.agent.grantHandler;
+    if (!handler || !grants.offers("grant") || places.length === 0 || grants.choices.length === 0) return null;
+    const choices = grants.choices;
+    const answer = await handler.requestGrant({
+      places, classes: grants.settings!.grantClasses, durations: choices,
+      preselected: choices.includes(AgentGrants.preselected) ? AgentGrants.preselected : choices[choices.length - 1]!,
+      ...(reason !== undefined ? { reason } : {}), conversationId: this.id,
+    }, signal ?? new AbortController().signal);
+    const kept = answer.places.filter((p) => places.some((q) => AgentGrants.samePlace(p, q)));
+    if (!answer.allowed || kept.length === 0) return null;
+    return grants.grantWork(kept, within(answer.duration, choices), this.id, answer.shownText, signal);
+  }
+
+  /**
+   * Asks the person to extend a running grant -- `more` time (milliseconds), and for a stretch of work the new `places` --
+   * on the same card, showing only the difference (desktop 37 §5.3). The server keeps the grant within the agent's longest
+   * grant from when it was made; past that it refuses, and a new grant needs the full card. A Bypass grant is never
+   * extended: it runs for the time its confirmation said, and more time is a new Bypass with the confirmation again (L-58).
+   * Returns the extended grant, or null when the person said no or nothing is offered.
+   */
+  async offerExtension(grant: AgentGrant, more: number, places: readonly GrantPlace[] = [], reason?: string,
+    signal?: AbortSignal): Promise<AgentGrant | null> {
+    const grants = this.agent.grants;
+    const handler = this.agent.grantHandler;
+    if (!handler || !grants.available || grant.kind === "bypass") return null;
+    const answer = await handler.requestGrant({
+      places, classes: grant.scope.classes ?? [], durations: [more], preselected: more,
+      ...(reason !== undefined ? { reason } : {}), extending: grant,
+    }, signal ?? new AbortController().signal);
+    if (!answer.allowed) return null;
+    const kept = answer.places.filter((p) => places.some((q) => AgentGrants.samePlace(p, q)));
+    const time = answer.duration > 0 ? Math.min(answer.duration, more) : 0;
+    if (time === 0 && kept.length === 0) return null;
+    return grants.extend(grant.id, time, kept, answer.shownText, signal);
+  }
+
+  /**
+   * Asks the person to switch approvals off in this conversation for a while (sdk/09 §3.12, L-58): the app's grant handler
+   * draws the confirmation (`GrantOffer.bypass`), which says what will no longer be asked, what still asks and what the
+   * server records, and the person picks the time -- 30 minutes are preselected, else the longest offered -- and may say why.
+   * Only once the server confirmed the grant does the conversation run in Bypass (L-59); a refusal is thrown. An app set to
+   * the `bypass` permission mode chose it in its own code: no card, the longest time, recorded the same way. `reason` is
+   * recorded when the person gave none on the card. Returns the grant, or null: not offered (the organisation or the agent
+   * does not allow it), no handler, or declined. The second sign-in comes after the card's Allow, never before and never on
+   * the model's word: no tool and no other agent can call this (L-58).
+   * @throws BypassSignInError The second sign-in did not happen.
+   */
+  async startBypass(reason?: string, signal?: AbortSignal): Promise<AgentGrant | null> {
+    const grants = this.agent.grants;
+    const choices = grants.bypassChoices;
+    if (!this.agent.bypassOffered || choices.length === 0) return null;
+    let duration = choices[choices.length - 1]!;
+    let shown: string | undefined;
+    if (this.agent.permissionMode !== "bypass") {
+      const handler = this.agent.grantHandler;
+      if (!handler) return null;
+      const answer = await handler.requestGrant({
+        // 30 min first, as the work card (owner, 2026-11-09); where it is not offered, the longest that is.
+        bypass: true, places: [], classes: [], durations: choices, ...(reason !== undefined ? { reason } : {}),
+        preselected: choices.includes(AgentGrants.preselected) ? AgentGrants.preselected : choices[choices.length - 1]!,
+        ...(grants.settings?.bypass ? { evidence: grants.settings.bypass.evidence } : {}), conversationId: this.id,
+      }, signal ?? new AbortController().signal);
+      if (!answer.allowed) return null;
+      duration = within(answer.duration, choices);
+      shown = answer.shownText;
+      const own = answer.reason?.trim();
+      if (own) reason = cutReason(own);
+    } else if (!this.agent.stepUpHandler) {
+      // Set in the app's code, but nobody can sign in again for it: no Bypass, the session runs in Auto (sdk/41).
+      console.warn("Bypass was not switched on: the app opens no second sign-in (useStepUpHandler).");
+      this.#runInAutoInstead();
+      return null;
+    }
+    // The second sign-in comes after the card's Allow, never before and never on the model's word (sdk/41).
+    const grant = await grants.grantBypass(duration, this.id, reason, shown, signal);
+    if (this.toolMode !== "bypass") {
+      this.#beforeBypass = this.toolMode;
+      this.toolMode = "bypass";
+    }
+    return grant;
+  }
+
+  /**
+   * Ends Bypass in this conversation: its grant ends from the next call on (a call already running finishes), and the
+   * conversation goes back to the mode it had before. The marker's Stop.
+   */
+  async stopBypass(signal?: AbortSignal): Promise<void> {
+    await this.#endBypassGrants(signal);
+    if (this.toolMode === "bypass") this.toolMode = this.#beforeBypass ?? "auto";
+    this.#beforeBypass = undefined;
+  }
+
+  async #endBypassGrants(signal?: AbortSignal): Promise<void> {
+    for (const grant of this.agent.grants.live.filter((g) => g.kind === "bypass" && g.conversationId === this.id)) {
+      await this.agent.grants.revoke(grant.id, signal);
+    }
+  }
+
+  /**
+   * @internal Before a turn: a conversation that left Bypass ends its grant (leaving Bypass ends it, L-63); an app set to
+   * the `bypass` permission mode starts it where the server offers it, never from Read only or Off -- Bypass skips
+   * questions, it does not show what the mode hides.
+   */
+  async settleBypass(signal: AbortSignal): Promise<void> {
+    if (this.toolMode !== "bypass" && this.bypass !== undefined) await this.#endBypassGrants(signal);
+    if (this.agent.permissionMode === "bypass" && narrowestMode("ask", this.toolMode) === "ask" && this.bypass === undefined) {
+      // Where Bypass cannot be had -- the server does not offer it, or the app opens no second sign-in -- the session runs in
+      // Auto instead (owner, 2026-11-09), as it did before the flow: never above the app's own default.
+      if (!this.agent.bypassOffered || !this.agent.stepUpHandler) return this.#runInAutoInstead();
+      try {
+        await this.startBypass("PermissionMode.Bypass", signal);
+      } catch (error) {
+        if (!(error instanceof BypassSignInError)) throw error;
+        // No second sign-in, no Bypass (sdk/41): the turn runs in Auto.
+        console.warn(`Bypass was not switched on, the turn runs in auto: ${error.message}`);
+        this.#runInAutoInstead();
+      }
+    }
+  }
+
+  /**
+   * An app set to the `bypass` permission mode that gets no Bypass (no second sign-in): its session runs in Auto instead
+   * (owner, 2026-11-09), never above the ceiling and never more than the app's own mode allows.
+   */
+  #runInAutoInstead(): void {
+    if (this.toolMode === "ask") this.toolMode = narrowestMode("auto", this.agent.settings.defaultMode);
+  }
+
+  /**
+   * @internal After a turn in Bypass: the calls the device ran under its grant go to the gateway, which compares them with
+   * its own records (L-61). A report that does not arrive is logged; the gateway's record stands on its own.
+   */
+  async reportBypass(grantId: string | undefined, calls: readonly string[]): Promise<void> {
+    if (grantId === undefined) return;
+    try {
+      await this.agent.grants.report(grantId, calls);
+    } catch {
+      console.warn("The calls of a turn in Bypass could not be reported to the server.");
+    }
+  }
+
+  /** @internal A session opened again in Bypass (its grant lives): the mode to go back to when it ends. */
+  reopened(before: ToolMode | undefined): void {
+    if (this.toolMode === "bypass") this.#beforeBypass = before;
+  }
+
+  /** @internal Whether the last turn of the transcript ran in Bypass (its `effective_tool_mode`). */
+  lastTurnRanInBypass(): boolean {
+    for (let i = this.#entries.length - 1; i >= 0; i--) {
+      if (this.#entries[i]!.type === EntryTypes.turnStart) return parseToolMode(str(this.#entries[i]!.data, "effective_tool_mode")) === "bypass";
+    }
+    return false;
   }
 
   /** Sends a message and waits for the turn to end. */
@@ -237,7 +411,10 @@ export class AgentSession {
     const run = turn
       .run(message, options.attachments ?? [], options.skills ?? [], stop.signal)
       .then(() => queue.end(), (error: unknown) => queue.end(error ?? new Error("The turn failed.")))
-      .finally(() => this.agent.reporter.flush());
+      .finally(async () => {
+        await this.reportBypass(turn.bypassGrant, turn.bypassRan);
+        await this.agent.reporter.flush();
+      });
     let finished = false;
     try {
       for await (const event of queue) yield event;
@@ -275,8 +452,9 @@ export class AgentSession {
     for (let i = entries.length - 1; i >= 0; i--) {
       const e = entries[i]!;
       if (e.type === EntryTypes.turnStart || e.type === EntryTypes.sessionStart) {
+        // Never Bypass: a switch-on never comes back from the transcript (sdk/09 L-58).
         const mode = parseToolMode(str(e.data, "tool_mode"));
-        if (mode) return mode;
+        if (mode && mode !== "bypass") return mode;
       }
     }
     return undefined;
@@ -293,7 +471,7 @@ export class AgentSession {
       status,
       data: JSON.parse(JSON.stringify(data)) as Data,
     };
-    await this.agent.settings.sessions.append(this.agent.slug, this.id, entry);
+    await this.agent.sessionStore.append(this.agent.slug, this.id, entry);
     this.#entries.push(entry);
   }
 }
@@ -337,6 +515,21 @@ class Turn {
   #skills: string[] = [];
   #commandOrigin: "user_command" | "user_history" | undefined;
   #commandInputJson: string | undefined;
+  // The conversation's Bypass grant as the turn began, the calls of the app's tools it ran without the person's answer
+  // (L-61), and whether the conversation's Bypass ended since its last turn (the model is told).
+  #bypassGrant: string | undefined;
+  readonly #bypassRan: string[] = [];
+  #bypassEnded = false;
+
+  /** The Bypass grant the turn ran under; undefined when it did not run in Bypass. */
+  get bypassGrant(): string | undefined {
+    return this.#bypassGrant;
+  }
+
+  /** The calls of the app's own tools the turn ran in Bypass without the person's answer. */
+  get bypassRan(): readonly string[] {
+    return this.#bypassRan;
+  }
 
   constructor(session: AgentSession, id: string, emit: (event: AgentEvent) => void, access: SessionAccess) {
     this.#session = session;
@@ -370,7 +563,12 @@ class Turn {
 
   async run(message: string, attachments: readonly MessageAttachment[], skills: readonly PickedSkill[], signal: AbortSignal): Promise<void> {
     await Promise.resolve(); // the caller gets the stream before the first request goes out
+    await this.#session.settleBypass(signal);
     this.#mode = this.#session.effectiveToolMode;
+    this.#bypassGrant = this.#mode === "bypass" ? this.#session.bypass?.id : undefined;
+    // The last turn ran in Bypass and this one does not: the model hears it ended (from the transcript, so an app started
+    // again tells it too).
+    this.#bypassEnded = this.#mode !== "bypass" && this.#session.lastTurnRanInBypass();
     this.#skills = [...new Set(skills.map((s) => s.slug).filter(Boolean))];
     const user: Data = { text: message };
     if (attachments.length) user["attachments"] = attachments.map(attachmentData);
@@ -435,7 +633,13 @@ class Turn {
     let finish: FinishReason | undefined;
     const calls: ToolCall[] = [];
     const receipts: ReceiptNote[] = [];
-    for await (const update of this.#agent.settings.chat.stream(this.#session.history, options)) {
+    const history = this.#session.history;
+    if (this.#bypassEnded) {
+      // Before the person's newest message, every round of this turn: what the model may and may not do now.
+      const newest = history.map((m) => m.role).lastIndexOf("user");
+      history.splice(Math.max(0, newest), 0, { role: "system", content: BYPASS_ENDED_NOTE });
+    }
+    for await (const update of this.#agent.settings.chat.stream(history, options)) {
       switch (update.type) {
         case "text":
           text += update.text;
@@ -560,7 +764,10 @@ class Turn {
     }
   }
 
-  /** A gateway tool held for the user: ask, and answer the gateway while it waits. */
+  /**
+   * A gateway tool held for the user: ask, and answer the gateway while it waits. Bypass never answers here: the gateway
+   * runs the tool, and only the server may skip its question.
+   */
   async #answerGatewayApproval(value: unknown, signal: AbortSignal): Promise<void> {
     const approvalId = str(value, "approvalId");
     if (!approvalId) return;
@@ -575,7 +782,8 @@ class Turn {
     const timeoutS = (value as Data)["timeoutS"];
     // A gateway that does not say whether a rule asks is taken as one: it asks every time.
     const rule = (value as Data)["rule"] !== false;
-    const settled = await this.#approve(request, rule, typeof timeoutS === "number" ? timeoutS * 1000 : 5 * 60_000, signal);
+    const settled = await this.#approve(request, rule, typeof timeoutS === "number" ? timeoutS * 1000 : 5 * 60_000, signal,
+      undefined, false, true);
     if (settled.timedOut) return; // the gateway expires it on its own
     const scope = settled.scope === "chat" || settled.scope === "always" ? settled.scope : "once";
     await this.#agent.client.agent!.answerApproval(approvalId, settled.approved, scope, signal);
@@ -672,6 +880,10 @@ class Turn {
     let waited = 0;
     const rule = mark?.rule === true || contractApproval === "always" || policy?.decision.requiredByRule === true;
     let coverage: { id: string; call: GrantCall } | undefined;
+    // In Bypass the device reports what ran without the person's answer, as the gateway records it (L-61): what the mode ran,
+    // and what the turn's own Bypass grant settled. A call the person answered is recorded as an answer (L-60); one a time or
+    // work grant settled belongs to that grant.
+    let unanswered = true;
     if (!this.#commandOrigin && (rule || decision === "ask" || policy?.decision.decision === "ask")) {
       const settled = await this.#approve({
         callId: call.id,
@@ -685,6 +897,7 @@ class Turn {
         ...(tool.openWorld ? { openWorld: true } : {}),
       }, rule, undefined, signal, tool.describe ? () => describeTarget(tool, args, signal) : undefined);
       waited = settled.waitedMs ?? 0;
+      unanswered = settled.scope === "grant" && settled.grantId !== undefined && settled.grantId === this.#bypassGrant;
       if (settled.coveredGrantId) coverage = { id: settled.coveredGrantId, call: this.#grantCall({ callId: call.id,
         toolName: tool.name, toolClass, arguments: args, requiredByRule: rule }) };
       if (!settled.approved) {
@@ -701,6 +914,7 @@ class Turn {
         toolClass,
         context: { signal, callId: call.id, sessionId: this.#session.id, turnId: this.#id, services },
       };
+      if (this.#bypassGrant !== undefined && unanswered) this.#bypassRan.push(call.id); // it runs: the device reports it, whatever it returns
       const value = await this.#invoker(services, policy, coverage)(invocation);
       return { result: resultText(value), outcome: "ok", waited };
     } catch (error) {
@@ -830,19 +1044,26 @@ class Turn {
    * only when the user is asked: what the call acts on, for the card.
    */
   async #approve(base: ApprovalRequest, rule: boolean, timeoutMs: number | undefined, signal: AbortSignal,
-    target?: () => Promise<string | undefined>, individual = false): Promise<Settled> {
+    target?: () => Promise<string | undefined>, individual = false, gatewayWait = false): Promise<Settled> {
     const { toolName: name, toolClass } = base;
     const open = !individual && !rule && !asksEveryTime(toolClass);
     const allowed = (kind: "chat" | "always") => this.#agent.profile.approvals?.standing == null
       || this.#agent.profile.approvals.standing.includes(kind);
     const chatAllowed = open && allowed("chat"), alwaysAllowed = open && allowed("always");
+    // A grant the gateway said covers the call (the first line) and the server's current grant holds for it (the second). A
+    // destructive or unclassified call only under the conversation's Bypass grant while the turn runs in Bypass; a person's
+    // own command, an admin's rule and a tool that asks every time never.
     const marked = this.#grantUsed.get(base.callId);
-    if (open && marked?.toolName === name && await this.#agent.grants.covers(marked.grantId,
-      this.#grantCall({ ...base, requiredByRule: rule }), signal)) {
+    let verdict: GrantVerdict = { covered: false };
+    if (!rule && !individual && marked?.toolName === name && (!asksEveryTime(toolClass) || this.#mode === "bypass")) {
+      verdict = await this.#agent.grants.check(marked.grantId, this.#grantCall({ ...base, requiredByRule: rule }, gatewayWait), signal);
+    }
+    if (verdict.covered && marked) {
       await this.#record(base, { approved: true, scope: "grant", asked: false, rule, timedOut: false, waitedMs: undefined, grantId: marked.grantId });
       return { approved: true, scope: "grant", grantId: marked.grantId, coveredGrantId: marked.grantId,
         timedOut: false, waitedMs: undefined, reason: undefined };
     }
+    const leadsOutside = verdict.leadsOutside;
     // No standing approval in bypass mode: the app's Bypass is the server's (a second sign-in), never a local yes.
     const standing: ApprovalScope | undefined = rule || individual || !open ? undefined
       : alwaysAllowed && (await this.#approvedAlways(name, toolClass)) ? "always"
@@ -858,6 +1079,7 @@ class Turn {
     const request: ApprovalRequest = {
       ...base, canAllowForSession: chatAllowed, canAllowAlways: alwaysAllowed,
       ...(grantDurations.length ? { grantDurations } : {}), ...(rule ? { requiredByRule: true } : {}), ...(described ? { target: described } : {}),
+      ...(leadsOutside !== undefined ? { leadsOutside } : {}),
     };
     this.#emit({ type: "approval_requested", turnId: this.#id, request });
     const limit = timeoutMs === undefined ? signal : AbortSignal.any([signal, AbortSignal.timeout(timeoutMs)]);
@@ -894,6 +1116,7 @@ class Turn {
     if (scope === "always" && !(await this.#keepAlways(name, toolClass))) scope = "once";
     if (scope === "chat") this.#access.approved.add(name);
     await this.#record(base, { approved: scope !== undefined, scope, asked: true, rule, timedOut: decision === undefined, waitedMs,
+      ...(leadsOutside !== undefined ? { outsideGrant: true } : {}),
       ...(grantId ? { grantId } : {}),
       ...(scope === "grant" ? { grantMinutes: Math.round(decision!.forTime! / 60_000) } : {}),
       ...(confirmedMinutes !== undefined ? { confirmedMinutes } : {}) });
@@ -907,14 +1130,15 @@ class Turn {
     return { approved: scope !== undefined, scope, ...(grantId ? { grantId } : {}), timedOut: decision === undefined, waitedMs, reason: decision?.reason };
   }
 
-  #grantCall(base: Pick<ApprovalRequest, "callId" | "toolName" | "toolClass" | "arguments" | "requiredByRule">): GrantCall {
-    return { ...base, requiredByRule: base.requiredByRule === true, conversationId: this.#session.id, turnId: this.#id };
+  #grantCall(base: Pick<ApprovalRequest, "callId" | "toolName" | "toolClass" | "arguments" | "requiredByRule">, gateway = false): GrantCall {
+    return { ...base, requiredByRule: base.requiredByRule === true, conversationId: this.#session.id, turnId: this.#id,
+      inBypass: this.#mode === "bypass", gateway };
   }
 
   /** The approval's transcript entry, and the server's record of it (names only). */
   async #record(request: ApprovalRequest, how: {
     approved: boolean; scope: ApprovalScope | undefined; asked: boolean; rule: boolean; timedOut: boolean; waitedMs: number | undefined;
-    grantId?: string; grantMinutes?: number; confirmedMinutes?: number;
+    grantId?: string; grantMinutes?: number; confirmedMinutes?: number; outsideGrant?: boolean;
   }): Promise<void> {
     await this.#access.append(EntryTypes.approvalDecision, this.#id, {
       call_id: request.callId,
@@ -925,6 +1149,8 @@ class Turn {
       scope: how.scope ?? null,
       asked: how.asked,
       rule: how.rule,
+      // A link or junction led the call's place out of the grant's places: the person was asked.
+      outside_grant: how.outsideGrant === true,
       timed_out: how.timedOut,
       wait_ms: Math.round(how.waitedMs ?? 0),
       // The same keys as every SDK's (sdk/43 §6): the time the person picked, and what the server confirmed.
@@ -943,7 +1169,7 @@ class Turn {
 
   async #approvedAlways(name: string, toolClass: ToolClass): Promise<boolean> {
     try {
-      const kept = await this.#agent.settings.approvalStore.list(this.#agent.slug);
+      const kept = await this.#agent.approvalStore.list(this.#agent.slug);
       return kept.some((a) => a.tool === name && a.toolClass === toolClass);
     } catch {
       return false; // a store that cannot be read approves nothing
@@ -952,7 +1178,7 @@ class Turn {
 
   async #keepAlways(name: string, toolClass: ToolClass): Promise<boolean> {
     try {
-      await this.#agent.settings.approvalStore.add(this.#agent.slug, { tool: name, toolClass, approvedAt: new Date().toISOString() });
+      await this.#agent.approvalStore.add(this.#agent.slug, { tool: name, toolClass, approvedAt: new Date().toISOString() });
       return true;
     } catch {
       return false; // not kept: this call runs, the next one asks
@@ -998,6 +1224,20 @@ class Turn {
         }
       : { ...usage };
   }
+}
+
+/**
+ * What the model is told in the first request after a Bypass of its conversation ended (owner, 2026-11-09): it may say so; it
+ * can never switch Bypass on -- only the person can, in the app (sdk/09 L-58).
+ */
+export const BYPASS_ENDED_NOTE =
+  "Bypass has ended in this conversation: tools ask for the person's approval again, as the conversation's mode says. "
+  + "You cannot switch Bypass on, and no tool does; only the person can, in the app.";
+
+/** The longest of `choices` not above `picked`: a card cannot widen the offer. */
+function within(picked: number, choices: readonly number[]): number {
+  const fits = choices.filter((c) => c <= picked);
+  return fits.length ? Math.max(...fits) : choices[0]!;
 }
 
 /** The SDK's own entry types, which a module cannot write. */
