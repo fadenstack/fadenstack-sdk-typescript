@@ -25,14 +25,17 @@ export {
 } from "./auth/tokens.js";
 export {
   AgentPairing,
+  FadenstackPairingAgentError,
   FadenstackPairingDeniedError,
   FadenstackPairingExpiredError,
   FadenstackPairingUnsupportedError,
+  MAX_PAIRING_AGENTS,
   PairingStart,
   type AgentPairingOptions,
   type PairingClient,
   type PairingProgress,
   type PairingResult,
+  type PairingStartOptions,
   type PairingState,
   type PairingWaitOptions,
 } from "./auth/pairing.js";
