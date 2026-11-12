@@ -75,6 +75,44 @@ to the agent), the SDK forgets the sign-in and throws a `FadenstackSignInRequire
 
 See [Your first agent](../../get-started/first-agent.md) for registering the agent and granting it to users.
 
+## Sign in by pairing
+
+An app that cannot ask for a password (single sign-on, a browser extension, an add-in) signs in by pairing. It shows a
+short code, the person approves it in the web console, and the app receives the same tokens a sign-in issues.
+
+```ts
+import { AgentPairing } from "@fadenstack/client";
+
+const pairing = new AgentPairing({ apiUrl: "https://ai.example.internal", store });
+const start = await pairing.start("docs", "Viewer on PC-7", { name: "Viewer", version: "1.0", os: "Windows 11" });
+show(start.userCode, start.verificationUriComplete);
+await pairing.wait(start, { onProgress, signal }); // saved in the store for "docs"
+```
+
+### One approval for several agents
+
+An app suite with several agents pairs once. `start` takes the further agents after the first (at most 8 agents in all,
+no repeats; more is refused before any request). The person sees every agent in the console and approves them together.
+`wait` returns the tokens of the first agent, or of `agent`; `redeem` collects each other agent's tokens after the
+approval, without waiting. Each agent can be collected once, and each is a sign-in of its own, saved in the store under
+that agent.
+
+```ts
+const start = await pairing.start("word", "Office on PC-7", client, { agents: ["excel", "outlook"] });
+show(start.userCode, start.verificationUriComplete);
+await pairing.wait(start);                 // the approval; tokens for "word"
+await pairing.redeem(start, "excel");      // one request each, no waiting
+await pairing.redeem(start, "outlook");
+```
+
+- `start.agents` lists the agents as the server stored them. A server that ignores `agents` (older than this) stores only
+  the first: `start.agents` is empty, `start.ignoredAgents` names the others, and `redeem` or `wait` for them throw a
+  `FadenstackPairingAgentError` with `reason: "not_offered"` before sending anything. Pair for those agents separately.
+- A person may lack the right to use some of the agents. The approval skips those; collecting one throws a
+  `FadenstackPairingAgentError` with `reason: "not_approved_or_redeemed"` (the same for an agent collected already).
+  Before the approval it has `reason: "pending"`.
+- A pairing with one agent sends exactly what it always did.
+
 ## Keep the sign-in
 
 A `TokenStore` keeps the sign-in between runs. The default `MemoryTokenStore` keeps it only as long as the page or
