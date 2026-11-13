@@ -15,7 +15,7 @@ export class FadenstackUnreachableError extends FadenstackError {}
 /** The server answered with an error: its status, and the OpenAI-shaped error's fields. */
 export class FadenstackApiError extends FadenstackError {
   readonly status: number;
-  /** The error code, e.g. `agent_not_granted`, `tool_not_in_contract`. */
+  /** The error code, e.g. `agent_not_granted`, `bypass_step_up_required`; `redirect` when the server redirected a request. */
   readonly code: string | undefined;
   readonly type: string | undefined;
   readonly param: string | undefined;

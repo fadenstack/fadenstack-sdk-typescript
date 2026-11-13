@@ -1,6 +1,6 @@
 import { FadenstackApiError, FadenstackError, FadenstackSignInRequiredError, FadenstackUnreachableError } from "../errors.js";
 import { toApiError } from "../http/errorReader.js";
-import { requireSecureUrl, type FetchLike } from "../http/transport.js";
+import { redirectError, requireSecureUrl, type FetchLike } from "../http/transport.js";
 import { ClientLog, writeLog, type FadenstackLogger } from "../logging.js";
 
 /** An agent sign-in on one device: a short access token and the refresh token that renews it. Times in ms since the epoch. */
@@ -106,6 +106,22 @@ const EARLY_MS = 30_000;
 /** How long a refresh may take. */
 const REFRESH_TIMEOUT_MS = 30_000;
 
+/** How long a renewal waits for another context's renewal of the same sign-in. */
+const LOCK_WAIT_MS = 60_000;
+
+/**
+ * What a provider needs of the Web Locks API (`navigator.locks`): one holder at a time per name, across every tab, side
+ * panel and service worker of the origin. `navigator.locks` fits it as it is.
+ */
+export interface LockManagerLike {
+  request<T>(name: string, options: { signal?: AbortSignal }, callback: () => Promise<T>): Promise<T>;
+}
+
+/** The platform's `navigator.locks`, where there is one (browsers, workers, Node 24 and later). */
+function platformLocks(): LockManagerLike | undefined {
+  return (globalThis as { navigator?: { locks?: LockManagerLike } }).navigator?.locks;
+}
+
 /** `promise`, or the signal's reason once it aborts (the promise itself goes on). */
 function abortable<T>(promise: Promise<T>, signal: AbortSignal): Promise<T> {
   if (signal.aborted) return Promise.reject(signal.reason);
@@ -139,11 +155,17 @@ export interface AgentTokenProviderOptions {
   allowInsecureHttp?: boolean;
   /** Where renewals and sign-outs are logged (the agent only; never a token). None by default. */
   logger?: FadenstackLogger;
+  /**
+   * Where renewals of one sign-in wait for each other across contexts that share the store (an extension's side panel and
+   * its service worker, several tabs): `navigator.locks` by default, where the platform has it; `null` for none.
+   */
+  locks?: LockManagerLike | null;
 }
 
 /**
  * An agent sign-in on this device: a short access token for one agent, renewed with a refresh token the server
- * replaces on every use. Kept in a `TokenStore` between runs. Concurrent callers share one refresh.
+ * replaces on every use. Kept in a `TokenStore` between runs. Concurrent callers share one refresh; contexts that share
+ * the store renew one at a time (`locks`), and whoever comes second takes the renewed sign-in from the store.
  */
 export class AgentTokenProvider implements TokenProvider {
   readonly agent: string;
@@ -153,6 +175,7 @@ export class AgentTokenProvider implements TokenProvider {
   readonly #now: () => number;
   readonly #key: string;
   readonly #logger: FadenstackLogger | undefined;
+  readonly #locks: LockManagerLike | undefined;
   #tokens: TokenSet | undefined;
   #loaded = false;
   #refreshing: Promise<TokenSet> | undefined;
@@ -166,6 +189,7 @@ export class AgentTokenProvider implements TokenProvider {
     this.#now = options.now ?? Date.now;
     this.#key = AgentTokenProvider.storeKey(this.#apiUrl, options.agent);
     this.#logger = options.logger;
+    this.#locks = options.locks === undefined ? platformLocks() : options.locks ?? undefined;
   }
 
   /** The key a sign-in is kept under: the backend and the agent. */
@@ -232,7 +256,7 @@ export class AgentTokenProvider implements TokenProvider {
     try {
       const limit = AbortSignal.timeout(15_000);
       const response = await this.#fetch(new URL("api/agent-tokens/revoke", this.#apiUrl), {
-        method: "POST", credentials: "omit", signal: signal ? AbortSignal.any([signal, limit]) : limit,
+        method: "POST", credentials: "omit", redirect: "manual", signal: signal ? AbortSignal.any([signal, limit]) : limit,
         headers: { "content-type": "application/json", accept: "application/json" }, body: JSON.stringify({ refresh_token: refreshToken }),
       });
       return response.ok;
@@ -261,7 +285,34 @@ export class AgentTokenProvider implements TokenProvider {
     return Promise.resolve();
   }
 
+  /**
+   * Renews under the lock on this sign-in, so that contexts sharing the store (the side panel and the service worker) renew
+   * one at a time: the refresh token changes on every renewal, and the server ends the whole sign-in when an old one
+   * comes back. .NET: the store's `ITokenStoreLock`.
+   */
   async #refresh(current: TokenSet | undefined): Promise<TokenSet> {
+    if (!this.#locks) return this.#renew(current);
+    const waited = AbortSignal.timeout(LOCK_WAIT_MS);
+    try {
+      return await this.#locks.request(`fadenstack.renewal:${this.#key}`, { signal: waited }, () => this.#renew(current));
+    } catch (error) {
+      if (waited.aborted && error === waited.reason) {
+        throw new FadenstackError(`Another tab or window has been renewing this sign-in for ${LOCK_WAIT_MS / 1000} s; try again.`);
+      }
+      throw error;
+    }
+  }
+
+  async #renew(current: TokenSet | undefined): Promise<TokenSet> {
+    // Another context may have renewed meanwhile (or signed in again): then the store holds a refresh token other than
+    // the one this provider has, and that sign-in is taken instead of renewing with a refresh token already used.
+    const stored = await this.#store.load(this.#key);
+    if (stored && stored.refreshToken !== current?.refreshToken) {
+      this.#tokens = stored;
+      this.#loaded = true;
+      if (stored.accessExpiresAt - EARLY_MS > this.#now()) return stored;
+      current = stored;
+    }
     if (!current || current.refreshExpiresAt <= this.#now()) {
       throw new FadenstackSignInRequiredError(`Sign in to the agent '${this.agent}' on this device.`);
     }
@@ -314,13 +365,15 @@ export class AgentTokenProvider implements TokenProvider {
     if (bearer) headers["authorization"] = `Bearer ${bearer}`;
     let response: Response;
     try {
-      const init: RequestInit = { method: "POST", headers, body: JSON.stringify(body), credentials: "omit" };
+      const init: RequestInit = { method: "POST", headers, body: JSON.stringify(body), credentials: "omit", redirect: "manual" };
       if (signal) init.signal = signal;
       response = await this.#fetch(new URL(path, this.#apiUrl), init);
     } catch (error) {
       if (signal?.aborted) throw signal.reason ?? error;
       throw new FadenstackUnreachableError(`Fadenstack could not be reached: ${(error as Error).message}`, { cause: error });
     }
+    const redirected = redirectError(response, new URL(path, this.#apiUrl));
+    if (redirected) throw redirected;
     const text = await response.text();
     if (!response.ok) throw toApiError(response, text);
     return readTokenSet(JSON.parse(text) as Record<string, unknown>, this.#now(), this.agent);
@@ -350,6 +403,7 @@ export async function loginWithPassword(options: PasswordLoginOptions): Promise<
     const init: RequestInit = {
       method: "POST",
       credentials: "omit",
+      redirect: "manual",
       headers: { "content-type": "application/x-www-form-urlencoded", accept: "application/json" },
       body: new URLSearchParams({ username: options.email, password: options.password }).toString(),
     };
@@ -359,6 +413,8 @@ export async function loginWithPassword(options: PasswordLoginOptions): Promise<
     if (options.signal?.aborted) throw options.signal.reason ?? error;
     throw new FadenstackUnreachableError(`Fadenstack could not be reached: ${(error as Error).message}`, { cause: error });
   }
+  const redirected = redirectError(response, url);
+  if (redirected) throw redirected;
   const text = await response.text();
   if (!response.ok) {
     if (response.status === 400 && text.includes("LOGIN_BAD_CREDENTIALS")) {

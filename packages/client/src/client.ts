@@ -29,8 +29,10 @@ export interface FadenstackClientOptions {
   /** Allow `http://`. Off: agents use TLS. Only for a development server on this machine. */
   allowInsecureHttp?: boolean;
   fetch?: FetchLike;
-  /** How long one request may take, in ms (default 5 min); a stream is not cut by it once it started. */
+  /** How long one request may take, in ms (default 5 min); for a stream it is the wait for the headers. */
   timeoutMs?: number;
+  /** How long a streamed answer may send nothing at all before it is given up, in ms (default 5 min; `Infinity` turns it off). */
+  streamIdleTimeoutMs?: number;
   /** Where the client logs: method, route, status and time of each request, never content or a token (see `FadenstackLogger`). */
   logger?: FadenstackLogger;
 }
@@ -59,6 +61,7 @@ export class FadenstackClient {
     if (options.allowInsecureHttp !== undefined) transport.allowInsecureHttp = options.allowInsecureHttp;
     if (options.fetch !== undefined) transport.fetch = options.fetch;
     if (options.timeoutMs !== undefined) transport.timeoutMs = options.timeoutMs;
+    if (options.streamIdleTimeoutMs !== undefined) transport.streamIdleTimeoutMs = options.streamIdleTimeoutMs;
     if (options.logger !== undefined) transport.logger = options.logger;
     this.transport = new FadenstackTransport(transport);
     const chat: ChatClientSettings = {

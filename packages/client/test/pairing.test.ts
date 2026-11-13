@@ -608,3 +608,63 @@ describe("signing out", () => {
 });
 
 export type { PairingStart };
+
+describe("pairing: the first agent refused (sdk/51 I00 #8, I-11)", () => {
+  const AGENTS = ["word-assistant", "excel-assistant", "outlook-assistant"];
+  const several = () => {
+    const rig = new Rig();
+    rig.startBody = { ...startAnswer(), agents: AGENTS };
+    return rig;
+  };
+  const key = (agent: string) => AgentTokenProvider.storeKey(SERVER, agent);
+
+  it("a first agent refused while another was approved is reported refused, not expired", async () => {
+    // The person approved only the second and third agents. The server answers invalid_grant for the first, as it would
+    // for a code it does not know; another agent of the pairing tells the two apart.
+    const rig = several().poll(() => pending("invalid_grant"), approved);
+    const pairing = rig.pairing();
+    const start = await pairing.start(AGENTS[0]!, "PC", APP, { agents: AGENTS.slice(1) });
+
+    const error = await pairing.wait(start).then(() => undefined, (e: unknown) => e);
+
+    expect(error).toBeInstanceOf(FadenstackPairingAgentError);
+    expect((error as FadenstackPairingAgentError).agent).toBe(AGENTS[0]);
+    expect((error as FadenstackPairingAgentError).reason).toBe("not_approved_or_redeemed");
+    expect(await rig.store.load(key(AGENTS[0]!))).toBeUndefined();
+    expect(await rig.store.load(key(AGENTS[1]!))).toBeDefined(); // the approved agent that told them apart is signed in
+    expect(rig.requests.at(-1)?.body["agent"]).toBe(AGENTS[1]);
+    expect(start.agentsLeft).toEqual([AGENTS[0], AGENTS[2]]);
+  });
+
+  it("the first agent and every other answering invalid_grant is a code the server does not know", async () => {
+    const rig = several().poll(() => pending("invalid_grant"), () => pending("invalid_grant"), () => pending("invalid_grant"));
+    const pairing = rig.pairing();
+    const start = await pairing.start(AGENTS[0]!, "PC", APP, { agents: AGENTS.slice(1) });
+
+    await expect(pairing.wait(start)).rejects.toBeInstanceOf(FadenstackPairingExpiredError);
+
+    expect(start.agentsLeft).toEqual(AGENTS);
+    for (const agent of AGENTS) expect(await rig.store.load(key(agent))).toBeUndefined();
+  });
+
+  it("another agent waited for and not approved is reported for that agent, not as expired", async () => {
+    const rig = several().poll(() => pending("invalid_grant"));
+    const pairing = rig.pairing();
+    const start = await pairing.start(AGENTS[0]!, "PC", APP, { agents: AGENTS.slice(1) });
+
+    const error = await pairing.wait(start, { agent: AGENTS[2]! }).then(() => undefined, (e: unknown) => e);
+
+    expect(error).toBeInstanceOf(FadenstackPairingAgentError);
+    expect((error as FadenstackPairingAgentError).agent).toBe(AGENTS[2]);
+  });
+
+  it("an older server that stored one agent reads invalid_grant as before and asks no other agent", async () => {
+    const rig = new Rig().poll(() => pending("invalid_grant"));
+    const pairing = rig.pairing();
+    const start = await pairing.start(AGENTS[0]!, "PC", APP, { agents: AGENTS.slice(1) });
+
+    await expect(pairing.wait(start)).rejects.toBeInstanceOf(FadenstackPairingExpiredError);
+    expect(rig.pollCount).toBe(1);
+    expect(start.agentsLeft).toEqual(AGENTS); // the ones the server ignored are still to be signed in
+  });
+});

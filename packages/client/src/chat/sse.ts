@@ -1,3 +1,5 @@
+import { FadenstackError } from "../errors.js";
+
 /** One server-sent event: its name (`event:`, undefined for the OpenAI chunks) and its data. */
 export interface SseEvent {
   name: string | undefined;
@@ -6,9 +8,10 @@ export interface SseEvent {
 
 /**
  * Reads `text/event-stream` event by event (the WHATWG rules: `event:` and `data:` fields, multi-line data,
- * comments, any line ending). Reading stops when the caller stops iterating.
+ * comments, any line ending). Reading stops when the caller stops iterating. With `idleMs`, a stream that sends nothing
+ * at all for that long is given up: it is cancelled and a `FadenstackError` says so (any byte counts, a keep-alive too).
  */
-export async function* readSse(body: ReadableStream<Uint8Array>, signal?: AbortSignal): AsyncGenerator<SseEvent> {
+export async function* readSse(body: ReadableStream<Uint8Array>, signal?: AbortSignal, idleMs?: number): AsyncGenerator<SseEvent> {
   const reader = body.getReader();
   const decoder = new TextDecoder();
   let buffer = "";
@@ -19,7 +22,7 @@ export async function* readSse(body: ReadableStream<Uint8Array>, signal?: AbortS
   try {
     for (;;) {
       if (signal?.aborted) throw signal.reason;
-      const { done, value } = await reader.read();
+      const { done, value } = await within(reader.read(), idleMs, reader);
       if (signal?.aborted) throw signal.reason;
       buffer += done ? decoder.decode() : decoder.decode(value, { stream: true });
       let start = 0;
@@ -57,6 +60,27 @@ export async function* readSse(body: ReadableStream<Uint8Array>, signal?: AbortS
     // Closes the connection when the caller stopped early; a no-op after the end.
     await reader.cancel().catch(() => undefined);
   }
+}
+
+/**
+ * A read that is given up when nothing arrives for `idleMs`: a dead connection (a laptop that slept, a dropped network)
+ * would otherwise keep the answer "thinking" for ever. The reader is cancelled, which closes the connection.
+ */
+function within(
+  read: Promise<ReadableStreamReadResult<Uint8Array>>,
+  idleMs: number | undefined,
+  reader: ReadableStreamDefaultReader<Uint8Array>,
+): Promise<ReadableStreamReadResult<Uint8Array>> {
+  if (idleMs === undefined || !Number.isFinite(idleMs)) return read;
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const idle = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => {
+      // Rejected before the cancel: the cancel ends the pending read as "done", which must not pass for the answer's end.
+      reject(new FadenstackError(`The server sent nothing for ${Math.round(idleMs / 1000)} s; the answer was given up.`));
+      void reader.cancel().catch(() => undefined);
+    }, idleMs);
+  });
+  return Promise.race([read, idle]).finally(() => clearTimeout(timer));
 }
 
 /** The index of the next line end (`\n`, `\r\n` or `\r`), or -1. A lone `\r` at the very end waits for more. */
