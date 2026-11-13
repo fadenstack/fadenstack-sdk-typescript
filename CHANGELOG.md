@@ -15,6 +15,10 @@ before 1.0, a minor version may break the API, and this file says where it does.
 - `PairingStart.agentsLeft`: the agents asked for whose tokens this device has not collected yet.
 - `@fadenstack/provenance` owns the words its marks show: `MarkStrings`, `builtInMarkStrings` and `markStringsFor` in
   English, German, French, Spanish and Simplified Chinese.
+- `@fadenstack/ui-web`: `browserChatServices()`, the browser's four services for a chat view model in one object, and
+  `browserOpenLink` (a new tab, `noopener,noreferrer`).
+- `@fadenstack/ui`: `ChatHostServices` (the four services a host passes), and `storedPromptStore` with
+  `KeyedTextStorage`, the prompt store's rules over any synchronous key-value storage.
 
 ### Changed
 
@@ -28,9 +32,20 @@ before 1.0, a minor version may break the API, and this file says where it does.
   agent (it was "expired"); for the first agent of a pairing for several, a refusal is reported so too, and the first
   approved other agent is signed in on the way.
 
+- **Breaking:** `AgentChatViewModel` has no browser default any more (`@fadenstack/ui` uses no browser API). Its
+  options are required, and with them four services the host passes: `clipboard`, `openLink`, `saveFile` and
+  `preferences` (`ChatHostServices`). A forgotten one is a type error, where before the browser's took its place
+  unseen; outside a browser that lost the user's choices. In a web page, spread the browser's and override what your
+  host does its own way:
+  `new AgentChatViewModel(agent, approvals, { ...browserChatServices(), openLink: myOpener, prompts: browserPromptStore() })`.
+  A host that passed some of the four and relied on the defaults for the rest now spreads `browserChatServices()` first.
+  `prompts` stays optional: without a store the feature is absent, as before.
+
 ### Removed
 
 - **Breaking:** `UiStrings.aiGenerated` and `UiStrings.aiGeneratedTitle` (now in `@fadenstack/provenance`).
+- **Breaking:** `browserClipboard`, `browserSaveFile`, `browserPreferences` and `browserPromptStore` are no longer in
+  `@fadenstack/ui`: they moved, unchanged, to `@fadenstack/ui-web`.
 
 ### Fixed
 

@@ -3,12 +3,13 @@ import { FadenstackAgent, MemorySessionStore, defineTool } from "@fadenstack/age
 import { FadenstackClient, loginWithPassword, type AgentPrincipal, type HostToolDecision } from "@fadenstack/client";
 import { AgentChatViewModel, ApprovalBroker, ApprovalPart, immediateScheduler, type AgentChatOptions } from "@fadenstack/ui";
 import { FakeGateway } from "@fadenstack/testing";
+import { testServices } from "./services.js";
 
 const principal: AgentPrincipal = { tenantId: "tenant", userId: "user", agentId: "agent", deviceId: "device" };
 const decision: HostToolDecision = { decision: "ask", toolClass: "destructive", effectiveToolMode: "auto", requiredByRule: false,
   message: "Individual approval", profileStamp: "a".repeat(64), argumentsStamp: "b".repeat(64), decisionStamp: "c".repeat(64), principal };
 
-async function fixture(options: AgentChatOptions = {}) {
+async function fixture(options: Partial<AgentChatOptions> = {}) {
   const gateway = new FakeGateway({ agents: [{ slug: "records", version: 1, contract: [{ name: "restore_record", risk: "destructive" }] }] });
   const { client, tokens } = FadenstackClient.forAgent({ serverUrl: gateway.serverUrl, agent: "records", fetch: gateway.fetch });
   await tokens.signIn(await loginWithPassword({ apiUrl: gateway.serverUrl, email: "user@example.com", password: "secret", fetch: gateway.fetch }));
@@ -20,7 +21,7 @@ async function fixture(options: AgentChatOptions = {}) {
   const approvals = new ApprovalBroker();
   const agent = FadenstackAgent.createBuilder().useClient(client).useSessionStore(new MemorySessionStore()).useApprovals(approvals)
     .addTools(defineTool({ name: "restore_record", toolClass: "destructive", parameters: { type: "object", properties: { action_id: { type: "string" } }, required: ["action_id"], additionalProperties: false }, run })).build();
-  const vm = new AgentChatViewModel(agent, approvals, { scheduler: immediateScheduler, ...options });
+  const vm = new AgentChatViewModel(agent, approvals, { ...testServices(), scheduler: immediateScheduler, ...options });
   await vm.initialize();
   vm.selectToolMode("auto");
   return { vm, agent, gateway, check, run };

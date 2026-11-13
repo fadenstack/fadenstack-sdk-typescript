@@ -26,3 +26,11 @@ export {
   turnMeta,
   type Badge,
 } from "./presentation.js";
+export {
+  browserChatServices,
+  browserClipboard,
+  browserOpenLink,
+  browserPreferences,
+  browserPromptStore,
+  browserSaveFile,
+} from "./browser.js";

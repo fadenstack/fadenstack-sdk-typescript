@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { describe, expect, it } from "vitest";
 
 import { FadenstackClient, loginWithPassword } from "@fadenstack/client";
 import { FadenstackAgent, MemorySessionStore } from "@fadenstack/agents";
@@ -7,36 +7,34 @@ import {
   ApprovalBroker,
   MAX_PROMPTS,
   MAX_PROMPT_LENGTH,
-  MemoryClipboard,
-  MemoryPreferenceStore,
   MemoryPromptStore,
   PromptStoreError,
-  browserPromptStore,
   germanStrings,
   immediateScheduler,
   matchPrompts,
   promptTitle,
+  storedPromptStore,
   type AgentChatOptions,
   type PromptStore,
   type SavedPrompt,
 } from "@fadenstack/ui";
 import { FakeGateway, type FakeAgent } from "@fadenstack/testing";
+import { testServices } from "./services.js";
 
-afterEach(() => vi.unstubAllGlobals());
 
 const SKILLS = [
   { slug: "reply", name: "Reply in our style", description: "Answers a customer mail" },
   { slug: "summary", name: "Short summary", description: "Five bullet points" },
 ];
 
-async function chat(options: AgentChatOptions = {}, agent: Partial<FakeAgent> = {}) {
+async function chat(options: Partial<AgentChatOptions> = {}, agent: Partial<FakeAgent> = {}) {
   const gateway = new FakeGateway({ agents: [{ slug: "page", name: "Page assistant", ...agent }] });
   const { client, tokens } = FadenstackClient.forAgent({ serverUrl: gateway.serverUrl, agent: "page", fetch: gateway.fetch });
   await tokens.signIn(await loginWithPassword({ apiUrl: gateway.serverUrl, email: "user@example.com", password: "secret", fetch: gateway.fetch }));
   const approvals = new ApprovalBroker();
   const built = FadenstackAgent.createBuilder().useClient(client).useSessionStore(new MemorySessionStore()).useApprovals(approvals).build();
   const vm = new AgentChatViewModel(built, approvals, {
-    scheduler: immediateScheduler, clipboard: new MemoryClipboard(), preferences: new MemoryPreferenceStore(), locale: "en-GB", ...options,
+    ...testServices(), scheduler: immediateScheduler, locale: "en-GB", ...options,
   });
   await vm.initialize();
   return { chat: vm, gateway };
@@ -110,7 +108,7 @@ describe("MemoryPromptStore", () => {
   });
 });
 
-describe("browserPromptStore", () => {
+describe("storedPromptStore", () => {
   function storage(initial: Record<string, string> = {}, failWrites = false) {
     const values = new Map(Object.entries(initial));
     return {
@@ -121,43 +119,31 @@ describe("browserPromptStore", () => {
           if (failWrites) throw new Error("quota");
           values.set(k, v);
         },
-        removeItem: (k: string) => void values.delete(k),
       },
     };
   }
 
-  it("keeps the list in localStorage under fadenstack.prompts, shared by every store on the page", async () => {
+  it("keeps the list under fadenstack.prompts, shared by every store over the same storage", async () => {
     const s = storage();
-    vi.stubGlobal("localStorage", s.api);
-    const a = browserPromptStore();
+    const a = storedPromptStore(s.api);
     const saved = await a.save("Kept");
     expect(JSON.parse(s.values.get("fadenstack.prompts")!)).toEqual([saved]);
-    expect((await browserPromptStore().list()).map((p) => p.text)).toEqual(["Kept"]);
+    expect((await storedPromptStore(s.api).list()).map((p) => p.text)).toEqual(["Kept"]);
     await a.remove(saved.id);
-    expect(await browserPromptStore().list()).toEqual([]);
+    expect(await storedPromptStore(s.api).list()).toEqual([]);
   });
 
   it("ignores a damaged list, entries that are not prompts, and falls back to memory when writes fail", async () => {
     const damaged = storage({ "fadenstack.prompts": "{not json" });
-    vi.stubGlobal("localStorage", damaged.api);
-    expect(await browserPromptStore().list()).toEqual([]);
+    expect(await storedPromptStore(damaged.api).list()).toEqual([]);
 
     const mixed = storage({ "fadenstack.prompts": JSON.stringify([{ id: "a", text: "Good", title: "Good", savedAt: "x" }, { id: 5 }, "x", { id: "b", text: "" }]) });
-    vi.stubGlobal("localStorage", mixed.api);
-    expect((await browserPromptStore().list()).map((p) => p.id)).toEqual(["a"]);
+    expect((await storedPromptStore(mixed.api).list()).map((p) => p.id)).toEqual(["a"]);
 
     const full = storage({}, true);
-    vi.stubGlobal("localStorage", full.api);
-    const store = browserPromptStore();
+    const store = storedPromptStore(full.api);
     await store.save("In memory only");
     expect((await store.list()).map((p) => p.text)).toEqual(["In memory only"]);
-  });
-
-  it("is a memory store where there is no localStorage", async () => {
-    vi.stubGlobal("localStorage", undefined);
-    const store = browserPromptStore();
-    await store.save("x");
-    expect((await store.list()).length).toBe(1);
   });
 });
 
@@ -177,7 +163,7 @@ describe("matchPrompts", () => {
 });
 
 describe("the picker with a prompt store", () => {
-  async function withPrompts(agent: Partial<FakeAgent> = {}, options: AgentChatOptions = {}) {
+  async function withPrompts(agent: Partial<FakeAgent> = {}, options: Partial<AgentChatOptions> = {}) {
     const prompts = new MemoryPromptStore();
     await prompts.save("Summarise this page in five points");
     await prompts.save("Antworte freundlich auf diese Mail");

@@ -4,20 +4,21 @@ import { afterEach, describe, expect, it } from "vitest";
 
 import { FadenstackClient, loginWithPassword } from "@fadenstack/client";
 import { FadenstackAgent, MemorySessionStore } from "@fadenstack/agents";
-import { AgentChatViewModel, ApprovalBroker, MemoryClipboard, MemoryPreferenceStore, MemoryPromptStore, immediateScheduler, type AgentChatOptions } from "@fadenstack/ui";
+import { AgentChatViewModel, ApprovalBroker, MemoryPromptStore, immediateScheduler, type AgentChatOptions } from "@fadenstack/ui";
 import { ChatPanel } from "@fadenstack/ui-react";
 import { FakeGateway, type FakeAgent } from "@fadenstack/testing";
+import { testServices } from "./services.js";
 
 afterEach(cleanup);
 
-async function panel(options: AgentChatOptions = {}, agent: Partial<FakeAgent> = {}) {
+async function panel(options: Partial<AgentChatOptions> = {}, agent: Partial<FakeAgent> = {}) {
   const gateway = new FakeGateway({ agents: [{ slug: "page", name: "Page assistant", ...agent }], model: () => ({ text: "An answer." }) });
   const { client, tokens } = FadenstackClient.forAgent({ serverUrl: gateway.serverUrl, agent: "page", fetch: gateway.fetch });
   await tokens.signIn(await loginWithPassword({ apiUrl: gateway.serverUrl, email: "user@example.com", password: "secret", fetch: gateway.fetch }));
   const approvals = new ApprovalBroker();
   const built = FadenstackAgent.createBuilder().useClient(client).useSessionStore(new MemorySessionStore()).useApprovals(approvals).build();
   const chat = new AgentChatViewModel(built, approvals, {
-    scheduler: immediateScheduler, clipboard: new MemoryClipboard(), preferences: new MemoryPreferenceStore(), locale: "en-GB", ...options,
+    ...testServices(), scheduler: immediateScheduler, locale: "en-GB", ...options,
   });
   await act(() => chat.initialize());
   render(<ChatPanel chat={chat} />);
@@ -26,7 +27,7 @@ async function panel(options: AgentChatOptions = {}, agent: Partial<FakeAgent> =
 
 const SKILLS = [{ slug: "reply", name: "Reply in our style", description: "Answers a customer mail" }];
 
-async function withPrompts(options: AgentChatOptions = {}, agent: Partial<FakeAgent> = {}) {
+async function withPrompts(options: Partial<AgentChatOptions> = {}, agent: Partial<FakeAgent> = {}) {
   const prompts = new MemoryPromptStore();
   await prompts.save("Summarise this page in five points");
   await prompts.save("Antworte freundlich auf diese Mail");

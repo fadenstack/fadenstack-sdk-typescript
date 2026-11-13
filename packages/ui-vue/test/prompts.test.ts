@@ -16,7 +16,7 @@ afterEach(() => {
 
 const SKILLS = [{ slug: "reply", name: "Reply in our style", description: "Answers a customer mail" }];
 
-async function withPrompts(options: AgentChatOptions = {}, agent: Partial<FakeAgent> = {}) {
+async function withPrompts(options: Partial<AgentChatOptions> = {}, agent: Partial<FakeAgent> = {}) {
   const prompts = new MemoryPromptStore();
   await prompts.save("Summarise this page in five points");
   await prompts.save("Antworte freundlich auf diese Mail");

@@ -17,14 +17,15 @@ import {
   type UiStrings,
 } from "@fadenstack/ui";
 import { FakeGateway, lastToolResults } from "@fadenstack/testing";
+import { testServices } from "./services.js";
 
-async function chat(options: AgentChatOptions = {}, gateway = pageGateway(), fetch: FakeGateway["fetch"] = gateway.fetch) {
+async function chat(options: Partial<AgentChatOptions> = {}, gateway = pageGateway(), fetch: FakeGateway["fetch"] = gateway.fetch) {
   const { client, tokens } = FadenstackClient.forAgent({ serverUrl: gateway.serverUrl, agent: "page", fetch });
   await tokens.signIn(await loginWithPassword({ apiUrl: gateway.serverUrl, email: "user@example.com", password: "secret", fetch }));
   const approvals = new ApprovalBroker();
   const agent = FadenstackAgent.createBuilder().useClient(client).useSessionStore(new MemorySessionStore()).useApprovals(approvals)
     .addTools(defineTool({ name: "read_page", toolClass: "read", run: () => "The page text." })).build();
-  return new AgentChatViewModel(agent, approvals, { scheduler: immediateScheduler, preferences: new MemoryPreferenceStore(), ...options });
+  return new AgentChatViewModel(agent, approvals, { ...testServices(), scheduler: immediateScheduler, ...options });
 }
 
 /** The user's language, as the server keeps it for all their clients. */

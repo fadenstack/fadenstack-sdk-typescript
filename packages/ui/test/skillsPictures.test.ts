@@ -6,13 +6,12 @@ import {
   AgentChatViewModel,
   ApprovalBroker,
   ApprovalPart,
-  MemoryClipboard,
-  MemoryPreferenceStore,
   immediateScheduler,
   matchSkills,
   skillToken,
 } from "@fadenstack/ui";
 import { FakeGateway, lastUserText as lastUserTextOf, type FakeAgent } from "@fadenstack/testing";
+import { testServices } from "./services.js";
 
 const SKILLS = [
   { slug: "reply-in-house-style", name: "Reply in our style", description: "Answers a customer mail the way we write" },
@@ -28,7 +27,7 @@ async function chat(agent: Partial<FakeAgent> = {}) {
   const approvals = new ApprovalBroker();
   const built = FadenstackAgent.createBuilder().useClient(client).useSessionStore(new MemorySessionStore()).useApprovals(approvals).build();
   const vm = new AgentChatViewModel(built, approvals, {
-    scheduler: immediateScheduler, clipboard: new MemoryClipboard(), preferences: new MemoryPreferenceStore(), locale: "en-GB",
+    ...testServices(), scheduler: immediateScheduler, locale: "en-GB",
   });
   await vm.initialize();
   return { chat: vm, gateway };
@@ -165,7 +164,7 @@ describe("an approval for a tool that reaches outside", () => {
         defineTool({ name: "search_web", toolClass: "write", openWorld: true, parameters: { type: "object", properties: { query: { type: "string" } } }, run: () => "results" }),
         defineTool({ name: "fill_field", toolClass: "write", parameters: { type: "object", properties: { query: { type: "string" } } }, run: () => "filled" }),
       ).build();
-    const vm = new AgentChatViewModel(built, approvals, { scheduler: immediateScheduler, clipboard: new MemoryClipboard(), preferences: new MemoryPreferenceStore() });
+    const vm = new AgentChatViewModel(built, approvals, { ...testServices(), scheduler: immediateScheduler });
     await vm.initialize();
     const card = async (tool: string) => {
       const sending = vm.send(tool);

@@ -5,11 +5,13 @@ framework.
 
 The UI comes in layers, and the split is strict:
 
-- **`@fadenstack/ui`** holds all of the behaviour, as view models with no UI framework: the chat
+- **`@fadenstack/ui`** holds all of the behaviour, as view models with no UI framework and no browser API: the chat
   (`AgentChatViewModel`), its turns, the parts of each answer, the tool-mode picker, the history, attachments, an
   `ApprovalBroker` that turns approvals into cards in the chat, and every text the panel shows, in several languages.
-- **`@fadenstack/ui-web`** holds the look every web skin shares: the stylesheet, the icons, the agent's avatar, and
-  the panel's browser behaviours (staying at the bottom while an answer streams, closing a menu on a click outside).
+  What only the host can do (copy, open a link, save a file, keep the user's choices) it asks of the host.
+- **`@fadenstack/ui-web`** holds the look every web skin shares: the stylesheet, the icons, the agent's avatar, the
+  panel's browser behaviours (staying at the bottom while an answer streams, closing a menu on a click outside), and
+  the browser's ways for what the chat asks of its host (`browserChatServices()`, see [The host's services](#the-hosts-services)).
 - **`@fadenstack/ui-react`** and **`@fadenstack/ui-vue`** only render. Both draw the same markup with the same
   stylesheet, so the panel looks and behaves the same in either. A skin for Lit or another framework binds to the same
   view models and uses `@fadenstack/ui-web` the same way.
@@ -24,6 +26,7 @@ The UI comes in layers, and the split is strict:
     import { FadenstackAgent } from "@fadenstack/agents";
     import { AgentChatViewModel, ApprovalBroker, stringsFor } from "@fadenstack/ui";
     import { ChatPanel } from "@fadenstack/ui-react";
+    import { browserChatServices } from "@fadenstack/ui-web";
     import "@fadenstack/ui-web/styles.css";
 
     const { client } = FadenstackClient.forAgent({
@@ -39,7 +42,11 @@ The UI comes in layers, and the split is strict:
       .useApprovals(approvals)
       .build();
 
-    const chat = new AgentChatViewModel(agent, approvals, { automaticLanguage: navigator.languages, locale: navigator.language });
+    const chat = new AgentChatViewModel(agent, approvals, {
+      ...browserChatServices(), // the browser's clipboard, links, downloads and kept choices
+      automaticLanguage: navigator.languages,
+      locale: navigator.language,
+    });
     await chat.initialize();
     createRoot(document.getElementById("chat")!).render(<ChatPanel chat={chat} />);
     ```
@@ -52,6 +59,7 @@ The UI comes in layers, and the split is strict:
     import { FadenstackAgent } from "@fadenstack/agents";
     import { AgentChatViewModel, ApprovalBroker, stringsFor } from "@fadenstack/ui";
     import { ChatPanel } from "@fadenstack/ui-vue";
+    import { browserChatServices } from "@fadenstack/ui-web";
     import "@fadenstack/ui-web/styles.css";
 
     const { client } = FadenstackClient.forAgent({
@@ -67,7 +75,11 @@ The UI comes in layers, and the split is strict:
       .useApprovals(approvals)
       .build();
 
-    const chat = markRaw(new AgentChatViewModel(agent, approvals, { automaticLanguage: navigator.languages, locale: navigator.language }));
+    const chat = markRaw(new AgentChatViewModel(agent, approvals, {
+      ...browserChatServices(), // the browser's clipboard, links, downloads and kept choices
+      automaticLanguage: navigator.languages,
+      locale: navigator.language,
+    }));
     await chat.initialize();
     createApp({ render: () => h(ChatPanel, { chat }) }).mount("#chat");
     ```
@@ -174,6 +186,7 @@ composer, a suggestion, Retry, or Edit and resend:
 
 ```ts
 const chat = new AgentChatViewModel(agent, approvals, {
+  ...browserChatServices(),
   beforeSend: async (message, signal) => {
     await session.assertStillSignedIn(signal);
     activeFile = picker.current();
@@ -193,11 +206,12 @@ threw.
 
 ## View model options
 
-`new AgentChatViewModel(agent, approvals, options)` takes `AgentChatOptions`:
+`new AgentChatViewModel(agent, approvals, options)` takes `AgentChatOptions`: the host's four services, which it must
+pass (see [The host's services](#the-hosts-services)), and these, which all have a default:
 
 | Option | What it is |
 |---|---|
-| `automaticLanguage`, `languages`, `lockedLanguage`, `preferences` | The language the user picks in the settings, and where it is kept. See [Languages](#languages). |
+| `automaticLanguage`, `languages`, `lockedLanguage` | The language the user picks in the settings. See [Languages](#languages). |
 | `strings` | Texts you fix instead of a language the user picks. |
 | `locale` | The locale for dates and numbers. The browser's by default. |
 | `beforeSend`, `afterSend` | What your application does around each message. See [Before a message goes](#before-a-message-goes). |
@@ -205,15 +219,41 @@ threw.
 | `turnGate` | Limits how many turns work at the same time across chats. See [Limiting running turns](#limiting-running-turns). |
 | `branding` | The muted Fadenstack link under the message box. On by default; `false` hides it. About stays. |
 | `refSource` | Your app's name in the links to fadenstack.com. `sdk` by default. See [About and the Fadenstack link](#about-and-the-fadenstack-link). |
-| `openLink` | How the panel opens its links. A new tab by default. |
 | `previewLength` | How many characters of a tool's input and output are shown. Default 4 000. |
 | `initialTurns` | How many turns an opened session shows at first. |
 | `pageSize` | How many older turns "Show earlier messages" adds. |
 | `renderIntervalMs` | How often streamed updates reach the view models, in milliseconds. The default suits a chat panel. |
 | `renderers` | Renderers for server events, tried before the built-in ones. |
-| `clipboard` | The clipboard. The browser's by default. |
 | `scheduler` | When batched work runs. `setTimeout` by default; `immediateScheduler` runs it at once, for tests. |
 | `now` | The clock, for tests. |
+| `prompts` | The user's saved prompts (`PromptStore`): `browserPromptStore()` from `@fadenstack/ui-web`, `MemoryPromptStore`, or your own. Without one the panel has no saved prompts. |
+
+### The host's services
+
+Four things only the host can do, and `@fadenstack/ui` has no default for them: a view model without one does not
+compile, so a host never loses the user's choices without noticing.
+
+| Option | What it is | In a web page (`@fadenstack/ui-web`) |
+|---|---|---|
+| `clipboard` | Copies a message, a code block or a table (`Clipboard`). | `browserClipboard` |
+| `openLink` | Opens the panel's links (About, the Fadenstack link). | `browserOpenLink`: a new tab, `noopener,noreferrer` |
+| `saveFile` | Saves a file the panel makes: a table as CSV, a chat as Markdown (`SaveFile`). | `browserSaveFile`: the browser's download |
+| `preferences` | Keeps the user's choices: the language they picked, the unmarked-answer notice (`PreferenceStore`). | `browserPreferences()`: `localStorage`, as `fadenstack.<name>`; memory where there is none |
+
+`browserChatServices()` returns all four. A host that does one of them its own way passes that one over the
+browser's:
+
+```ts
+import { browserChatServices } from "@fadenstack/ui-web";
+
+const chat = new AgentChatViewModel(agent, approvals, {
+  ...browserChatServices(),
+  openLink: (url) => chrome.tabs.create({ url }), // an extension's tab
+  preferences: myUserSettings,                     // the user's settings on your server
+});
+```
+
+Outside a browser (a test, a headless host), `MemoryClipboard` and `MemoryPreferenceStore` keep everything in memory.
 
 ## Context chips
 
@@ -327,6 +367,7 @@ it, so their other agents, their other devices and the console follow it. Your a
 
 ```ts
 const chat = new AgentChatViewModel(agent, approvals, {
+  ...browserChatServices(),
   automaticLanguage: navigator.languages, // or Office's language, the Nextcloud user's: "de-DE"
   locale: navigator.language,             // dates and numbers
 });
@@ -341,7 +382,7 @@ is not shipped, and gets English unless you add it.
 | `automaticLanguage` | What *Automatic* means: a locale, or several, best first. |
 | `languages` | The languages to pick from, by tag: `builtInStrings` by default. |
 | `lockedLanguage` | A language your organisation fixed, from its policy: the panel uses it, and the settings show it with *Set by your organisation* and no choice. |
-| `preferences` | Where the choice is kept (`PreferenceStore`). `browserPreferences()` by default: the browser's `localStorage`, so every panel of the site or extension shares it; memory where there is none. Pass your own for an extension's storage or your application's settings. |
+| `preferences` | Where the choice is kept (`PreferenceStore`), one of [the host's services](#the-hosts-services). `browserPreferences()` (`@fadenstack/ui-web`) keeps it in the browser's `localStorage`, so every panel of the site or extension shares it; memory where there is none. Pass your own for an extension's storage or your application's settings. |
 | `strings` | Texts you fix instead: the panel then offers no choice. |
 
 `chat.setLanguage("fr")` and `chat.setLanguage("auto")` do from code what the settings do, and `chat.language`,
@@ -363,6 +404,7 @@ import { builtInStrings, germanStrings, withStrings, type UiStrings } from "@fad
 
 const italianStrings: UiStrings = { language: "it", direction: "ltr", languageName: "Italiano", send: "Invia", /* ... every text */ };
 const chat = new AgentChatViewModel(agent, approvals, {
+  ...browserChatServices(),
   languages: {
     ...builtInStrings,
     it: italianStrings,
@@ -395,7 +437,7 @@ AI mark"). From then on, one quiet notice ("Answer without an AI mark") sits on 
 
 In the view model, `chat.showUnmarkedNotice` is the state and `await chat.setShowUnmarkedNotice(on)` changes it and
 remembers it. It applies to the answers that come after. The setting is a preference of the person: it is kept in the
-`preferences` store (the browser's `localStorage` by default) under the key `unmarkedNotice`, as `"1"` when on and absent
+`preferences` store (with `browserPreferences()`, the browser's `localStorage`) under the key `unmarkedNotice`, as `"1"` when on and absent
 when off. The words are `strings.unmarkedTitle`, `unmarkedMessage` and `settingsUnmarked`. The .NET SDK calls the
 setting `TellUnmarked`.
 
@@ -412,6 +454,7 @@ Under the AI notice, on a small line of its own, the panel shows a muted **Faden
 
 ```ts
 const chat = new AgentChatViewModel(agent, approvals, {
+  ...browserChatServices(),
   refSource: "my-crm",                            // ref=my-crm-panel and ref=my-crm-about
   branding: false,                                // no Fadenstack link under the message box
   openLink: (url) => chrome.tabs.create({ url }), // how your host opens a link (here an extension's tab)
@@ -427,8 +470,9 @@ Help link goes to your own server and carries nothing. The server's address in A
 `refSource` names your app: lower-case letters and digits, words joined by single hyphens, at most 20 characters
 (`my-crm`). Anything else falls back to `sdk`. Do not put a customer, tenant or host name in it.
 
-Links open in a new tab through `openLink`, by default `window.open(url, "_blank", "noopener,noreferrer")`. A host
-that opens links its own way, such as an Office add-in or a browser extension, passes its own. Screen readers hear that
+Links open through `openLink`; in a web page `browserOpenLink` opens them in a new tab
+(`window.open(url, "_blank", "noopener,noreferrer")`). A host that opens links its own way, such as an Office add-in
+or a browser extension, passes its own. Screen readers hear that
 each link opens in a new tab.
 
 `chat.setAboutOpen(true)`, `chat.about` and `chat.copyAboutDetails()` do from code what About does. For a skin of
@@ -471,7 +515,7 @@ step-up handler, so there is no code of your own:
 ```ts
 const approvals = new ApprovalBroker();
 const agent = FadenstackAgent.createBuilder().useClient(client).useApprovals(approvals).build();
-const chat = new AgentChatViewModel(agent, approvals);
+const chat = new AgentChatViewModel(agent, approvals, browserChatServices());
 ```
 
 - **The work card** ("Work alongside you?", `session.offerWork(places)`) lists the places, each of which the person
@@ -553,6 +597,7 @@ awaits it when a turn is about to start: the person's message is already shown, 
 
 ```ts
 const chat = new AgentChatViewModel(agent, approvals, {
+  ...browserChatServices(),
   turnGate: async (signal) => {
     await slots.acquire(signal);      // your own limit: resolves when a slot is free
     return () => slots.release();     // or { dispose() { ... } }

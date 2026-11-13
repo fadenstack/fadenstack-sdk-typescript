@@ -17,7 +17,7 @@ The packages are ES modules and use standard web APIs only: `fetch`, Web Streams
 |---|---|---|---|
 | Sessions and "Allow always" | IndexedDB, encrypted with a non-extractable key per signed-in user | The same, in the extension's pages and service worker | Memory only: nothing is written, no key is made |
 | The sign-in | Memory by default; pass a `TokenStore` to keep it | Memory by default; a store over `chrome.storage` keeps it (see [In a browser extension](agent.md#in-a-browser-extension)) | Memory by default; a store over a file only the user can read keeps it |
-| Preferences (language, the unmarked notice) | `localStorage`, as `fadenstack.<name>` | `localStorage` where there is one, else memory | Memory |
+| Preferences (language, the unmarked notice) | Yours to pass; `browserPreferences()` keeps them in `localStorage`, as `fadenstack.<name>` | Yours to pass: `chrome.storage`, or `browserPreferences()` (`localStorage` where there is one, else memory) | Yours to pass; `MemoryPreferenceStore` keeps them in memory |
 | Opening the second sign-in or the pairing page | `openInBrowser`: a new tab, never an iframe | Give your own handler (a tab of the extension) | Give your own handler |
 | The chat panel | `@fadenstack/ui-react` or `ui-vue` | The same, in a page of the extension | Not applicable: the skins draw DOM |
 | Logging | Your logger, or `consoleLogger` | The same | The same |
@@ -41,8 +41,10 @@ the page: a `TokenStore` over `chrome.storage.local`, or `chrome.storage.session
 example is in [Build an agent](agent.md#in-a-browser-extension). An extension signs in by pairing, since it cannot ask
 for a password the way a login page does: see [Sign in by pairing](agent.md#sign-in-by-pairing).
 
-An extension opens links its own way: pass `openLink` to the chat view model, and set `openBrowser` on the
-`ApprovalBroker`, so a second sign-in opens in a tab of the extension and not in a window the page opens.
+The chat view model takes the host's clipboard, link opener, download and preferences store, with no default (see
+[The host's services](chat-panel.md#the-hosts-services)). An extension opens links its own way: pass `openLink` over
+`browserChatServices()`, and set `openBrowser` on the `ApprovalBroker`, so a second sign-in opens in a tab of the
+extension and not in a window the page opens.
 
 ### Node
 

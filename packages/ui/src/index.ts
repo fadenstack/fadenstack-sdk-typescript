@@ -4,6 +4,7 @@ export {
   AUTOMATIC_LANGUAGE,
   UNMARKED_PREFERENCE,
   type AgentChatOptions,
+  type ChatHostServices,
   type TurnLease,
   type LanguageOption,
   type OutgoingMessage,
@@ -34,7 +35,7 @@ export {
 } from "./about.js";
 export { CSV_BOM, csvField, csvFileName, rowsToCsv, tableToCsv } from "./csv.js";
 export { chatFileName, chatToMarkdown, type ChatExportInput } from "./export.js";
-export { browserSaveFile, type FileToSave, type SaveFile } from "./files.js";
+export type { FileToSave, SaveFile } from "./files.js";
 export { SkillPickerViewModel, matchSkills, skillToken, type PickerEntry, type PickerPrompts } from "./skills.js";
 export {
   MAX_PROMPTS,
@@ -42,9 +43,10 @@ export {
   MemoryPromptStore,
   PROMPTS_STORAGE_KEY,
   PromptStoreError,
-  browserPromptStore,
   matchPrompts,
   promptTitle,
+  storedPromptStore,
+  type KeyedTextStorage,
   type PromptStore,
   type PromptStoreErrorCode,
   type SavedPrompt,
@@ -108,7 +110,6 @@ export { buildTurn, groupTurns } from "./transcriptTurns.js";
 export { RenderBatcher } from "./batcher.js";
 export {
   MemoryClipboard,
-  browserClipboard,
   immediateScheduler,
   timeoutScheduler,
   writeClipboard,
@@ -117,7 +118,7 @@ export {
   type UiScheduler,
 } from "./services.js";
 export { englishStrings, withStrings, type UiStrings } from "./strings.js";
-export { MemoryPreferenceStore, browserPreferences, type PreferenceStore } from "./preferences.js";
+export { MemoryPreferenceStore, type PreferenceStore } from "./preferences.js";
 export {
   builtInStrings,
   chineseSimplifiedStrings,

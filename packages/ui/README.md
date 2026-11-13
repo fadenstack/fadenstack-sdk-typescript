@@ -12,16 +12,19 @@ npm install @fadenstack/client @fadenstack/agents @fadenstack/ui
 ```ts
 import { FadenstackAgent } from "@fadenstack/agents";
 import { AgentChatViewModel, ApprovalBroker } from "@fadenstack/ui";
+import { browserChatServices } from "@fadenstack/ui-web";
 
 const approvals = new ApprovalBroker(); // approval cards in the chat decide
 const agent = FadenstackAgent.createBuilder().useClient(client).useApprovals(approvals).build();
 
-const chat = new AgentChatViewModel(agent, approvals);
+// What only the host can do -- copy, open a link, save a file, keep the user's choices -- is required: in a web page,
+// browserChatServices() from @fadenstack/ui-web; elsewhere your own (or MemoryClipboard, MemoryPreferenceStore).
+const chat = new AgentChatViewModel(agent, approvals, { ...browserChatServices() });
 const unsubscribe = chat.subscribe(() => render(chat)); // after each change
 await chat.initialize();
 ```
 
-The package is an ES module with type declarations, for browsers (Chrome 116 or later) and Node.js 24 or later. It uses [marked](https://www.npmjs.com/package/marked) for Markdown.
+The package is an ES module with type declarations, for browsers (Chrome 116 or later) and Node.js 24 or later, and uses no browser API itself. It uses [marked](https://www.npmjs.com/package/marked) for Markdown.
 
 - Documentation: <https://developers.fadenstack.com/sdk/typescript/chat-panel/>
 - Source and issues: <https://github.com/fadenstack/fadenstack-sdk-typescript>

@@ -1,7 +1,8 @@
 import { FadenstackClient, loginWithPassword } from "@fadenstack/client";
 import { FadenstackAgent, GrantPlace, MemorySessionStore, defineTool, type StepUpRequest, type StepUpStage } from "@fadenstack/agents";
-import { AgentChatViewModel, ApprovalBroker, MemoryClipboard, MemoryPreferenceStore, immediateScheduler, type AgentChatOptions } from "@fadenstack/ui";
+import { AgentChatViewModel, ApprovalBroker, immediateScheduler, type AgentChatOptions } from "@fadenstack/ui";
 import { FakeGateway, type FakeGatewayOptions, type FakeGrants } from "@fadenstack/testing";
+import { testServices } from "./services.js";
 
 /** What a 0.7 server offers an agent that announced Bypass: up to an hour, the second sign-in, calls as evidence. */
 export const OFFERED: Record<string, unknown> = {
@@ -27,7 +28,7 @@ export async function waitFor<T>(find: () => T | undefined | false, timeoutMs = 
 export interface GrantChatOptions {
   approvals?: Record<string, unknown>;
   gateway?: FakeGatewayOptions;
-  chat?: AgentChatOptions;
+  chat?: Partial<AgentChatOptions>;
   maxLevel?: string;
   ceiling?: string;
   /** Another view model over the same agent and broker, as a second chat panel. */
@@ -69,7 +70,7 @@ export async function grantChat(options: GrantChatOptions = {}) {
   grants.serverNow = clock.now;
   const advance = (ms: number) => { clock.now += ms; grants.serverNow = clock.now; };
   const chat = new AgentChatViewModel(agent, broker, {
-    scheduler: immediateScheduler, clipboard: new MemoryClipboard(), preferences: new MemoryPreferenceStore(), grantTickMs: 0,
+    ...testServices(), scheduler: immediateScheduler, grantTickMs: 0,
     ...options.chat,
   });
   await chat.initialize();

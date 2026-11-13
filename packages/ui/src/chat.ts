@@ -7,16 +7,16 @@ import { aboutView, footerLink, refSource, type AboutView, type PanelLink } from
 import type { ApprovalBroker, PendingApproval } from "./approvalBroker.js";
 import { AttachmentViewModel, type AttachmentChip } from "./attachments.js";
 import { chatFileName, chatToMarkdown } from "./export.js";
-import { browserSaveFile, type SaveFile } from "./files.js";
+import type { SaveFile } from "./files.js";
 import { RenderBatcher } from "./batcher.js";
 import { formatNumber, formatWhen } from "./format.js";
 import { markdownToHtml } from "./markdown/serialize.js";
 import { Observable } from "./observable.js";
 import { NoticePart, type PartContext } from "./parts.js";
 import { citationsRenderer, fallbackRenderer, piiRenderer, unmarkedRenderer, type AgentEventRenderer } from "./renderers.js";
-import { browserClipboard, timeoutScheduler, writeClipboard, type Clipboard, type UiScheduler } from "./services.js";
+import { timeoutScheduler, writeClipboard, type Clipboard, type UiScheduler } from "./services.js";
 import { builtInStrings, stringsFor } from "./languages/index.js";
-import { browserPreferences, type PreferenceStore } from "./preferences.js";
+import type { PreferenceStore } from "./preferences.js";
 import { GrantsViewModel } from "./grants.js";
 import { period } from "./period.js";
 import { MAX_PROMPTS, MAX_PROMPT_LENGTH, PromptStoreError, type PromptStore, type SavedPrompt } from "./prompts.js";
@@ -26,8 +26,36 @@ import { buildTurn, groupTurns } from "./transcriptTurns.js";
 import { ToolsViewModel } from "./tools.js";
 import { TurnViewModel, type TurnHost } from "./turn.js";
 
-/** How a chat view model behaves; the defaults suit a chat panel. */
-export interface AgentChatOptions {
+/**
+ * What the panel needs from its host, with no default: a forgotten one is a type error, not a silent loss (of the user's
+ * choices, a download, a copy, a link). In a web page, `browserChatServices()` (`@fadenstack/ui-web`) gives the browser's
+ * four; a host with its own ways (an extension's storage and tabs, Office's dialogs, a user's settings on a server) passes
+ * those, alone or over the browser's: `{ ...browserChatServices(), preferences: myPreferences }`.
+ */
+export interface ChatHostServices {
+  /** Copies (a message, a code block, a table): the browser's is `browserClipboard`; `MemoryClipboard` keeps it in memory. */
+  clipboard: Clipboard;
+  /**
+   * Opens a link of the panel's (About, the footer): the browser's is `browserOpenLink` (a new tab, `noopener,noreferrer`);
+   * a host that opens links its own way (Office's dialogs, an extension's tabs) passes its own.
+   */
+  openLink: (url: string) => void;
+  /**
+   * Saves a file the panel makes (a table as CSV, a chat as Markdown): `{ name, type, content }`, UTF-8 text. The browser's
+   * is `browserSaveFile` (a download through a temporary link); a host that saves its own way (an extension's
+   * `chrome.downloads`, Office) passes its own.
+   */
+  saveFile: SaveFile;
+  /**
+   * Where the user's choices are kept, such as the language picked in the panel's settings: the browser's is
+   * `browserPreferences()` (localStorage); a host passes its own (an extension's storage, a user's settings on a server).
+   * `MemoryPreferenceStore` forgets them when the page goes.
+   */
+  preferences: PreferenceStore;
+}
+
+/** How a chat view model behaves: the host's services (required), and options whose defaults suit a chat panel. */
+export interface AgentChatOptions extends ChatHostServices {
   /**
    * How often streamed updates reach the view models (default 33 ms, about 30 a second). Tokens in between are
    * merged, so a fast model costs one update per frame.
@@ -39,7 +67,6 @@ export interface AgentChatOptions {
   pageSize?: number;
   /** Characters of a tool result or argument shown (default 4 000). */
   previewLength?: number;
-  clipboard?: Clipboard;
   scheduler?: UiScheduler;
   /** Renderers for gateway events, tried before the built-in ones. */
   renderers?: AgentEventRenderer[];
@@ -55,16 +82,10 @@ export interface AgentChatOptions {
   automaticLanguage?: string | readonly string[];
   /** A language the organisation fixed (a policy): the panel uses it, and its settings show it without a choice. */
   lockedLanguage?: string;
-  /** Where the user's pick is kept: the browser's localStorage by default (`browserPreferences()`), memory where there is none. */
-  preferences?: PreferenceStore;
   /**
-   * Saves a file the panel makes (a table as CSV, a chat as Markdown): `{ name, type, content }`, UTF-8 text. By default the
-   * browser's download (a temporary link); a host that saves its own way (an extension's `chrome.downloads`, Office) passes its own.
-   */
-  saveFile?: SaveFile;
-  /**
-   * The user's own saved prompts (`browserPromptStore()`, `MemoryPromptStore`, or the host's): with a store the skill picker also
-   * lists them under "My prompts", and a sent message offers "Save as prompt". Without one the feature is absent.
+   * The user's own saved prompts (`browserPromptStore()` from `@fadenstack/ui-web`, `MemoryPromptStore`, or the host's): with
+   * a store the skill picker also lists them under "My prompts", and a sent message offers "Save as prompt". Without one the
+   * feature is absent.
    */
   prompts?: PromptStore;
   /**
@@ -95,11 +116,6 @@ export interface AgentChatOptions {
    * words joined by hyphens, at most 20 characters ("my-crm"). `sdk` by default, and for anything else.
    */
   refSource?: string;
-  /**
-   * Opens a link of the panel's (About, the footer). By default `window.open(url, "_blank", "noopener,noreferrer")`;
-   * a host that opens links its own way (Office's dialogs, an extension's tabs) passes its own.
-   */
-  openLink?: (url: string) => void;
   /**
    * How often the grant markers look again, in milliseconds (default 15 000): the time left, a paused or ending grant, a
    * Bypass the server ended. 0: never, and the host calls `chat.grants.tick()`.
@@ -288,7 +304,7 @@ export class AgentChatViewModel extends Observable implements TurnHost {
   #mode: ToolMode = "ask";
   #bypassAsk: AbortController | undefined;
 
-  constructor(agent: FadenstackAgent, approvals: ApprovalBroker, options: AgentChatOptions = {}) {
+  constructor(agent: FadenstackAgent, approvals: ApprovalBroker, options: AgentChatOptions) {
     super();
     this.#agent = agent;
     this.#approvals = approvals;
@@ -296,21 +312,21 @@ export class AgentChatViewModel extends Observable implements TurnHost {
     this.#automatic = options.automaticLanguage;
     this.#fixed = options.strings ? withStrings(options.strings) : undefined;
     this.#locked = options.lockedLanguage === undefined ? undefined : this.#keyOf(stringsFor(options.lockedLanguage, this.#languages));
-    this.#preferences = options.preferences ?? browserPreferences();
+    this.#preferences = options.preferences;
     this.#batcher = new RenderBatcher(options.scheduler ?? timeoutScheduler, options.renderIntervalMs ?? 33);
     this.#renderers = [...(options.renderers ?? []), citationsRenderer, piiRenderer, unmarkedRenderer, fallbackRenderer];
     this.#initialTurns = options.initialTurns ?? 30;
     this.#pageSize = options.pageSize ?? 30;
     this.#context = {
       strings: this.#resolve(),
-      clipboard: options.clipboard ?? browserClipboard,
+      clipboard: options.clipboard,
       locale: options.locale,
       previewLength: options.previewLength ?? 4000,
       now: options.now ?? (() => new Date()),
       showUnmarked: false,
-      saveFile: options.saveFile ?? browserSaveFile,
+      saveFile: options.saveFile,
     };
-    this.#saveFile = options.saveFile ?? browserSaveFile;
+    this.#saveFile = options.saveFile;
     this.#promptStore = options.prompts;
     this.#beforeSend = options.beforeSend;
     this.#turnGate = options.turnGate;
@@ -319,7 +335,7 @@ export class AgentChatViewModel extends Observable implements TurnHost {
     this.#afterCommand = options.afterCommand;
     this.#refSource = refSource(options.refSource);
     this.#footerLink = options.branding === false ? undefined : footerLink(this.#refSource);
-    this.#openLink = options.openLink ?? openInNewTab;
+    this.#openLink = options.openLink;
     this.skillPicker = new SkillPickerViewModel({
       load: (signal) => agent.listSkills(undefined, signal),
       onPick: (skill) => this.#pickSkill(skill),
@@ -1071,7 +1087,7 @@ export class AgentChatViewModel extends Observable implements TurnHost {
     }
   }
 
-  /** Opens one of the panel's links (`openLink`, a new tab by default). */
+  /** Opens one of the panel's links through the host's `openLink`. */
   openLink(url: string): void {
     this.#openLink(url);
   }
@@ -1572,11 +1588,6 @@ function reasoningKey(turn: TurnViewModel): object {
 
 function approvalKey(request: { callId: string; toolName: string }): string {
   return `${request.callId}\u0001${request.toolName}`;
-}
-
-/** A link in a new tab, with no way back to the panel and no Referer (intranet addresses stay inside). */
-function openInNewTab(url: string): void {
-  globalThis.open?.(url, "_blank", "noopener,noreferrer");
 }
 
 function abortError(): Error {

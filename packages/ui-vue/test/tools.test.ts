@@ -20,7 +20,7 @@ const SERVER_TOOLS = [
   { name: "mcp.wiki.read", server: "wiki", description: "Reads a page", allowed: true, enabled: false },
 ];
 
-async function panel(agent: Partial<FakeAgent> = {}, options: AgentChatOptions = {}) {
+async function panel(agent: Partial<FakeAgent> = {}, options: Partial<AgentChatOptions> = {}) {
   const made = await chatWith(() => ({ text: "ok" }), options, "write", true, agent);
   const wrapper = mount(ChatPanel, { props: { chat: made.chat }, attachTo: document.body });
   wrappers.push(wrapper);

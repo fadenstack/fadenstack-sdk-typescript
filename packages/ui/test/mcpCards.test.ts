@@ -11,6 +11,7 @@ import {
   type AgentChatOptions,
 } from "@fadenstack/ui";
 import { FakeGateway, lastToolResults } from "@fadenstack/testing";
+import { testServices } from "./services.js";
 
 /** A local MCP tool's approval card names its server; a reopened chat's cards say what the tool does (sdk/45 3.3, G4). Port of the .NET McpApprovalTests. */
 
@@ -33,7 +34,7 @@ function mcpTool(name: string, extra: Partial<AgentTool> = {}): AgentTool {
 }
 
 /** Runs one call of `tool` and returns the card it asked with (allowed), the chat and the agent. */
-async function cardFor(tool: AgentTool, options: AgentChatOptions = {}, risk?: string) {
+async function cardFor(tool: AgentTool, options: Partial<AgentChatOptions> = {}, risk?: string) {
   const gateway = new FakeGateway({
     agents: [{ slug: "page", ...(risk ? { contract: [{ name: tool.name, risk: risk as "write" }] } : {}) }],
     model: (r) => (lastToolResults(r).size ? { text: "Done." } : { toolCalls: [{ name: tool.name, arguments: { path: "a" } }] }),
@@ -42,7 +43,7 @@ async function cardFor(tool: AgentTool, options: AgentChatOptions = {}, risk?: s
   await tokens.signIn(await loginWithPassword({ apiUrl: gateway.serverUrl, email: "user@example.com", password: "secret", fetch: gateway.fetch }));
   const approvals = new ApprovalBroker();
   const agent = FadenstackAgent.createBuilder().useClient(client).useSessionStore(new MemorySessionStore()).useApprovals(approvals).addTools(tool).build();
-  const vm = new AgentChatViewModel(agent, approvals, { scheduler: immediateScheduler, ...options });
+  const vm = new AgentChatViewModel(agent, approvals, { ...testServices(), scheduler: immediateScheduler, ...options });
   await vm.initialize();
   const sending = vm.send("Go.");
   const card = await waitFor(() => vm.turns[0]!.parts.find((p): p is ApprovalPart => p instanceof ApprovalPart && p.isPending));
@@ -108,9 +109,9 @@ describe("the card of a local MCP tool", () => {
 });
 
 describe("a reopened chat's cards", () => {
-  async function reopened(tool: AgentTool, risk?: string, options: AgentChatOptions = {}) {
+  async function reopened(tool: AgentTool, risk?: string, options: Partial<AgentChatOptions> = {}) {
     const { vm, agent } = await cardFor(tool, options, risk);
-    const again = new AgentChatViewModel(agent, new ApprovalBroker(), { scheduler: immediateScheduler, ...options });
+    const again = new AgentChatViewModel(agent, new ApprovalBroker(), { ...testServices(), scheduler: immediateScheduler, ...options });
     await again.initialize();
     await again.openSession(vm.currentSessionId!);
     return again.turns.flatMap((t) => t.parts.filter((p): p is ApprovalPart => p instanceof ApprovalPart));
@@ -129,7 +130,7 @@ describe("a reopened chat's cards", () => {
     const withoutStarts = new MemorySessionStore();
     for (const e of await agent.sessionStore.read(agent.slug, id)) if (e.type !== "tool.execution_start") await withoutStarts.append(agent.slug, id, e);
     const bare = FadenstackAgent.createBuilder().useClient(agent.client).useSessionStore(withoutStarts).build();
-    const again = new AgentChatViewModel(bare, new ApprovalBroker(), { scheduler: immediateScheduler });
+    const again = new AgentChatViewModel(bare, new ApprovalBroker(), { ...testServices(), scheduler: immediateScheduler });
     await again.initialize();
     await again.openSession(id);
     const [card] = again.turns.flatMap((t) => t.parts.filter((p): p is ApprovalPart => p instanceof ApprovalPart));
@@ -159,7 +160,7 @@ describe("a reopened chat's cards", () => {
       await older.append(agent.slug, id, { ...e, data });
     }
     const legacy = FadenstackAgent.createBuilder().useClient(agent.client).useSessionStore(older).build();
-    const again = new AgentChatViewModel(legacy, new ApprovalBroker(), { scheduler: immediateScheduler });
+    const again = new AgentChatViewModel(legacy, new ApprovalBroker(), { ...testServices(), scheduler: immediateScheduler });
     await again.initialize();
     await again.openSession(id);
     const [card] = again.turns.flatMap((t) => t.parts.filter((p): p is ApprovalPart => p instanceof ApprovalPart));

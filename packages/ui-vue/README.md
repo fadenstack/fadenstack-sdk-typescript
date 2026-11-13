@@ -14,14 +14,19 @@ import { createApp, h, markRaw } from "vue";
 import { FadenstackAgent } from "@fadenstack/agents";
 import { AgentChatViewModel, ApprovalBroker } from "@fadenstack/ui";
 import { ChatPanel } from "@fadenstack/ui-vue";
+import { browserChatServices } from "@fadenstack/ui-web";
 import "@fadenstack/ui-web/styles.css";
 
 const approvals = new ApprovalBroker();
 const agent = FadenstackAgent.createBuilder().useClient(client).useApprovals(approvals).build();
 
 // The view model stays raw: Vue never wraps it in a proxy (keep it out of ref() and reactive()).
-// The user picks the language in the panel's settings; it starts in the browser's.
-const chat = markRaw(new AgentChatViewModel(agent, approvals, { automaticLanguage: navigator.languages, locale: navigator.language }));
+// The browser's clipboard, links, downloads and kept choices; the user picks the language in the panel's settings.
+const chat = markRaw(new AgentChatViewModel(agent, approvals, {
+  ...browserChatServices(),
+  automaticLanguage: navigator.languages,
+  locale: navigator.language,
+}));
 await chat.initialize();
 createApp({ render: () => h(ChatPanel, { chat }) }).mount("#chat");
 ```

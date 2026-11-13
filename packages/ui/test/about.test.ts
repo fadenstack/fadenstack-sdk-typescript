@@ -7,7 +7,6 @@ import {
   ApprovalBroker,
   DEFAULT_REF_SOURCE,
   MemoryClipboard,
-  MemoryPreferenceStore,
   aboutView,
   englishStrings,
   fadenstackLink,
@@ -23,6 +22,7 @@ import {
   type Clipboard,
 } from "@fadenstack/ui";
 import { FakeGateway, type FakeAgent } from "@fadenstack/testing";
+import { testServices } from "./services.js";
 
 /** The query of a link, as name-value pairs. */
 const query = (href: string) => [...new URL(href).searchParams.entries()];
@@ -138,7 +138,7 @@ describe("aboutView", () => {
   });
 });
 
-async function chatWith(options: AgentChatOptions = {}, app?: AppDescription, agent: Partial<FakeAgent> = {}) {
+async function chatWith(options: Partial<AgentChatOptions> = {}, app?: AppDescription, agent: Partial<FakeAgent> = {}) {
   const gateway = new FakeGateway({ agents: [{ slug: "page", name: "Page assistant", ...agent }], model: () => ({ text: "ok" }) });
   const { client, tokens } = FadenstackClient.forAgent({ serverUrl: gateway.serverUrl, agent: "page", fetch: gateway.fetch });
   await tokens.signIn(await loginWithPassword({ apiUrl: gateway.serverUrl, email: "user@example.com", password: "secret", fetch: gateway.fetch }));
@@ -147,7 +147,7 @@ async function chatWith(options: AgentChatOptions = {}, app?: AppDescription, ag
   if (app) builder.describeApp(app);
   const clipboard = new MemoryClipboard();
   const chat = new AgentChatViewModel(builder.build(), approvals, {
-    scheduler: immediateScheduler, clipboard, preferences: new MemoryPreferenceStore(), ...options,
+    ...testServices(), scheduler: immediateScheduler, clipboard, ...options,
   });
   return { chat, clipboard, gateway };
 }

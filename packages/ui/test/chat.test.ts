@@ -19,6 +19,7 @@ import {
   type UiScheduler,
 } from "@fadenstack/ui";
 import { FakeGateway, lastToolResults, type FakeGatewayOptions } from "@fadenstack/testing";
+import { testServices } from "./services.js";
 
 /** The value once `find` returns one (polled; the agent runs on its own). */
 async function waitFor<T>(find: () => T | undefined, timeoutMs = 2000): Promise<T> {
@@ -31,7 +32,7 @@ async function waitFor<T>(find: () => T | undefined, timeoutMs = 2000): Promise<
   }
 }
 
-async function chat(options: FakeGatewayOptions = {}, chatOptions: AgentChatOptions = {}) {
+async function chat(options: FakeGatewayOptions = {}, chatOptions: Partial<AgentChatOptions> = {}) {
   const gateway = new FakeGateway({
     agents: [{
       slug: "page", name: "Page assistant", ui: { greeting: "I read pages.", suggestions: ["Summarise", 7, "Explain"] },
@@ -60,7 +61,7 @@ async function chat(options: FakeGatewayOptions = {}, chatOptions: AgentChatOpti
     )
     .build();
   const clipboard = new MemoryClipboard();
-  const vm = new AgentChatViewModel(agent, approvals, { scheduler: immediateScheduler, clipboard, ...chatOptions });
+  const vm = new AgentChatViewModel(agent, approvals, { ...testServices(), scheduler: immediateScheduler, clipboard, ...chatOptions });
   await vm.initialize();
   return { gateway, vm, written, clipboard, agent };
 }
@@ -141,7 +142,7 @@ describe("AgentChatViewModel", () => {
       title: "No answer came back",
       message: "The model reached its length limit before it wrote an answer, for example while thinking. You can try again.",
     });
-    const reopened = new AgentChatViewModel(agent, new ApprovalBroker(), { scheduler: immediateScheduler, strings: germanStrings });
+    const reopened = new AgentChatViewModel(agent, new ApprovalBroker(), { ...testServices(), scheduler: immediateScheduler, strings: germanStrings });
     await reopened.initialize();
     await reopened.openSession(vm.currentSessionId!);
     const turn = reopened.turns[0]!;
@@ -189,7 +190,7 @@ describe("AgentChatViewModel", () => {
     const { vm } = await chat({ model: () => ({ text: "ok" }) });
     for (let i = 1; i <= 5; i++) await vm.send(`Question ${i}`);
     const id = vm.currentSessionId!;
-    const small = new AgentChatViewModel(vm.agent, new ApprovalBroker(), { scheduler: immediateScheduler, initialTurns: 2, pageSize: 2 });
+    const small = new AgentChatViewModel(vm.agent, new ApprovalBroker(), { ...testServices(), scheduler: immediateScheduler, initialTurns: 2, pageSize: 2 });
     await small.initialize();
     await small.openSession(id);
     expect(small.turns.map((t) => t.userText)).toEqual(["Question 4", "Question 5"]);
@@ -216,7 +217,7 @@ describe("AgentChatViewModel", () => {
     expect(written).toEqual(["Jane", "Jane"]);
     expect(vm.turns[1]!.parts.some((p) => p instanceof ApprovalPart)).toBe(false);
     // Opened again: the asked card shows how it was answered; the call allowed always shows none.
-    const reopened = new AgentChatViewModel(agent, new ApprovalBroker(), { scheduler: immediateScheduler });
+    const reopened = new AgentChatViewModel(agent, new ApprovalBroker(), { ...testServices(), scheduler: immediateScheduler });
     await reopened.initialize();
     await reopened.openSession(vm.currentSessionId!);
     const cards = reopened.turns.flatMap((t) => t.parts.filter((p): p is ApprovalPart => p instanceof ApprovalPart));
@@ -265,7 +266,7 @@ describe("AgentChatViewModel", () => {
     const gateway = new FakeGateway({ agents: [{ slug: "page" }] });
     const { client } = FadenstackClient.forAgent({ serverUrl: gateway.serverUrl, agent: "page", fetch: gateway.fetch });
     const agent = FadenstackAgent.createBuilder().useClient(client).useSessionStore(new MemorySessionStore()).build();
-    const vm = new AgentChatViewModel(agent, new ApprovalBroker(), { scheduler: immediateScheduler });
+    const vm = new AgentChatViewModel(agent, new ApprovalBroker(), { ...testServices(), scheduler: immediateScheduler });
     await vm.initialize();
     expect(vm.signInRequired).toBe(true);
     expect(vm.isReady).toBe(false);

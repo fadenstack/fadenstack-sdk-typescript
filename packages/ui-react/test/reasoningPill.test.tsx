@@ -5,23 +5,24 @@ import { afterEach, describe, expect, it } from "vitest";
 import { FadenstackClient, loginWithPassword } from "@fadenstack/client";
 import { FadenstackAgent, MemorySessionStore } from "@fadenstack/agents";
 import {
-  AgentChatViewModel, ApprovalBroker, MemoryClipboard, MemoryPreferenceStore, immediateScheduler, type AgentChatOptions, type TurnLease,
+  AgentChatViewModel, ApprovalBroker, immediateScheduler, type AgentChatOptions, type TurnLease,
 } from "@fadenstack/ui";
 import { ChatPanel } from "@fadenstack/ui-react";
 import { FakeGateway } from "@fadenstack/testing";
+import { testServices } from "./services.js";
 
 // The thinking pill and its menu in the React skin (.NET ReasoningPillTests drives the same view model).
 
 afterEach(cleanup);
 
-async function panel(ui: Record<string, unknown> = {}, options: AgentChatOptions = {}) {
+async function panel(ui: Record<string, unknown> = {}, options: Partial<AgentChatOptions> = {}) {
   const gateway = new FakeGateway({ agents: [{ slug: "page", name: "Page assistant", ui }], model: () => ({ text: "ok" }) });
   const { client, tokens } = FadenstackClient.forAgent({ serverUrl: gateway.serverUrl, agent: "page", fetch: gateway.fetch });
   await tokens.signIn(await loginWithPassword({ apiUrl: gateway.serverUrl, email: "user@example.com", password: "secret", fetch: gateway.fetch }));
   const approvals = new ApprovalBroker();
   const agent = FadenstackAgent.createBuilder().useClient(client).useSessionStore(new MemorySessionStore()).useApprovals(approvals).build();
   const chat = new AgentChatViewModel(agent, approvals, {
-    scheduler: immediateScheduler, clipboard: new MemoryClipboard(), preferences: new MemoryPreferenceStore(), automaticLanguage: "en", ...options,
+    ...testServices(), scheduler: immediateScheduler, automaticLanguage: "en", ...options,
   });
   await act(() => chat.initialize());
   render(<ChatPanel chat={chat} />);

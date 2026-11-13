@@ -2,9 +2,10 @@ import { describe, expect, it } from "vitest";
 import { FadenstackClient, loginWithPassword } from "@fadenstack/client";
 import { FadenstackAgent, MemorySessionStore, defineTool } from "@fadenstack/agents";
 import {
-  AgentChatViewModel, ApprovalBroker, ApprovalPart, MemoryClipboard, immediateScheduler, type TurnLease, type TurnViewModel,
+  AgentChatViewModel, ApprovalBroker, ApprovalPart, immediateScheduler, type TurnLease, type TurnViewModel,
 } from "@fadenstack/ui";
 import { FakeGateway, lastToolResults, type FakeModel } from "@fadenstack/testing";
+import { testServices } from "./services.js";
 
 // The host's gate on running turns (.NET TurnGateTests).
 
@@ -23,8 +24,7 @@ async function chatWith(model: FakeModel, turnGate?: (signal: AbortSignal) => Pr
   const approvals = new ApprovalBroker();
   const agent = FadenstackAgent.createBuilder().useClient(client).useSessionStore(new MemorySessionStore()).useApprovals(approvals)
     .addTools(defineTool({ name: "stamp", toolClass: "write", run: () => "stamped" })).build();
-  const chat = new AgentChatViewModel(agent, approvals, { scheduler: immediateScheduler, clipboard: new MemoryClipboard(),
-    ...(turnGate ? { turnGate } : {}) });
+  const chat = new AgentChatViewModel(agent, approvals, { ...testServices(), scheduler: immediateScheduler, ...(turnGate ? { turnGate } : {}) });
   await chat.initialize();
   return { chat, gateway, agent };
 }

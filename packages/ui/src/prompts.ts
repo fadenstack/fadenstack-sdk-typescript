@@ -1,5 +1,3 @@
-import { localStorageOrUndefined } from "./preferences.js";
-
 /** A prompt the user saved to use again. */
 export interface SavedPrompt {
   id: string;
@@ -11,9 +9,9 @@ export interface SavedPrompt {
 }
 
 /**
- * Where the user's own prompts are kept: a host passes its own (an extension's storage, a server), the browser's
- * localStorage by default (`browserPromptStore()`). Newest first. `save` refuses what is empty, longer than
- * `MAX_PROMPT_LENGTH` or beyond `MAX_PROMPTS` with a `PromptStoreError`.
+ * Where the user's own prompts are kept: a host passes its own (an extension's storage, a server) or the browser's
+ * localStorage (`browserPromptStore()` in `@fadenstack/ui-web`); without one the feature is absent. Newest first. `save`
+ * refuses what is empty, longer than `MAX_PROMPT_LENGTH` or beyond `MAX_PROMPTS` with a `PromptStoreError`.
  */
 export interface PromptStore {
   list(): Promise<SavedPrompt[]>;
@@ -137,17 +135,26 @@ export class MemoryPromptStore implements PromptStore {
   }
 }
 
-/** The key the browser's store uses in localStorage. */
+/** The key a stored prompt list is kept under (`storedPromptStore`; the browser's store in localStorage). */
 export const PROMPTS_STORAGE_KEY = "fadenstack.prompts";
 
 /**
- * The browser's localStorage under `fadenstack.prompts` (one list for every panel of this site or extension). Where there is
- * none (Node, a sandboxed frame, storage switched off) or the browser refuses a write (quota, private mode), memory.
+ * Text kept by key in a store that may refuse, synchronously: what `storedPromptStore` keeps its list in. The browser's
+ * localStorage is one; so is a host's own synchronous key-value store.
  */
-export function browserPromptStore(options: { now?: () => Date } = {}): PromptStore {
-  const storage = localStorageOrUndefined();
-  if (!storage) return new MemoryPromptStore(options);
-  let memory: SavedPrompt[] | undefined; // when the browser refused a write: this list is the truth from then on
+export interface KeyedTextStorage {
+  getItem(key: string): string | null | undefined;
+  setItem(key: string, value: string): void;
+}
+
+/**
+ * The user's prompts in `storage` under `PROMPTS_STORAGE_KEY`, as JSON: one list for everything that shares the storage.
+ * A damaged list reads as empty, and entries that are not prompts are dropped. When the storage refuses a write (quota,
+ * private mode), the list is kept in memory from then on. `browserPromptStore()` (`@fadenstack/ui-web`) is this over
+ * localStorage.
+ */
+export function storedPromptStore(storage: KeyedTextStorage, options: { now?: () => Date } = {}): PromptStore {
+  let memory: SavedPrompt[] | undefined; // when the storage refused a write: this list is the truth from then on
   const read = (): SavedPrompt[] => {
     if (memory) return memory;
     try {

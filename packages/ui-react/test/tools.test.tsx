@@ -4,9 +4,10 @@ import { afterEach, describe, expect, it } from "vitest";
 
 import { FadenstackClient, loginWithPassword } from "@fadenstack/client";
 import { FadenstackAgent, MemorySessionStore, defineTool } from "@fadenstack/agents";
-import { AgentChatViewModel, ApprovalBroker, MemoryClipboard, MemoryPreferenceStore, immediateScheduler, type AgentChatOptions } from "@fadenstack/ui";
+import { AgentChatViewModel, ApprovalBroker, immediateScheduler, type AgentChatOptions } from "@fadenstack/ui";
 import { ChatPanel } from "@fadenstack/ui-react";
 import { FakeGateway, type FakeAgent } from "@fadenstack/testing";
+import { testServices } from "./services.js";
 
 afterEach(cleanup);
 
@@ -16,7 +17,7 @@ const SERVER_TOOLS = [
   { name: "mcp.wiki.read", server: "wiki", description: "Reads a page", allowed: true, enabled: false },
 ];
 
-async function panel(agent: Partial<FakeAgent> = {}, options: AgentChatOptions = {}, failTools = false) {
+async function panel(agent: Partial<FakeAgent> = {}, options: Partial<AgentChatOptions> = {}, failTools = false) {
   const gateway = new FakeGateway({
     agents: [{ slug: "page", name: "Page assistant", contract: [{ name: "read_page", risk: "read" }, { name: "fill_field", risk: "write" }], ...agent }],
   });
@@ -34,7 +35,7 @@ async function panel(agent: Partial<FakeAgent> = {}, options: AgentChatOptions =
       defineTool({ name: "fill_field", description: "Fills a field", toolClass: "write", run: () => "x" }),
     ).build();
   const chat = new AgentChatViewModel(built, approvals, {
-    scheduler: immediateScheduler, clipboard: new MemoryClipboard(), preferences: new MemoryPreferenceStore(), locale: "en-GB", ...options,
+    ...testServices(), scheduler: immediateScheduler, locale: "en-GB", ...options,
   });
   await act(() => chat.initialize());
   render(<ChatPanel chat={chat} />);

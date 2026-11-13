@@ -14,6 +14,7 @@ import {
   type UiStrings,
 } from "@fadenstack/ui";
 import { FakeGateway } from "@fadenstack/testing";
+import { testServices } from "./services.js";
 
 describe("stringsFor", () => {
   it.each([
@@ -68,7 +69,7 @@ describe("a chat in German", () => {
     await tokens.signIn(await loginWithPassword({ apiUrl: gateway.serverUrl, email: "user@example.com", password: "secret", fetch: gateway.fetch }));
     const approvals = new ApprovalBroker();
     const agent = FadenstackAgent.createBuilder().useClient(client).useSessionStore(new MemorySessionStore()).useApprovals(approvals).build();
-    const vm = new AgentChatViewModel(agent, approvals, { scheduler: immediateScheduler, strings: stringsFor("de-DE"), locale: "de-DE" });
+    const vm = new AgentChatViewModel(agent, approvals, { ...testServices(), scheduler: immediateScheduler, strings: stringsFor("de-DE"), locale: "de-DE" });
     await vm.initialize();
     expect(vm.greeting).toBe("Was möchten Sie Seitenhelfer fragen?");
     expect(vm.toolModes.map((o) => o.label)).toEqual(["Aus", "Nur lesen", "Nachfragen", "Automatisch"]);
