@@ -4,11 +4,11 @@
   "T3": [
     {
       "finding": "packages/ui/src/languages/index.ts: globalThis.navigator",
-      "reason": "the host's language, read where the runtime has one (browsers, workers, Node 21+, Deno); not a DOM API; the owner reviews this entry"
+      "reason": "the host's language, read defensively where the runtime has one (browsers, workers, Deno, Node 21.2+; Node 20 falls back); not a DOM API; accepted by the owner, 13 Nov"
     },
     {
       "finding": "packages/provenance/src/strings.ts: globalThis.navigator",
-      "reason": "the host's language for the mark texts, read as the UI package reads it (browsers, workers, Node 21+, Deno); not a DOM API; the owner reviews this entry"
+      "reason": "the host's language for the mark texts, read defensively as the UI package reads it (browsers, workers, Deno, Node 21.2+; Node 20 falls back); not a DOM API; accepted by the owner, 13 Nov"
     },
     {
       "finding": "packages/ui/src/chat.ts: globalThis.open",
@@ -32,11 +32,11 @@
     },
     {
       "finding": "packages/provenance/src/markers/htmlNesting.ts: type Element",
-      "reason": "DOM helpers for browser hosts (splitMarksAt, unnestMarks, keepsOwnModel) work on a DOM the host passes in: DOM types, no global access; the owner reviews this entry"
+      "reason": "DOM helpers for browser hosts (splitMarksAt, unnestMarks, keepsOwnModel) work on a DOM the host passes in: DOM types only; T3 still refuses any global DOM access in this file; accepted by the owner, 13 Nov"
     },
     {
       "finding": "packages/provenance/src/markers/htmlNesting.ts: type Document",
-      "reason": "the same DOM helpers; the owner reviews this entry"
+      "reason": "the same DOM helpers, types only; accepted by the owner, 13 Nov"
     }
   ],
   "T4": []
