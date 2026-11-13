@@ -1,5 +1,4 @@
-import type { UiStrings } from "@fadenstack/ui";
-
+import type { MarkStrings } from "./strings.js";
 import { RECORD_ID, isImage } from "./content.js";
 import { htmlRecordIds } from "./markers/htmlAttribute.js";
 import { recordText, recordTextSha256 } from "./markers/htmlNesting.js";
@@ -20,7 +19,7 @@ export interface FoundMark {
 
 export interface ProvenanceReaderOptions {
   /** The title texts to recognise, besides every built-in language's: the host's own. */
-  strings?: readonly Pick<UiStrings, "aiGeneratedTitle">[];
+  strings?: readonly Pick<MarkStrings, "aiGeneratedTitle">[];
 }
 
 /**

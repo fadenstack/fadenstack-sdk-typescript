@@ -1,24 +1,14 @@
 {
-  "T1": [
-    {
-      "finding": "@fadenstack/provenance -> @fadenstack/ui",
-      "reason": "TEMPORARY until P1 (sdk/52 §7, the next commit): provenance still takes its mark texts from the UI package"
-    }
-  ],
-  "T2": [
-    {
-      "finding": "packages/provenance/src/reader.ts: @fadenstack/ui",
-      "reason": "TEMPORARY until P1 (the next commit)"
-    },
-    {
-      "finding": "packages/provenance/src/titles.ts: @fadenstack/ui",
-      "reason": "TEMPORARY until P1 (the next commit)"
-    }
-  ],
+  "T1": [],
+  "T2": [],
   "T3": [
     {
       "finding": "packages/ui/src/languages/index.ts: globalThis.navigator",
       "reason": "the host's language, read where the runtime has one (browsers, workers, Node 21+, Deno); not a DOM API; the owner reviews this entry"
+    },
+    {
+      "finding": "packages/provenance/src/strings.ts: globalThis.navigator",
+      "reason": "the host's language for the mark texts, read as the UI package reads it (browsers, workers, Node 21+, Deno); not a DOM API; the owner reviews this entry"
     },
     {
       "finding": "packages/ui/src/chat.ts: globalThis.open",

@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
-import { chineseSimplifiedStrings, frenchStrings, germanStrings, spanishStrings } from "@fadenstack/ui";
 import {
+  builtInMarkStrings,
   AI_GENERATED_HEADER,
   Carriers,
   FIXTURE,
@@ -26,6 +26,11 @@ import {
 } from "@fadenstack/provenance";
 
 import { markedPicture } from "./helpers.js";
+
+const germanStrings = builtInMarkStrings["de"]!;
+const frenchStrings = builtInMarkStrings["fr"]!;
+const spanishStrings = builtInMarkStrings["es"]!;
+const chineseSimplifiedStrings = builtInMarkStrings["zh-Hans"]!;
 
 const ID = "3f2c8a8e-1b7d-4c1e-9f00-2a6b1c0d9e11";
 

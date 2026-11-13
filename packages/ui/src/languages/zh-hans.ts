@@ -148,8 +148,6 @@ export const chineseSimplifiedStrings: UiStrings = {
   pastedPicture: "粘贴的图片",
   picturesNotSeen: "此智能体的模型无法查看图片。",
   pictureNotRead: (name) => `无法将 ${name} 读取为图片。`,
-  aiGenerated: "人工智能生成",
-  aiGeneratedTitle: (record) => `人工智能生成 ${record}`,
   approvalLeadsOutside: (realPlace) => `此路径通过链接指向您允许它工作的位置之外：${realPlace}。`,
   allowMore: "更多允许方式",
   resetApprovalsHint: "对已在此聊天中允许或始终允许的工具重新询问",

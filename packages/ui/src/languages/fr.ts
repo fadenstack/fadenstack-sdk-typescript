@@ -153,8 +153,6 @@ export const frenchStrings: UiStrings = {
   pastedPicture: "Image collée",
   picturesNotSeen: "Le modèle de cet agent ne voit pas les images.",
   pictureNotRead: (name) => `${name} n'a pas pu être lu comme image.`,
-  aiGenerated: "Généré par IA",
-  aiGeneratedTitle: (record) => `Généré par IA ${record}`,
   approvalLeadsOutside: (realPlace) => `Ce chemin mène, par un lien, hors des emplacements où vous le laissez travailler : vers ${realPlace}.`,
   allowMore: "Autres façons d'autoriser",
   resetApprovalsHint: "Redemander avant les outils autorisés pour cette conversation ou toujours",

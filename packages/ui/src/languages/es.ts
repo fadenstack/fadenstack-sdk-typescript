@@ -152,8 +152,6 @@ export const spanishStrings: UiStrings = {
   pastedPicture: "Imagen pegada",
   picturesNotSeen: "El modelo de este agente no ve imágenes.",
   pictureNotRead: (name) => `${name} no se pudo leer como imagen.`,
-  aiGenerated: "Generado por IA",
-  aiGeneratedTitle: (record) => `Generado por IA ${record}`,
   approvalLeadsOutside: (realPlace) => `Esta ruta lleva, a través de un enlace, fuera de los lugares en los que le deja trabajar: a ${realPlace}.`,
   allowMore: "Más formas de permitir",
   resetApprovalsHint: "Volver a preguntar antes de las herramientas permitidas en este chat o siempre",

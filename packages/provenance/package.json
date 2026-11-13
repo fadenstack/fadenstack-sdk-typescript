@@ -39,7 +39,6 @@
   },
   "dependencies": {
     "@fadenstack/agents": "0.3.0-rc.2",
-    "@fadenstack/client": "0.3.0-rc.2",
-    "@fadenstack/ui": "0.3.0-rc.2"
+    "@fadenstack/client": "0.3.0-rc.2"
   }
 }

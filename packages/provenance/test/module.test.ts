@@ -4,6 +4,7 @@ import { textSha256 } from "@fadenstack/client";
 import { defineTool, type AgentTool } from "@fadenstack/agents";
 import {
   MemoryBackend,
+  markStringsFor,
   ProvenanceEntryTypes,
   ProvenanceReader,
   provenanceOf,
@@ -103,10 +104,9 @@ describe("placing content", () => {
     expect(seen[0]!.missing).toEqual([{ layer: "watermark", method: "model", reason: "runtime-without-watermark" }]);
   });
 
-  it("writes the title in the user's language, from the UI catalogues", async () => {
-    const { germanStrings } = await import("@fadenstack/ui");
+  it("writes the title in the user's language, from the module's own texts", async () => {
     const editor = new Editor();
-    const r = await run([fillField(editor)], { tool: "fill_field", args: { text: LONG } }, { module: { strings: germanStrings } });
+    const r = await run([fillField(editor)], { tool: "fill_field", args: { text: LONG } }, { module: { strings: markStringsFor("de") } });
     await r.session.send("Antwort schreiben.");
     const id = r.gateway.provenanceRecords[0]!.signed.record.id;
     expect(editor.html).toContain(`title="KI-generiert ${id}"`);
