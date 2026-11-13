@@ -1,6 +1,6 @@
 import {
   GrantLifecycle,
-  type AgentSession,
+  type ChatSession,
   type FadenstackAgent,
   type GrantEnded,
 } from "@fadenstack/agents";
@@ -48,7 +48,7 @@ export interface GrantsHost {
   /** Stops the running turn. */
   stopTurn(): void;
   /** The chat's session, once it has one. */
-  session(): AgentSession | undefined;
+  session(): ChatSession | undefined;
   /** Asks for Bypass again (the confirmation, then the second sign-in). */
   switchOnAgain(): Promise<unknown>;
 }
@@ -308,7 +308,7 @@ export class GrantsViewModel extends Observable {
    * for the server and says when it gives no acknowledgement (L-59). `on` once the server confirmed it; false when
    * declined, not offered, or not confirmed. An error with no card to say it on is returned as `unsaid`.
    */
-  async startBypass(session: AgentSession, signal: AbortSignal): Promise<{ on: boolean; unsaid?: unknown }> {
+  async startBypass(session: ChatSession, signal: AbortSignal): Promise<{ on: boolean; unsaid?: unknown }> {
     this.#bypassCard = undefined;
     this.#setEnded(false, null);
     this.notify();

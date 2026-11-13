@@ -3,7 +3,7 @@ import {
   EntryTypes,
   GrantAnswer,
   type AgentBuilder,
-  type AgentSession,
+  type ChatSession,
   type ApprovalHandler,
   type ApprovalRequest,
   type GrantHandler,
@@ -125,7 +125,7 @@ export async function fixture(options: {
   return { ...s, script, card, grants: s.gateway.grants! };
 }
 
-export const decisions = (session: AgentSession) =>
+export const decisions = (session: ChatSession) =>
   session.transcript.filter((e) => e.type === EntryTypes.approvalDecision).map((e) => e.data);
 
 /** The requests the fake got that made grants (the refused ones too). */

@@ -1,5 +1,5 @@
 import type {
-  AgentEvent, AgentSession, FadenstackAgent, HostCommandResult, MessageAttachment, ReasoningLevel, TranscriptEntry,
+  AgentEvent, ChatSession, FadenstackAgent, HostCommandResult, MessageAttachment, ReasoningLevel, TranscriptEntry,
 } from "@fadenstack/agents";
 import { FadenstackSignInRequiredError, TOOL_MODES, narrowestMode, type SkillOption, type ToolMode } from "@fadenstack/client";
 
@@ -251,7 +251,7 @@ export class AgentChatViewModel extends Observable implements TurnHost {
   // which carries the answer. Whichever comes second adds the card, so it sits where the event put it.
   readonly #waitingForEvent = new Map<string, PendingApproval>();
   readonly #eventsWithoutRequest = new Set<string>();
-  #session: AgentSession | undefined;
+  #session: ChatSession | undefined;
   #stop: AbortController | undefined;
   #current: TurnViewModel | undefined;
   #history: TranscriptEntry[][] = [];
@@ -585,7 +585,7 @@ export class AgentChatViewModel extends Observable implements TurnHost {
    * this chat (`session.offerWork`, `session.startBypass`) uses this one, so the card lands in this chat and the grant
    * belongs to its conversation.
    */
-  get session(): AgentSession | undefined {
+  get session(): ChatSession | undefined {
     return this.#session;
   }
 
@@ -1160,7 +1160,7 @@ export class AgentChatViewModel extends Observable implements TurnHost {
     this.#bypassAsk?.abort(abortError());
     const ask = new AbortController();
     this.#bypassAsk = ask;
-    let made: AgentSession | undefined;
+    let made: ChatSession | undefined;
     try {
       if (!this.#session) {
         made = this.#session = await this.#agent.startSession(this.#mode);

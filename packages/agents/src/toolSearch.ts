@@ -1,4 +1,4 @@
-import type { AgentSession } from "./session.js";
+import type { ChatSession } from "./session.js";
 import type { AgentContext, ChangingToolSource } from "./stages.js";
 import { defineTool, settleHostTools, type AgentTool, type ToolScope } from "./tools.js";
 
@@ -103,12 +103,12 @@ export class OnRequestTools implements ChangingToolSource {
     return `Switched on ${found.length} tool${found.length === 1 ? "" : "s"} for this conversation. Call them with their parameters.\n${lines}`;
   }
 
-  #isOn(tool: AgentTool, session: AgentSession): boolean {
+  #isOn(tool: AgentTool, session: ChatSession): boolean {
     if (this.#current.get(tool.name) !== tool) return false; // gone, or changed since this list was made
     return this.#scopes.get(session.id)?.isOn(tool) === true;
   }
 
-  #beforeCall(tool: AgentTool, session: AgentSession): string | undefined {
+  #beforeCall(tool: AgentTool, session: ChatSession): string | undefined {
     if (tool.name === FIND_TOOL_NAME) return undefined;
     const current = this.#current.get(tool.name);
     if (!current) return `${tool.name} is no longer available.`;

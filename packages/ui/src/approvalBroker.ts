@@ -130,7 +130,7 @@ export class ApprovalBroker implements ApprovalHandler, GrantHandler, StepUpHand
   }
 
   /**
-   * Calls `listener` for each grant card to show (`AgentSession.offerWork`, an extension) and for the Bypass
+   * Calls `listener` for each grant card to show (`ChatSession.offerWork`, an extension) and for the Bypass
    * confirmation (`offer.bypass`), which only the chat of its conversation draws: it `claim()`s it.
    */
   onGrantRequested(listener: (pending: PendingGrant) => void): () => void {

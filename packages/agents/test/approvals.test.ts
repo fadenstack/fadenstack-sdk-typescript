@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { ApprovalDecision, EntryTypes, MemoryApprovalStore, defineTool, type AgentSession } from "@fadenstack/agents";
+import { ApprovalDecision, EntryTypes, MemoryApprovalStore, defineTool, type ChatSession } from "@fadenstack/agents";
 import { lastToolResults, type FakeModel, type FakeReply } from "@fadenstack/testing";
 
 import { PAGE_CONTRACT, setup } from "./helpers.js";
@@ -12,7 +12,7 @@ function once(call: { name: string; arguments: Record<string, unknown>; id?: str
     : { text: "On it.", toolCalls: [call], ...extra });
 }
 
-const decisions = (session: AgentSession) =>
+const decisions = (session: ChatSession) =>
   session.transcript.filter((e) => e.type === EntryTypes.approvalDecision).map((e) => e.data);
 
 afterEach(() => {

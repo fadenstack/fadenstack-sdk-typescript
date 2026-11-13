@@ -152,7 +152,7 @@ function freezeCommand<T>(value: T): T {
  * streams the answer, runs the agent's tools under the session's tool mode -- asking the user where the mode
  * says so -- and ends with a typed outcome. Refusals are outcomes; the session goes on.
  */
-export class AgentSession {
+export class ChatSession {
   readonly id: string;
   /** The mode the user picked for this session. New sessions start in `ask`. */
   toolMode: ToolMode;
@@ -564,7 +564,7 @@ interface PreparedHostPolicy {
 
 /** One turn: the loop of model calls and tool runs, and its record. */
 class Turn {
-  readonly #session: AgentSession;
+  readonly #session: ChatSession;
   readonly #id: string;
   readonly #emit: (event: AgentEvent) => void;
   readonly #access: SessionAccess;
@@ -611,7 +611,7 @@ class Turn {
     return this.#bypassRan;
   }
 
-  constructor(session: AgentSession, id: string, emit: (event: AgentEvent) => void, access: SessionAccess) {
+  constructor(session: ChatSession, id: string, emit: (event: AgentEvent) => void, access: SessionAccess) {
     this.#session = session;
     this.#id = id;
     this.#emit = emit;
@@ -785,7 +785,7 @@ class Turn {
   /**
    * The round's calls, each under an id of its own and with the gateway's word on it. A call with no id, or an id another call
    * of the round has, gets `fs-{turn}-{round}-{index}`. A word that cannot tell calls apart (no id, or one id on several
-   * calls) covers every call of its tool: a refusal is never lost, and a mark asks (.NET `AgentSession.Plan`).
+   * calls) covers every call of its tool: a refusal is never lost, and a mark asks (.NET `ChatSession.Plan`).
    */
   #plan(calls: readonly ToolCall[], round: number): PlannedCall[] {
     const model = calls.map((call, i) => ({ call, modelId: call.id, index: call.index ?? i }));

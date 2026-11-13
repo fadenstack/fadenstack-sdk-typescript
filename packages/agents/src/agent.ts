@@ -30,7 +30,7 @@ import {
 
 import { AgentBuilder, UNDESCRIBED_APP_NAME, type AgentSettings, type AppDescription } from "./builder.js";
 import { EventReporter } from "./reporter.js";
-import { AgentSession } from "./session.js";
+import { ChatSession } from "./session.js";
 import { isChangingToolSource, type AgentContext, type ToolSource } from "./stages.js";
 import { AgentLog } from "./log.js";
 import { settleHostTools, toDefinition, type AgentTool, type ToolOutput } from "./tools.js";
@@ -535,10 +535,10 @@ export class FadenstackAgent {
   }
 
   /** A new session, in the agent's default mode (`ask`) unless `toolMode` says otherwise. */
-  async startSession(toolMode?: ToolMode): Promise<AgentSession> {
+  async startSession(toolMode?: ToolMode): Promise<ChatSession> {
     await this.start();
     await this.refreshProfile();
-    const session = new AgentSession(this, newId(), [], toolMode ?? this.defaultToolMode);
+    const session = new ChatSession(this, newId(), [], toolMode ?? this.defaultToolMode);
     await session.writeStart();
     return session;
   }
@@ -548,7 +548,7 @@ export class FadenstackAgent {
    * in Bypass, with its marker; one without never does (owner, 2026-11-09: parallel chats never break). The grants are read
    * from the server first; offline, the copy as it is.
    */
-  async openSession(sessionId: string): Promise<AgentSession> {
+  async openSession(sessionId: string): Promise<ChatSession> {
     await this.start();
     await this.refreshProfile();
     const entries = await this.sessionStore.read(this.slug, sessionId);
@@ -562,8 +562,8 @@ export class FadenstackAgent {
     }
     // The grant decides, not the transcript: Bypass switched on before the chat's first message left no turn in it.
     const lives = this.grants.live.some((g) => g.kind === "bypass" && g.conversationId === sessionId);
-    const before = AgentSession.lastMode(entries) ?? this.defaultToolMode;
-    const session = new AgentSession(this, sessionId, entries, lives ? "bypass" : before);
+    const before = ChatSession.lastMode(entries) ?? this.defaultToolMode;
+    const session = new ChatSession(this, sessionId, entries, lives ? "bypass" : before);
     session.reopened(before);
     return session;
   }
@@ -581,7 +581,7 @@ export class FadenstackAgent {
 
   /**
    * Forgets what the user allowed always on this device for this agent: every tool, or `tool` only. (What a chat
-   * allowed ends with that chat: `AgentSession.resetApprovals`.)
+   * allowed ends with that chat: `ChatSession.resetApprovals`.)
    */
   async resetApprovals(tool?: string): Promise<void> {
     await this.#startUnless(this.settings.approvalStore);
@@ -665,7 +665,7 @@ export class FadenstackAgent {
   }
 
   /** The tools a mode offers the model in `session` (when given): the mode's, and those the tool's scope offers. */
-  offer(mode: ToolMode, session?: AgentSession): ToolDefinition[] {
+  offer(mode: ToolMode, session?: ChatSession): ToolDefinition[] {
     return this.#tools
       .filter((t) => (!t.scope || (session !== undefined && t.scope.offers(t, session))) && decideTool(mode, t.toolClass) !== "hidden")
       .map(toDefinition);
