@@ -1,10 +1,18 @@
 import { FadenstackClient, loginWithPassword } from "@fadenstack/client";
 import { FadenstackAgent, MemorySessionStore, defineTool } from "@fadenstack/agents";
-import { AgentChatViewModel, ApprovalBroker, MemoryClipboard, MemoryPreferenceStore, immediateScheduler, type AgentChatOptions } from "@fadenstack/ui";
+import { AgentChatViewModel, ApprovalBroker, MemoryClipboard, MemoryPreferenceStore, immediateScheduler, type AgentChatOptions, type ChatHostServices } from "@fadenstack/ui";
 import { FakeGateway, lastToolResults, type FakeAgent, type FakeModel } from "@fadenstack/testing";
 
+/**
+ * The host's four services for a chat view model in a test (sdk/52 P4: they have no default): a clipboard and choices in
+ * memory, and links and files that go nowhere. Spread it first, so a test's own service wins: `{ ...testServices(), clipboard }`.
+ */
+export function testServices(): ChatHostServices {
+  return { clipboard: new MemoryClipboard(), openLink: () => undefined, saveFile: () => undefined, preferences: new MemoryPreferenceStore() };
+}
+
 /** A chat (signed in unless `signIn` is false) with "Page assistant": read_page (read) and fill_field (write, or destructive). */
-export async function chatWith(model: FakeModel, options: AgentChatOptions = {}, risk: "write" | "destructive" = "write", signIn = true,
+export async function chatWith(model: FakeModel, options: Partial<AgentChatOptions> = {}, risk: "write" | "destructive" = "write", signIn = true,
   serverAgent: Partial<FakeAgent> = {}) {
   const gateway = new FakeGateway({
     agents: [{
@@ -36,7 +44,7 @@ export async function chatWith(model: FakeModel, options: AgentChatOptions = {},
     )
     .build();
   const clipboard = new MemoryClipboard();
-  const chat = new AgentChatViewModel(agent, approvals, { scheduler: immediateScheduler, clipboard, locale: "en-GB", preferences: new MemoryPreferenceStore(), ...options });
+  const chat = new AgentChatViewModel(agent, approvals, { ...testServices(), scheduler: immediateScheduler, clipboard, locale: "en-GB", ...options });
   await chat.initialize();
   return { chat, filled, clipboard, gateway };
 }

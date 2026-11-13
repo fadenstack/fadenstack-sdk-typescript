@@ -2,15 +2,16 @@ import { describe, expect, it } from "vitest";
 import { FadenstackClient, loginWithPassword } from "@fadenstack/client";
 import { FadenstackAgent, MemoryReasoningStore, MemorySessionStore, REASONING_LEVELS, type ReasoningLevel } from "@fadenstack/agents";
 import {
-  AgentChatViewModel, ApprovalBroker, MemoryClipboard, MemoryPreferenceStore, builtInStrings, immediateScheduler, type AgentChatOptions, type TurnLease,
+  AgentChatViewModel, ApprovalBroker, builtInStrings, immediateScheduler, type AgentChatOptions, type TurnLease,
 } from "@fadenstack/ui";
 import { FakeGateway, type FakeModel } from "@fadenstack/testing";
+import { testServices } from "./services.js";
 
 // The thinking pill's view model: the levels the profile offers, the pick, and what the next message carries (.NET ReasoningPillTests).
 
 const says: FakeModel = () => ({ text: "Ok." });
 
-async function chatWith(ui: Record<string, unknown> = {}, options: AgentChatOptions = {}, store = new MemoryReasoningStore()) {
+async function chatWith(ui: Record<string, unknown> = {}, options: Partial<AgentChatOptions> = {}, store = new MemoryReasoningStore()) {
   const gateway = new FakeGateway({ agents: [{ slug: "page", name: "Page assistant", ui }], model: says });
   const { client, tokens } = FadenstackClient.forAgent({ serverUrl: gateway.serverUrl, agent: "page", fetch: gateway.fetch });
   await tokens.signIn(await loginWithPassword({ apiUrl: gateway.serverUrl, email: "user@example.com", password: "secret", fetch: gateway.fetch }));
@@ -18,7 +19,7 @@ async function chatWith(ui: Record<string, unknown> = {}, options: AgentChatOpti
   const agent = FadenstackAgent.createBuilder().useClient(client).useSessionStore(new MemorySessionStore()).useApprovals(approvals)
     .useReasoningStore(store).build();
   const chat = new AgentChatViewModel(agent, approvals, {
-    scheduler: immediateScheduler, clipboard: new MemoryClipboard(), preferences: new MemoryPreferenceStore(), automaticLanguage: "en", ...options,
+    ...testServices(), scheduler: immediateScheduler, automaticLanguage: "en", ...options,
   });
   return { chat, agent, gateway, store };
 }

@@ -7,16 +7,17 @@ import {
   immediateScheduler, type AgentChatOptions,
 } from "@fadenstack/ui";
 import { FakeGateway } from "@fadenstack/testing";
+import { testServices } from "./services.js";
 
 const unmarked = { type: "CUSTOM", name: "faden.unmarked", value: { reason: "allowed-by-administrator" } };
 
-async function chat(events: Record<string, unknown>[], options: AgentChatOptions = {}, start = true) {
+async function chat(events: Record<string, unknown>[], options: Partial<AgentChatOptions> = {}, start = true) {
   const gateway = new FakeGateway({ agents: [{ slug: "page", name: "Page" }], model: () => ({ text: "Answer.", events }) });
   const { client, tokens } = FadenstackClient.forAgent({ serverUrl: gateway.serverUrl, agent: "page", fetch: gateway.fetch });
   await tokens.signIn(await loginWithPassword({ apiUrl: gateway.serverUrl, email: "user@example.com", password: "secret", fetch: gateway.fetch }));
   const approvals = new ApprovalBroker();
   const agent = FadenstackAgent.createBuilder().useClient(client).useSessionStore(new MemorySessionStore()).useApprovals(approvals).build();
-  const vm = new AgentChatViewModel(agent, approvals, { scheduler: immediateScheduler, preferences: new MemoryPreferenceStore(), automaticLanguage: "en", ...options });
+  const vm = new AgentChatViewModel(agent, approvals, { ...testServices(), scheduler: immediateScheduler, automaticLanguage: "en", ...options });
   if (start) await vm.initialize();
   return vm;
 }

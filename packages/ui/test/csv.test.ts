@@ -1,6 +1,6 @@
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it } from "vitest";
 
-import { CSV_BOM, MarkdownPart, browserSaveFile, csvField, csvFileName, englishStrings, germanStrings, rowsToCsv, tableToCsv, tablesOf, type FileToSave, type PartContext } from "@fadenstack/ui";
+import { CSV_BOM, MarkdownPart, csvField, csvFileName, englishStrings, germanStrings, rowsToCsv, tableToCsv, tablesOf, type FileToSave, type PartContext } from "@fadenstack/ui";
 
 const BOM = String.fromCharCode(0xfeff);
 
@@ -81,39 +81,5 @@ describe("a Markdown part's table download", () => {
 
   it("has a German label for the button", () => {
     expect(germanStrings.downloadCsv).toBe("CSV herunterladen");
-  });
-});
-
-describe("browserSaveFile", () => {
-  it("does nothing where there is no page", () => {
-    expect(() => browserSaveFile({ name: "x.csv", type: "text/csv", content: "a" })).not.toThrow();
-  });
-
-  it("makes a temporary link with the file's name, clicks it, and releases the object URL once the download surely began", () => {
-    vi.useFakeTimers();
-    const doc = { createElement: vi.fn(), body: { appendChild: vi.fn() } };
-    const link = { href: "", download: "", rel: "", style: { display: "" }, click: vi.fn(), remove: vi.fn() };
-    doc.createElement.mockReturnValue(link);
-    vi.stubGlobal("document", doc);
-    const create = vi.spyOn(URL, "createObjectURL").mockReturnValue("blob:fake");
-    const revoke = vi.spyOn(URL, "revokeObjectURL").mockImplementation(() => undefined);
-    try {
-      browserSaveFile({ name: "table.csv", type: "text/csv", content: `${BOM}a` });
-      expect(link.download).toBe("table.csv");
-      expect(link.href).toBe("blob:fake");
-      expect(link.click).toHaveBeenCalledOnce();
-      expect(link.remove).toHaveBeenCalledOnce();
-      expect((create.mock.calls[0]![0] as Blob).type).toBe("text/csv;charset=utf-8");
-      // Revoked at once, a download that has not started yet may be cancelled.
-      vi.advanceTimersByTime(1000);
-      expect(revoke).not.toHaveBeenCalled();
-      vi.advanceTimersByTime(40_000);
-      expect(revoke).toHaveBeenCalledWith("blob:fake");
-    } finally {
-      vi.useRealTimers();
-      vi.unstubAllGlobals();
-      create.mockRestore();
-      revoke.mockRestore();
-    }
   });
 });

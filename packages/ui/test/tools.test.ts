@@ -5,8 +5,6 @@ import { FadenstackAgent, MemorySessionStore, defineTool } from "@fadenstack/age
 import {
   AgentChatViewModel,
   ApprovalBroker,
-  MemoryClipboard,
-  MemoryPreferenceStore,
   ToolsViewModel,
   englishStrings,
   germanStrings,
@@ -15,8 +13,9 @@ import {
   type AgentChatOptions,
 } from "@fadenstack/ui";
 import { FakeGateway, type FakeAgent } from "@fadenstack/testing";
+import { testServices } from "./services.js";
 
-async function chat(agent: Partial<FakeAgent> = {}, options: AgentChatOptions = {}, fetchFor?: (gateway: FakeGateway) => typeof fetch) {
+async function chat(agent: Partial<FakeAgent> = {}, options: Partial<AgentChatOptions> = {}, fetchFor?: (gateway: FakeGateway) => typeof fetch) {
   const gateway = new FakeGateway({
     agents: [{
       slug: "page", name: "Page assistant",
@@ -35,7 +34,7 @@ async function chat(agent: Partial<FakeAgent> = {}, options: AgentChatOptions = 
       defineTool({ name: "delete_page", toolClass: "destructive", run: () => "x" }),
     ).build();
   const vm = new AgentChatViewModel(built, approvals, {
-    scheduler: immediateScheduler, clipboard: new MemoryClipboard(), preferences: new MemoryPreferenceStore(), locale: "en-GB", ...options,
+    ...testServices(), scheduler: immediateScheduler, locale: "en-GB", ...options,
   });
   await vm.initialize();
   return { chat: vm, gateway };

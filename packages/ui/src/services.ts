@@ -31,7 +31,7 @@ export function writeClipboard(clipboard: Clipboard, content: ClipboardContent):
   return content.html && clipboard.setContent ? clipboard.setContent(content) : clipboard.setText(content.text);
 }
 
-/** No clipboard (headless): remembers the last text (and HTML). */
+/** No clipboard (headless): remembers the last text (and HTML). The browser's is `browserClipboard` (`@fadenstack/ui-web`). */
 export class MemoryClipboard implements Clipboard {
   lastText: string | undefined;
   lastHtml: string | undefined;
@@ -46,17 +46,3 @@ export class MemoryClipboard implements Clipboard {
     this.lastHtml = content.html;
   }
 }
-
-/** The browser's clipboard, when there is one. Rejects when the browser refuses (a page without focus). */
-export const browserClipboard: Clipboard = {
-  setText: (text) => globalThis.navigator?.clipboard?.writeText(text),
-  setContent: (content) => {
-    const clipboard = globalThis.navigator?.clipboard;
-    if (!clipboard) return undefined;
-    if (!content.html || typeof ClipboardItem === "undefined") return clipboard.writeText(content.text);
-    return clipboard.write([new ClipboardItem({
-      "text/plain": new Blob([content.text], { type: "text/plain" }),
-      "text/html": new Blob([content.html], { type: "text/html" }),
-    })]);
-  },
-};

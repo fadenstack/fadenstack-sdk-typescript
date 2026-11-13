@@ -5,16 +5,15 @@ import { FadenstackAgent, MemorySessionStore, defineTool } from "@fadenstack/age
 import {
   AgentChatViewModel,
   ApprovalBroker,
-  MemoryClipboard,
-  MemoryPreferenceStore,
   chatFileName,
   immediateScheduler,
   type AgentChatOptions,
   type FileToSave,
 } from "@fadenstack/ui";
 import { FakeGateway, lastToolResults, type FakeAgent, type FakeModel } from "@fadenstack/testing";
+import { testServices } from "./services.js";
 
-async function chat(model: FakeModel, options: AgentChatOptions = {}, agent: Partial<FakeAgent> = {}) {
+async function chat(model: FakeModel, options: Partial<AgentChatOptions> = {}, agent: Partial<FakeAgent> = {}) {
   const gateway = new FakeGateway({
     agents: [{ slug: "page", name: "Page assistant", contract: [{ name: "read_page", risk: "read" }], ...agent }],
     model,
@@ -26,7 +25,7 @@ async function chat(model: FakeModel, options: AgentChatOptions = {}, agent: Par
     .addTools(defineTool({ name: "read_page", toolClass: "read", run: () => "The page text." })).build();
   const saved: FileToSave[] = [];
   const vm = new AgentChatViewModel(built, approvals, {
-    scheduler: immediateScheduler, clipboard: new MemoryClipboard(), preferences: new MemoryPreferenceStore(), locale: "en-GB",
+    ...testServices(), scheduler: immediateScheduler, locale: "en-GB",
     now: () => new Date(2026, 10, 12, 9, 30), saveFile: (f) => void saved.push(f), ...options,
   });
   await vm.initialize();

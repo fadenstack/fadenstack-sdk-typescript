@@ -5,14 +5,16 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { FadenstackClient, SDK_VERSION, loginWithPassword } from "@fadenstack/client";
 import { FadenstackAgent, MemorySessionStore, defineTool } from "@fadenstack/agents";
 import {
-  AgentChatViewModel, ApprovalBroker, MemoryClipboard, MemoryPreferenceStore, immediateScheduler, majorMinor, type AgentChatOptions,
+  AgentChatViewModel, ApprovalBroker, MemoryClipboard, immediateScheduler, majorMinor, type AgentChatOptions,
 } from "@fadenstack/ui";
 import { ChatPanel, type ChatPanelProps } from "@fadenstack/ui-react";
+import { browserOpenLink } from "@fadenstack/ui-web";
 import { FakeGateway, lastToolResults, type FakeModel } from "@fadenstack/testing";
+import { testServices } from "./services.js";
 
 afterEach(cleanup);
 
-async function panel(model: FakeModel, risk: "write" | "destructive" = "write", options: AgentChatOptions = {}, panelProps: Partial<ChatPanelProps> = {}) {
+async function panel(model: FakeModel, risk: "write" | "destructive" = "write", options: Partial<AgentChatOptions> = {}, panelProps: Partial<ChatPanelProps> = {}) {
   const gateway = new FakeGateway({
     agents: [{
       slug: "page", name: "Page assistant", ui: { greeting: "I read the page you are on.", suggestions: ["Summarise this page"] },
@@ -39,7 +41,7 @@ async function panel(model: FakeModel, risk: "write" | "destructive" = "write", 
     }))
     .build();
   const clipboard = new MemoryClipboard();
-  const chat = new AgentChatViewModel(agent, approvals, { scheduler: immediateScheduler, clipboard, preferences: new MemoryPreferenceStore(), ...options });
+  const chat = new AgentChatViewModel(agent, approvals, { ...testServices(), scheduler: immediateScheduler, clipboard, ...options });
   await act(() => chat.initialize());
   render(<ChatPanel chat={chat} {...panelProps} />);
   return { chat, filled, clipboard };
@@ -255,10 +257,10 @@ describe("ChatPanel's About and links", () => {
     expect(opened).toEqual([link.getAttribute("href")]);
   });
 
-  it("opens links in a new tab without a way back by default", async () => {
+  it("opens links in a new tab without a way back with the browser's link opener", async () => {
     const open = vi.spyOn(window, "open").mockReturnValue(null);
     try {
-      await panel(() => ({ text: "ok" }));
+      await panel(() => ({ text: "ok" }), "write", { openLink: browserOpenLink });
       fireEvent.click(screen.getByRole("link", { name: /^Fadenstack/ }));
       expect(open).toHaveBeenCalledWith(`https://fadenstack.com/?ref=sdk-panel&v=${sdkMinor}`, "_blank", "noopener,noreferrer");
     } finally {

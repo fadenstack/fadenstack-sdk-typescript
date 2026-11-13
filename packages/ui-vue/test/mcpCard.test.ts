@@ -12,7 +12,7 @@ import { ChatPanel as ReactPanel } from "@fadenstack/ui-react";
 import { ChatPanel as VuePanel } from "@fadenstack/ui-vue";
 import { FakeGateway, lastToolResults } from "@fadenstack/testing";
 
-import { normalize, waitUntil } from "./helpers.js";
+import { normalize, testServices, waitUntil } from "./helpers.js";
 
 let wrappers: VueWrapper[] = [];
 afterEach(() => {
@@ -28,7 +28,7 @@ function mcpTool(extra: Partial<AgentTool> = {}): AgentTool {
   };
 }
 
-async function pendingCard(tool: AgentTool, options: AgentChatOptions = {}) {
+async function pendingCard(tool: AgentTool, options: Partial<AgentChatOptions> = {}) {
   const gateway = new FakeGateway({
     agents: [{ slug: "page" }],
     model: (r) => (lastToolResults(r).size ? { text: "Done." } : { toolCalls: [{ name: tool.name, arguments: {} }] }),
@@ -37,7 +37,7 @@ async function pendingCard(tool: AgentTool, options: AgentChatOptions = {}) {
   await tokens.signIn(await loginWithPassword({ apiUrl: gateway.serverUrl, email: "user@example.com", password: "secret", fetch: gateway.fetch }));
   const approvals = new ApprovalBroker();
   const agent = FadenstackAgent.createBuilder().useClient(client).useSessionStore(new MemorySessionStore()).useApprovals(approvals).addTools(tool).build();
-  const chat = new AgentChatViewModel(agent, approvals, { scheduler: immediateScheduler, locale: "en-GB", ...options });
+  const chat = new AgentChatViewModel(agent, approvals, { ...testServices(), scheduler: immediateScheduler, locale: "en-GB", ...options });
   await chat.initialize();
   const react = render(createElement(ReactPanel, { chat }));
   const vue = mount(VuePanel, { props: { chat }, attachTo: document.body });

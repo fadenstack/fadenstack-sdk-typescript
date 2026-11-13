@@ -17,7 +17,7 @@ afterEach(() => {
   wrappers = [];
 });
 
-async function panel(model: FakeModel, options: AgentChatOptions = {}, risk: "write" | "destructive" = "write",
+async function panel(model: FakeModel, options: Partial<AgentChatOptions> = {}, risk: "write" | "destructive" = "write",
   mountOptions: { props?: Record<string, unknown>; slots?: Record<string, () => unknown> } = {}) {
   const setup = await chatWith(model, options, risk);
   const wrapper = mount(ChatPanel, { props: { chat: setup.chat, ...mountOptions.props }, slots: mountOptions.slots, attachTo: document.body });
