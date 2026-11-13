@@ -179,13 +179,6 @@ export interface UiStrings {
   picturesNotSeen: string;
   pictureNotRead(name: string): string;
   // content made with AI, where an agent places it (@fadenstack/provenance)
-  /** A visible label on content made with AI, where the organisation asks for one. */
-  aiGenerated: string;
-  /**
-   * The tooltip (`title`) on content made with AI that an agent put into a page or a mail: `aiGenerated`, a space, the
-   * record's id, in every language (the .NET SDK and the host agents write the same, and readers find the id so).
-   */
-  aiGeneratedTitle(record: string): string;
   // approvals that last: grants, Bypass, Settings -> Approvals
   /** Why a card asks although the user let the agent work in a place: a link (a symbolic link, a junction) leads out of it; realPlace is where it really leads. */
   approvalLeadsOutside(realPlace: string): string;
@@ -536,8 +529,6 @@ export const englishStrings: UiStrings = {
   pastedPicture: "Pasted picture",
   picturesNotSeen: "This agent's model does not see pictures.",
   pictureNotRead: (name) => `${name} could not be read as a picture.`,
-  aiGenerated: "AI-generated",
-  aiGeneratedTitle: (record) => `AI-generated ${record}`,
   approvalLeadsOutside: (realPlace) => `This path leads through a link outside the places you let it work in: to ${realPlace}.`,
   allowMore: "More ways to allow",
   resetApprovalsHint: "Ask again before the tools you allowed for this chat or always",

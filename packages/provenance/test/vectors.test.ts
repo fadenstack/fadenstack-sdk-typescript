@@ -3,8 +3,8 @@ import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 
 import { PLACEMENT_FAILURE, normalizeText, placementFailure, textSha256 } from "@fadenstack/client";
-import { englishStrings, germanStrings } from "@fadenstack/ui";
 import {
+  builtInMarkStrings,
   OfficeMarks,
   hasReaderText,
   invisibleMark,
@@ -36,6 +36,9 @@ import {
   withFrontMatter,
   wrapHtml,
 } from "@fadenstack/provenance";
+
+const englishStrings = builtInMarkStrings["en"]!;
+const germanStrings = builtInMarkStrings["de"]!;
 
 /**
  * The marks byte for byte, with fixed inputs: the .NET SDK's tests (`SharedVectorTests`) hold the same strings, so both

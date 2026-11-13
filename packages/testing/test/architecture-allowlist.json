@@ -1,0 +1,43 @@
+{
+  "T1": [],
+  "T2": [],
+  "T3": [
+    {
+      "finding": "packages/ui/src/languages/index.ts: globalThis.navigator",
+      "reason": "the host's language, read where the runtime has one (browsers, workers, Node 21+, Deno); not a DOM API; the owner reviews this entry"
+    },
+    {
+      "finding": "packages/provenance/src/strings.ts: globalThis.navigator",
+      "reason": "the host's language for the mark texts, read as the UI package reads it (browsers, workers, Node 21+, Deno); not a DOM API; the owner reviews this entry"
+    },
+    {
+      "finding": "packages/ui/src/chat.ts: globalThis.open",
+      "reason": "TEMPORARY until P4: the link opener's browser default moves to ui-web"
+    },
+    {
+      "finding": "packages/ui/src/services.ts: globalThis.navigator",
+      "reason": "TEMPORARY until P4: the clipboard's browser default (browserClipboard) moves to ui-web; the owner decides how hosts pass it"
+    },
+    {
+      "finding": "packages/ui/src/files.ts: globalThis.document",
+      "reason": "TEMPORARY until P4: the browser download (browserSaveFile) moves to ui-web; the owner decides how hosts pass it"
+    },
+    {
+      "finding": "packages/ui/src/files.ts: type Document",
+      "reason": "TEMPORARY until P4, with browserSaveFile"
+    },
+    {
+      "finding": "packages/ui/src/preferences.ts: globalThis.localStorage",
+      "reason": "TEMPORARY until P4: the localStorage preferences default (browserPreferences) moves to ui-web; the owner decides how hosts pass it"
+    },
+    {
+      "finding": "packages/provenance/src/markers/htmlNesting.ts: type Element",
+      "reason": "DOM helpers for browser hosts (splitMarksAt, unnestMarks, keepsOwnModel) work on a DOM the host passes in: DOM types, no global access; the owner reviews this entry"
+    },
+    {
+      "finding": "packages/provenance/src/markers/htmlNesting.ts: type Document",
+      "reason": "the same DOM helpers; the owner reviews this entry"
+    }
+  ],
+  "T4": []
+}

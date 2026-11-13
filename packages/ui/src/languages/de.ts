@@ -152,8 +152,6 @@ export const germanStrings: UiStrings = {
   pastedPicture: "Eingefügtes Bild",
   picturesNotSeen: "Das Modell dieses Agenten sieht keine Bilder.",
   pictureNotRead: (name) => `${name} konnte nicht als Bild gelesen werden.`,
-  aiGenerated: "KI-generiert",
-  aiGeneratedTitle: (record) => `KI-generiert ${record}`,
   approvalLeadsOutside: (realPlace) => `Dieser Pfad führt über eine Verknüpfung aus den Orten hinaus, in denen Sie es arbeiten lassen: zu ${realPlace}.`,
   allowMore: "Weitere Möglichkeiten zum Zulassen",
   resetApprovalsHint: "Wieder nachfragen vor den Tools, die Sie für diesen Chat oder immer zugelassen haben",

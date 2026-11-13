@@ -45,7 +45,8 @@ export { ProvenanceReader, type FoundMark, type ProvenanceReaderOptions } from "
 export { editSimilarity, similarityClassifier, suggestEditKind, type EditSimilarityOptions } from "./editKind.js";
 export { decodeHtmlEntities, hasReaderText, htmlText, markdownText, readerText, readerTextSha256 } from "./readerText.js";
 export { findPersonalData, type PersonalDataFinding } from "./personalData.js";
-export { type MarkStrings, type MarkStringsOption } from "./titles.js";
+export { type MarkStringsOption } from "./titles.js";
+export { builtInMarkStrings, markStringsFor, type MarkStrings } from "./strings.js";
 export { isCode, isLabel, isRecordId, tokensOf } from "./content.js";
 export { SIGNED_RECORD_METHOD, ServerSignedMarker } from "./markers/serverSigned.js";
 export { ImageProvenanceGuard, inspectImage, type ImageMarks } from "./markers/imageGuard.js";

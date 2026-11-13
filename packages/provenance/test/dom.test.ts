@@ -5,8 +5,9 @@ import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 
 import { textSha256 } from "@fadenstack/client";
-import { englishStrings } from "@fadenstack/ui";
-import { ProvenanceReader, keepsOwnModel, readerTextSha256, splitMarksAt, unnestMarks, wrapHtml } from "@fadenstack/provenance";
+import { builtInMarkStrings, ProvenanceReader, keepsOwnModel, readerTextSha256, splitMarksAt, unnestMarks, wrapHtml } from "@fadenstack/provenance";
+
+const englishStrings = builtInMarkStrings["en"]!;
 
 /**
  * The rule on a page's DOM, as a browser host (the Chrome extension) applies it to an editor: the same cases as the
