@@ -1,5 +1,5 @@
 import type { TokenProvider } from "../auth/tokens.js";
-import { FadenstackError, FadenstackUnreachableError } from "../errors.js";
+import { FadenstackApiError, FadenstackError, FadenstackUnreachableError } from "../errors.js";
 import { ClientLog, writeLog, type FadenstackLogger } from "../logging.js";
 import { toApiError } from "./errorReader.js";
 
@@ -163,8 +163,9 @@ export class FadenstackTransport {
       let response: Response;
       const started = performance.now();
       try {
-        // Never the browser's cookies: a console session for the same server would act instead of the app's user.
-        const init: RequestInit = { method: spec.method, headers, signal, credentials: "omit" };
+        // Never the browser's cookies: a console session for the same server would act instead of the app's user. No
+        // redirect followed: see redirectError.
+        const init: RequestInit = { method: spec.method, headers, signal, credentials: "omit", redirect: "manual" };
         if (spec.body !== undefined) init.body = spec.body;
         response = await this.fetch(spec.url, init);
       } catch (error) {
@@ -181,6 +182,11 @@ export class FadenstackTransport {
         await response.body?.cancel().catch(() => undefined);
         await this.#credentials!.invalidate(token);
         continue;
+      }
+      const redirected = redirectError(response, spec.url);
+      if (redirected) {
+        await response.body?.cancel().catch(() => undefined);
+        throw redirected;
       }
       return response;
     }
@@ -225,6 +231,30 @@ export function jsonRequest(method: string, url: URL, body?: unknown): RequestSp
     spec.body = JSON.stringify(body);
   }
   return spec;
+}
+
+/**
+ * A redirect is refused, never followed: every request of the SDK goes with `redirect: "manual"`, because a 307 or 308
+ * would send its body again -- chat text, a refresh token, a password, a pairing code -- to wherever it points, and a
+ * Fadenstack server does not redirect them. The error names where it pointed when the runtime shows it (Node does; a
+ * browser answers an opaque redirect and hides it). Undefined when the answer is no redirect. OWASP ASVS 5.0 V12.
+ * .NET: `FadenstackTransport.Redirected`.
+ */
+export function redirectError(response: Response, requested: URL): FadenstackApiError | undefined {
+  if (response.type !== "opaqueredirect" && (response.status < 300 || response.status > 399)) return undefined;
+  let where = "another address";
+  const location = response.headers.get("location");
+  if (location) {
+    try {
+      const to = new URL(location, requested);
+      where = `${to.protocol}//${to.host}${to.pathname}`; // no user info, no query
+    } catch {
+      // not an address: say so without it
+    }
+  }
+  return new FadenstackApiError(response.status,
+    `The server redirected the request to ${where}. Fadenstack does not follow redirects: check the server address (https, the right path).`,
+    { code: "redirect" });
 }
 
 /** A 401 that asks for a fresher sign-in (RFC 9470 `insufficient_user_authentication`), not for a new token. */

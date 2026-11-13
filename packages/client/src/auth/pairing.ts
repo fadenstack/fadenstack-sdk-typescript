@@ -1,6 +1,6 @@
 import { FadenstackError, FadenstackUnreachableError } from "../errors.js";
 import { toApiError, retryAfterMs } from "../http/errorReader.js";
-import { requireSecureUrl, type FetchLike } from "../http/transport.js";
+import { redirectError, requireSecureUrl, type FetchLike } from "../http/transport.js";
 import { ClientLog, writeLog, type FadenstackLogger } from "../logging.js";
 import { AgentTokenProvider, MemoryTokenStore, readTokenSet, type SignedInUser, type TokenStore } from "./tokens.js";
 
@@ -358,15 +358,26 @@ export class AgentPairing {
   /** One POST; a request that gets no answer is a `FadenstackUnreachableError` (whose cause names why). */
   async #send(path: string, body: unknown, signal?: AbortSignal): Promise<{ response: Response; text: string }> {
     const limit = AbortSignal.timeout(REQUEST_TIMEOUT_MS);
+    let response: Response;
     try {
-      const response = await this.#fetch(new URL(path, this.#api), {
-        method: "POST", credentials: "omit", signal: signal ? AbortSignal.any([signal, limit]) : limit,
+      response = await this.#fetch(new URL(path, this.#api), {
+        method: "POST", credentials: "omit", redirect: "manual", signal: signal ? AbortSignal.any([signal, limit]) : limit,
         headers: { "content-type": "application/json", accept: "application/json" }, body: JSON.stringify(body),
       });
-      return { response, text: await response.text() };
     } catch (error) {
       if (signal?.aborted) throw signal.reason ?? error;
       // The message of a network error can carry the address; the caller sees it, a log would not.
+      throw new FadenstackUnreachableError(`Fadenstack could not be reached: ${(error as Error).message}`, { cause: error });
+    }
+    const redirected = redirectError(response, new URL(path, this.#api));
+    if (redirected) {
+      await response.body?.cancel().catch(() => undefined);
+      throw redirected; // the pairing code is not sent on
+    }
+    try {
+      return { response, text: await response.text() };
+    } catch (error) {
+      if (signal?.aborted) throw signal.reason ?? error;
       throw new FadenstackUnreachableError(`Fadenstack could not be reached: ${(error as Error).message}`, { cause: error });
     }
   }

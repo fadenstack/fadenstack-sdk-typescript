@@ -1,6 +1,6 @@
 import { FadenstackApiError, FadenstackError, FadenstackSignInRequiredError, FadenstackUnreachableError } from "../errors.js";
 import { toApiError } from "../http/errorReader.js";
-import { requireSecureUrl, type FetchLike } from "../http/transport.js";
+import { redirectError, requireSecureUrl, type FetchLike } from "../http/transport.js";
 import { ClientLog, writeLog, type FadenstackLogger } from "../logging.js";
 
 /** An agent sign-in on one device: a short access token and the refresh token that renews it. Times in ms since the epoch. */
@@ -232,7 +232,7 @@ export class AgentTokenProvider implements TokenProvider {
     try {
       const limit = AbortSignal.timeout(15_000);
       const response = await this.#fetch(new URL("api/agent-tokens/revoke", this.#apiUrl), {
-        method: "POST", credentials: "omit", signal: signal ? AbortSignal.any([signal, limit]) : limit,
+        method: "POST", credentials: "omit", redirect: "manual", signal: signal ? AbortSignal.any([signal, limit]) : limit,
         headers: { "content-type": "application/json", accept: "application/json" }, body: JSON.stringify({ refresh_token: refreshToken }),
       });
       return response.ok;
@@ -314,13 +314,15 @@ export class AgentTokenProvider implements TokenProvider {
     if (bearer) headers["authorization"] = `Bearer ${bearer}`;
     let response: Response;
     try {
-      const init: RequestInit = { method: "POST", headers, body: JSON.stringify(body), credentials: "omit" };
+      const init: RequestInit = { method: "POST", headers, body: JSON.stringify(body), credentials: "omit", redirect: "manual" };
       if (signal) init.signal = signal;
       response = await this.#fetch(new URL(path, this.#apiUrl), init);
     } catch (error) {
       if (signal?.aborted) throw signal.reason ?? error;
       throw new FadenstackUnreachableError(`Fadenstack could not be reached: ${(error as Error).message}`, { cause: error });
     }
+    const redirected = redirectError(response, new URL(path, this.#apiUrl));
+    if (redirected) throw redirected;
     const text = await response.text();
     if (!response.ok) throw toApiError(response, text);
     return readTokenSet(JSON.parse(text) as Record<string, unknown>, this.#now(), this.agent);
@@ -350,6 +352,7 @@ export async function loginWithPassword(options: PasswordLoginOptions): Promise<
     const init: RequestInit = {
       method: "POST",
       credentials: "omit",
+      redirect: "manual",
       headers: { "content-type": "application/x-www-form-urlencoded", accept: "application/json" },
       body: new URLSearchParams({ username: options.email, password: options.password }).toString(),
     };
@@ -359,6 +362,8 @@ export async function loginWithPassword(options: PasswordLoginOptions): Promise<
     if (options.signal?.aborted) throw options.signal.reason ?? error;
     throw new FadenstackUnreachableError(`Fadenstack could not be reached: ${(error as Error).message}`, { cause: error });
   }
+  const redirected = redirectError(response, url);
+  if (redirected) throw redirected;
   const text = await response.text();
   if (!response.ok) {
     if (response.status === 400 && text.includes("LOGIN_BAD_CREDENTIALS")) {

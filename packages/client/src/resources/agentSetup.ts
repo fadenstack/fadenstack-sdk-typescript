@@ -1,6 +1,6 @@
 import { FadenstackUnreachableError } from "../errors.js";
 import { toApiError } from "../http/errorReader.js";
-import { requireSecureUrl, type FetchLike } from "../http/transport.js";
+import { redirectError, requireSecureUrl, type FetchLike } from "../http/transport.js";
 
 /** An agent definition as `POST /api/agents` takes it -- what an app ships in its `contracts/*.json`. */
 export interface AgentDefinition {
@@ -43,6 +43,7 @@ export async function listModels(options: ListModelsOptions): Promise<string[]> 
   try {
     const init: RequestInit = {
       credentials: "omit",
+      redirect: "manual",
       headers: { accept: "application/json", authorization: `Bearer ${options.loginToken}` },
     };
     if (options.signal) init.signal = options.signal;
@@ -51,6 +52,8 @@ export async function listModels(options: ListModelsOptions): Promise<string[]> 
     if (options.signal?.aborted) throw options.signal.reason ?? error;
     throw new FadenstackUnreachableError(`Fadenstack could not be reached: ${(error as Error).message}`, { cause: error });
   }
+  const redirected = redirectError(response, url);
+  if (redirected) throw redirected;
   const text = await response.text();
   if (!response.ok) throw toApiError(response, text);
   const data = (JSON.parse(text) as { data?: { id?: unknown }[] }).data ?? [];
@@ -79,6 +82,7 @@ export async function createAgent(options: CreateAgentOptions): Promise<CreatedA
     const init: RequestInit = {
       method: "POST",
       credentials: "omit",
+      redirect: "manual",
       headers: {
         "content-type": "application/json",
         accept: "application/json",
@@ -92,6 +96,8 @@ export async function createAgent(options: CreateAgentOptions): Promise<CreatedA
     if (options.signal?.aborted) throw options.signal.reason ?? error;
     throw new FadenstackUnreachableError(`Fadenstack could not be reached: ${(error as Error).message}`, { cause: error });
   }
+  const redirected = redirectError(response, url);
+  if (redirected) throw redirected;
   const text = await response.text();
   if (!response.ok) throw toApiError(response, text);
   const body = JSON.parse(text) as Record<string, unknown>;
