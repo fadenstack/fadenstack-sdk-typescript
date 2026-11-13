@@ -41,6 +41,8 @@ export class FadenstackPairingUnsupportedError extends FadenstackError {}
 
 // The secret the app polls with lives here, apart from the object the app shows: never a property, never in JSON or text.
 const codes = new WeakMap<PairingStart, string>();
+/** The agents whose tokens this device collected from a pairing. */
+const collected = new WeakMap<PairingStart, Set<string>>();
 
 /**
  * A pairing the server started: what to show the person. The pairing code the app polls with stays inside; it is not a
@@ -88,6 +90,15 @@ export class PairingStart {
 
   toJSON(): { expiresAt: number } {
     return { expiresAt: this.expiresAt };
+  }
+
+  /**
+   * The agents the app asked for whose tokens this device has not collected yet, the first included (also those an older
+   * server ignored). .NET: `PairingStart.AgentsLeft`.
+   */
+  get agentsLeft(): readonly string[] {
+    const done = collected.get(this);
+    return [...new Set([this.agent, ...this.agents, ...this.ignoredAgents])].filter((agent) => !done?.has(agent));
   }
 }
 
@@ -231,6 +242,9 @@ export class AgentPairing {
    * server cannot be reached it tries again after 5, 10, 20 and then 30 seconds for as long as the pairing is valid.
    * @throws FadenstackPairingDeniedError The person denied the pairing in the console.
    * @throws FadenstackPairingExpiredError The code expired, or the server no longer knows it.
+   * @throws FadenstackPairingAgentError The person did not approve this agent (`not_approved_or_redeemed`). For the first
+   *   agent of a pairing for several, the first approved other agent was collected to tell this from an unknown code: it
+   *   is signed in, and `start.agentsLeft` lists the rest.
    * @throws FadenstackPairingUnsupportedError The server does not have the pairing routes.
    */
   async wait(start: PairingStart, options: PairingWaitOptions = {}): Promise<PairingResult> {
@@ -285,6 +299,10 @@ export class AgentPairing {
         case "expired_token":
           throw this.#expired(start, "The code expired.");
         case "invalid_grant":
+          if (agent !== start.agent) throw this.#notRedeemable(agent);
+          // For the first agent this is either "not approved" or "a code the server does not know". When the person
+          // approved another agent of the pairing, the code is good: the first was refused.
+          if (await this.#collectAnother(start, signal)) throw this.#notRedeemable(agent);
           throw this.#expired(start, "The server no longer knows this code. Get a new one.");
         default:
           if (tooOld(response.status)) throw unsupported();
@@ -310,9 +328,7 @@ export class AgentPairing {
     if (response.ok) return this.#finish(start, agent, text);
     switch (response.status === 429 ? "slow_down" : errorCode(text)) {
       case "invalid_grant":
-        writeLog(this.#logger, ClientLog.pairingEnded, { Agent: agent, Outcome: "not redeemable" });
-        throw new FadenstackPairingAgentError(agent, "not_approved_or_redeemed",
-          `The sign-in for agent ${agent} cannot be collected: the person did not approve it, or it was collected already.`);
+        throw this.#notRedeemable(agent);
       case "authorization_pending":
       case "slow_down":
         throw new FadenstackPairingAgentError(agent, "pending", "The person has not approved the pairing yet.");
@@ -324,6 +340,33 @@ export class AgentPairing {
         if (tooOld(response.status)) throw unsupported();
         throw toApiError(response, text);
     }
+  }
+
+  #notRedeemable(agent: string): FadenstackPairingAgentError {
+    writeLog(this.#logger, ClientLog.pairingEnded, { Agent: agent, Outcome: "not redeemable" });
+    return new FadenstackPairingAgentError(agent, "not_approved_or_redeemed",
+      `The sign-in for agent ${agent} cannot be collected: the person did not approve it, or it was collected already.`);
+  }
+
+  /**
+   * Collects the first other agent of the pairing that the person approved, and says whether there was one: that tells a
+   * refused first agent from a code the server does not know (both are `invalid_grant` for the first agent). Only for a
+   * server that stored several agents; the collected agent is signed in and leaves `start.agentsLeft`.
+   */
+  async #collectAnother(start: PairingStart, signal?: AbortSignal): Promise<boolean> {
+    const done = collected.get(start);
+    for (const other of start.agents) {
+      if (other === start.agent || done?.has(other)) continue;
+      try {
+        await this.redeem(start, other, signal);
+        return true;
+      } catch (error) {
+        if (signal?.aborted || error instanceof FadenstackPairingDeniedError) throw error;
+        if (error instanceof FadenstackPairingAgentError && error.reason === "not_approved_or_redeemed") continue; // the next one
+        return false; // unreachable, expired, not approved yet: it cannot tell
+      }
+    }
+    return false;
   }
 
   /** The agent to get tokens for: the first by default; one the server did not store (an older server) is refused before any request. */
@@ -346,6 +389,9 @@ export class AgentPairing {
     }
     if (!tokens.accessToken || !tokens.refreshToken) throw new FadenstackError("The server's sign-in answer was not understood.");
     await this.#store.save(AgentTokenProvider.storeKey(this.#api, agent), tokens);
+    let done = collected.get(start);
+    if (!done) collected.set(start, (done = new Set()));
+    done.add(agent);
     writeLog(this.#logger, ClientLog.pairingEnded, { Agent: agent, Outcome: "signed in" });
     return { agentSlug: tokens.agent || agent, ...(start.ignoredAgents.length > 0 ? { ignoredAgents: start.ignoredAgents } : {}), deviceId: tokens.deviceId, ...(tokens.user ? { signedInUser: tokens.user } : {}) };
   }
