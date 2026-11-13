@@ -77,7 +77,7 @@ export class FadenstackChatClient implements ChatStreamer {
     if (!response.body) throw new FadenstackStreamError("The answer had no body.");
     for (const receipt of readReceiptHeader(response.headers.get(RECEIPT_HEADER))) yield { type: "receipt", receipt };
     const assembler = new StreamAssembler(this.#transport);
-    for await (const sse of readSse(response.body, options.signal)) {
+    for await (const sse of readSse(response.body, options.signal, this.#transport.streamIdleTimeoutMs)) {
       yield* assembler.read(sse);
       if (assembler.done) break;
     }

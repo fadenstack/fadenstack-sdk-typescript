@@ -18,8 +18,13 @@ export interface TransportOptions {
   allowInsecureHttp?: boolean;
   /** The `fetch` to use; the global one by default. */
   fetch?: FetchLike;
-  /** How long one request may take, in ms (default 5 min). A stream is not cut by it once its answer started. */
+  /** How long one request may take, in ms (default 5 min). For a stream it is the wait for the headers. */
   timeoutMs?: number;
+  /**
+   * How long a streamed answer may send nothing at all before it is given up, in ms (default 5 min, since a reasoning
+   * model may think a long time; `Infinity` turns it off). Any byte counts, a keep-alive comment too.
+   */
+  streamIdleTimeoutMs?: number;
   /** Where the client logs (method, route, status, time; never a body, a header or a token). None by default. */
   logger?: FadenstackLogger;
 }
@@ -51,6 +56,8 @@ export class FadenstackTransport {
   readonly serverUrl: URL;
   readonly apiUrl: URL;
   readonly timeoutMs: number;
+  /** How long a streamed answer may send nothing before it is given up, in ms. */
+  readonly streamIdleTimeoutMs: number;
   readonly fetch: FetchLike;
   readonly #credentials: TokenProvider | undefined;
   readonly #supports = new Set<string>();
@@ -62,6 +69,8 @@ export class FadenstackTransport {
     this.apiUrl = withSlash(requireUrl(options.apiUrl ?? this.serverUrl, "apiUrl", options.allowInsecureHttp));
     this.#credentials = options.credentials;
     this.timeoutMs = options.timeoutMs ?? 5 * 60_000;
+    this.streamIdleTimeoutMs = options.streamIdleTimeoutMs ?? 5 * 60_000;
+    if (!(this.streamIdleTimeoutMs > 0)) throw new TypeError("streamIdleTimeoutMs must be positive, or Infinity.");
     this.fetch = options.fetch ?? ((input, init) => globalThis.fetch(input, init));
   }
 
