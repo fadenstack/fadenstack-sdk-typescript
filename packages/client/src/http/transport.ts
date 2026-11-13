@@ -24,7 +24,7 @@ export interface TransportOptions {
   logger?: FadenstackLogger;
 }
 
-/** The header a client announces what it can do beyond the agent API it was written for (sdk/40 ง3 rule 5). */
+/** The header a client announces what it can do beyond the agent API it was written for (sdk/40 ยง3 rule 5). */
 export const CLIENT_SUPPORTS_HEADER = "X-Faden-Client-Supports";
 
 /**
