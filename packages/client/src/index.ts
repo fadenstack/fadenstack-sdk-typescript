@@ -17,6 +17,7 @@ export {
   loginWithPassword,
   readTokenSet,
   type AgentTokenProviderOptions,
+  type LockManagerLike,
   type PasswordLoginOptions,
   type SignedInUser,
   type TokenProvider,
