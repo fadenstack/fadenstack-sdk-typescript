@@ -163,10 +163,10 @@ content needs metadata (a container, a picture).
 | `VisibleLabelMarker` (`visible-label`) | label | text | A visible "AI-generated" line before the content, with an icon you choose for HTML. Used while the policy's `visible_label` is on, or always when you add it to `markers`. |
 | `UnicodeTextMarker` (`unicode-text`) | metadata | `unicode-text` | Opt-in: the record's id as invisible characters at the end of plain text or Markdown. Filters and editors often strip them; add it to `markers` and to the sink's `carries` only where they hold. |
 
-Texts people see -- the `title`, the label -- come from the UI catalogues of `@fadenstack/ui` (`aiGenerated`,
-`aiGeneratedTitle`) in English, German, French, Spanish and Simplified Chinese: pass `strings`
-(`stringsFor(language)`, or a function that returns the current ones) to the module or the marker. Without them, the
-browser's language. Readers recognise the titles of every built-in language.
+Texts people see -- the `title`, the label -- are `@fadenstack/provenance`'s own (`MarkStrings`: `aiGenerated`,
+`aiGeneratedTitle`) in English, German, French, Spanish and Simplified Chinese, not the chat's UI texts: pass `strings`
+(`markStringsFor(language)`, or a function that returns the current ones) to the module or the marker. Without them,
+the host's language (`markStringsFor()` reads the browser's). Readers recognise the titles of every built-in language.
 
 ## The policy
 
