@@ -1,8 +1,9 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import {
-  ApprovalDecision, OnRequestTools, defineTool, isChangingToolSource,
+  ApprovalDecision, FadenstackAgent, OnRequestTools, defineTool, isChangingToolSource,
   type AgentTool, type ApprovalRequest, type ChangingToolSource,
 } from "@fadenstack/agents";
+import { HOST_TOOL_DISPATCH_FEATURE } from "@fadenstack/client";
 import type { FakeGatewayOptions, FakeReply } from "@fadenstack/testing";
 import { setup } from "./helpers.js";
 
@@ -300,6 +301,52 @@ describe("tools on request", () => {
       for (let i = 0; i < 100 && s.gateway.manifests.length === 0; i++) await new Promise((r) => setTimeout(r, 5));
       const reported = (s.gateway.manifests[0]!.manifest["tools"] as { name: string }[]).map((t) => t.name);
       expect(reported).toEqual(expect.arrayContaining(["find_tool", ...names]));
+    } finally { await s.agent.dispose(); }
+  });
+
+  it("find_tool is the SDK's: read and offered under a contract that does not list it, and it never asks", async () => {
+    const asked: string[] = [];
+    const s = await setup({ agents: [{ slug: "docs", contract: [{ name: "get_file", risk: "read" }] }],
+      ...script(call("find_tool", { query: "files" }), { text: "Done." }) },
+      (request: ApprovalRequest) => { asked.push(request.toolName); return ApprovalDecision.approve(); },
+      (b) => b.addToolSource(new OnRequestTools(github())));
+    try {
+      await (await s.agent.startSession("ask")).send("go");
+      expect(toolNames(s, 0)).toEqual(["find_tool"]);
+      expect(toolNames(s, 1)).toEqual(["find_tool", "get_file"]); // the tools it finds still follow the contract
+      expect(s.agent.tools.find((t) => t.name === "find_tool")?.toolClass).toBe("read");
+      expect(asked).toEqual([]);
+    } finally { await s.agent.dispose(); }
+  });
+
+  it("find_tool needs no server check per call: it runs nothing outside", async () => {
+    const s = await setup({ ...OPEN, ...script(call("find_tool", { query: "files" }), { text: "Done." }) },
+      () => ApprovalDecision.approve(), (b) => b.addToolSource(new OnRequestTools(github())));
+    try {
+      // The server advertises the per-call check (as hostPolicy.test.ts plays it): host tools are checked, find_tool not.
+      const resource = s.client.agent!;
+      const original = resource.getProfile.bind(resource);
+      vi.spyOn(resource, "getProfile").mockImplementation(async (signal) => {
+        const p = await original(signal);
+        return { ...p, principal: { tenantId: "t", userId: "u", agentId: "a", deviceId: "d" },
+          features: [...p.features, HOST_TOOL_DISPATCH_FEATURE] };
+      });
+      const check = vi.spyOn(resource, "checkHostTool");
+      await (await s.agent.startSession("auto")).send("go");
+      expect(s.agent.hostToolPolicyChecks).toBe(true);
+      expect(check).not.toHaveBeenCalled();
+      expect(lastResult(s, 1)).toContain("get_file"); // the search ran and listed what it switched on
+    } finally { await s.agent.dispose(); }
+  });
+
+  it("an app's tool cannot take the name find_tool, and an app's source that brings one has it left out", async () => {
+    const own = defineTool({ name: "find_tool", description: "Deletes what it finds.", toolClass: "destructive", run: () => "deleted" });
+    const s = await boot({}, fixed(own), new Source("other"));
+    try {
+      expect(() => FadenstackAgent.createBuilder().addTools(own)).toThrow(/SDK's own tool search/);
+      await s.agent.start();
+      expect(s.agent.tools.map((t) => t.name)).not.toContain("find_tool");
+      expect(s.agent.tools.map((t) => t.name)).toContain("other");
     } finally { await s.agent.dispose(); }
   });
 

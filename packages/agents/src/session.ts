@@ -33,7 +33,7 @@ import { ContextBuilder, isBlank } from "./contextBuilder.js";
 import { EventQueue } from "./eventQueue.js";
 import type { AgentEvent, AgentResult, ToolOutcome } from "./events.js";
 import type { ToolInvocation, ToolInvoker, ToolServiceCall } from "./stages.js";
-import { checkArguments, type AgentTool, type ToolServiceKey, type ToolServices } from "./tools.js";
+import { FIND_TOOL_NAME, checkArguments, type AgentTool, type ToolServiceKey, type ToolServices } from "./tools.js";
 import { EntryTypes, TurnStatus, newId, type TranscriptEntry } from "./transcript.js";
 import { commandJson, commandSchemaHash } from "./commands.js";
 import { AgentLog } from "./log.js";
@@ -993,7 +993,8 @@ class Turn {
   async #decideAndRun(tool: AgentTool, toolClass: ToolClass, mark: GatewayMark | undefined, call: ToolCall,
     args: Record<string, unknown>, signal: AbortSignal): Promise<{ result: string; outcome: ToolOutcome; waited: number }> {
     let policy: PreparedHostPolicy | undefined;
-    if (!this.#commandOrigin && tool.source === "host" && this.#agent.hostToolPolicyChecks) {
+    // find_tool is the SDK's own search (no app's tool has the name): it runs nothing outside, so no server check per call.
+    if (!this.#commandOrigin && tool.source === "host" && tool.name !== FIND_TOOL_NAME && this.#agent.hostToolPolicyChecks) {
       try {
         await this.#agent.refreshPolicy(signal);
         const inputJson = commandJson(args);

@@ -33,7 +33,7 @@ import { EventReporter } from "./reporter.js";
 import { ChatSession } from "./session.js";
 import { isChangingToolSource, type AgentContext, type ToolSource } from "./stages.js";
 import { AgentLog } from "./log.js";
-import { settleHostTools, toDefinition, type AgentTool, type ToolOutput } from "./tools.js";
+import { FIND_TOOL_NAME, isCoreToolSource, settleHostTools, toDefinition, type AgentTool, type ToolOutput } from "./tools.js";
 import { newId, type SessionInfo } from "./transcript.js";
 import { AgentGrants, isGrantHandler, type GrantHandler } from "./grants.js";
 
@@ -170,7 +170,7 @@ export class FadenstackAgent {
     const who = (p: AgentProfile) => JSON.stringify({ id: p.id, slug: p.slug, principal: p.principal });
     if (who(before) !== who(fresh)) throw new FadenstackError("The agent or the signed-in user changed. Reconnect before starting a session.");
     const offered = this.#tools;
-    this.#tools = this.#compose(settleHostTools(this.settings.tools, fresh), this.#sourceTools.map((s) => s.tools));
+    this.#tools = this.#compose(settleHostTools(this.settings.tools, fresh), this.#sourceTools);
     this.#markGone(offered, this.#tools);
     this.#reasoningChoices = ReasoningChoices.fromUi(fresh.ui); // a maximum the server lowered counts from the next message
     this.#profile = fresh;
@@ -287,13 +287,19 @@ export class FadenstackAgent {
     }
   }
 
-  /** The host tools, then each source's tools in the builder's order; a host tool wins over a source's of the same name, the first source over a later one. */
-  #compose(hosts: readonly AgentTool[], fromSources: readonly (readonly AgentTool[])[]): AgentTool[] {
+  /**
+   * The host tools, then each source's tools in the builder's order; a host tool wins over a source's of the same name, the
+   * first source over a later one. `find_tool` comes only from the SDK's own source: an app's source's is left out.
+   */
+  #compose(hosts: readonly AgentTool[], fromSources: readonly { source: ToolSource; tools: readonly AgentTool[] }[]): AgentTool[] {
     const tools = [...hosts];
     const names = new Set(tools.map((t) => t.name));
-    for (const list of fromSources) for (const tool of list) if (!names.has(tool.name)) {
-      names.add(tool.name);
-      tools.push(tool);
+    for (const { source, tools: list } of fromSources) for (const tool of list) {
+      if (tool.name === FIND_TOOL_NAME && !isCoreToolSource(source)) continue;
+      if (!names.has(tool.name)) {
+        names.add(tool.name);
+        tools.push(tool);
+      }
     }
     return tools;
   }
@@ -334,7 +340,7 @@ export class FadenstackAgent {
         const at = this.#sourceTools.findIndex((s) => s.source === source);
         if (at >= 0) this.#sourceTools[at] = { source, tools: fresh };
       }
-      this.#tools = this.#compose(settleHostTools(this.settings.tools, this.profile), this.#sourceTools.map((s) => s.tools));
+      this.#tools = this.#compose(settleHostTools(this.settings.tools, this.profile), this.#sourceTools);
       this.#markGone(before, this.#tools);
       writeLog(this.settings.logger, AgentLog.toolsRefreshed, { Agent: this.slug, Sources: changed.length, Tools: this.#tools.length });
     });
@@ -358,7 +364,7 @@ export class FadenstackAgent {
       fromSources.push({ source, tools: await source.getTools(context, signal) });
     }
     this.#sourceTools = fromSources;
-    this.#tools = this.#compose(hosts, fromSources.map((s) => s.tools));
+    this.#tools = this.#compose(hosts, fromSources);
     this.#settleStores(profile.principal);
     this.#reasoningChoices = ReasoningChoices.fromUi(profile.ui);
     this.#reasoningPick = await this.#picks?.get(this.slug).catch(() => undefined);

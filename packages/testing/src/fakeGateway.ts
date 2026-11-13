@@ -909,9 +909,10 @@ export class FakeGateway {
       if (fn["parameters"]) def.parameters = fn["parameters"] as ToolDefinition["parameters"];
       return def;
     });
-    // As the gateway does: tools outside the contract are held back -- the model never sees them -- and named.
+    // As the gateway does: tools outside the contract are held back -- the model never sees them -- and named; the SDKs'
+    // tool search (find_tool) never is.
     const contract = agent.contract ?? [];
-    const held = contract.length ? tools.filter((t) => !contract.some((c) => c.name === t.name)) : [];
+    const held = contract.length ? tools.filter((t) => t.name !== "find_tool" && !contract.some((c) => c.name === t.name)) : [];
     if (held.length) this.heldTools.push(...held.map((t) => t.name));
     const events = request.headers.get("x-faden-events") !== null;
     // A tool a rule refuses is not offered, nor one a rule asks about to a client that cannot be told.
@@ -986,7 +987,7 @@ export class FakeGateway {
   /**
    * What the gateway says about the client's own calls as it hands them over: a call a rule refuses or the mode
    * hides is `faden.tool_denied`; one a rule or the mode asks about is `faden.approval_required` without an
-   * approvalId, with the class the gateway holds (the contract's risk, else unknown) and whether a rule asks.
+   * approvalId, with the class the gateway holds (the contract's risk; find_tool read; else unknown) and whether a rule asks.
    */
   #screen(agent: FakeAgent, modeHeader: string | null, calls: WireCall[]): Record<string, unknown>[] {
     const mode = parseToolMode(modeHeader) ?? "ask";
@@ -994,7 +995,8 @@ export class FakeGateway {
     for (const call of calls) {
       const name = call.function.name;
       const rule = this.#rule(name);
-      const toolClass: ToolClass = parseToolClass((agent.contract ?? []).find((c) => c.name === name)?.risk);
+      const risk = (agent.contract ?? []).find((c) => c.name === name)?.risk;
+      const toolClass: ToolClass = name === "find_tool" && !risk ? "read" : parseToolClass(risk);
       const decision = decideTool(mode, toolClass);
       if (rule?.action === "deny" || decision === "hidden") {
         events.push(toolDenied(call.id, name, rule?.action === "deny" ? rule.message : `The tool mode is ${mode}.`, this.#decision()));
