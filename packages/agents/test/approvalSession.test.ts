@@ -3,7 +3,7 @@ import { ApprovalDecision, EntryTypes, type ApprovalRequest } from "@fadenstack/
 import { lastToolResults, type FakeModel } from "@fadenstack/testing";
 import { setup } from "./helpers.js";
 
-// S-1 (.NET ApprovalRequest.SessionId / TurnId, AgentSession.Approvals): a request names its session, so a screen with
+// S-1 (.NET ApprovalRequest.SessionId / TurnId, ChatSession.Approvals): a request names its session, so a screen with
 // several chats hands it to the chat that owns it.
 
 const write: FakeModel = request => lastToolResults(request).size ? { text: "Done." }

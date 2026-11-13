@@ -18,6 +18,8 @@ before 1.0, a minor version may break the API, and this file says where it does.
 
 ### Changed
 
+- **Breaking:** `AgentSession` (`@fadenstack/agents`) is now `ChatSession`, as in the .NET SDK, where the agent becomes
+  a Microsoft Agent Framework `AIAgent` with an `AgentSession` of its own; only the name changes.
 - **Breaking:** the SDK follows no redirects (`redirect: "manual"`). A 3xx answer, or a browser's opaque redirect, is a
   `FadenstackApiError` with the code `redirect`.
 - **Breaking:** `@fadenstack/provenance` no longer depends on `@fadenstack/ui`, and a chat's `UiStrings` no longer serve

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { ApprovalDecision, EntryTypes, type AgentSession } from "@fadenstack/agents";
+import { ApprovalDecision, EntryTypes, type ChatSession } from "@fadenstack/agents";
 import { lastToolResults, type FakeModel, type FakeReply } from "@fadenstack/testing";
 import { setup } from "./helpers.js";
 
@@ -11,7 +11,7 @@ const custom = (name: string, value: Record<string, unknown>) => ({ type: "CUSTO
 /** Round one carries `first`, the next rounds answer. */
 const twoRounds = (first: FakeReply): FakeModel => (request) => lastToolResults(request).size ? { text: "OK." } : first;
 
-const completed = (session: AgentSession) =>
+const completed = (session: ChatSession) =>
   session.transcript.filter(e => e.type === EntryTypes.toolComplete && e.data["source"] !== "gateway")
     .map(e => ({ id: e.data["call_id"] as string, outcome: e.data["outcome"] as string }));
 

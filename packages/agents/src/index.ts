@@ -1,6 +1,6 @@
 export { FadenstackAgent } from "./agent.js";
 export { AgentBuilder, type AgentSettings, type AppDescription } from "./builder.js";
-export { AgentSession, BYPASS_ENDED_NOTE, resultText, type PickedSkill, type SendOptions, type HostCommandOptions, type HostCommandResult } from "./session.js";
+export { ChatSession, BYPASS_ENDED_NOTE, resultText, type PickedSkill, type SendOptions, type HostCommandOptions, type HostCommandResult } from "./session.js";
 export {
   ApprovalDecision,
   approvalsFrom,

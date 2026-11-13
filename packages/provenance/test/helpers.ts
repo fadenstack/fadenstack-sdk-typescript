@@ -1,5 +1,5 @@
 import { FadenstackClient, loginWithPassword } from "@fadenstack/client";
-import { FadenstackAgent, MemorySessionStore, type AgentSession, type AgentTool, type TranscriptEntry } from "@fadenstack/agents";
+import { FadenstackAgent, MemorySessionStore, type ChatSession, type AgentTool, type TranscriptEntry } from "@fadenstack/agents";
 import { provenanceModule, type ProvenanceOptions, type SinkInfo } from "@fadenstack/provenance";
 import { FakeGateway, lastToolResults, type FakeAgent, type FakeGatewayOptions } from "@fadenstack/testing";
 
@@ -26,7 +26,7 @@ export class Editor {
 export interface Run {
   gateway: FakeGateway;
   agent: FadenstackAgent;
-  session: AgentSession;
+  session: ChatSession;
   /** The last tool result, as the model got it. */
   toolResult(): string;
   entries(type: string): TranscriptEntry[];

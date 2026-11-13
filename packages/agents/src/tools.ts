@@ -1,7 +1,7 @@
 import { effectiveToolClass, parseToolClass } from "@fadenstack/client";
 import type { AgentProfile, EditKind, JsonSchema, ToolClass, ToolDefinition } from "@fadenstack/client";
 
-import type { AgentSession } from "./session.js";
+import type { ChatSession } from "./session.js";
 
 /** What a running tool knows about its call. */
 export interface ToolCallContext {
@@ -72,12 +72,12 @@ export function outputEditKind(output: ToolOutput, args: Record<string, unknown>
  */
 export interface ToolScope {
   /** Whether the model is offered `tool` in `session` now. */
-  offers(tool: AgentTool, session: AgentSession): boolean;
+  offers(tool: AgentTool, session: ChatSession): boolean;
   /**
    * Called before a call of `tool` is approved or run. Returns the text that answers the call instead (the tool was not in
    * scope and is now), or undefined to run it.
    */
-  beforeCall(tool: AgentTool, session: AgentSession): string | undefined;
+  beforeCall(tool: AgentTool, session: ChatSession): string | undefined;
 }
 
 /** A tool the agent can run: what it is, what it does, where it runs, and its body. */
