@@ -24,7 +24,7 @@ import type { StoreProblemHandler } from "./storeSupport.js";
 import type { SessionRetention, SessionStore } from "./sessionStore.js";
 import { isStepUpHandler, type StepUpHandler } from "./stepUp.js";
 import type { ChatStage, FadenstackModule, ToolServiceFactory, ToolSource, ToolStage } from "./stages.js";
-import type { AgentTool, ToolServiceKey } from "./tools.js";
+import { FIND_TOOL_NAME, type AgentTool, type ToolServiceKey } from "./tools.js";
 import type { GrantHandler, GrantPlaceResolver } from "./grants.js";
 import type { ReasoningStore } from "./reasoning.js";
 import type { FadenstackLogger } from "@fadenstack/client";
@@ -142,8 +142,13 @@ export class AgentBuilder {
     return this;
   }
 
-  /** Host tools (see `defineTool`). */
+  /** Host tools (see `defineTool`). `find_tool` is the SDK's own name (`FIND_TOOL_NAME`): a tool of that name is refused. */
   addTools(...tools: AgentTool[]): this {
+    for (const tool of tools) {
+      if (tool.name === FIND_TOOL_NAME) {
+        throw new TypeError(`'${tool.name}' is the SDK's own tool search, so an app's tool cannot take the name: name it differently.`);
+      }
+    }
     this.#tools.push(...tools);
     return this;
   }

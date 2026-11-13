@@ -3,6 +3,21 @@ import type { AgentProfile, EditKind, JsonSchema, ToolClass, ToolDefinition } fr
 
 import type { ChatSession } from "./session.js";
 
+/**
+ * The name of the SDK's tool search (`OnRequestTools`; .NET: the local MCP module's), kept for the SDK: an app's tool
+ * cannot take it. It only switches tools on for the conversation, so a Fadenstack gateway takes it as read, and the tools
+ * it finds ask on their own calls (sdk/51, the owner, 13 Nov 2026).
+ */
+export const FIND_TOOL_NAME = "find_tool";
+
+/** Marks one of the SDK's own tool sources, the only kind that may bring `FIND_TOOL_NAME`. Not exported from the package. */
+export const CORE_TOOL_SOURCE: unique symbol = Symbol("fadenstack.coreToolSource");
+
+/** Whether `source` is one of the SDK's own tool sources. */
+export function isCoreToolSource(source: unknown): boolean {
+  return typeof source === "object" && source !== null && (source as { [CORE_TOOL_SOURCE]?: unknown })[CORE_TOOL_SOURCE] === true;
+}
+
 /** What a running tool knows about its call. */
 export interface ToolCallContext {
   /** Aborted when the turn is stopped. */

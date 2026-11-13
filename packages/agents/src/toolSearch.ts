@@ -1,9 +1,9 @@
 import type { ChatSession } from "./session.js";
 import type { AgentContext, ChangingToolSource } from "./stages.js";
-import { defineTool, settleHostTools, type AgentTool, type ToolScope } from "./tools.js";
+import { CORE_TOOL_SOURCE, FIND_TOOL_NAME, defineTool, settleHostTools, type AgentTool, type ToolScope } from "./tools.js";
 
-/** The name of the tool that finds the other tools. */
-export const FIND_TOOL_NAME = "find_tool";
+/** The name of the tool that finds the other tools: the SDK's own (an app's tool cannot take it). */
+export { FIND_TOOL_NAME };
 /** The most on-request tools in scope in one conversation; a new pick pushes out the least recently used. */
 export const MAX_TOOLS_IN_SCOPE = 10;
 /** The most tools one search switches on. */
@@ -30,6 +30,8 @@ export interface OnRequestToolsOptions {
  * Add the source with `addToolSource`; `set` changes the tools, and the agent settles the change at the next turn.
  */
 export class OnRequestTools implements ChangingToolSource {
+  /** The SDK's own source: the only kind that brings `find_tool`. */
+  readonly [CORE_TOOL_SOURCE] = true;
   readonly #listeners = new Set<() => void>();
   readonly #scopes = new Map<string, ConversationScope>();
   readonly #index: readonly string[];
@@ -66,9 +68,19 @@ export class OnRequestTools implements ChangingToolSource {
   }
 
   async getTools(context: AgentContext): Promise<readonly AgentTool[]> {
-    // Host tools like any other: the contract vouches for their class and drops what it does not list -- `find_tool` too.
-    const settled = settleHostTools(this.declared(), context.profile).map((t): AgentTool => ({ ...t, scope: this.#scope }));
-    this.#current = new Map(settled.filter((t) => t.name !== FIND_TOOL_NAME).map((t) => [t.name, t]));
+    // The tools on request are host tools like any other: the contract vouches for their class and drops what it does not
+    // list. find_tool is the SDK's: read, as the gateway takes it, unless the contract lists it (then its word); offered
+    // while any tool on request is left to find.
+    const [find, ...onRequest] = this.declared();
+    const found = settleHostTools(onRequest, context.profile);
+    if (!find || found.length === 0) {
+      this.#current = new Map();
+      return [];
+    }
+    const listed = context.profile.hostToolContract.some((t) => t.name === FIND_TOOL_NAME);
+    const search = listed ? settleHostTools([find], context.profile) : [find];
+    const settled = [...search, ...found].map((t): AgentTool => ({ ...t, scope: this.#scope }));
+    this.#current = new Map(found.map((t) => [t.name, settled.find((s) => s.name === t.name)!]));
     return settled;
   }
 

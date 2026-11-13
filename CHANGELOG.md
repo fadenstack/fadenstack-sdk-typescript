@@ -22,6 +22,11 @@ before 1.0, a minor version may break the API, and this file says where it does.
 
 ### Changed
 
+- **`find_tool` is the SDK's own** (`FIND_TOOL_NAME`): read, needing no listing in the agent's contract (one that lists it
+  with a `risk` still decides its class) and no server check per call; offered while any tool on request is left to find.
+  A Fadenstack gateway from 0.7.1 takes it as read and never holds it back. **Breaking (unlikely to matter):**
+  `addTools` refuses an app's tool named `find_tool`, and an app's tool source that brings one has it left out.
+
 - **Breaking:** `AgentSession` (`@fadenstack/agents`) is now `ChatSession`, as in the .NET SDK, where the agent becomes
   a Microsoft Agent Framework `AIAgent` with an `AgentSession` of its own; only the name changes.
 - **Breaking:** the SDK follows no redirects (`redirect: "manual"`). A 3xx answer, or a browser's opaque redirect, is a
