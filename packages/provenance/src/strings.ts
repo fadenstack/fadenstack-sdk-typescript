@@ -59,7 +59,7 @@ function candidates(locale: string): string[] {
   }
 }
 
-/** The host's languages, best first, where the runtime has them (browsers, workers, Node 21+); none elsewhere. */
+/** The host's languages, best first, where the runtime has them (browsers, workers, Deno, Node 21.2+); none elsewhere (Node 20). */
 function hostLanguages(): readonly string[] {
   const navigator = globalThis.navigator as { languages?: readonly string[]; language?: string } | undefined;
   if (navigator?.languages?.length) return navigator.languages;
