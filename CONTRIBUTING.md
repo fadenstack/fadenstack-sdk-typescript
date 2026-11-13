@@ -50,6 +50,31 @@ three sentences long: you let Emagin8 UG (haftungsbeschränkt), Fadenstack's ste
 any terms, and you give it without warranty. If your employer or a client has rights in your work, make sure you
 may sign.
 
+## Architecture rules
+
+The SDK is built in layers. `packages/testing/test/architecture.test.ts` fails when a change breaks one of these rules,
+so they show up in `npm test`:
+
+| Layer | Packages | May depend on |
+|---|---|---|
+| 1 · Connection | `@fadenstack/client` | no other package of the SDK |
+| 2 · Agent runtime | `@fadenstack/agents` | client |
+| 3 · Modules | `@fadenstack/provenance` (and later `skills`, `mcp`, `web-search`) | agents and client, never another module or the UI |
+| 4 · UI logic | `@fadenstack/ui`; `@fadenstack/ui-web` (the web look) | agents and client; ui-web also ui |
+| 5 · Skins | `@fadenstack/ui-react`, `@fadenstack/ui-vue` | ui, ui-web, agents, client; never a module directly |
+
+- **Dependencies and imports point down only**, and React and Vue are imported only in their own skin. A new package
+  needs its row in the test.
+- **No browser API in `@fadenstack/ui` and the modules**: no `window`, `document`, DOM types or `localStorage`. View
+  models are headless; a host or `ui-web` injects the browser's services (opening a link, the clipboard, storage).
+- **A module owns its texts**, in the SDK's five languages (English, German, French, Spanish, Simplified Chinese),
+  never in the UI package.
+- **No text is written in a skin**: every text comes from `UiStrings`.
+- `packages/testing/test/architecture-allowlist.json` lists what is allowed anyway, each entry with its reason; an
+  entry that no longer matches anything fails the test.
+
+The rules come from the maintainers' SDK architecture note (sdk/52).
+
 ## Setting up for development
 
 You need Node.js 24 or later and git.
