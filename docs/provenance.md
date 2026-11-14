@@ -226,6 +226,26 @@ For an agent on the person's own endpoint (`useEndpoint`) the module chooses the
 - **Placements:** appended to a log in the principal's IndexedDB database, which keeps the newest 2,000 entries
   (`maxLogEntries`); `LocalProvenanceBackend.placements()` reads it. Hashes and outcomes, never content. Nothing leaves the
   device.
+### The endpoint's watermark
+
+Part of D18 (owner, 14 Nov): the endpoint's text watermark is used, never switched off for text people read, and recorded.
+
+- **Never off for text people read.** A request asks SGLang for its mark (`watermark: {"enabled": true}`), and nothing in
+  `ChatOptions.extra` can send a `watermarking` or `watermark` field of the app's own. Only a call whose answer no person
+  reads (a classification, a message between agents) says so with `ChatOptions.unread: true` (.NET:
+  `FadenstackChatOptions.Unread`); then, and only where the dialect has the switch (`EndpointDialect.watermarkSwitchOff`:
+  vLLM `watermarking: false`, SGLang `watermark: {"enabled": false}`), the request carries the switch-off. Nothing in the SDK
+  marks a call unread yet.
+- **Each answer's transcript entry** carries `endpoint_marking`: `{ status, requested, confirmed, deterministic }` (the
+  connection's status, whether the request asked for the mark, the server's `x-watermark` word when it gave one, and
+  whether the sampling was deterministic). A server's answer carries none. `agent.endpointWatermark` gives the connection's
+  status: the check's report, else `EndpointCheck.watermarkOf(endpoint)` (the sourced table by host and dialect, no request);
+  `EndpointCheck.serverOf(endpoint)` names the kind of server.
+- **The module's watermark layer** for a standalone agent relies on the endpoint and never claims more: method
+  `endpoint-<server>`; applied where the provider marks by default (Anthropic) or the server said so for that answer;
+  `runtime-without-watermark` where the runtime has none (Ollama, LM Studio, llama.cpp, LocalAI); `no-watermark-greedy` for
+  deterministic sampling; `no-watermark-remote-model` where the server said the answer is unmarked; otherwise not applied,
+  with the reason in the entry's `detail` (only if the operator configured it, only if the account turned it on, not known).
 ## Receipts
 
 Every answer ends with the server's receipt: what model made it, when, and whether the text is watermarked. The

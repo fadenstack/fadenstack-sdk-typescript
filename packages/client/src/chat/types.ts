@@ -167,6 +167,14 @@ export interface ChatOptions {
    * above the chat stages for a person's own endpoint. .NET: `ChatOptions.Instructions`.
    */
   instructions?: string;
+  /**
+   * Set to `true` on a request whose answer no person reads (a classification, a message between agents): only then may a
+   * person's own endpoint be asked to leave its text watermark off (`EndpointDialect.watermarkSwitchOff`, sdk/51 F10). Text
+   * people read always keeps it. Only `true` counts; nothing else is read as unread, and the gateway's client ignores it.
+   * .NET: `FadenstackChatOptions.Unread` (the key `faden.unread` in `AdditionalProperties`); TypeScript has a plain option.
+   * Nothing in the SDK marks a call unread yet.
+   */
+  unread?: boolean;
   /** More request fields, sent as they are (a `DirectChatClient` passes on only `top_k`, `min_p`, `repetition_penalty`, `parallel_tool_calls`). */
   extra?: Record<string, unknown>;
   signal?: AbortSignal;

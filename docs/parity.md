@@ -64,6 +64,7 @@ This table is for SDK 0.3.0, against Fadenstack server 0.7.1. TypeScript names a
 | Tool services | `AddToolService<T>(factory)`, `GetService<T>()` | `addToolService(key, factory)`, `context.services.get(key)` | A service has a typed key (`toolServiceKey`), not a type. |
 | The client's transport | `client.Transport`, `FadenstackTransport` | `client.transport`, `FadenstackTransport` | |
 | Content marking | `Fadenstack.Provenance` | `@fadenstack/provenance` | |
+| Endpoint watermarks (no server) | `FadenstackChatOptions.Unread` (`faden.unread`), `EndpointDialect.WatermarkSwitchOff`, `FadenstackAgent.EndpointWatermark`, `EndpointCheck.WatermarkOf`/`ServerOf` | `ChatOptions.unread`, `EndpointDialect.watermarkSwitchOff`, `agent.endpointWatermark`, `EndpointCheck.watermarkOf`/`serverOf` | `unread` is a plain option: TypeScript has no `AdditionalProperties` bag. |
 | Records signed on the device (no server) | `LocalProvenanceBackend`, `DeviceSigner`, `UseLocalBackend`: the key in the OS key store, the log a rotating file, DigiCert by default | `LocalProvenanceBackend`, `DeviceSigner`, `localBackend`: a non-extractable WebCrypto key and the log in IndexedDB per principal, no authority unless the app names one | A browser has no key store or files, and `fetch` cannot reach an http-only authority from an https page. The log keeps a number of entries, not bytes. |
 
 ## Sessions and a person's data

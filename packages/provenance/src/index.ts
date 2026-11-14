@@ -21,6 +21,7 @@ export {
   type EditClassifier,
   type EditDecision,
   type EnrichmentContext,
+  type EndpointLayer,
   type ExemptReason,
   type ExtensionValue,
   type HttpHeaderSink,

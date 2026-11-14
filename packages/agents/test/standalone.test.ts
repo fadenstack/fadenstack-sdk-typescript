@@ -4,6 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   EndpointDialect,
   FadenstackClient,
+  StaticTokenProvider,
   loginWithPassword,
   type ChatMessage,
   type ChatOptions,
@@ -449,8 +450,53 @@ describe("a turn on the endpoint (I03 commit 9)", () => {
   });
 });
 
-/** A host's own model: it answers "echo", and notices a close. */
-class HostStreamer implements ChatStreamer {
+describe("the endpoint's watermark, recorded per answer (F10)", () => {
+  it("each answer records what the endpoint did about its watermark, and a server's answer records none", async () => {
+    const { builder, fake } = standalone();
+    fake.chatHeaders["x-watermark"] = "false";
+    const agent = builder.build();
+    const session = await agent.startSession();
+    await session.send("Hi");
+
+    expect(agent.endpointWatermark?.status).toBe("Never");
+    expect(agent.endpointWatermark?.requested).toBe(false);
+    const answer = session.transcript.find((e) => e.type === "assistant.message")!;
+    expect(answer.data["endpoint_marking"]).toEqual({ status: "Never", requested: false, confirmed: false, deterministic: false });
+
+    // Without the server's word the key is absent, as .NET leaves out a null.
+    const silent = standalone();
+    const other = silent.builder.build();
+    const s2 = await other.startSession();
+    await s2.send("Hi");
+    expect((s2.transcript.find((e) => e.type === "assistant.message")!.data["endpoint_marking"] as Record<string, unknown>)).not.toHaveProperty("confirmed");
+
+    const governed = await setup({ model: () => ({ text: "Hi." }) });
+    const g = await governed.agent.startSession();
+    await g.send("Hi");
+    expect(governed.agent.endpointWatermark).toBeUndefined();
+    expect(g.transcript.find((e) => e.type === "assistant.message")!.data).not.toHaveProperty("endpoint_marking");
+  });
+
+  it("the status is the check's report when the app gave one, else the sourced table", async () => {
+    const { builder } = standalone({ base: "https://api.anthropic.com/v1", endpoint: { key: new StaticTokenProvider("k") } });
+    expect(builder.build().endpointWatermark?.status).toBe("Marks");
+    const host = FadenstackAgent.createBuilder().useChatStreamer(new HostStreamer()).useLocalProfile(AgentDefinition.fromJson(DEFINITION)).build();
+    expect(host.endpointWatermark?.status).toBe("Unknown");
+  });
+
+  it("deterministic sampling is said in the record", async () => {
+    const { builder, fake } = standalone();
+    const agent = builder.addChatStage(StageOrder.custom, (inner) => ({
+      stream: (messages, options) => inner.stream(messages, { ...options, temperature: 0 }),
+    })).build();
+    const session = await agent.startSession();
+    await session.send("Hi");
+    expect(fake.requests).toHaveLength(1);
+    expect(session.transcript.find((e) => e.type === "assistant.message")!.data["endpoint_marking"]).toMatchObject({ deterministic: true });
+  });
+});
+
+/** A host's own model: it answers "echo", and notices a close. */class HostStreamer implements ChatStreamer {
   closed = 0;
   calls = 0;
 

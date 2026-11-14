@@ -8,6 +8,11 @@ before 1.0, a minor version may break the API, and this file says where it does.
 
 ### Added
 
+- **Endpoint watermarks** (a standalone agent): the person's endpoint's text watermark is never switched off for text people
+  read. `ChatOptions.unread` marks a call whose answer no person reads, and only then does a dialect with a switch send it
+  (`EndpointDialect.watermarkSwitchOff`: vLLM, SGLang); each answer's transcript entry records `endpoint_marking`;
+  `agent.endpointWatermark`, `EndpointCheck.watermarkOf` and `EndpointCheck.serverOf`; the provenance module's
+  watermark layer relies on the endpoint (`endpoint-<server>`) and never claims more.
 - **Records signed on the device** (@fadenstack/provenance): for an agent without a server the module chooses
   LocalProvenanceBackend: the server's record format (a compact ES256 JWS with kid device:<16 hex> and a self-signed
   certificate in x5c, hash_key_version 0), signed by a non-extractable WebCrypto key kept per principal in IndexedDB

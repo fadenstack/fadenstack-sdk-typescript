@@ -224,6 +224,21 @@ export class EndpointCheck {
     this.#endpoint = endpoint;
   }
 
+  /**
+   * The text watermark status of an endpoint from the sourced table alone, by its host and dialect, with no request: what
+   * applies when no check report is at hand (a vLLM or SGLang server of unknown version: only if its operator configured
+   * it). .NET: `EndpointCheck.WatermarkOf`.
+   */
+  static watermarkOf(endpoint: ModelEndpoint): EndpointWatermarkStatus {
+    if (!endpoint) throw new TypeError("An endpoint is needed.");
+    return TextWatermarks.for(EndpointCheck.serverOf(endpoint), null, (endpoint.dialect ?? EndpointDialect.openAiCompatible).requestWatermark, null);
+  }
+
+  /** The kind of server behind an endpoint by its host and dialect alone, with no request. .NET: `EndpointCheck.ServerOf`. */
+  static serverOf(endpoint: ModelEndpoint): EndpointServer {
+    return (endpoint?.baseUrl ? byHost(endpoint.baseUrl) : undefined) ?? byDialect(endpoint?.dialect ?? EndpointDialect.openAiCompatible);
+  }
+
   async run(options: EndpointCheckOptions = {}): Promise<EndpointReport> {
     const endpoint = this.#endpoint;
     const signal = options.signal;

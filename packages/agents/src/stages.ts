@@ -1,4 +1,4 @@
-import type { AgentClientEvent, AgentProfile, ChatStreamer, FadenstackClient, GovernanceNotice, ToolClass } from "@fadenstack/client";
+import type { AgentClientEvent, AgentProfile, ChatStreamer, EndpointServer, EndpointWatermarkStatus, FadenstackClient, GovernanceNotice, ToolClass } from "@fadenstack/client";
 
 import type { AgentConnection } from "./backend.js";
 import type { AppDescription } from "./builder.js";
@@ -46,6 +46,10 @@ export interface AgentContext {
   readonly connection: AgentConnection;
   /** The app the agent runs in, as the host described it (describeApp); undefined when it did not. */
   readonly app: AppDescription | undefined;
+  /** For a standalone agent, its connection's text watermark status (FadenstackAgent.endpointWatermark); undefined with a server. */
+  readonly endpointWatermark: EndpointWatermarkStatus | undefined;
+  /** For a standalone agent, the kind of server behind its endpoint; undefined with a server. */
+  readonly endpointServer: EndpointServer | undefined;
   readonly profile: AgentProfile;
   /** Reports an event to the server (names and counts, never content). */
   report(event: AgentClientEvent): Promise<void>;

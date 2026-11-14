@@ -10,6 +10,7 @@ import {
   type AgentProfile,
   type AgentToolInfo,
   type AppManifest,
+  type EndpointWatermarkStatus,
   type FadenstackClient,
   type ManifestTool,
   type ReasoningEffort,
@@ -125,7 +126,16 @@ export class FadenstackAgent {
   }
 
   /**
-   * How the agent is connected: `governed` to an organisation's Fadenstack server, or `standalone` to the person's own model
+   * For a standalone agent, whether its connection marks text with the server's watermark (sdk/51 F03 item 8, F10): the
+   * endpoint check's report, else the sourced table by the endpoint's host and dialect. Undefined with a Fadenstack server,
+   * whose receipts say it per answer. .NET: `EndpointWatermark`.
+   */
+  get endpointWatermark(): EndpointWatermarkStatus | undefined {
+    return this.settings.backend instanceof LocalBackend ? this.settings.backend.watermark : undefined;
+  }
+
+  /**
+   * How the agent is connected: ``governed`` to an organisation's Fadenstack server, or `standalone` to the person's own model
    * endpoint. For showing or hiding the server's parts; nothing decides security by it. .NET: `Connection`.
    */
   get connection(): AgentConnection {
@@ -201,6 +211,8 @@ export class FadenstackAgent {
       serverClient: this.serverClient,
       connection: this.connection,
       app: this.app,
+      endpointWatermark: this.endpointWatermark,
+      endpointServer: this.settings.backend instanceof LocalBackend ? this.settings.backend.server : undefined,
       profile,
       report: (event) => this.reporter.reportNow([event]),
     };

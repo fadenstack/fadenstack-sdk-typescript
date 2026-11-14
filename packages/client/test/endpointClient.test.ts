@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   DirectChatClient,
+  EndpointCheck,
   EndpointContextLengthError,
   EndpointDialect,
   EndpointKeyRejectedError,
@@ -545,6 +546,66 @@ describe("the errors", () => {
 });
 
 describe("the watermark as an answer reports it (F03 item 8, F10)", () => {
+  // .NET: A_request_for_text_people_read_never_switches_the_watermark_off. Here the app's extras cannot reach the wire at all.
+  it.each(["vllm", "sglang", "ollama"])("a request for text people read never switches the watermark off: %s", async (name) => {
+    const { client, fake } = make("https://api.example.test/v1", { dialect: EndpointDialect.named(name), key: new StaticTokenProvider("k") });
+    const options: ChatOptions = { extra: { watermarking: false, watermark: { enabled: false } } };
+
+    await streamed(client, options);
+
+    const body = fake.requests[0]!.json();
+    expect(body).not.toHaveProperty("watermarking");
+    if (name === "sglang") expect(body["watermark"]).toEqual({ enabled: true });
+    else expect(body).not.toHaveProperty("watermark");
+  });
+
+  // .NET: An_answer_nobody_reads_may_go_without_the_watermark_where_the_server_has_the_switch
+  it.each<[string, Record<string, unknown>]>([
+    ["vllm", { watermarking: false }],
+    ["sglang", { watermark: { enabled: false } }],
+    ["ollama", {}],
+  ])("an answer nobody reads may go without the watermark where the server has the switch: %s", async (name, expected) => {
+    const { client, fake } = make("https://api.example.test/v1", { dialect: EndpointDialect.named(name), key: new StaticTokenProvider("k") });
+
+    const { updates } = await streamed(client, { unread: true });
+
+    const body = fake.requests[0]!.json();
+    for (const [field, value] of Object.entries(expected)) expect(body[field]).toEqual(value);
+    if (name === "ollama") {
+      expect(body).not.toHaveProperty("watermarking");
+      expect(body).not.toHaveProperty("watermark");
+    }
+    expect(body).not.toHaveProperty("unread");
+    const marking = (updates.at(-1) as { marking: { requested: boolean } }).marking;
+    expect(marking.requested).toBe(false);
+  });
+
+  it("only exactly true is unread: anything else keeps the watermark", async () => {
+    const { client, fake } = make("https://api.example.test/v1", { dialect: EndpointDialect.vllm, key: new StaticTokenProvider("k") });
+    await streamed(client, { unread: "true" as unknown as boolean });
+    await streamed(client, { unread: false });
+    await streamed(client, {});
+    for (const request of fake.requests) expect(request.json()).not.toHaveProperty("watermarking");
+  });
+
+  it("the dialects' switch-offs are the .NET names", () => {
+    expect(EndpointDialect.vllm.watermarkSwitchOff).toBe("WatermarkingFalse");
+    expect(EndpointDialect.sglang.watermarkSwitchOff).toBe("WatermarkEnabledFalse");
+    expect(EndpointDialect.ollama.watermarkSwitchOff).toBe("None");
+    expect(EndpointDialect.openAiCompatible.watermarkSwitchOff).toBe("None");
+  });
+
+  it("the status and the server come from the sourced table by host and dialect, with no request", () => {
+    const status = (baseUrl: string, dialect: EndpointDialect) => EndpointCheck.watermarkOf({ baseUrl, model: "m", dialect }).status;
+    expect(status("http://localhost:11434/v1", EndpointDialect.ollama)).toBe("Never");
+    expect(status("https://api.anthropic.com/v1", EndpointDialect.openAiCompatible)).toBe("Marks");
+    expect(status("https://api.x.ai/v1", EndpointDialect.openAiCompatible)).toBe("IfAccountEnabled");
+    expect(status("http://localhost:8000/v1", EndpointDialect.vllm)).toBe("IfOperatorConfigured");
+    expect(EndpointCheck.serverOf({ baseUrl: "https://api.anthropic.com/v1", model: "m" })).toBe("Anthropic");
+    expect(EndpointCheck.serverOf({ baseUrl: "http://localhost:8000/v1", model: "m", dialect: EndpointDialect.vllm })).toBe("Vllm");
+    expect(EndpointCheck.serverOf({ baseUrl: "https://llm.example/v1", model: "m" })).toBe("Unknown");
+    expect(EndpointCheck.watermarkOf({ baseUrl: "http://localhost:30000/v1", model: "m", dialect: EndpointDialect.sglang }).requested).toBe(true);
+  });
   it.each<[string | undefined, boolean | undefined]>([
     ["true", true],
     ["false", false],

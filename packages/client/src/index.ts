@@ -191,6 +191,7 @@ export {
   type MaxTokensField,
   type ModelEndpoint,
   type ThinkingSwitch,
+  type WatermarkSwitchOff,
 } from "./endpoints/endpoint.js";
 export { endpointBase, endpointChatCompletions, endpointModels, endpointOrigin, endpointRoot, endpointRoute } from "./endpoints/endpointUrl.js";
 export { hostScope, type AddressScope } from "./endpoints/hostScope.js";
@@ -205,7 +206,7 @@ export {
   ServerCertificateError,
   type PlainHttpRefusal,
 } from "./endpoints/endpointErrors.js";
-export { ENDPOINT_PASS_THROUGH, endpointRequest, isDeterministic, parseWatermarkHeader } from "./endpoints/endpointWire.js";
+export { ENDPOINT_PASS_THROUGH, endpointRequest, isDeterministic, isUnread, parseWatermarkHeader } from "./endpoints/endpointWire.js";
 export { EndpointTransport, checkPlainHttp, parseEndpointError, toEndpointError, ENDPOINT_MAX_BODY_CHARS, type EndpointRequest } from "./endpoints/endpointTransport.js";
 export { DirectChatClient } from "./endpoints/directChatClient.js";
 export { TextWatermark, TextWatermarks, type EndpointWatermarkStatus } from "./endpoints/textWatermarks.js";

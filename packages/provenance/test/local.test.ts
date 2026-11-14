@@ -2,8 +2,8 @@ import { X509Certificate } from "node:crypto";
 import { IDBFactory } from "fake-indexeddb";
 import { describe, expect, it } from "vitest";
 
-import { EndpointDialect, textSha256, type PlacementReport, type RecordRequest } from "@fadenstack/client";
-import { AgentDefinition, FadenstackAgent, MemoryApprovalStore, MemorySessionStore, defineTool } from "@fadenstack/agents";
+import { EndpointDialect, StaticTokenProvider, textSha256, type PlacementReport, type RecordRequest } from "@fadenstack/client";
+import { AgentDefinition, FadenstackAgent, MemoryApprovalStore, MemorySessionStore, StageOrder, defineTool } from "@fadenstack/agents";
 import {
   DeviceSigner, LocalProvenanceBackend, MemoryBackend, Rfc3161, canonicalJson, provenanceModule, provenanceOf, type LocalProvenanceOptions,
   type Placement, type ProvenanceBackend,
@@ -459,6 +459,69 @@ describe("which backend", () => {
   });
 });
 
+describe("the watermark layer for a standalone agent (F10)", () => {
+  const write = (editor: Editor, seen: Placement<string>[]) => defineTool<{ text: string }>({
+    name: "fill_field", toolClass: "write",
+    parameters: { type: "object", properties: { text: { type: "string" } }, required: ["text"] },
+    output: { argument: "text", mediaType: "text/html", edit: "generated" },
+    run: async ({ text }, context) => {
+      seen.push(await provenanceOf(context).place({ content: text, mediaType: "text/html", sink: editor.sink }, (m) => editor.insert(String(m.content))));
+      return "Inserted.";
+    },
+  });
+
+  // .NET: The_watermark_layer_relies_on_the_endpoint_and_never_claims_more
+  it.each<[string, string, string | undefined, boolean, string, boolean, string | undefined]>([
+    ["http://localhost:11434/v1", "ollama", undefined, false, "endpoint-ollama", false, "runtime-without-watermark"],
+    ["https://api.anthropic.com/v1", "openai-compatible", undefined, false, "endpoint-anthropic", true, undefined],
+    ["https://api.x.ai/v1", "openai-compatible", "true", false, "endpoint-xai", true, undefined],
+    ["https://api.x.ai/v1", "openai-compatible", "false", false, "endpoint-xai", false, "no-watermark-remote-model"],
+    ["https://api.openai.com/v1", "openai", undefined, false, "endpoint-openai", false, undefined],
+    ["http://localhost:8000/v1", "vllm", undefined, false, "endpoint-vllm", false, undefined],
+    ["https://api.anthropic.com/v1", "openai-compatible", undefined, true, "endpoint-anthropic", false, "no-watermark-greedy"],
+  ])("%s (%s, x-watermark %s, greedy %s) relies on the endpoint and never claims more", async (baseUrl, dialect, header, greedy, method, applied, reason) => {
+    const fake = new OpenAiFake();
+    if (header !== undefined) fake.chatHeaders["x-watermark"] = header;
+    fake.answers.push(OpenAiFake.calls(["call-1", "fill_field", JSON.stringify({ text: `<p>${LONG}</p>` })]), OpenAiFake.text("Done."));
+    const editor = new Editor();
+    const seen: Placement<string>[] = [];
+    let builder = FadenstackAgent.createBuilder()
+      .useEndpoint({
+        baseUrl, model: "m", dialect: EndpointDialect.named(dialect), fetch: fake.fetch,
+        ...(baseUrl.startsWith("https") ? { key: new StaticTokenProvider("k") } : {}),
+      })
+      .useLocalProfile(AgentDefinition.fromJson({ slug: "docs-assistant", version: { host_tool_contract: [{ name: "fill_field", risk: "write" }] } }))
+      .useSessionStore(new MemorySessionStore())
+      .useApprovalStore(new MemoryApprovalStore())
+      .useApprovals(async () => ({ approved: true }))
+      .addTools(write(editor, seen))
+      .use(provenanceModule({ localBackend: { indexedDB: new IDBFactory() } }));
+    if (greedy) builder = builder.addChatStage(StageOrder.custom, (inner) => ({ stream: (messages, options) => inner.stream(messages, { ...options, temperature: 0 }) }));
+    const agent = builder.build();
+
+    await (await agent.startSession("auto")).send("Tell the customer.");
+
+    const layers = seen[0]!.layers.filter((l) => l.layer === "watermark");
+    expect(layers).toHaveLength(1);
+    expect(layers[0]!.method).toBe(method);
+    expect(layers[0]!.applied).toBe(applied);
+    expect(layers[0]!.reason).toBe(reason);
+  });
+
+  it("a short text has the endpoint's own method and the short-text reason", async () => {
+    const fake = new OpenAiFake();
+    fake.answers.push(OpenAiFake.calls(["call-1", "fill_field", JSON.stringify({ text: "<p>Short.</p>" })]), OpenAiFake.text("Done."));
+    const editor = new Editor();
+    const seen: Placement<string>[] = [];
+    const agent = FadenstackAgent.createBuilder()
+      .useEndpoint({ baseUrl: "http://localhost:11434/v1", model: "m", dialect: EndpointDialect.ollama, fetch: fake.fetch })
+      .useLocalProfile(AgentDefinition.fromJson({ slug: "docs-assistant", version: { host_tool_contract: [{ name: "fill_field", risk: "write" }] } }))
+      .useSessionStore(new MemorySessionStore()).useApprovalStore(new MemoryApprovalStore()).useApprovals(async () => ({ approved: true }))
+      .addTools(write(editor, seen)).use(provenanceModule({ localBackend: { indexedDB: new IDBFactory() } })).build();
+    await (await agent.startSession("auto")).send("Hi.");
+    expect(seen[0]!.layers.find((l) => l.layer === "watermark")).toMatchObject({ method: "endpoint", applied: false, reason: "short-text" });
+  });
+});
 // ---- raw IndexedDB, to see what is stored ----
 
 function openRaw(factory: IDBFactory, name: string): Promise<IDBDatabase> {

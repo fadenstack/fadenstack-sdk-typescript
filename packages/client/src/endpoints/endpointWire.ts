@@ -20,6 +20,7 @@ export function endpointRequest(
   stream: boolean,
   dialect: EndpointDialect,
 ): Record<string, unknown> {
+  const unread = isUnread(options);
   const body = requestBody(messages, cleanOptions(options), model, stream);
   if (!dialect.streamUsage) delete body["stream_options"];
   if (dialect.maxTokens === "MaxCompletionTokens" && body["max_tokens"] !== undefined) {
@@ -43,8 +44,17 @@ export function endpointRequest(
       return rest;
     });
   }
-  if (dialect.requestWatermark) body["watermark"] = { enabled: true };
+  // Text people read: the mark is asked for where the server takes a request, and never switched off. Only an answer nobody
+  // reads (the caller said so) may go without it, and only where the server has the switch (F10).
+  if (!unread && dialect.requestWatermark) body["watermark"] = { enabled: true };
+  else if (unread && dialect.watermarkSwitchOff === "WatermarkingFalse") body["watermarking"] = false;
+  else if (unread && dialect.watermarkSwitchOff === "WatermarkEnabledFalse") body["watermark"] = { enabled: false };
   return body;
+}
+
+/** Whether the caller said no person reads this answer (ChatOptions.unread, exactly 	rue). .NET: EndpointWire.IsUnread. */
+export function isUnread(options: ChatOptions | undefined): boolean {
+  return options?.unread === true;
 }
 
 /** The options without the gateway's fields and without any extra key that is not passed through. */
@@ -83,7 +93,7 @@ export function parseWatermarkHeader(value: string | null | undefined): boolean 
 
 /** What an answer says about the watermark: the request, the `x-watermark` header and the sampling. */
 export function endpointMarking(dialect: EndpointDialect, response: Response, options: ChatOptions | undefined): EndpointMarking {
-  const marking: EndpointMarking = { requested: dialect.requestWatermark, deterministic: isDeterministic(options) };
+  const marking: EndpointMarking = { requested: dialect.requestWatermark && !isUnread(options), deterministic: isDeterministic(options) };
   const confirmed = parseWatermarkHeader(response.headers.get("x-watermark"));
   if (confirmed !== undefined) marking.confirmed = confirmed;
   return marking;

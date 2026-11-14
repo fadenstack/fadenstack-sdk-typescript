@@ -12,6 +12,7 @@ import {
   receiptIdOf,
   type ChatMessage,
   type ChatOptions,
+  type EndpointMarking,
   type AgentGrant,
   type ChatOutcome,
   type ReasoningEffort,
@@ -737,6 +738,7 @@ class Turn {
     let finish: FinishReason | undefined;
     const calls: ToolCall[] = [];
     const receipts: ReceiptNote[] = [];
+    let marking: EndpointMarking | undefined;
     const history = this.#session.history;
     if (this.#bypassEnded) {
       // Before the person's newest message, every round of this turn: what the model may and may not do now.
@@ -768,6 +770,9 @@ class Turn {
         case "receipt":
           receipts.push(update.receipt);
           break;
+        case "endpoint_marking":
+          marking = update.marking; // a person's own endpoint says what it did about its watermark (F10)
+          break;
         case "finish":
           finish = update.reason;
           if (update.reason === "content_filter" && !this.#blocked) {
@@ -789,6 +794,16 @@ class Turn {
         origin: "model",
         // What made the answer, by the receipts' ids: never more of them than that.
         ...(receipts.length ? { receipts: receipts.map(receiptData) } : {}),
+        // Without a server: the endpoint's text watermark for this answer, as far as anyone can tell (F10): the connection's
+        // status, whether the request asked for it, the server's word (when it gave one), and deterministic sampling.
+        ...(marking ? {
+          endpoint_marking: {
+            status: this.#agent.endpointWatermark?.status,
+            requested: marking.requested,
+            ...(marking.confirmed === undefined ? {} : { confirmed: marking.confirmed }),
+            deterministic: marking.deterministic,
+          },
+        } : {}),
       });
     }
     if (this.#blocked) await this.#notice(this.#blocked);

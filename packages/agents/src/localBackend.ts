@@ -1,4 +1,7 @@
 import {
+  EndpointCheck,
+  EndpointServer,
+  TextWatermarks,
   bytesSha256,
   hostScope,
   type AgentClientEvent,
@@ -10,6 +13,7 @@ import {
   type AppManifest,
   type ChatStreamer,
   type EndpointReport,
+  type EndpointWatermarkStatus,
   type FadenstackClient,
   type GrantExtension,
   type GrantList,
@@ -95,6 +99,23 @@ export class LocalBackend implements AgentBackend {
   get endpointUrl(): URL | undefined {
     const base = this.#settings.endpoint?.baseUrl;
     return base === undefined ? undefined : base instanceof URL ? base : new URL(String(base));
+  }
+
+  /** The kind of server: the check's word, else by the endpoint's host and dialect; unknown for a host's own streamer. */
+  get server(): EndpointServer {
+    const { endpoint, report } = this.#settings;
+    if (report && report.server !== EndpointServer.Unknown) return report.server;
+    return endpoint ? EndpointCheck.serverOf(endpoint) : EndpointServer.Unknown;
+  }
+
+  /**
+   * Whether the connection marks text (F03 item 8): the check's word when the app gave its report, else the sourced table by
+   * the endpoint's host and dialect; unknown for a host's own streamer.
+   */
+  get watermark(): EndpointWatermarkStatus {
+    const { endpoint, report } = this.#settings;
+    if (report) return report.watermark;
+    return endpoint ? EndpointCheck.watermarkOf(endpoint) : TextWatermarks.for(EndpointServer.Unknown, null, false, null);
   }
 
   readonly acceptsEvents = false;

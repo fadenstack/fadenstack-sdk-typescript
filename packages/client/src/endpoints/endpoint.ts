@@ -59,6 +59,18 @@ export type ThinkingSwitch =
    */
   | "ChatTemplateKwargs";
 
+/**
+ * How a request asks a server to leave its text watermark off; sent only for calls no person reads (`ChatOptions.unread`,
+ * F10). The strings are .NET's `WatermarkSwitchOff` names.
+ */
+export type WatermarkSwitchOff =
+  /** The server has no such switch, or the SDK never sends it. */
+  | "None"
+  /** `watermarking: false`: vLLM (0.30+) and TensorRT-LLM. */
+  | "WatermarkingFalse"
+  /** `watermark: {"enabled": false}`: SGLang (0.5.22+). */
+  | "WatermarkEnabledFalse";
+
 /** Which header carries the key. */
 export type KeyHeader =
   /** `Authorization: Bearer {key}`. */
@@ -87,11 +99,17 @@ export interface EndpointDialect {
    * setting (`{"enabled": true}`; part of D18, owner 14 Nov). Other servers mark, or not, by their own configuration.
    */
   readonly requestWatermark: boolean;
+  /**
+   * How a request for an answer no person reads (`ChatOptions.unread`) asks the server to leave its watermark off. Never
+   * sent for text people read (owner, 14 Nov; part of D18).
+   */
+  readonly watermarkSwitchOff: WatermarkSwitchOff;
 }
 
 const dialect = (name: string, changes: Partial<EndpointDialect> = {}): EndpointDialect =>
   Object.freeze({
     name, maxTokens: "MaxTokens", thinking: "None", streamUsage: true, keyHeader: "Bearer", extraHighEffort: false, requestWatermark: false,
+    watermarkSwitchOff: "None",
     ...changes,
   } satisfies EndpointDialect);
 
@@ -100,8 +118,8 @@ const openAi = dialect("openai", { maxTokens: "MaxCompletionTokens", thinking: "
 const azureOpenAi = dialect("azure-openai", { maxTokens: "MaxCompletionTokens", thinking: "ReasoningEffort", keyHeader: "ApiKey", extraHighEffort: true });
 const ollama = dialect("ollama", { thinking: "ReasoningEffort" });
 const lmStudio = dialect("lm-studio");
-const vllm = dialect("vllm", { thinking: "ChatTemplateKwargs" });
-const sglang = dialect("sglang", { thinking: "ChatTemplateKwargs", requestWatermark: true });
+const vllm = dialect("vllm", { thinking: "ChatTemplateKwargs", watermarkSwitchOff: "WatermarkingFalse" });
+const sglang = dialect("sglang", { thinking: "ChatTemplateKwargs", requestWatermark: true, watermarkSwitchOff: "WatermarkEnabledFalse" });
 const llamaCpp = dialect("llama.cpp", { thinking: "ChatTemplateKwargs" });
 const liteLlm = dialect("litellm", { thinking: "ReasoningEffort" });
 const openRouter = dialect("openrouter", { thinking: "ReasoningEffort" });
