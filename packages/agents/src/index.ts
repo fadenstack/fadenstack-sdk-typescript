@@ -143,3 +143,39 @@ export {
 export type { ListsAgents, StoreName, StoreProblem, StoreProblemHandler } from "./storeSupport.js";
 export { withinServerRetention } from "./sessionStore.js";
 export type { DataDeletion, ExportedSession, MyDataExport } from "./dataRights.js";
+// What the skill editor and the skills module share (sdk/51 F04): the contracts, the limits and the strict SKILL.md reader and writer.
+export {
+  DEFAULT_SKILL_PRIORITY,
+  LOAD_SKILL_TOOL,
+  SkillIssueCode,
+  SkillLimits,
+  SkillOrigin,
+  SkillSaveStatus,
+  SkillSeverity,
+  createExtensionFields,
+  createSkillDocument,
+  createSkillEntry,
+  extensionFieldsAreEmpty,
+  importAnalysis,
+  skillCheck,
+  skillFileFromText,
+  skillFileText,
+  skillIssue,
+  skillSaveResult,
+  type ImportAnalysis,
+  type OrganisationSkills,
+  type SkillCheck,
+  type SkillDocument,
+  type SkillEntry,
+  type SkillExtensionFields,
+  type SkillExtensionParse,
+  type SkillFile,
+  type SkillIssue,
+  type SkillReadResult,
+  type SkillSaveResult,
+  type SkillTestMatch,
+  type SkillTestResult,
+  type SkillWorkshop,
+  type SkillZipFile,
+} from "./skillAuthoring.js";
+export { parseSkillMarkdown, slugifySkillName, writeExtensionYaml, writeSkillMarkdown, yamlScalar, type SkillMarkdownParse } from "./skillMarkdown.js";

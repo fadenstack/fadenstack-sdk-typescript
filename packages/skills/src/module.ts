@@ -20,6 +20,8 @@ import { MAX_MATCHED, MAX_NAMED, MAX_PRELOADED, SkillCandidate, select, type Ski
 import { checkSkill, type SkillDefinition } from "./skillRules.js";
 import { SkillSet, loadedFrom, xmlEscape, type LoadedSkill } from "./skillSet.js";
 import { openSkillStore, type SkillStore, type StorePrincipal } from "./store.js";
+import { openSkillSwitches, type SkillSwitches } from "./skillSwitches.js";
+import { StoreSkillWorkshop, type SkillWorkshopOptions } from "./skillWorkshop.js";
 
 /** The module's name, as an agent profile's `required_client_modules` would name it. */
 export const SKILLS_MODULE = "skills";
@@ -41,6 +43,12 @@ export interface SkillsOptions {
   store?: SkillStore | false;
   /** The IndexedDB factory of the default store (default `globalThis.indexedDB`). */
   indexedDB?: IDBFactory;
+  /**
+   * The person's on/off switch per skill (sdk/51 F04): the module does not list an off skill, bundled or own. By default in the
+   * person's IndexedDB (`fadenstack-skill-switches`, per principal) where there is one, in memory where there is not; `false`:
+   * every skill is on.
+   */
+  switches?: SkillSwitches | false;
   /** Decides from the agent's profile whether local skills are on; the core rule (`coreLocalSkillsPolicy`) by default. */
   policy?: LocalSkillsPolicy;
   /** Most skills a message matches by keyword, file type or tag (core's `max_skills`, 3), beside the ones it names. */
@@ -104,6 +112,8 @@ export class SkillsModule implements FadenstackModule, ChangingToolSource {
   readonly name = SKILLS_MODULE;
   /** The person's own skills, or undefined when the app keeps none. */
   readonly store: SkillStore | undefined;
+  /** The person's on/off switches, or undefined when the app keeps none. */
+  readonly switches: SkillSwitches | undefined;
   readonly #options: SkillsOptions;
   readonly #listeners = new Set<() => void>();
   readonly #unsubscribe: (() => void) | undefined;
@@ -116,7 +126,27 @@ export class SkillsModule implements FadenstackModule, ChangingToolSource {
     this.#options = options;
     this.store = options.store === false ? undefined
       : options.store ?? openSkillStore({ principal: () => this.#principal, ...(options.indexedDB ? { indexedDB: options.indexedDB } : {}) });
+    this.switches = options.switches === false ? undefined
+      : options.switches ?? openSkillSwitches({ principal: () => this.#principal, ...(options.indexedDB ? { indexedDB: options.indexedDB } : {}) });
     this.#unsubscribe = this.store?.onChanged(() => this.refresh());
+  }
+
+  /**
+   * The skill editor's side of this module (sdk/51 F04): the person's skills in this module's store, the bundled ones (read only),
+   * the switches this module honours, and the test step over this module's own pre-selection. A change it makes (a save, a delete,
+   * a switch) reaches the agent at the start of its next turn. `organisation` lists the organisation's skills in governed mode.
+   */
+  workshop(extra: Pick<SkillWorkshopOptions, "organisation"> = {}): StoreSkillWorkshop {
+    return new StoreSkillWorkshop({
+      bundled: this.#options.bundled ?? [],
+      store: this.store,
+      switches: this.switches,
+      ...(this.#options.maxMatched !== undefined ? { maxMatched: this.#options.maxMatched } : {}),
+      ...(this.#options.maxNamed !== undefined ? { maxNamed: this.#options.maxNamed } : {}),
+      ...(this.#options.maxPreloaded !== undefined ? { maxPreloaded: this.#options.maxPreloaded } : {}),
+      ...extra,
+      changed: () => this.refresh(),
+    });
   }
 
   configure(builder: AgentBuilder): void {
@@ -196,7 +226,19 @@ export class SkillsModule implements FadenstackModule, ChangingToolSource {
       return true;
     };
     this.#bundledKept = 0;
+    let off: ReadonlySet<string> = new Set();
+    const switchedOff = new Set<string>();
+    try {
+      off = (await this.switches?.disabled()) ?? off;
+    } catch {
+      // the switches cannot be read: every skill is on
+    }
     for (const bundled of this.#options.bundled ?? []) {
+      const bundledName = typeof bundled?.name === "string" ? bundled.name : "";
+      if (off.has(bundledName)) {
+        switchedOff.add(bundledName); // the person switched it off; no skill of theirs takes its name meanwhile
+        continue;
+      }
       if (take(bundled, undefined, typeof bundled?.name === "string" ? bundled.name : "(a bundled skill)")) this.#bundledKept++;
     }
     if (own) {
@@ -208,6 +250,7 @@ export class SkillsModule implements FadenstackModule, ChangingToolSource {
       }
       for (const row of rows) {
         const name = typeof row?.name === "string" ? row.name : "(a skill of the person's)";
+        if (off.has(name) || switchedOff.has(name)) continue; // the person switched it off
         take(row, undefined, name);
       }
     }
@@ -328,7 +371,7 @@ function block(skill: SkillCandidate, body: string): string {
 }
 
 /** The prompt with the listed skills (XML, as MAF lists them) and, after it, the blocks of the pre-loaded ones. */
-function render(selection: SkillSelection, blocks: readonly string[]): string | undefined {
+export function render(selection: SkillSelection, blocks: readonly string[]): string | undefined {
   if (selection.listed.length === 0) return undefined;
   let list = "";
   for (const skill of selection.listed) {

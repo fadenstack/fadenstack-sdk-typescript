@@ -39,3 +39,15 @@ export {
   type SkillSelection,
 } from "./skillResolver.js";
 export { SKILLS_LOG_CATEGORY, SkillsLog } from "./log.js";
+// The skill editor's side (sdk/51 F04, the third slice): the workshop over the store, the switches, the checks, zip import and export.
+export { StoreSkillWorkshop, toDefinition, type SkillWorkshopOptions } from "./skillWorkshop.js";
+export {
+  IndexedDbSkillSwitches,
+  MemorySkillSwitches,
+  openSkillSwitches,
+  type IndexedDbSkillSwitchesOptions,
+  type SkillSwitches,
+} from "./skillSwitches.js";
+export { checkSkillDocument, isScript, pathProblem, scanCharacters, validName } from "./skillValidator.js";
+export { analyzeZip, skillToZip, type ImportServices } from "./skillImport.js";
+export { crc32, inflateEntry, readZip, writeZip, type InflateResult, type ZipEntry, type ZipProblem, type ZipRead } from "./zip.js";

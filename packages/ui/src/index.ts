@@ -168,3 +168,42 @@ export {
   type WizardServices,
 } from "./wizard/connectionWizard.js";
 export { createEndpointChecker, createServerSignIn, createSystemClock, type ServerSignInOptions } from "./wizard/services.js";
+// The skill library, the skill editor and "Draft from this chat" (sdk/51 F04, the third slice). .NET: Fadenstack.UI.Skills.
+export {
+  skillActivationLabel,
+  skillIssueText,
+  skillIssueView,
+  skillMatchLabel,
+  skillOriginLabel,
+  type SkillFileHost,
+  type SkillIssueView,
+  type SkillModel,
+  type StringsSource,
+} from "./skills/contracts.js";
+export {
+  SkillEditorMode,
+  SkillEditorViewModel,
+  SkillModelAnswer,
+  SkillResourceViewModel,
+  type SkillActivationOption,
+  type SkillEditorClosed,
+  type SkillEditorOptions,
+} from "./skills/skillEditor.js";
+export { SkillLibraryViewModel, SkillRowViewModel, type SkillLibraryOptions } from "./skills/skillLibrary.js";
+export {
+  ANSWER_MAX_CHARS,
+  DRAFT_DESCRIPTION_MAX,
+  DRAFT_NAME_MAX,
+  MESSAGE_MAX_CHARS,
+  SkillDraftState,
+  SkillDraftViewModel,
+  TRANSCRIPT_MAX_CHARS,
+  WRITER_PROMPT,
+  YAML_MARKER,
+  draftMessagesFromChat,
+  parseAnswer as parseSkillDraft,
+  transcript as draftTranscript,
+  writerMessages as draftWriterMessages,
+  type SkillDraftMessage,
+  type SkillDraftOptions,
+} from "./skills/skillDraft.js";
