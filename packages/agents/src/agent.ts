@@ -148,7 +148,7 @@ export class FadenstackAgent {
   /** Refresh mutable approval controls; an identity/contract change requires a new reviewed agent context. */
   async refreshPolicy(signal?: AbortSignal): Promise<void> {
     const before = this.profile;
-    const fresh = await this.client.agent!.getProfile(signal);
+    const fresh = await this.backend.getProfile(signal);
     this.#assertHostPolicySupport(fresh);
     const binding = (p: AgentProfile) => JSON.stringify({ id: p.id, slug: p.slug, version: p.version, draft: p.draft,
       principal: p.principal, contract: p.hostToolContract, instructions: p.instructionsSha256,
@@ -171,7 +171,7 @@ export class FadenstackAgent {
     if (!before || this.clock() - this.#profileRead < PROFILE_MAX_AGE_MS) return;
     let fresh: AgentProfile;
     try {
-      fresh = await this.client.agent!.getProfile(signal);
+      fresh = await this.backend.getProfile(signal);
       this.#checkModules(fresh);
     } catch (error) {
       if (signal?.aborted) throw signal.reason ?? error;
@@ -369,7 +369,7 @@ export class FadenstackAgent {
   }
 
   async #start(signal?: AbortSignal): Promise<void> {
-    const profile = await this.client.agent!.getProfile(signal);
+    const profile = await this.backend.getProfile(signal);
     this.#assertHostPolicySupport(profile);
     this.#checkModules(profile);
     const hosts = settleHostTools(this.settings.tools, profile);
