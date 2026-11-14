@@ -19,6 +19,12 @@ export const Tag = Object.freeze({
   set: 0x31,
   /** `[0]` constructed: the explicit tag of a SignedData and of an eContent. */
   context0: 0xa0,
+  /** [1] constructed: the CRLs of a SignedData, the unsigned attributes of a SignerInfo. */
+  context1: 0xa1,
+  /** [3] constructed: the extensions of a certificate. */
+  context3: 0xa3,
+  /** [0] primitive: an implicit SubjectKeyIdentifier (a SignerInfo's sid). */
+  context0Primitive: 0x80,
 });
 
 /** A DER value that is not well formed (or uses a form this reader does not read). */
@@ -213,4 +219,25 @@ export function oidText(node: DerNode): string {
 
 export function equalBytes(a: Uint8Array, b: Uint8Array): boolean {
   return a.length === b.length && a.every((x, i) => x === b[i]);
+}
+
+/** A Name's whole encoding (tag, length and content), which is what two names are compared by: byte for byte, as RFC 5280 §7.1 allows. */
+export function nameBytes(node: DerNode): Uint8Array {
+  if (node.tag !== Tag.sequence) throw new DerError("A Name is a SEQUENCE.");
+  return node.raw;
+}
+
+/**
+ * A UTCTime (`YYMMDDHHMMSSZ`, years 1950 to 2049) or GeneralizedTime (`YYYYMMDDHHMMSSZ`) as a date. Only the forms RFC 5280 §4.1.2.5
+ * allows (whole seconds, `Z`); any other throws.
+ */
+export function readTime(node: DerNode): Date {
+  const text = new TextDecoder("ascii").decode(node.content);
+  const pattern = node.tag === Tag.utcTime ? /^(\d{2})(\d{2})(\d{2})(\d{2})(\d{2})(\d{2})Z$/ : node.tag === Tag.generalizedTime ? /^(\d{4})(\d{2})(\d{2})(\d{2})(\d{2})(\d{2})Z$/ : undefined;
+  const m = pattern?.exec(text);
+  if (!m) throw new DerError("Not a time.");
+  const [year, month, day, hour, minute, second] = m.slice(1).map(Number) as [number, number, number, number, number, number];
+  const full = node.tag === Tag.utcTime ? (year >= 50 ? 1900 + year : 2000 + year) : year;
+  if (month < 1 || month > 12 || day < 1 || day > 31 || hour > 23 || minute > 59 || second > 60) throw new DerError("Not a time.");
+  return new Date(Date.UTC(full, month - 1, day, hour, minute, second));
 }

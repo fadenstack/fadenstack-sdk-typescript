@@ -35,6 +35,8 @@ export const EndpointProblem = Object.freeze({
   OllamaDefaultContext: "OllamaDefaultContext",
   /** The server refused the request for its watermark; requests go without it. */
   WatermarkRequestRefused: "WatermarkRequestRefused",
+  /** The key travels unencrypted, on this computer only (plain http to loopback; owner, 14 Nov). */
+  KeyUnencryptedOnThisComputer: "KeyUnencryptedOnThisComputer",
   Failed: "Failed",
 } as const);
 export type EndpointProblem = (typeof EndpointProblem)[keyof typeof EndpointProblem];
@@ -253,6 +255,9 @@ export class EndpointCheck {
       watermark: TextWatermarks.for(server, null, dialect.requestWatermark, null), problems: [],
     };
     const transport = new EndpointTransport(endpoint);
+    if (endpoint.key && new URL(endpoint.baseUrl).protocol === "http:") {
+      problems.push(EndpointProblem.KeyUnencryptedOnThisComputer); // said, even where it is allowed
+    }
 
     // 1. /models: reachable, the key, the models.
     let listing: Json | undefined;

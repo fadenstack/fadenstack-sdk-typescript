@@ -41,8 +41,9 @@ const CERTIFICATE_CODES: ReadonlySet<string> = new Set([
  * Requests to a person's own endpoint, under the transport rules (sdk/51 F03, D3; OWASP ASVS 5.0 V12 secure communication,
  * V13 configuration and secrets):
  *
- * - https, or plain http to this device; plain http to a private network only with the endpoint's opt-in; a key never over
- *   plain http, so a request that would carry one is refused before anything is sent (`checkPlainHttp`);
+ * - https, or plain http to this device; plain http to a private network only with the endpoint's opt-in; a key over plain
+ *   http only to this computer (`localhost`, `127.0.0.1`, `[::1]`; owner, 14 Nov), so a request that would carry one anywhere
+ *   else is refused before anything is sent (`checkPlainHttp`);
  * - `redirect: "manual"`, as the gateway's transport: a browser answers an opaque redirect (the typed `redirect` error,
  *   nothing sent again); where the `Location` is visible (Node) a redirect to the same origin is followed (at most three,
  *   body and key sent again), any other is refused, so the key and the body never leave the origin they were meant for;
@@ -186,13 +187,25 @@ function redirected(status: number, to: URL | undefined): FadenstackApiError {
 }
 
 /**
- * D3: plain http only to this device, or to a private network after the endpoint's opt-in; never with a key. Decided by the
- * host's spelling (`hostScope`: a browser cannot resolve names). Throws `EndpointPlainHttpRefusedError`, before anything is sent.
+ * D3: plain http only to this device, or to a private network after the endpoint's opt-in. A key goes over plain http only to
+ * this computer (sdk/51 F03, owner, 14 Nov: "must be secure"; ASVS 5.0 V12): the host must be written `localhost`, `127.0.0.1`
+ * or `::1`. A browser cannot resolve names, and Chrome treats `localhost` as loopback without asking DNS, so only these three
+ * spellings count: not `*.localhost`, not `127.0.0.2`, not `::ffff:127.0.0.1`, not a LAN address, opt-in or not. The machine
+ * policy's `plainHttp: forbidden` (F09) forbids even that. Otherwise decided by the host's spelling (`hostScope`). Throws
+ * `EndpointPlainHttpRefusedError`, before anything is sent.
  */
 export function checkPlainHttp(url: URL, endpoint: Pick<ModelEndpoint, "key" | "allowPlainHttpInLan" | "plainHttpForbidden">): void {
   if (url.protocol !== "http:") return;
   if (endpoint.key) {
-    throw new EndpointPlainHttpRefusedError("keyOverPlainHttp", "A key never travels over plain http: use the endpoint's https address, or leave the key out.");
+    if (endpoint.plainHttpForbidden) {
+      throw new EndpointPlainHttpRefusedError("forbiddenByPolicy",
+        "This computer's policy forbids plain http, so a key does not travel unencrypted even to this computer: use https.");
+    }
+    let name = url.hostname.toLowerCase();
+    if (name.startsWith("[") && name.endsWith("]")) name = name.slice(1, -1);
+    if (name === "localhost" || name === "127.0.0.1" || name === "::1") return;
+    throw new EndpointPlainHttpRefusedError("keyOverPlainHttp",
+      "A key travels over plain http only to this computer: use the endpoint's https address, or leave the key out.");
   }
   const scope = hostScope(url.hostname);
   if (scope === "loopback") return;

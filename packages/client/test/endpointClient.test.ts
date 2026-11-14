@@ -39,6 +39,7 @@ interface MakeOptions {
   dialect?: EndpointDialect;
   key?: TokenProvider;
   lan?: boolean;
+  forbidden?: boolean;
   model?: string;
 }
 
@@ -47,6 +48,7 @@ function make(baseUrl = "http://localhost:11434/v1", options: MakeOptions = {}):
   const client = new DirectChatClient({
     baseUrl, model: options.model ?? "qwen3:14b", dialect: options.dialect ?? EndpointDialect.openAiCompatible,
     allowPlainHttpInLan: options.lan ?? false, fetch: fake.fetch,
+    ...(options.forbidden ? { plainHttpForbidden: true } : {}),
     ...(options.key ? { key: options.key } : {}),
   });
   return { client, fake };
@@ -330,11 +332,32 @@ describe("the dialects", () => {
 
 describe("the transport rules", () => {
   it.each([
-    "http://localhost:11434/v1",
     "http://127.0.0.1:1234/v1",
-    "http://192.168.1.20:8000/v1",
-  ])("a key never goes over plain http: %s", async (baseUrl) => {
-    const { client, fake } = make(baseUrl, { key: new StaticTokenProvider("k-123"), lan: true });
+    "http://localhost:11434/v1",
+    "http://[::1]:8000/v1",
+  ])("a key goes over plain http to this computer: %s (owner, 14 Nov)", async (baseUrl) => {
+    const { client, fake } = make(baseUrl, { key: new StaticTokenProvider("k-123") });
+
+    const { text } = await streamed(client);
+
+    expect(text).toBe("Hello.");
+    expect(fake.requests).toHaveLength(1);
+    expect(fake.requests[0]!.header("authorization")).toBe("Bearer k-123");
+  });
+
+  it.each([
+    ["http://192.168.1.20:8000/v1", false],
+    ["http://192.168.1.20:8000/v1", true],
+    ["http://nas.local/v1", false],
+    ["http://nas.local/v1", true],
+    ["http://nas/v1", true],
+    ["http://203.0.113.5/v1", true],
+    ["http://api.example.test/v1", false],
+    ["http://app.localhost:8000/v1", false],
+    ["http://127.0.0.2:8000/v1", false],
+    ["http://[::ffff:127.0.0.1]:8000/v1", false],
+  ])("a key to anywhere but this computer is refused before any request: %s (opt-in %s)", async (baseUrl, lan) => {
+    const { client, fake } = make(baseUrl, { key: new StaticTokenProvider("k-123"), lan });
 
     const e = await failure(() => streamed(client));
 
@@ -343,6 +366,19 @@ describe("the transport rules", () => {
     expect(fake.requests).toHaveLength(0);
   });
 
+  it.each([
+    "http://127.0.0.1:1234/v1",
+    "http://localhost:11434/v1",
+    "http://[::1]:8000/v1",
+  ])("the policy's plainHttp: forbidden stops even a key to this computer: %s", async (baseUrl) => {
+    const { client, fake } = make(baseUrl, { key: new StaticTokenProvider("k-123"), forbidden: true });
+
+    const e = await failure(() => streamed(client));
+
+    expect(e).toBeInstanceOf(EndpointPlainHttpRefusedError);
+    expect((e as EndpointPlainHttpRefusedError).reason).toBe("forbiddenByPolicy");
+    expect(fake.requests).toHaveLength(0);
+  });
   it.each<[string, boolean, PlainHttpRefusal]>([
     ["http://192.168.1.20:8000/v1", false, "noOptIn"],
     ["http://10.0.0.5/v1", false, "noOptIn"],
