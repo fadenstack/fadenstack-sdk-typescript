@@ -670,3 +670,75 @@ describe("pairing: the first agent refused (sdk/51 I00 #8, I-11)", () => {
     expect(start.agentsLeft).toEqual(AGENTS); // the ones the server ignored are still to be signed in
   });
 });
+
+describe("pairing: export and resume (sdk/51 I15 §2, a panel that was closed)", () => {
+  it("writes the pairing out with its code and makes it again, and a resumed wait signs in", async () => {
+    const rig = new Rig().poll(approved);
+    const first = rig.pairing();
+    const start = await first.start(AGENT, "PC", APP);
+    const saved = first.export(start);
+    expect(saved.pairingCode).toBe(PAIRING);
+    expect(saved.userCode).toBe("BDWP-HTQX");
+    expect(saved.expiresAt).toBe(start.expiresAt);
+    expect(JSON.parse(JSON.stringify(saved))).toEqual(saved); // plain data, fit for session storage
+    // another AgentPairing (a new panel, a new JS context) makes the same pairing and waits on it
+    const second = rig.pairing();
+    const again = second.resume(JSON.parse(JSON.stringify(saved)));
+    expect(again.userCode).toBe(start.userCode);
+    expect(again.verificationUriComplete.href).toBe(start.verificationUriComplete.href);
+    expect(again.agents).toEqual(start.agents);
+    expect(again.expiresAt).toBe(start.expiresAt);
+    expect(again.intervalMs).toBe(start.intervalMs);
+    const result = await second.wait(again);
+    expect(result.agentSlug).toBe(AGENT);
+    expect(rig.requests.filter((r) => r.path.endsWith("/token")).map((r) => r.body)).toEqual([{ pairing_code: PAIRING }]);
+  });
+
+  it("keeps the code out of the resumed object's text and JSON, like start", async () => {
+    const rig = new Rig();
+    const pairing = rig.pairing();
+    const again = pairing.resume(pairing.export(await pairing.start(AGENT, "PC", APP)));
+    expect(`${again}`).not.toContain(PAIRING);
+    expect(JSON.stringify(again)).not.toContain(PAIRING);
+    expect(Object.values(again).map(String).join("|")).not.toContain(PAIRING);
+  });
+
+  it("round-trips several agents and the ones an older server ignored", async () => {
+    const rig = new Rig();
+    rig.startBody = { ...startAnswer(), agents: [AGENT, "b"] };
+    const pairing = rig.pairing();
+    const start = await pairing.start(AGENT, "PC", APP, { agents: ["b", "c"] });
+    const again = pairing.resume(pairing.export(start));
+    expect(again.agents).toEqual([AGENT, "b"]);
+    expect(again.ignoredAgents).toEqual(["c"]);
+    expect(again.agentsLeft).toEqual(start.agentsLeft);
+  });
+
+  it("refuses to export what start did not return, and to resume what is not an export", async () => {
+    const rig = new Rig();
+    const pairing = rig.pairing();
+    expect(() => pairing.export({} as PairingStart)).toThrow(TypeError);
+    const saved = pairing.export(await pairing.start(AGENT, "PC", APP));
+    for (const broken of [null, "x", { ...saved, pairingCode: "" }, { ...saved, userCode: 3 }, { ...saved, expiresAt: "soon" },
+      { ...saved, intervalMs: 0 }, { ...saved, agents: [1] }, { ...saved, ignoredAgents: "b" }]) {
+      expect(() => pairing.resume(broken as never)).toThrow(TypeError);
+    }
+  });
+
+  it("reads the saved pages as untrusted: a page on another origin is refused", async () => {
+    const rig = new Rig();
+    const pairing = rig.pairing();
+    const saved = pairing.export(await pairing.start(AGENT, "PC", APP));
+    expect(() => pairing.resume({ ...saved, verificationUri: "https://evil.example/pair" })).toThrow(FadenstackPairingPageElsewhereError);
+    expect(() => pairing.resume({ ...saved, verificationUriComplete: "https://evil.example/pair#code=X" })).toThrow(FadenstackPairingPageElsewhereError);
+  });
+
+  it("resumes a pairing that has expired and its wait ends as expired", async () => {
+    const rig = new Rig();
+    const pairing = rig.pairing();
+    const saved = pairing.export(await pairing.start(AGENT, "PC", APP));
+    rig.now = saved.expiresAt + 1;
+    await expect(pairing.wait(pairing.resume(saved))).rejects.toBeInstanceOf(FadenstackPairingExpiredError);
+    expect(rig.pollCount).toBe(0);
+  });
+});
