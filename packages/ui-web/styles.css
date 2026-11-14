@@ -1767,3 +1767,190 @@
   align-self: center;
   margin-inline-start: auto;
 }
+
+/* -- the connection wizard ----------------------------------------------------------------------- */
+
+/* One narrow, centred column (a side panel is 360-420 px wide); the same markup in every web skin. */
+.fdn-wizard {
+  align-items: center;
+  overflow-y: auto;
+}
+
+.fdn-wizard-column {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  width: 100%;
+  max-width: 420px;
+  margin-block: auto;
+  padding: 20px 16px;
+}
+
+.fdn-wizard-column:focus {
+  outline: none;
+}
+
+.fdn-wizard-title {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.fdn-wizard-title:focus {
+  outline: none;
+}
+
+.fdn-wizard-title:focus-visible {
+  outline: 2px solid var(--fdn-focus);
+  outline-offset: 2px;
+}
+
+.fdn-wizard p {
+  margin: 0;
+}
+
+.fdn-wizard-live {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.fdn-wizard-live:empty {
+  display: none;
+}
+
+.fdn-wizard-form {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.fdn-wizard-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.fdn-wizard-field input[type="text"],
+.fdn-wizard-field input[type="url"],
+.fdn-wizard-field input[type="email"],
+.fdn-wizard-field input[type="password"],
+.fdn-wizard-field select {
+  width: 100%;
+  padding: 6px 8px;
+  border: 1px solid var(--fdn-border);
+  border-radius: var(--fdn-radius);
+  background: var(--fdn-bg);
+  color: inherit;
+  font: inherit;
+}
+
+.fdn-wizard-field input[readonly] {
+  background: var(--fdn-surface);
+  color: var(--fdn-text-muted);
+}
+
+.fdn-wizard-check {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+}
+
+.fdn-wizard-check input {
+  flex: none;
+  margin-block-start: 3px;
+  accent-color: var(--fdn-accent);
+}
+
+.fdn-wizard-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.fdn-wizard-actions .fdn-button {
+  width: 100%;
+  height: auto;
+  min-height: 32px;
+  padding-block: 6px;
+}
+
+.fdn-wizard-choice {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  width: 100%;
+}
+
+.fdn-wizard-choice-name {
+  font-weight: 500;
+}
+
+.fdn-wizard-busy {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--fdn-text-muted);
+}
+
+.fdn-wizard-code {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 12px;
+  border: 1px solid var(--fdn-hairline);
+  border-radius: var(--fdn-radius);
+  background: var(--fdn-surface);
+}
+
+.fdn-wizard-code code {
+  font-family: var(--fdn-mono);
+  font-size: 2em;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  user-select: all;
+}
+
+.fdn-wizard-terms {
+  max-height: 220px;
+  padding: 10px 12px;
+  overflow-y: auto;
+  border: 1px solid var(--fdn-hairline);
+  border-radius: var(--fdn-radius);
+  background: var(--fdn-surface);
+}
+
+.fdn-wizard-terms p + p {
+  margin-block-start: 8px;
+}
+
+.fdn-wizard-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 0;
+  padding-inline-start: 18px;
+}
+
+.fdn-wizard-presets {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.fdn-wizard-presets .fdn-button {
+  height: auto;
+  min-height: 28px;
+}
+
+.fdn-wizard-error {
+  color: var(--fdn-danger);
+}
+
+.fdn-wizard-note {
+  padding: 8px 12px;
+  border-radius: var(--fdn-radius);
+  background: var(--fdn-warning-soft);
+  color: var(--fdn-warning);
+}

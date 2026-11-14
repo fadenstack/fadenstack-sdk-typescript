@@ -23,6 +23,7 @@ export { default as Markdown } from "./markdown/Markdown.vue";
 export { default as AgentAvatar } from "./AgentAvatar.js";
 export { default as Icon } from "./Icon.vue";
 export { default as Spinner } from "./Spinner.vue";
+export { default as ConnectionWizard } from "./ConnectionWizard.vue";
 export { useDismiss, useStickToBottom, useViewModel } from "./composables.js";
 export type { ChatTheme, PartRenderer } from "./types.js";
 export type { IconName } from "@fadenstack/ui-web";
