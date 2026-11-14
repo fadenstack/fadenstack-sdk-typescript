@@ -10,7 +10,9 @@ import {
   type ChatOptions,
   type ChatStreamer,
   type ChatUpdate,
+  type FadenstackLogger,
   type FetchLike,
+  type LogEvent,
   type ModelEndpoint,
 } from "@fadenstack/client";
 import {
@@ -77,6 +79,40 @@ const seeing = (see: (options: ChatOptions | undefined) => void) => (inner: Chat
     see(options);
     return inner.stream(messages, options);
   },
+});
+
+describe("the notice for a standalone agent without the provenance module (sdk/51 F10)", () => {
+  const capture = () => {
+    const events: LogEvent[] = [];
+    const logger: FadenstackLogger = { log: (event) => { events.push(event); } };
+    return { logger, notices: () => events.filter((e) => e.eventId === 2054) };
+  };
+
+  it("is logged once, with the agent's slug", () => {
+    const { logger, notices } = capture();
+    standalone().builder.useLogging(logger).build();
+
+    expect(notices()).toHaveLength(1);
+    expect(notices()[0]!.eventName).toBe("NoProvenanceModule");
+    expect(notices()[0]!.level).toBe("warning");
+    expect(notices()[0]!.fields["Agent"]).toBe("docs-assistant");
+    expect(notices()[0]!.message).toContain("@fadenstack/provenance");
+  });
+
+  it("is not logged when a module named provenance is added", () => {
+    const { logger, notices } = capture();
+    standalone().builder.useLogging(logger).use({ name: "provenance", configure: () => undefined }).build();
+
+    expect(notices()).toHaveLength(0);
+  });
+
+  it("is not logged for an agent with a server", () => {
+    const { logger, notices } = capture();
+    FadenstackAgent.createBuilder().useServer("https://faden.test", { getToken: () => Promise.resolve("t") } as never).useAgent("docs-assistant")
+      .useLogging(logger).build();
+
+    expect(notices()).toHaveLength(0);
+  });
 });
 
 describe("the build rules (I03 commit 8)", () => {

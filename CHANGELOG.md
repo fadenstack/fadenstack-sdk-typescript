@@ -12,7 +12,12 @@ before 1.0, a minor version may break the API, and this file says where it does.
   `endpoints`, `plainHttp`, `mcp`, `skills`, `webSearch`, `timestamping`), read fail-closed (`MachinePolicy.from(object)`,
   `fromJson`; a Chrome extension hands it `chrome.storage.managed`), enforced by `AgentBuilder.useMachinePolicy`
   (`MachinePolicyError`, `EndpointPlainHttpRefusedError` reason `forbiddenByPolicy`), narrowing local MCP and skills with a
-  server too; `agent.machinePolicy`; the device's provenance backend sends no time-stamp request where it forbids it.
+  server too; `agent.machinePolicy`; `timestamping` is `on` (DigiCert), `off` or the organisation's own server
+  (`TimestampingPolicy`, `TimestampingMode`).
+- **A key over plain http only to this computer** (owner, 14 Nov): `useEndpoint` sends a key over `http:` only to a host
+  written `localhost`, `127.0.0.1` or `[::1]` (a browser cannot resolve names), never to the local network; a machine
+  policy's `plainHttp: forbidden` forbids it too, and the check reports `KeyUnencryptedOnThisComputer`. A standalone
+  agent built without the provenance module logs one warning (event 2054); the module is never loaded on its own.
 - **Endpoint watermarks** (a standalone agent): the person's endpoint's text watermark is never switched off for text people
   read. `ChatOptions.unread` marks a call whose answer no person reads, and only then does a dialect with a switch send it
   (`EndpointDialect.watermarkSwitchOff`: vLLM, SGLang); each answer's transcript entry records `endpoint_marking`;
@@ -21,8 +26,11 @@ before 1.0, a minor version may break the API, and this file says where it does.
 - **Records signed on the device** (@fadenstack/provenance): for an agent without a server the module chooses
   LocalProvenanceBackend: the server's record format (a compact ES256 JWS with kid device:<16 hex> and a self-signed
   certificate in x5c, hash_key_version 0), signed by a non-extractable WebCrypto key kept per principal in IndexedDB
-  (DeviceSigner, DeviceSigner.verify), an RFC 3161 time-stamp when the app names an authority (Rfc3161, off by default in a
-  browser), and a placement log in IndexedDB that keeps the newest entries. provenanceModule({ localBackend }) sets it up;
+  (DeviceSigner, DeviceSigner.verify), an RFC 3161 time-stamp from DigiCert by default whose token counts only when its CMS
+  signature, a time-stamping certificate that chains to DigiCert's embedded root (or `timestampRoots`) and the nonce check
+  out (`Rfc3161.grants`, now async), a local backup (every record kept with its token, `keptRecords()`; offline the
+  labelled device clock and a queue that survives a restart, `flushTimestampQueue()`), and a placement log in IndexedDB
+  that keeps the newest entries. provenanceModule({ localBackend }) sets it up;
   deleteMyData() removes its database.
 - `AgentTokenProviderOptions.locks` (`LockManagerLike`, `navigator.locks` by default where there is one): contexts that
   share a token store (an extension's side panel and its service worker, several tabs) renew a sign-in one at a time.

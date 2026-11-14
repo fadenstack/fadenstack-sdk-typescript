@@ -41,4 +41,7 @@ export const AgentLog = Object.freeze({
     "Governance notice {Outcome} at stage {Stage}, category {Category}, code {Code}, decision {DecisionId}"),
   approvalAnswerRetried: defineLog(AGENT_LOG_CATEGORY, 2053, "ApprovalAnswerRetried", "warning",
     "An approval answer got no word back ({Kind}); it is sent once more"),
+  /** sdk/51 F10 (owner, 14 Nov): `build()` says once that a standalone agent goes without the provenance module. */
+  noProvenanceModule: defineLog(AGENT_LOG_CATEGORY, 2054, "NoProvenanceModule", "warning",
+    "Agent {Agent} runs on its own model endpoint without the provenance module: what it places in documents carries no mark. Add @fadenstack/provenance (builder.use(provenanceModule()))"),
 });

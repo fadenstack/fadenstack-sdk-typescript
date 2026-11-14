@@ -14,6 +14,7 @@ import {
 import { FadenstackAgent } from "./agent.js";
 import { ServerBackend, type AgentBackend } from "./backend.js";
 import type { AgentDefinition } from "./definition.js";
+import { AgentLog } from "./log.js";
 import { LocalBackend, type LocalProfileOptions } from "./localBackend.js";
 import { MachinePolicy, MachinePolicyError, PolicyAccess } from "./machinePolicy.js";
 import {
@@ -33,7 +34,7 @@ import type { ChatStage, FadenstackModule, ToolServiceFactory, ToolSource, ToolS
 import { refuseReservedToolNames, type AgentTool, type ToolServiceKey } from "./tools.js";
 import type { GrantHandler, GrantPlaceResolver } from "./grants.js";
 import type { ReasoningStore } from "./reasoning.js";
-import type { FadenstackLogger } from "@fadenstack/client";
+import { writeLog, type FadenstackLogger } from "@fadenstack/client";
 
 /** What an agent was built with. */
 export interface AgentSettings {
@@ -100,6 +101,9 @@ export interface AppDescription {
   /** The greeting and suggestions the app would show. */
   ui?: { greeting?: string; suggestions?: string[] };
 }
+
+/** The name `@fadenstack/provenance` gives its module (its `PROVENANCE_MODULE`); this package cannot import that package. */
+const PROVENANCE_MODULE_NAME = "provenance";
 
 /**
  * Puts an agent together: the server, the agent, its host tools, who approves, where sessions live, and the
@@ -433,6 +437,9 @@ export class AgentBuilder {
       // An endpoint's client is made here; a host's own streamer stays the host's.
       backend = new LocalBackend({ definition, chat: this.#streamer ?? new DirectChatClient(endpoint!), endpoint,
         report: this.#endpointReport, options: local });
+      // Marking by default as far as the layering allows (sdk/51 F10, owner, 14 Nov): this package cannot load the provenance
+      // module, so it says so once, here, when a standalone agent goes without it.
+      if (!this.#modules.includes(PROVENANCE_MODULE_NAME)) writeLog(this.#logger, AgentLog.noProvenanceModule, { Agent: agent });
       // D7: the person's own instructions come after the definition's.
       instructions = [definition.instructions, this.#ownInstructions?.trim()].filter((part) => part).join("\n\n") || undefined;
     } else {
