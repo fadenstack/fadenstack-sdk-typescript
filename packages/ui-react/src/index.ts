@@ -19,5 +19,6 @@ export {
   type PartRenderer,
 } from "./Parts.js";
 export { Markdown, type MarkdownProps } from "./Markdown.js";
+export { ConnectionWizard, type ConnectionWizardProps, type WizardTheme } from "./ConnectionWizard.js";
 export { Icon, Spinner, type IconName } from "./icons.js";
 export { useDismiss, useStickToBottom, useViewModel } from "./hooks.js";
