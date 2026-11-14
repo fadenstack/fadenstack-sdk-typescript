@@ -181,6 +181,7 @@ approval handler the SDK declines it. See [Tools and approvals](tools.md).
 - [Sessions on the device](sessions.md): where conversations are kept, and for how long.
 - [The chat panel](chat-panel.md): a ready-made chat UI for React, and view models for other frameworks.
 - [Connecting an agent](connecting.md): the connection wizard, to a server or the person's own AI.
+- [Skills](skills.md): skills on the device, the rules that pick them, the editor and its security rules.
 - [Testing without a server](testing.md): the fake server in `@fadenstack/testing`.
 - [Plain chat completions](plain-api.md): the gateway's chat without an agent.
 - [Hosting](hosting.md): where the SDK runs, a web page, a browser extension or Node, and what differs.

@@ -1,0 +1,89 @@
+# Skills
+
+A skill is a set of instructions and reference files for one kind of task, in the open
+[Agent Skills](https://agentskills.io) format: a `SKILL.md` with its frontmatter, plus optional files.
+`@fadenstack/skills` gives an agent the person's own skills and the app's bundled ones. The model sees a short list. It
+loads a skill's instructions when a task matches (`load_skill`) and reads a listed file when it needs one
+(`read_skill_resource`). Scripts never run. The .NET SDK has the same module (`Fadenstack.Skills`), with MAF's skills
+provider underneath. A browser has no MAF, so this package has a loader of its own with the same two tools and answers.
+
+```ts
+import { skillsModule } from "@fadenstack/skills";
+
+const skills = skillsModule({
+  bundled: [{ name: "slide-design", description: "Designs slides ...", body, fadenYaml }],  // build assets
+  // the person's own skills: IndexedDB per principal by default (fadenstack-skills), memory where there is none
+});
+const agent = FadenstackAgent.createBuilder().useEndpoint(endpoint).useLocalProfile(definition).use(skills).build();
+```
+
+## The format
+
+`SKILL.md` keeps only the six standard frontmatter fields:
+- `name`: 1 to 64 lowercase letters, digits and single hyphens;
+- `description`: up to 1,024 characters;
+- optional: `license`, `compatibility` (up to 500 characters), `metadata`, `allowed-tools`.
+
+A skill with another key is skipped and logged.
+
+Fadenstack's own fields go in a `faden.yaml` beside it, as on the server:
+- `title`, `tags`, `priority`, `activation`;
+- `trigger_rules`: `keywords`, `file_types`, `intents`;
+- `preferred_tools`.
+
+It is read with a restricted reader (32 KiB, depth 8). It refuses anchors, aliases, tags, block scalars and invisible
+characters. Quote `yes`, `no`, `on` and `off` in a keyword list: unquoted, they are booleans, as on the server, and the
+file does not read.
+
+## Which skills a turn gets
+
+The server's rules apply:
+- skills the person names with `$slug` first, up to 5;
+- then `always` and matching `auto` skills by score, up to 3;
+- a keyword (as a whole word) +30, a file type +30, a tag +20, on top of the priority;
+- `manual` skills only by name.
+
+The model sees the resolved list. The first strong match is put into the turn's instructions as skill text: a named
+skill, an `always` skill, or a keyword or file-type hit. Only one is put in (`maxPreloaded`): the server puts in every
+resolved skill, but a local model's context is short. `load_skill` still loads any skill.
+
+## Where skills come from, and who decides
+
+The skills come from three places:
+- bundled with the app, read-only;
+- the person's own, in IndexedDB per principal (deleted with `deleteMyData`), labelled "not reviewed";
+- the organisation's, with a server, read-only.
+
+Which of them the agent may use:
+- **With a server:** local skills only when the profile's `local_skills.mode` is `allow`, or `developer_mode` is on.
+- **Without one:** on, unless the [machine policy](machine-policy.md)'s `skills` forbids them. A list of sources keeps
+  only the bundled skills in a browser.
+- **The person's switch:** each skill can be turned on or off, per principal.
+
+## The editor
+
+`@fadenstack/ui` has `SkillLibraryViewModel`, `SkillEditorViewModel` and `SkillDraftViewModel`. `@fadenstack/ui-react`
+and `@fadenstack/ui-vue` draw them as `SkillLibrary`, `SkillEditor` and `SkillDraft`.
+
+- **Import and export** go through a zip: a browser has no folders.
+- **Test** shows, for a prompt, which skills the rules pick and pre-load.
+- **"Draft from this chat"** proposes a skill from the conversation and opens it in the editor.
+
+**Nothing is saved until the person presses Save.**
+
+## Security
+
+- Skill text is information, never a rule: it never changes a tool's class, a tool mode or a grant. `preferred_tools`
+  is a hint only.
+- No scripts: `run_skill_script` is never offered; scripts and binary files are refused.
+- A resource is read only by the name the skill lists, so no path leaves it.
+- A single validator serves the editor, the import and the draft.
+- The zip reader is strict:
+  - it counts the bytes as they expand, whatever the archive claims;
+  - it refuses traversal, absolute paths, backslashes, links, duplicate or overlapping entries, ZIP64, encryption and
+    bombs;
+  - it checks sizes, counts and CRCs.
+
+  Nothing is stored before every check passes.
+
+OWASP ASVS 5.0: V5 (file handling), V15 (secure coding).
