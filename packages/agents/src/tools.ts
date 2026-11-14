@@ -36,7 +36,10 @@ export function refuseReservedToolNames(tools: readonly { readonly name: string 
   }
 }
 
-/** Marks one of the SDK's own tool sources, the only kind that may bring `FIND_TOOL_NAME`. Not exported from the package. */
+/**
+ * Marks one of the SDK's own tool sources, the only kind that may bring a name the SDK keeps (`RESERVED_TOOL_NAMES`): `OnRequestTools`
+ * and the SDK's own packages (`@fadenstack/skills`). An app's tool source must not carry it.
+ */
 export const CORE_TOOL_SOURCE: unique symbol = Symbol("fadenstack.coreToolSource");
 
 /** Whether `source` is one of the SDK's own tool sources. */
