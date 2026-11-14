@@ -31,6 +31,7 @@ import {
 
 import { AgentBuilder, UNDESCRIBED_APP_NAME, type AgentSettings, type AppDescription } from "./builder.js";
 import type { AgentBackend, AgentConnection } from "./backend.js";
+import { LocalBackend } from "./localBackend.js";
 import { EventReporter } from "./reporter.js";
 import { ChatSession } from "./session.js";
 import { isChangingToolSource, type AgentContext, type ToolSource } from "./stages.js";
@@ -113,6 +114,14 @@ export class FadenstackAgent {
   /** The agent's Fadenstack client; undefined for an agent without a server (on the person's own model endpoint). */
   get serverClient(): FadenstackClient | undefined {
     return this.settings.backend.serverClient;
+  }
+
+  /**
+   * The person's own model endpoint (its base) for a standalone agent built with `useEndpoint`; undefined with a server, or
+   * with a host's own streamer (`useChatStreamer`). .NET: `EndpointUrl`.
+   */
+  get endpointUrl(): URL | undefined {
+    return this.settings.backend instanceof LocalBackend ? this.settings.backend.endpointUrl : undefined;
   }
 
   /**

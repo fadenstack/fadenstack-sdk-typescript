@@ -30,7 +30,7 @@ import type { FadenstackAgent } from "./agent.js";
 import { ApprovalDecision, type ApprovalHandler, type ApprovalRequest, type ApprovalScope } from "./approvals.js";
 import { BypassSignInError } from "./stepUp.js";
 import { attachmentData, type MessageAttachment } from "./attachments.js";
-import { ContextBuilder, isBlank } from "./contextBuilder.js";
+import { ContextBuilder, instructionsTokens, isBlank } from "./contextBuilder.js";
 import { EventQueue } from "./eventQueue.js";
 import type { AgentEvent, AgentResult, ToolOutcome } from "./events.js";
 import type { ToolInvocation, ToolInvoker, ToolServiceCall } from "./stages.js";
@@ -229,7 +229,7 @@ export class ChatSession {
 
   /** What the next request would carry as history. */
   get history(): ChatMessage[] {
-    return this.#context.build(this.#entries);
+    return this.#context.build(this.#entries, instructionsTokens(this.agent.settings.instructions));
   }
 
   /** Tools the user approved for the rest of this session ("Allow for this chat"), while this object lives. */
@@ -730,6 +730,9 @@ class Turn {
     // On every call of the turn, not the first only: the gateway gives a request the skills it names.
     if (this.#skills.length) options.skills = this.#skills;
     if (this.#effort) options.reasoningEffort = this.#effort;
+    // A standalone agent's instructions (its definition's, then the person's own, D7): set here, above the chat stages, so the
+    // stages see them and the history budget counts them (review R2). With a server the gateway adds the agent's.
+    if (this.#agent.settings.instructions) options.instructions = this.#agent.settings.instructions;
     let text = "";
     let finish: FinishReason | undefined;
     const calls: ToolCall[] = [];

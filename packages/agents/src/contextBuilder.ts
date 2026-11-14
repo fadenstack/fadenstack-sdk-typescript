@@ -43,7 +43,11 @@ export class ContextBuilder {
     this.tokenBudget = tokenBudget;
   }
 
-  build(entries: readonly TranscriptEntry[]): ChatMessage[] {
+  /**
+   * The history, within `tokenBudget` less `reservedTokens`: what goes with it on every request and is not in the transcript,
+   * such as a standalone agent's instructions (sdk/51 I03 4a). .NET: `ContextBuilder.Build(entries, reservedTokens)`.
+   */
+  build(entries: readonly TranscriptEntry[], reservedTokens = 0): ChatMessage[] {
     const status = new Map<string, string>();
     const commands = new Set(entries.filter(e => e.type === EntryTypes.userCommand && e.turnId).map(e => e.turnId));
     for (const e of entries) if (e.type === EntryTypes.turnEnd && e.turnId) status.set(e.turnId, e.status ?? TurnStatus.ok);
@@ -71,12 +75,12 @@ export class ContextBuilder {
       }
       turns[turns.length - 1]!.push(message);
     }
-    return merge(this.#trim(turns));
+    return merge(this.#trim(turns, Math.max(0, reservedTokens)));
   }
 
-  #trim(turns: ChatMessage[][]): ChatMessage[] {
+  #trim(turns: ChatMessage[][], reservedTokens: number): ChatMessage[] {
     const kept: ChatMessage[][] = [];
-    let budget = this.tokenBudget * 4;
+    let budget = Math.max(0, this.tokenBudget - reservedTokens) * 4;
     for (let i = turns.length - 1; i >= 0; i--) {
       const size = turns[i]!.reduce((sum, m) => sum + sizeOf(m), 0);
       if (kept.length > 0 && size > budget) break; // the newest turn always goes, whatever its size
@@ -85,6 +89,11 @@ export class ContextBuilder {
     }
     return kept.flat();
   }
+}
+
+/** About how many tokens a text takes (4 characters a token, rounded up as .NET does): what the history budget leaves room for. */
+export function instructionsTokens(text: string | undefined): number {
+  return text === undefined ? 0 : Math.floor((text.length + 3) / 4);
 }
 
 /** The user messages whose pictures still go: the newest, up to `MAX_HISTORY_PICTURES` pictures in all. */
