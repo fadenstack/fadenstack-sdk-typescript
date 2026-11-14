@@ -20,5 +20,8 @@ export {
 } from "./Parts.js";
 export { Markdown, type MarkdownProps } from "./Markdown.js";
 export { ConnectionWizard, type ConnectionWizardProps, type WizardTheme } from "./ConnectionWizard.js";
+export { SkillLibrary, type SkillLibraryProps } from "./SkillLibrary.js";
+export { SkillEditor, type SkillEditorProps } from "./SkillEditor.js";
+export { SkillDraft, type SkillDraftProps } from "./SkillDraft.js";
 export { Icon, Spinner, type IconName } from "./icons.js";
 export { useDismiss, useStickToBottom, useViewModel } from "./hooks.js";

@@ -112,3 +112,74 @@ function localStorageOrUndefined(): Storage | undefined {
     return undefined;
   }
 }
+
+/** The bytes of a file the person chose (`File.arrayBuffer`, or a `FileReader` where a browser has none). */
+export function readFileBytes(file: Blob): Promise<Uint8Array> {
+  if (typeof file.arrayBuffer === "function") return file.arrayBuffer().then((buffer) => new Uint8Array(buffer));
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(new Uint8Array(reader.result as ArrayBuffer));
+    reader.onerror = () => reject(reader.error ?? new Error("The file could not be read."));
+    reader.readAsArrayBuffer(file);
+  });
+}
+
+/** Asks for one file with the browser's picker; undefined when the person cancels. Call it inside a click: a picker needs the gesture. */
+function pickFile(accept: string, signal?: AbortSignal): Promise<File | undefined> {
+  const doc = (globalThis as { document?: Document }).document;
+  if (!doc) return Promise.resolve(undefined);
+  return new Promise((resolve) => {
+    const input = doc.createElement("input");
+    input.type = "file";
+    if (accept) input.accept = accept;
+    input.style.display = "none";
+    input.setAttribute("aria-hidden", "true");
+    input.tabIndex = -1;
+    const done = (file: File | undefined) => {
+      input.remove();
+      resolve(file);
+    };
+    input.addEventListener("change", () => done(input.files?.[0]), { once: true });
+    input.addEventListener("cancel", () => done(undefined), { once: true });
+    signal?.addEventListener("abort", () => done(undefined), { once: true });
+    doc.body.appendChild(input);
+    input.click();
+  });
+}
+
+/**
+ * The browser's ways for the skill editor (`SkillFileHost`): the file picker for a zip to import and for a file to add to a skill,
+ * and the exported zip as a download (a Blob behind an object URL and a temporary `<a download>`). A browser has no folders, so a
+ * zip is the only way in and out. Where there is no page it answers undefined or false.
+ */
+export function browserSkillFiles(): {
+  pickImport(signal?: AbortSignal): Promise<{ readonly name: string; readonly bytes: Uint8Array } | undefined>;
+  saveExport(suggestedFileName: string, zip: Uint8Array): Promise<boolean>;
+  pickResource(signal?: AbortSignal): Promise<{ readonly path: string; readonly bytes: Uint8Array } | undefined>;
+} {
+  return {
+    async pickImport(signal) {
+      const file = await pickFile(".zip", signal);
+      return file ? { name: file.name, bytes: await readFileBytes(file) } : undefined;
+    },
+    async pickResource(signal) {
+      const file = await pickFile("", signal);
+      return file ? { path: file.name, bytes: await readFileBytes(file) } : undefined;
+    },
+    saveExport(suggestedFileName, zip) {
+      const doc = (globalThis as { document?: Document }).document;
+      if (!doc || typeof URL === "undefined" || typeof URL.createObjectURL !== "function" || typeof Blob === "undefined") return Promise.resolve(false);
+      const url = URL.createObjectURL(new Blob([zip as BlobPart], { type: "application/zip" }));
+      const link = doc.createElement("a");
+      link.href = url;
+      link.download = suggestedFileName;
+      link.rel = "noopener";
+      link.style.display = "none";
+      doc.body.appendChild(link);
+      link.click();
+      link.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 40_000);
+      return Promise.resolve(true);
+    },
+  };
+}

@@ -33,4 +33,6 @@ export {
   browserPreferences,
   browserPromptStore,
   browserSaveFile,
+  browserSkillFiles,
+  readFileBytes,
 } from "./browser.js";
