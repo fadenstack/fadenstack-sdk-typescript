@@ -184,7 +184,13 @@ export class LocalProvenanceBackend implements ProvenanceBackend {
     const nonce = globalThis.crypto.getRandomValues(new Uint8Array(8));
     nonce[0] = (nonce[0]! & 0x7f) | 0x40; // positive, and never a leading zero
     const hash = new Uint8Array(await globalThis.crypto.subtle.digest("SHA-256", DeviceSigner.signatureBytes(signature) as BufferSource));
-    const limit = AbortSignal.any([signal, AbortSignal.timeout(this.options.timestampTimeoutMs ?? 5000)]);
+    // A controller and a timer of our own, not AbortSignal.any with AbortSignal.timeout: Node holds those weakly, and a
+    // collected one never fires.
+    const limit = new AbortController();
+    const timer = setTimeout(() => { limit.abort(new DOMException("The time-stamp authority took too long.", "TimeoutError")); }, this.options.timestampTimeoutMs ?? 5000);
+    const stop = () => { limit.abort(signal.reason); };
+    signal.addEventListener("abort", stop, { once: true });
+    if (signal.aborted) stop();
     try {
       const response = await (this.options.fetch ?? globalThis.fetch)(String(authority), {
         method: "POST",
@@ -192,7 +198,7 @@ export class LocalProvenanceBackend implements ProvenanceBackend {
         body: Rfc3161.request(hash, nonce) as BufferSource,
         redirect: "error",
         credentials: "omit",
-        signal: limit,
+        signal: limit.signal,
       });
       if (!response.ok) return null;
       const answer = new Uint8Array(await response.arrayBuffer());
@@ -201,6 +207,9 @@ export class LocalProvenanceBackend implements ProvenanceBackend {
     } catch (error) {
       if (signal.aborted) throw error;
       return null; // offline, slow or a bad answer: the device's clock, as without an authority
+    } finally {
+      clearTimeout(timer);
+      signal.removeEventListener("abort", stop);
     }
   }
 }

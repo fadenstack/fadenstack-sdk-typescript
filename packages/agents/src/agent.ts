@@ -59,6 +59,8 @@ export class FadenstackAgent {
   readonly stepUps: StepUpProofs;
   /** @internal The time, in milliseconds, for the profile's age and the grants' remaining time; tests set it. */
   clock: () => number = () => Date.now();
+  /** @internal How long one try at answering a gateway's approval may take, in milliseconds, before it is sent once more; tests shorten it. */
+  approvalAnswerTimeoutMs = 10_000;
   #profile: AgentProfile | undefined;
   #profileRead = 0;
   #context: AgentContext | undefined;

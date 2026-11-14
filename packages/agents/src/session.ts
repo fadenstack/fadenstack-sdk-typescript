@@ -1,4 +1,6 @@
 import {
+  FadenstackApiError,
+  FadenstackError,
   FadenstackRateLimitedError,
   writeLog,
   conversationOnly,
@@ -10,6 +12,7 @@ import {
   parseToolMode,
   readNotice,
   receiptIdOf,
+  type AnswerScope,
   type ChatMessage,
   type ChatOptions,
   type EndpointMarking,
@@ -942,8 +945,43 @@ class Turn {
       undefined, false, true);
     if (settled.timedOut) return; // the gateway expires it on its own
     const scope = settled.scope === "chat" || settled.scope === "always" ? settled.scope : "once";
-    await this.#agent.backend.answerApproval(approvalId, settled.approved, scope, signal);
+    await this.#answerGateway(approvalId, settled.approved, scope, signal);
     if (!settled.approved) this.#toolDenied = true;
+  }
+
+  /**
+   * Sends the person's answer to a call the gateway holds: a short wait for it, then once more with the same body when
+   * nothing came back (no answer in time, the server unreachable, a proxy's 502, 503 or 504), since an answer lost on the way
+   * leaves the call waiting until the gateway's own timeout (the lost decline, release gate of 14 Nov). A gateway with
+   * `approvals.idempotent` takes a repeated answer once (core 0.7.1 rc17); an older one answers the repeat of a taken answer
+   * 404, which counts as taken: the stream says which. Any other refusal (409 and the rest) is not retried. .NET:
+   * `ChatSession.AnswerGatewayAsync`.
+   */
+  async #answerGateway(approvalId: string, approved: boolean, scope: AnswerScope, signal: AbortSignal): Promise<void> {
+    for (let attempt = 0; ; attempt++) {
+      // A controller and a timer of our own, not AbortSignal.any with AbortSignal.timeout: Node holds those weakly, and a
+      // collected one never fires, which would leave the answer hanging.
+      const waiting = new AbortController();
+      const timer = setTimeout(() => { waiting.abort(new DOMException("No word came back in time.", "TimeoutError")); }, this.#agent.approvalAnswerTimeoutMs);
+      const stop = () => { waiting.abort(signal.reason); };
+      signal.addEventListener("abort", stop, { once: true });
+      if (signal.aborted) stop();
+      try {
+        await this.#agent.backend.answerApproval(approvalId, approved, scope, waiting.signal);
+        return;
+      } catch (error) {
+        if (attempt === 0 && !signal.aborted && (waiting.signal.aborted || unanswered(error))) {
+          writeLog(this.#agent.settings.logger, AgentLog.approvalAnswerRetried, { Kind: error instanceof Error ? error.name : typeof error }, this.#scope);
+          continue;
+        }
+        // An older gateway: the first try was most likely taken.
+        if (attempt === 1 && error instanceof FadenstackApiError && error.status === 404 && !this.#agent.profile.features.includes(IDEMPOTENT_APPROVALS)) return;
+        throw error;
+      } finally {
+        clearTimeout(timer);
+        signal.removeEventListener("abort", stop);
+      }
+    }
   }
 
   /** The gateway's word on a call of the agent's own tool, kept until the round's calls are planned. */
@@ -1571,4 +1609,13 @@ function abortReason(): Error {
   const error = new Error("The turn was stopped.");
   error.name = "AbortError";
   return error;
+}
+
+/** The server's feature: a repeated approval answer is taken once (core 0.7.1 rc17). */
+const IDEMPOTENT_APPROVALS = "approvals.idempotent";
+
+/** No word came back: the answer may or may not have been taken. A proxy's 502, 503 or 504, or an error that is not the server's word. */
+function unanswered(error: unknown): boolean {
+  if (error instanceof FadenstackApiError) return error.status === 502 || error.status === 503 || error.status === 504;
+  return error instanceof FadenstackError; // unreachable, or no answer within the transport's time
 }

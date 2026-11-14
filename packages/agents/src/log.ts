@@ -39,4 +39,6 @@ export const AgentLog = Object.freeze({
     "Approval for {Tool} ({ToolClass}): {Approval}, asked {Asked}, waited {WaitMs} ms"),
   notice: defineLog(AGENT_LOG_CATEGORY, 2030, "Notice", "information",
     "Governance notice {Outcome} at stage {Stage}, category {Category}, code {Code}, decision {DecisionId}"),
+  approvalAnswerRetried: defineLog(AGENT_LOG_CATEGORY, 2053, "ApprovalAnswerRetried", "warning",
+    "An approval answer got no word back ({Kind}); it is sent once more"),
 });

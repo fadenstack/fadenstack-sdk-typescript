@@ -497,6 +497,7 @@ The client gets the logger too, unless it has one: `useLogging` reaches a client
 | | 2013, 2014 | `ToolsRefreshed`, `ToolsRefreshFailed` | information, warning |
 | | 2020, 2021 | `ToolCall`, `Approval` | information |
 | | 2030 | `Notice` | information |
+| | 2053 | `ApprovalAnswerRetried` | warning |
 
 The agent's events are the `AgentLog` entries of `@fadenstack/agents`; the client's are `ClientLog` in
 `@fadenstack/client`. The .NET events about files on a disk (data export, adoption) have no use in a browser and are not
