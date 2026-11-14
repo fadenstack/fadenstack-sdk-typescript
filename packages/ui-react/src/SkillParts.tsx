@@ -1,16 +1,13 @@
 import { useEffect, type KeyboardEvent, type ReactElement, type ReactNode, type RefObject } from "react";
 
-import { englishStrings, type StringsSource, type UiStrings } from "@fadenstack/ui";
+import type { UiStrings } from "@fadenstack/ui";
 
 import type { ChatTheme } from "./ChatPanel.js";
 
 // What the skill views share: the shell (the wizard's own column, a little wider), the first-field focus, and the small blocks.
-
-export const defaultStrings: StringsSource = () => englishStrings;
+// The texts are the view model's (`vm.strings`, as the wizard's are), so a language change shows with the view model's `retext()`.
 
 export interface SkillViewProps {
-  /** The texts, asked for on every draw so that a language change shows at once: the function the view model was given. English by default. */
-  strings?: StringsSource;
   /** `system` (default) follows the browser's light or dark setting. */
   theme?: ChatTheme;
   className?: string;
@@ -52,14 +49,16 @@ export function Actions({ children }: { children: ReactNode }): ReactElement {
   return <div className="fdn-wizard-actions">{children}</div>;
 }
 
-export function Button({ onClick, children, primary, quiet, disabled, submit, form, focus, describedBy }: {
+export function Button({ onClick, children, primary, quiet, disabled, submit, form, focus, describedBy, label }: {
   onClick?: () => void; children: ReactNode; primary?: boolean; quiet?: boolean; disabled?: boolean; submit?: boolean; form?: string;
   focus?: boolean; describedBy?: string;
+  /** The screen-reader name when it says more than the button does ("Edit contract-review"). */
+  label?: string;
 }): ReactElement {
   const cls = `fdn-button${primary ? " fdn-primary" : ""}${quiet ? " fdn-quiet" : ""}`;
   return (
     <button type={submit ? "submit" : "button"} className={cls} disabled={disabled} onClick={onClick} form={form}
-      aria-describedby={describedBy} data-wizard-focus={focus ? "" : undefined} dir="auto">
+      aria-label={label} aria-describedby={describedBy} data-wizard-focus={focus ? "" : undefined} dir="auto">
       {children}
     </button>
   );

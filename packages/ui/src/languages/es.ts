@@ -1,3 +1,4 @@
+import { formatNumber } from "../format.js";
 import { minutesAndSeconds, type UiStrings } from "../strings.js";
 
 /** Spanish, formal ("usted"), in the console's words ("chat", "herramienta"). */
@@ -527,6 +528,17 @@ export const spanishStrings: UiStrings = {
   skillDraftFailed: "No se pudo escribir el borrador.",
   skillDraftUnreadable: "La respuesta del modelo no es una habilidad. Vuelva a intentarlo.",
   skillDraftBroken: "El borrador incumple las reglas indicadas abajo. Corríjalo en el editor antes de guardar.",
+  skillBroken: (reason) => `Esta habilidad no se puede leer: ${reason}`,
+  skillBrokenNoReason: "Esta habilidad no se puede leer. Ábrala para corregirla o elimínela.",
+  skillTestMatchesHeading: "Coinciden con este mensaje:",
+  skillTokens: (tokens, limit) => `unos ${formatNumber(tokens, "es")} de ${formatNumber(limit, "es")} tokens`,
+  skillDraftNothingSaved: "No se guarda nada hasta que pulse Guardar.",
+  skillDraftOpen: "Abrir la propuesta",
+  skillEditNamed: (name) => `Editar ${name}`,
+  skillViewNamed: (name) => `Ver ${name}`,
+  skillDeleteNamed: (name) => `Eliminar ${name}`,
+  skillExportNamed: (name) => `Exportar ${name}`,
+  skillDuplicateNamed: (name) => `Duplicar ${name}`,
   skillIssue: {
     NameMissing: "El nombre está vacío.",
     NameForm: "El nombre solo puede tener minúsculas, dígitos y guiones sencillos.",

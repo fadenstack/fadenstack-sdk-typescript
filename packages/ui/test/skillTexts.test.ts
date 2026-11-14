@@ -38,7 +38,12 @@ describe("the skill editor's texts", () => {
         expect(value, `${language}: ${key} is missing`).toBeDefined();
         expect(typeof value, `${language}: ${key} has another kind of value`).toBe(typeof english);
         if (typeof value === "string") expect(value.length, `${language}: ${key} is empty`).toBeGreaterThan(0);
-        if (typeof value === "function") {
+        if (typeof value === "function" && key === "skillTokens") {
+          // the one text that takes numbers: the size and the limit, written the language's way
+          const said = (value as (tokens: number, limit: number) => string)(1234, 5000);
+          expect(said, `${language}: ${key} leaves out the size`).toContain(new Intl.NumberFormat(language).format(1234));
+          expect(said, `${language}: ${key} leaves out the limit`).toContain(new Intl.NumberFormat(language).format(5000));
+        } else if (typeof value === "function") {
           const said = (value as (name: string) => string)("some-skill");
           expect(said.length, `${language}: ${key} says nothing`).toBeGreaterThan(0);
           expect(said, `${language}: ${key} leaves out the name`).toContain("some-skill");
@@ -188,5 +193,38 @@ describe("the skill editor's texts", () => {
       expect(strings.skillIssue.NameMissing).toBe("Give it a name.");
       expect(strings.skillIssue.NameForm).toBe(englishStrings.skillIssue.NameForm);
     });
+  });
+});
+
+describe("the texts of the skill editor's gaps", () => {
+  describe.each(LANGUAGES)("in %s", (language) => {
+    const strings = builtInStrings[language]!;
+
+    it("says a broken skill, the Try heading, the draft's standing line, and the row button names, with their places filled", () => {
+      expect(strings.skillBroken("REASON")).toContain("REASON");
+      expect(strings.skillBroken("REASON")).not.toContain("{");
+      for (const make of [strings.skillEditNamed, strings.skillViewNamed, strings.skillDeleteNamed, strings.skillExportNamed, strings.skillDuplicateNamed]) {
+        expect(make("NAME")).toContain("NAME");
+        expect(make("NAME")).not.toContain("{");
+      }
+      expect(new Set([strings.skillEditNamed("N"), strings.skillViewNamed("N"), strings.skillDeleteNamed("N"), strings.skillExportNamed("N"), strings.skillDuplicateNamed("N")]).size).toBe(5);
+      expect(strings.skillTokens(1234, 5000)).not.toContain("{");
+      for (const text of [strings.skillBrokenNoReason, strings.skillTestMatchesHeading, strings.skillDraftNothingSaved, strings.skillDraftOpen]) {
+        expect(text.length).toBeGreaterThan(0);
+        expect(text.startsWith("skill")).toBe(false);
+      }
+      if (language !== "en") {
+        expect(strings.skillBrokenNoReason).not.toBe(englishStrings.skillBrokenNoReason);
+        expect(strings.skillTestMatchesHeading).not.toBe(englishStrings.skillTestMatchesHeading);
+        expect(strings.skillDraftNothingSaved).not.toBe(englishStrings.skillDraftNothingSaved);
+        expect(strings.skillDraftOpen).not.toBe(englishStrings.skillDraftOpen);
+        expect(strings.skillEditNamed("N")).not.toBe(englishStrings.skillEditNamed("N"));
+      }
+    });
+  });
+
+  it("writes the token counter's numbers the language's way", () => {
+    expect(englishStrings.skillTokens(1200, 5000)).toBe("about 1,200 of 5,000 tokens");
+    expect(builtInStrings["de"]!.skillTokens(1200, 5000)).toBe("etwa 1.200 von 5.000 Tokens");
   });
 });

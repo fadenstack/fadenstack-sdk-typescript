@@ -8,7 +8,7 @@
  */
 import { computed, ref, useId } from "vue";
 
-import type { SkillEditorViewModel, StringsSource } from "@fadenstack/ui";
+import type { SkillEditorViewModel } from "@fadenstack/ui";
 
 import { useViewModel } from "./composables.js";
 import Markdown from "./markdown/Markdown.vue";
@@ -18,13 +18,11 @@ import { useFirstFocus } from "./skills.js";
 
 const props = defineProps<{
   editor: SkillEditorViewModel;
-  strings: StringsSource;
 }>();
 
 const vm = useViewModel(() => props.editor);
 const s = computed(() => {
-  void vm.value; // a language change reaches the view model (`retext`) and draws this again
-  return props.strings();
+  return vm.value.strings; // the view model's texts: a language change reaches it (`retext`) and draws this again
 });
 const id = useId();
 const root = ref<HTMLElement | null>(null);
@@ -50,10 +48,9 @@ function priority(e: Event): void {
   <div ref="root" class="fdn-skills-editor" :aria-busy="vm.isSaving">
     <h2 class="fdn-wizard-title" tabindex="-1" data-wizard-title dir="auto">{{ vm.heading }}</h2>
     <p v-if="vm.isProposal" class="fdn-wizard-note" dir="auto">{{ vm.proposalNote }}</p>
-    <template v-if="vm.message">
-      <p v-if="vm.message === s.skillSaveFailed" class="fdn-wizard-error" role="alert" dir="auto">{{ vm.message }}</p>
-      <p v-else class="fdn-skills-message" role="status" dir="auto">{{ vm.message }}</p>
-    </template>
+    <p v-if="vm.messageIsError" class="fdn-wizard-error" role="alert" dir="auto">{{ vm.message }}</p>
+    <p v-else-if="vm.messageIsWarning" class="fdn-skills-message fdn-skills-message-warning" role="status" dir="auto">{{ vm.message }}</p>
+    <p v-else-if="vm.messageIsInformation" class="fdn-skills-message" role="status" dir="auto">{{ vm.message }}</p>
     <div v-if="vm.needsReplaceConfirmation" class="fdn-card fdn-skills-ask" role="group" :aria-labelledby="`${id}-replace-title`">
       <h3 :id="`${id}-replace-title`" role="alert" dir="auto">{{ vm.replaceTitle }}</h3>
       <p dir="auto">{{ vm.replaceBody }}</p>
@@ -89,7 +86,9 @@ function priority(e: Event): void {
       </div>
       <textarea :id="`${id}-instructions`" class="fdn-skills-instructions" rows="10" dir="auto" :spellcheck="false" :value="vm.instructions"
         :readonly="vm.isReadOnly" :aria-invalid="invalid(about('instructions'))"
-        :aria-describedby="about('instructions').length > 0 ? `${id}-instructions-issues` : undefined" @input="vm.instructions = valueOf($event)" />
+        :aria-describedby="about('instructions').length > 0 ? `${id}-instructions-issues ${id}-tokens` : `${id}-tokens`" @input="vm.instructions = valueOf($event)" />
+      <!-- The size against the advisory limit: a note, and a warning when over. Not live: it changes with every key. -->
+      <p :id="`${id}-tokens`" :class="vm.instructionsOverLimit ? 'fdn-skills-tokens fdn-skills-tokens-over' : 'fdn-skills-tokens'" dir="auto">{{ vm.instructionsTokensText }}</p>
       <SkillIssues :id="`${id}-instructions-issues`" :items="about('instructions')" />
       <div v-if="vm.showPreview" class="fdn-card fdn-skills-preview" role="region" :aria-label="s.skillPreview">
         <Markdown :blocks="vm.previewBlocks" :strings="s" />
@@ -186,7 +185,10 @@ function priority(e: Event): void {
             <p><strong dir="auto">{{ s.skillTestListed }}</strong></p>
             <ul><li v-for="name in vm.testListed" :key="name" dir="auto">{{ name }}</li></ul>
           </template>
-          <ul v-if="vm.testMatches.length > 0"><li v-for="line in vm.testMatches" :key="line" dir="auto">{{ line }}</li></ul>
+          <template v-if="vm.testMatches.length > 0">
+            <p><strong dir="auto">{{ s.skillTestMatchesHeading }}</strong></p>
+            <ul><li v-for="line in vm.testMatches" :key="line" dir="auto">{{ line }}</li></ul>
+          </template>
           <template v-if="vm.testPreloaded.length > 0">
             <p><strong dir="auto">{{ s.skillTestPreloaded }}</strong></p>
             <ul><li v-for="name in vm.testPreloaded" :key="name" dir="auto">{{ name }}</li></ul>

@@ -7,32 +7,28 @@
  */
 import { computed } from "vue";
 
-import type { SkillEditorViewModel, StringsSource } from "@fadenstack/ui";
+import type { SkillEditorViewModel } from "@fadenstack/ui";
 
 import { useViewModel } from "./composables.js";
 import SkillEditorBody from "./SkillEditorBody.vue";
 import SkillShell from "./SkillShell.vue";
-import { defaultStrings, editorEscape } from "./skills.js";
+import { editorEscape } from "./skills.js";
 import type { ChatTheme } from "./types.js";
 
 const props = withDefaults(defineProps<{
   /** The editor's view model (new, edit, a bundled skill to read, or a draft's proposal). Closing it (Save, Cancel) is the app's: `onClosed`. */
   editor: SkillEditorViewModel;
-  /** The texts, asked for on every draw so that a language change shows at once: the function the view model was given. English by default. */
-  strings?: StringsSource;
+
   /** `system` (default) follows the browser's light or dark setting. */
   theme?: ChatTheme;
-}>(), { strings: defaultStrings, theme: "system" });
+}>(), { theme: "system" });
 
 const vm = useViewModel(() => props.editor);
-const s = computed(() => {
-  void vm.value;
-  return props.strings();
-});
+const s = computed(() => vm.value.strings); // the view model's texts
 </script>
 
 <template>
   <SkillShell :strings="s" :theme="theme" :busy="vm.isSaving" @keydown="editorEscape(vm, $event)">
-    <SkillEditorBody :editor="editor" :strings="strings" />
+    <SkillEditorBody :editor="editor" />
   </SkillShell>
 </template>

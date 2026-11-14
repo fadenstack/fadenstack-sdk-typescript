@@ -28,6 +28,25 @@ export type SkillModel = ChatStreamer;
 /** The texts, asked for on every use so that a language change shows at once. */
 export type StringsSource = () => UiStrings;
 
+/**
+ * What kind of thing a message says: a skin shows an error as an alert (assertive) and the others as a status (polite).
+ * .NET: `SkillMessageKind`.
+ */
+export const SkillMessageKind = Object.freeze({
+  /** What an action did ("x was saved"): polite. */
+  Information: "information",
+  /** Something the person should look at, that did not stop the action. */
+  Warning: "warning",
+  /** The action did not happen: assertive. */
+  Error: "error",
+} as const);
+export type SkillMessageKind = (typeof SkillMessageKind)[keyof typeof SkillMessageKind];
+
+/** A skill view model that tells its texts (as the connection wizard does): a skin reads every text from `strings` and says them again when the view model notifies. */
+export interface SkillTexts {
+  readonly strings: UiStrings;
+}
+
 /** One check's finding, in words, for the list under the editor. */
 export interface SkillIssueView {
   readonly issue: SkillIssue;

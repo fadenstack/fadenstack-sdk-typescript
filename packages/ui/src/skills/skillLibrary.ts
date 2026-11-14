@@ -15,10 +15,11 @@ import {
 } from "@fadenstack/agents";
 
 import { Observable } from "../observable.js";
-import { englishStrings } from "../strings.js";
+import { englishStrings, type UiStrings } from "../strings.js";
 import {
   skillIssueText,
   skillIssueView,
+  SkillMessageKind,
   skillOriginLabel,
   type SkillFileHost,
   type SkillIssueView,
@@ -72,6 +73,14 @@ export class SkillRowViewModel extends Observable {
     return this.entry.isBroken;
   }
 
+  /** "This skill cannot be read: ..." for a broken skill (with the reason when the library knows it); empty for the others. */
+  get brokenText(): string {
+    if (!this.entry.isBroken) return "";
+    const strings = this.#strings();
+    const issue = this.entry.brokenIssue;
+    return issue ? strings.skillBroken(skillIssueText(strings, issue.code, issue.subject ?? "", issue.limit, issue.actual, issue.detail ?? "")) : strings.skillBrokenNoReason;
+  }
+
   get isEnabled(): boolean {
     return this.#enabled;
   }
@@ -111,6 +120,27 @@ export class SkillRowViewModel extends Observable {
     return this.entry.origin !== SkillOrigin.Organisation && !this.entry.isBroken;
   }
 
+  /** The names a screen reader says for the row's buttons ("Edit contract-review"), so the buttons of two rows are told apart. */
+  get editLabel(): string {
+    return this.#strings().skillEditNamed(this.name);
+  }
+
+  get viewLabel(): string {
+    return this.#strings().skillViewNamed(this.name);
+  }
+
+  get duplicateLabel(): string {
+    return this.#strings().skillDuplicateNamed(this.name);
+  }
+
+  get deleteLabel(): string {
+    return this.#strings().skillDeleteNamed(this.name);
+  }
+
+  get exportLabel(): string {
+    return this.#strings().skillExportNamed(this.name);
+  }
+
   retext(): void {
     this.notify();
   }
@@ -125,6 +155,8 @@ export interface SkillLibraryOptions {
   model?: SkillModel | undefined;
   /** The texts; English by default. */
   strings?: StringsSource | undefined;
+  /** The app's conversation, for "Draft from this chat" (see `createDraft`); without it the library has no such entry. */
+  draftSource?: (() => readonly SkillDraftMessage[]) | undefined;
 }
 
 /**
@@ -146,6 +178,9 @@ export class SkillLibraryViewModel extends Observable {
   #loaded = false;
   #failed = false;
   #message = "";
+  #messageKind: SkillMessageKind = SkillMessageKind.Information;
+  #draft: SkillDraftViewModel | undefined;
+  #draftOpen = false;
   #pendingDelete: SkillRowViewModel | undefined;
   #pendingImport: ImportAnalysis | undefined;
   #importIssues: readonly SkillIssueView[] = [];
@@ -159,6 +194,44 @@ export class SkillLibraryViewModel extends Observable {
     this.#files = options.files;
     this.#model = options.model;
     this.#strings = options.strings ?? (() => englishStrings);
+    if (options.draftSource) {
+      this.#draft = this.createDraft(options.draftSource);
+      this.#draft.onProposal(() => {
+        this.#draftOpen = false;
+        this.notify();
+      });
+    }
+  }
+
+  /** The texts; a skin reads the fixed ones (`strings.skillLibraryTitle`) and the computed ones below, and follows `version` when the language changes. */
+  get strings(): UiStrings {
+    return this.#strings();
+  }
+
+  /** "Draft from this chat": the draft, when the app gave a conversation (`draftSource`); undefined otherwise, and then the library has no such entry. */
+  get draft(): SkillDraftViewModel | undefined {
+    return this.#draft;
+  }
+
+  get hasDraft(): boolean {
+    return this.#draft !== undefined;
+  }
+
+  /** The draft's panel is shown (the entry was pressed and no proposal has opened since). */
+  get draftOpen(): boolean {
+    return this.#draftOpen;
+  }
+
+  /** The "Draft from this chat" entry is on: there is a draft source and no editor is open. */
+  get canToggleDraft(): boolean {
+    return this.#draft !== undefined && this.#editor === undefined;
+  }
+
+  /** The "Draft from this chat" entry: shows or hides the draft's panel. */
+  toggleDraft(): void {
+    if (!this.canToggleDraft) return;
+    this.#draftOpen = !this.#draftOpen;
+    this.notify();
   }
 
   /** The skills, bundled first, then the person's own, then the organisation's. */
@@ -188,6 +261,31 @@ export class SkillLibraryViewModel extends Observable {
   /** What the last action did ("x was saved"), or why not; empty when nothing was said. */
   get message(): string {
     return this.#message;
+  }
+
+  /** Whether `message` is information, a warning or an error; a skin shows an error as an alert (assertive) and the rest as a status (polite). */
+  get messageKind(): SkillMessageKind {
+    return this.#messageKind;
+  }
+
+  /** There is a message and it is an error: a skin shows it as an alert. */
+  get messageIsError(): boolean {
+    return this.#message.length > 0 && this.#messageKind === SkillMessageKind.Error;
+  }
+
+  /** There is a message and it is a warning. */
+  get messageIsWarning(): boolean {
+    return this.#message.length > 0 && this.#messageKind === SkillMessageKind.Warning;
+  }
+
+  /** There is a message and it is information: a skin shows it as a status. */
+  get messageIsInformation(): boolean {
+    return this.#message.length > 0 && this.#messageKind === SkillMessageKind.Information;
+  }
+
+  #say(text: string, kind: SkillMessageKind = SkillMessageKind.Information): void {
+    this.#message = text;
+    this.#messageKind = kind;
   }
 
   /** The skill the person asked to delete, until they confirm or cancel. */
@@ -297,10 +395,12 @@ export class SkillLibraryViewModel extends Observable {
   retext(): void {
     for (const row of this.#rows) row.retext();
     this.#editor?.retext();
+    this.#draft?.retext();
     this.notify();
   }
 
   #open(editor: SkillEditorViewModel): void {
+    if (this.#editor === editor) return;
     this.#unsubscribe?.();
     this.#unsubscribe = editor.onClosed((event) => this.#onEditorClosed(editor, event));
     this.#editor = editor;
@@ -322,7 +422,7 @@ export class SkillLibraryViewModel extends Observable {
     this.#unsubscribe?.();
     this.#unsubscribe = undefined;
     this.#editor = undefined;
-    if (event.saved) this.#message = this.#strings().skillSaved(event.name ?? "");
+    if (event.saved) this.#say(this.#strings().skillSaved(event.name ?? ""));
     this.notify();
     void this.refresh();
   }
@@ -349,7 +449,7 @@ export class SkillLibraryViewModel extends Observable {
     if (this.#editor !== undefined) return;
     if (!read.document) {
       const first = read.issues[0];
-      this.#message = skillIssueText(this.#strings(), first?.code ?? SkillIssueCode.ReadFailed, row.name, 0, 0, first?.detail ?? "");
+      this.#say(skillIssueText(this.#strings(), first?.code ?? SkillIssueCode.ReadFailed, row.name, 0, 0, first?.detail ?? ""), SkillMessageKind.Error);
       this.notify();
       return;
     }
@@ -363,7 +463,7 @@ export class SkillLibraryViewModel extends Observable {
     const taken = new Set((await this.#workshop.list()).map((e) => e.name));
     if (this.#editor !== undefined) return;
     if (!read.document) {
-      this.#message = skillIssueText(this.#strings(), SkillIssueCode.ReadFailed, row.name, 0, 0, "");
+      this.#say(skillIssueText(this.#strings(), SkillIssueCode.ReadFailed, row.name, 0, 0, ""), SkillMessageKind.Error);
       this.notify();
       return;
     }
@@ -392,7 +492,8 @@ export class SkillLibraryViewModel extends Observable {
     } catch {
       deleted = false;
     }
-    this.#message = deleted ? this.#strings().skillDeleted(row.name) : this.#strings().skillSaveFailed;
+    if (deleted) this.#say(this.#strings().skillDeleted(row.name));
+    else this.#say(this.#strings().skillSaveFailed, SkillMessageKind.Error);
     this.notify();
     await this.refresh();
   }
@@ -471,15 +572,15 @@ export class SkillLibraryViewModel extends Observable {
       if (result.saved) {
         saved = true;
         this.#setImport(undefined);
-        this.#message = this.#strings().skillImported(result.name ?? "");
+        this.#say(this.#strings().skillImported(result.name ?? ""));
       } else if (result.status === SkillSaveStatus.Refused) {
         this.#setImport(importAnalysis(analysis.source, analysis.document, result.issues, analysis.wouldReplace, analysis.fileCount, analysis.totalBytes));
       } else {
-        this.#message = this.#strings().skillSaveFailed;
+        this.#say(this.#strings().skillSaveFailed, SkillMessageKind.Error);
       }
     } catch {
       this.#importBusy = false;
-      this.#message = this.#strings().skillSaveFailed;
+      this.#say(this.#strings().skillSaveFailed, SkillMessageKind.Error);
     }
     this.notify();
     if (saved) await this.refresh();
@@ -496,7 +597,8 @@ export class SkillLibraryViewModel extends Observable {
       zip = undefined;
     }
     const written = zip !== undefined && (await files.saveExport(`${row.name}.zip`, zip).catch(() => false));
-    this.#message = zip === undefined ? this.#strings().skillExportFailed(row.name) : written ? this.#strings().skillExported(row.name) : "";
+    if (zip === undefined) this.#say(this.#strings().skillExportFailed(row.name), SkillMessageKind.Error);
+    else this.#say(written ? this.#strings().skillExported(row.name) : "");
     this.notify();
   }
 }

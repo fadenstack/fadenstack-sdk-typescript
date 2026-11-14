@@ -11,7 +11,7 @@ import type { ChatMessage, ChatOptions } from "@fadenstack/client";
 
 import type { AgentChatViewModel } from "../chat.js";
 import { Observable } from "../observable.js";
-import { englishStrings } from "../strings.js";
+import { englishStrings, type UiStrings } from "../strings.js";
 import type { SkillFileHost, SkillModel, StringsSource } from "./contracts.js";
 import { SkillEditorMode, SkillEditorViewModel } from "./skillEditor.js";
 
@@ -172,6 +172,33 @@ export class SkillDraftViewModel extends Observable {
   /** The editor holding the draft; its Save is the only way the draft is ever saved. */
   get proposal(): SkillEditorViewModel | undefined {
     return this.#proposal;
+  }
+
+  /** The texts; a skin reads the fixed ones (`strings.skillDraftTitle`) and the computed ones below, and follows `version` when the language changes. */
+  get strings(): UiStrings {
+    return this.#strings();
+  }
+
+  /** In every state: nothing is saved until Save (in the editor). */
+  get standingNote(): string {
+    return this.#strings().skillDraftNothingSaved;
+  }
+
+  /** The draft has a proposal to open. */
+  get hasProposal(): boolean {
+    return this.#proposal !== undefined;
+  }
+
+  /** "Open the proposal" is on: there is a proposal. */
+  get canOpenProposal(): boolean {
+    return this.#proposal !== undefined;
+  }
+
+  /** "Open the proposal": shows the proposal's editor (calls the `onProposal` listeners again, which the library answers by showing it). */
+  openProposal(): void {
+    const editor = this.#proposal;
+    if (!editor) return;
+    for (const listener of [...this.#ready]) listener(editor);
   }
 
   /** What the draft says in words: working, ready (and that nothing is saved yet), broken, or why not. */

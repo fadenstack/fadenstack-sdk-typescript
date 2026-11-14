@@ -393,3 +393,70 @@ describe("draft from this chat", () => {
     });
   });
 });
+
+describe("the gaps the skin builders found: the draft", () => {
+  it("exposes its texts and says so when the language changes", () => {
+    const rig = new SkillRig();
+    let current = english;
+    const draft = new SkillDraftViewModel({ workshop: rig.workshop, model: undefined, conversation: () => CHAT, strings: () => current });
+    let changed = 0;
+    draft.subscribe(() => changed++);
+
+    expect(draft.strings.skillDraftTitle).toBe("Draft from this chat");
+    current = inLanguage("fr");
+    draft.retext();
+
+    expect(changed).toBeGreaterThan(0);
+    expect(draft.strings.skillDraftTitle).toBe(inLanguage("fr").skillDraftTitle);
+    expect(draft.standingNote).toBe(inLanguage("fr").skillDraftNothingSaved);
+  });
+
+  it("says that nothing is saved until Save, in every state of the draft", async () => {
+    const rig = new SkillRig();
+    const line = "Nothing is saved until you press Save.";
+    const states: [string, string][] = [];
+    const record = (draft: SkillDraftViewModel) => states.push([draft.state, draft.standingNote]);
+
+    record(draftOf(rig, new ScriptedModel().says(GOOD_ANSWER)));
+    const noChat = draftOf(rig, new ScriptedModel().says(GOOD_ANSWER), []);
+    await noChat.draft();
+    record(noChat);
+    const noModel = draftOf(rig, undefined);
+    await noModel.draft();
+    record(noModel);
+    const unreadable = draftOf(rig, new ScriptedModel().says("   "));
+    await unreadable.draft();
+    record(unreadable);
+    const failed = draftOf(rig, new ScriptedModel().throws());
+    await failed.draft();
+    record(failed);
+    const ready = draftOf(rig, new ScriptedModel().says(GOOD_ANSWER));
+    await ready.draft();
+    record(ready);
+
+    expect(states.map(([state]) => state)).toEqual([
+      SkillDraftState.Idle, SkillDraftState.NoChat, SkillDraftState.NoModel, SkillDraftState.Unreadable, SkillDraftState.Failed, SkillDraftState.Ready,
+    ]);
+    for (const [, note] of states) expect(note).toBe(line);
+  });
+
+  it("has an 'Open the proposal' command that is on only when there is a proposal", async () => {
+    const rig = new SkillRig();
+    const draft = draftOf(rig, new ScriptedModel().says(GOOD_ANSWER));
+    const opened: SkillEditorViewModel[] = [];
+    draft.onProposal((editor) => opened.push(editor));
+
+    expect([draft.hasProposal, draft.canOpenProposal]).toEqual([false, false]);
+    draft.openProposal();
+    expect(opened).toHaveLength(0);
+
+    await draft.draft();
+    expect([draft.hasProposal, draft.canOpenProposal]).toEqual([true, true]);
+    expect(opened).toHaveLength(1);
+
+    draft.openProposal();
+    expect(opened).toHaveLength(2);
+    expect(opened[1]).toBe(draft.proposal);
+    expect(rig.workshop.saves).toBe(0);
+  });
+});

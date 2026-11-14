@@ -89,9 +89,16 @@ export class StoreSkillWorkshop implements SkillWorkshop {
     for (const row of await this.#rows()) {
       const name = typeof row?.name === "string" ? row.name : "";
       if (name.length === 0) continue;
-      let broken = checkSkill(row, name) !== undefined || this.#reserved.has(name);
-      if (!broken) broken = this.check({ ...recordToDocument(row, name), instructions: "", extension: createExtensionFields(), resources: [] }, name).hasErrors;
-      entries.push(createSkillEntry(name, typeof row.description === "string" ? row.description : "", SkillOrigin.Own, !off.has(name), broken));
+      const problem = checkSkill(row, name);
+      let broken = problem !== undefined || this.#reserved.has(name);
+      let reason = problem !== undefined ? skillIssue(SkillIssueCode.SkillMdUnreadable, SkillSeverity.Error, "SKILL.md", { detail: problem })
+        : broken ? skillIssue(SkillIssueCode.NameReserved, SkillSeverity.Error, name) : undefined;
+      if (!broken) {
+        const check = this.check({ ...recordToDocument(row, name), instructions: "", extension: createExtensionFields(), resources: [] }, name);
+        broken = check.hasErrors;
+        reason = check.issues.find((i) => i.isError);
+      }
+      entries.push(createSkillEntry(name, typeof row.description === "string" ? row.description : "", SkillOrigin.Own, !off.has(name), broken, reason));
     }
     if (this.#options.organisation) {
       try {

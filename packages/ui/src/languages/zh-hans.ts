@@ -1,3 +1,4 @@
+import { formatNumber } from "../format.js";
 import { minutesAndSeconds, type UiStrings } from "../strings.js";
 
 /** Chinese, Simplified script, polite ("您"), in the console's words ("智能体", "工具", "审批"). */
@@ -523,6 +524,17 @@ export const chineseSimplifiedStrings: UiStrings = {
   skillDraftFailed: "无法撰写草稿。",
   skillDraftUnreadable: "模型的回答不是技能。请重试。",
   skillDraftBroken: "草稿违反了下列规则。请先在编辑器中修正，再保存。",
+  skillBroken: (reason) => `无法读取此技能：${reason}`,
+  skillBrokenNoReason: "无法读取此技能。请打开它进行修正，或将其删除。",
+  skillTestMatchesHeading: "与此消息匹配：",
+  skillTokens: (tokens, limit) => `约 ${formatNumber(tokens, "zh-Hans")} / ${formatNumber(limit, "zh-Hans")} 个词元`,
+  skillDraftNothingSaved: "在您点击“保存”之前不会保存任何内容。",
+  skillDraftOpen: "打开提案",
+  skillEditNamed: (name) => `编辑 ${name}`,
+  skillViewNamed: (name) => `查看 ${name}`,
+  skillDeleteNamed: (name) => `删除 ${name}`,
+  skillExportNamed: (name) => `导出 ${name}`,
+  skillDuplicateNamed: (name) => `复制 ${name}`,
   skillIssue: {
     NameMissing: "名称为空。",
     NameForm: "名称只能使用小写字母、数字和单个连字符。",

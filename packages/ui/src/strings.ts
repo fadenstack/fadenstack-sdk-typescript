@@ -1,3 +1,4 @@
+import { formatNumber } from "./format.js";
 import type { ReasoningLevel, SkillIssueCode } from "@fadenstack/agents";
 import type { EndpointProblem, TextWatermark, ToolClass, ToolMode } from "@fadenstack/client";
 
@@ -592,6 +593,24 @@ export interface UiStrings {
   skillDraftFailed: string;
   skillDraftUnreadable: string;
   skillDraftBroken: string;
+  /** "This skill cannot be read: {reason}" (the reason is a check's words). */
+  skillBroken(reason: string): string;
+  /** A broken skill whose reason is not known. */
+  skillBrokenNoReason: string;
+  /** The Try panel's heading for the skills that matched. */
+  skillTestMatchesHeading: string;
+  /** "about 1,200 of 5,000 tokens": the instructions' size against the advisory limit. */
+  skillTokens(tokens: number, limit: number): string;
+  /** In every state of a draft: nothing is saved until Save. */
+  skillDraftNothingSaved: string;
+  /** "Open the proposal". */
+  skillDraftOpen: string;
+  /** "Edit {name}": a row button's name for a screen reader. */
+  skillEditNamed(name: string): string;
+  skillViewNamed(name: string): string;
+  skillDeleteNamed(name: string): string;
+  skillExportNamed(name: string): string;
+  skillDuplicateNamed(name: string): string;
   /** What a check found, in words, by its code: `{0}` the field or file, `{1}` the limit, `{2}` the size, `{3}` the detail (`skillIssueText` fills it). */
   skillIssue: Record<SkillIssueCode, string>;
 }
@@ -1115,6 +1134,17 @@ export const englishStrings: UiStrings = {
   skillDraftFailed: "The draft could not be written.",
   skillDraftUnreadable: "The model’s answer is not a skill. Try again.",
   skillDraftBroken: "The draft breaks the rules listed below. Fix it in the editor before saving.",
+  skillBroken: (reason) => `This skill cannot be read: ${reason}`,
+  skillBrokenNoReason: "This skill cannot be read. Open it to fix it, or delete it.",
+  skillTestMatchesHeading: "Matched this message:",
+  skillTokens: (tokens, limit) => `about ${formatNumber(tokens, "en")} of ${formatNumber(limit, "en")} tokens`,
+  skillDraftNothingSaved: "Nothing is saved until you press Save.",
+  skillDraftOpen: "Open the proposal",
+  skillEditNamed: (name) => `Edit ${name}`,
+  skillViewNamed: (name) => `View ${name}`,
+  skillDeleteNamed: (name) => `Delete ${name}`,
+  skillExportNamed: (name) => `Export ${name}`,
+  skillDuplicateNamed: (name) => `Duplicate ${name}`,
   skillIssue: {
     NameMissing: "The name is empty.",
     NameForm: "The name may use only lower-case letters, digits and single hyphens.",

@@ -48,6 +48,8 @@ export interface SkillEntry {
   readonly enabled: boolean;
   /** The record breaks a rule: the module does not list it; the person can open it to fix or delete it. */
   readonly isBroken: boolean;
+  /** Why it is broken, as a check's finding, when the library knows (undefined otherwise); the view model says it in words. */
+  readonly brokenIssue: SkillIssue | undefined;
   /** Not the person's own: bundled and organisation skills are read only. */
   readonly isReadOnly: boolean;
   /** The on/off switch is the person's for bundled and own skills; the organisation decides its own. */
@@ -56,13 +58,14 @@ export interface SkillEntry {
   readonly notReviewed: boolean;
 }
 
-export function createSkillEntry(name: string, description: string, origin: SkillOrigin, enabled: boolean, isBroken = false): SkillEntry {
+export function createSkillEntry(name: string, description: string, origin: SkillOrigin, enabled: boolean, isBroken = false, brokenIssue?: SkillIssue): SkillEntry {
   return {
     name,
     description,
     origin,
     enabled,
     isBroken,
+    brokenIssue: isBroken ? brokenIssue : undefined,
     isReadOnly: origin !== SkillOrigin.Own,
     canSwitch: origin !== SkillOrigin.Organisation,
     notReviewed: origin === SkillOrigin.Own,

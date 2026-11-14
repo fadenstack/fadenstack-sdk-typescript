@@ -1,9 +1,11 @@
 import { describe, expect, it } from "vitest";
+import { SkillOrigin, createSkillEntry } from "@fadenstack/agents";
 import { readZip } from "@fadenstack/skills";
-import { SkillEditorMode, SkillLibraryViewModel } from "@fadenstack/ui";
+import { SkillEditorMode, SkillLibraryViewModel, SkillMessageKind, SkillRowViewModel, englishStrings, germanStrings, type UiStrings } from "@fadenstack/ui";
 
 import {
   Gate,
+  ScriptedModel,
   SkillRig,
   ThrowingWorkshop,
   doc,
@@ -380,5 +382,119 @@ describe("the skill library", () => {
     expect(library.canConfirmImport).toBe(false);
     expect(library.importIssues.some((i) => i.isError)).toBe(true);
     expect(await rig.isEmpty()).toBe(true);
+  });
+});
+
+describe("the gaps the skin builders found: the library", () => {
+  it("exposes its texts and says so when the language changes", async () => {
+    const rig = new SkillRig();
+    let current: UiStrings = englishStrings;
+    const library = rig.library(undefined, () => current);
+    const versions: number[] = [];
+    library.subscribe(() => versions.push(library.version));
+
+    expect(library.strings.skillLibraryTitle).toBe("Skills on this device");
+    current = germanStrings;
+    library.retext();
+
+    expect(versions.length).toBeGreaterThan(0);
+    expect(library.strings.skillLibraryTitle).toBe(germanStrings.skillLibraryTitle);
+  });
+
+  it("says whether a message is information or an error", async () => {
+    const rig = new SkillRig();
+    await rig.workshop.save(doc());
+    const library = rig.library();
+    await library.refresh();
+    expect([library.message, library.messageIsError, library.messageIsInformation, library.messageIsWarning]).toEqual(["", false, false, false]);
+
+    // information: what an action did
+    library.askDelete(row(library, "contract-review"));
+    await library.confirmDelete();
+    expect(library.message).toBe("contract-review was deleted.");
+    expect(library.messageKind).toBe(SkillMessageKind.Information);
+    expect([library.messageIsInformation, library.messageIsError]).toEqual([true, false]);
+
+    // an error: the action did not happen (the skill is gone before Edit reads it)
+    await rig.workshop.save(doc("other-skill"));
+    await library.refresh();
+    const other = row(library, "other-skill");
+    await rig.workshop.delete("other-skill");
+    await library.edit(other);
+    expect(library.message).not.toBe("");
+    expect(library.messageKind).toBe(SkillMessageKind.Error);
+    expect([library.messageIsError, library.messageIsInformation]).toEqual([true, false]);
+  });
+
+  it("says a broken skill cannot be read, and why when it knows", async () => {
+    const rig = new SkillRig();
+    await rig.workshop.save(doc());
+    rig.store.putRaw({ name: "bad-skill", description: "x", body: "Body.", version: 3 });
+    let current: UiStrings = englishStrings;
+    const library = rig.library(undefined, () => current);
+    await library.refresh();
+
+    const bad = row(library, "bad-skill");
+    expect(bad.isBroken).toBe(true);
+    expect(bad.brokenText.startsWith("This skill cannot be read: ")).toBe(true);
+    expect(bad.brokenText).toContain("version");
+    expect(row(library, "contract-review").brokenText).toBe("");
+    expect(row(library, "slide-design").brokenText).toBe("");
+    current = germanStrings;
+    library.retext();
+    expect(bad.brokenText.startsWith("Dieser Skill kann nicht gelesen werden: ")).toBe(true);
+
+    // a broken skill whose reason is not known still says it cannot be read
+    const odd = new SkillRowViewModel(createSkillEntry("odd", "", SkillOrigin.Own, true, true), () => englishStrings);
+    expect(odd.brokenText).toBe("This skill cannot be read. Open it to fix it, or delete it.");
+  });
+
+  it("names the buttons of a row for the row, in every language", async () => {
+    const rig = new SkillRig();
+    await rig.workshop.save(doc());
+    let current: UiStrings = englishStrings;
+    const library = rig.library(undefined, () => current);
+    await library.refresh();
+    const own = row(library, "contract-review");
+    const bundled = row(library, "slide-design");
+
+    expect([own.editLabel, own.deleteLabel, own.exportLabel, own.duplicateLabel]).toEqual([
+      "Edit contract-review", "Delete contract-review", "Export contract-review", "Duplicate contract-review",
+    ]);
+    expect(bundled.viewLabel).toBe("View slide-design");
+    current = inLanguage("fr");
+    library.retext();
+    expect(own.editLabel).toBe("Modifier contract-review");
+    current = inLanguage("zh-Hans");
+    library.retext();
+    expect(new Set([own.editLabel, own.deleteLabel, own.exportLabel, own.duplicateLabel, bundled.viewLabel]).size).toBe(5);
+    expect(own.exportLabel).toContain("contract-review");
+  });
+
+  it("has a 'Draft from this chat' entry only when the host gives a conversation", async () => {
+    const rig = new SkillRig();
+    const without = rig.library();
+    expect([without.hasDraft, without.draft, without.canToggleDraft]).toEqual([false, undefined, false]);
+
+    const chat = [{ fromUser: true, text: "Please review this contract." }, { fromUser: false, text: "Clause 4 caps liability." }];
+    const model = new ScriptedModel().says("---\nname: contract-review\ndescription: Reviews contracts. Use when asked.\n---\n## Goal\nReview.\n");
+    const library = new SkillLibraryViewModel({ workshop: rig.workshop, files: rig.files, model, strings: () => english, draftSource: () => chat });
+
+    expect([library.hasDraft, library.draftOpen, library.canToggleDraft]).toEqual([true, false, true]);
+    library.toggleDraft();
+    expect(library.draftOpen).toBe(true);
+
+    // the draft opens in the library's editor as a proposal; nothing is saved
+    await library.draft!.draft();
+    expect(library.editor?.isProposal).toBe(true);
+    expect(library.draftOpen).toBe(false);
+    expect(rig.workshop.saves).toBe(0);
+    expect(library.canToggleDraft).toBe(false);
+
+    // Open the proposal while it is open: the same editor, once
+    library.draft!.openProposal();
+    expect(library.editor).toBe(library.draft!.proposal);
+    library.editor!.cancel();
+    expect(library.editor).toBeUndefined();
   });
 });

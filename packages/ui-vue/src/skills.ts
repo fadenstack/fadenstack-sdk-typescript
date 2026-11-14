@@ -1,11 +1,9 @@
 import { nextTick, onMounted, watch, type Ref } from "vue";
 
-import { englishStrings, type SkillEditorViewModel, type StringsSource } from "@fadenstack/ui";
+import type { SkillDraftViewModel, SkillEditorViewModel } from "@fadenstack/ui";
 
 // What the skill views share (parity with @fadenstack/ui-react's SkillParts and the editor's Escape).
 
-/** The texts when the app gives none: English. */
-export const defaultStrings: StringsSource = () => englishStrings;
 
 /**
  * A new state takes the focus: its first marked field, else its title, else the root itself. `source` says when the state changed
@@ -28,6 +26,14 @@ export function editorEscape(vm: SkillEditorViewModel, e: KeyboardEvent): void {
   if (e.key !== "Escape" || e.defaultPrevented) return;
   if (vm.needsReplaceConfirmation) vm.dismissReplace();
   else vm.cancel();
+  e.preventDefault();
+  e.stopPropagation();
+}
+
+/** Escape stops a draft that is on its way. */
+export function draftEscape(vm: SkillDraftViewModel, e: KeyboardEvent): void {
+  if (e.key !== "Escape" || e.defaultPrevented || !vm.isWorking) return;
+  vm.cancel();
   e.preventDefault();
   e.stopPropagation();
 }
