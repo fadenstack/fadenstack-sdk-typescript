@@ -1,0 +1,47 @@
+{
+  "name": "@fadenstack/mcp",
+  "version": "0.3.0-rc.2",
+  "description": "Local MCP servers over HTTP for a Fadenstack agent: the person's servers in IndexedDB, the hint rule, import, and the policy",
+  "license": "Apache-2.0",
+  "author": "Emagin8 UG (haftungsbeschränkt)",
+  "homepage": "https://developers.fadenstack.com/sdk/typescript/mcp/",
+  "bugs": "https://github.com/fadenstack/fadenstack-sdk-typescript/issues",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/fadenstack/fadenstack-sdk-typescript.git",
+    "directory": "packages/mcp"
+  },
+  "keywords": [
+    "fadenstack",
+    "ai",
+    "agents",
+    "mcp",
+    "model-context-protocol"
+  ],
+  "type": "module",
+  "sideEffects": false,
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "src",
+    "NOTICE"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
+  "dependencies": {
+    "@fadenstack/agents": "0.3.0-rc.2",
+    "@fadenstack/client": "0.3.0-rc.2",
+    "@modelcontextprotocol/client": "2.4.0"
+  },
+  "devDependencies": {
+    "@modelcontextprotocol/server": "2.4.0"
+  }
+}

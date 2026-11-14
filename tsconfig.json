@@ -12,7 +12,8 @@
       "@fadenstack/testing": ["./packages/testing/src/index.ts"],
       "@fadenstack/testing/provenance": ["./packages/testing/src/provenance.ts"],
       "@fadenstack/provenance": ["./packages/provenance/src/index.ts"],
-      "@fadenstack/skills": ["./packages/skills/src/index.ts"]
+      "@fadenstack/skills": ["./packages/skills/src/index.ts"],
+      "@fadenstack/mcp": ["./packages/mcp/src/index.ts"]
     }
   },
   "include": ["packages/*/src", "packages/*/test", "samples", "vitest.config.ts"],

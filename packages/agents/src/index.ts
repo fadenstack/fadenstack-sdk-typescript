@@ -136,6 +136,8 @@ export {
   IndexedDbKeyStore,
   SecretProtectionError,
   WebCryptoSecretProtector,
+  browserSecretProtector,
+  recordContext,
   type IndexedDbKeyStoreOptions,
   type KeySource,
   type SecretProtector,
