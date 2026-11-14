@@ -101,6 +101,19 @@ describe("the endpoint check", () => {
     expect(report.chatOnly).toBe(true);
   });
 
+  it.each([
+    ["http://127.0.0.1:1234/v1", true, true],
+    ["http://localhost:11434/v1", true, true],
+    ["https://api.example.test/v1", true, false],
+    ["http://localhost:11434/v1", false, false],
+  ])("says a key travels unencrypted on this computer only for a keyed http endpoint: %s (key %s)", async (baseUrl, keyed, said) => {
+    const { check, fake } = make(baseUrl, EndpointDialect.openAiCompatible, keyed ? new StaticTokenProvider("k-1") : undefined);
+    fake.answers.push(OpenAiFake.text("OK"), OpenAiFake.calls(["call-1", "report_ready", "{}"]));
+
+    const report = await check.run();
+
+    expect(report.problems.includes(EndpointProblem.KeyUnencryptedOnThisComputer)).toBe(said);
+  });
   it("a bad key stops the check there", async () => {
     const { check, fake } = make("https://api.example.test/v1", EndpointDialect.openAi, new StaticTokenProvider("k-bad"));
     fake.intercept = () => OpenAiFake.error(401, { error: { message: "Incorrect API key" } });
