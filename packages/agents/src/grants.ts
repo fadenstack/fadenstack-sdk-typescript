@@ -306,7 +306,7 @@ export class AgentGrants {
     if (!this.available) { this.#replace([], undefined); return; }
     try {
       const since = this.#generation;
-      const list = await this.#agent.client.agent!.listGrants(signal);
+      const list = await this.#agent.backend.listGrants(signal);
       for (const grant of list.data) this.#owned(grant);
       this.#replace(list.data, list.serverNow, since);
     } catch (error) { this.#replace([], undefined); throw error; }
@@ -320,7 +320,7 @@ export class AgentGrants {
       || this.#agent.profile.hostToolContract.find(t => t.name === tool)?.approval === "always")
       throw new Error("A time grant is not offered for this call.");
     const shownTextSha256 = shownText === undefined ? undefined : await bytesSha256(new TextEncoder().encode(shownText));
-    const grant = await this.#agent.client.agent!.createGrant({ kind: "time", tools: [tool], minutes,
+    const grant = await this.#agent.backend.createGrant({ kind: "time", tools: [tool], minutes,
       ...(conversationId ? { conversation: true } : {}), ...(shownTextSha256 ? { shownTextSha256 } : {}) }, { conversationId, signal });
     if (!this.#answers(grant, "time", minutes, conversationId) || grant.scope.tools?.length !== 1 || grant.scope.tools[0] !== tool)
       throw new Error("The returned grant exceeds or differs from the confirmed request. Inspect active grants.");
@@ -342,7 +342,7 @@ export class AgentGrants {
       }
     }
     const classes = [...this.#agent.profile.approvals!.grantClasses];
-    const grant = await this.#agent.client.agent!.createGrant({ kind: "work", targets: structuredClone([...targets]), minutes,
+    const grant = await this.#agent.backend.createGrant({ kind: "work", targets: structuredClone([...targets]), minutes,
       classes, ...(shownText === undefined ? {} : { shownTextSha256: await bytesSha256(new TextEncoder().encode(shownText)) }) }, { conversationId, signal });
     if (!this.#answers(grant, "work", minutes, conversationId)
       || !grant.scope.classes?.length || !grant.scope.targets?.length || grant.scope.classes.some(c => !classes.includes(c as "read" | "write"))
@@ -377,7 +377,7 @@ export class AgentGrants {
     for (let attempt = 0; ; attempt++) {
       const proof = await this.#agent.stepUps.obtain(handler, conversationId, longest, signal ?? new AbortController().signal);
       try {
-        const grant = await this.#agent.client.agent!.createGrant(request, { conversationId, stepUpProof: proof, signal });
+        const grant = await this.#agent.backend.createGrant(request, { conversationId, stepUpProof: proof, signal });
         if (!this.#answers(grant, "bypass", minutes, conversationId))
           throw new Error("The returned Bypass grant exceeds or differs from the confirmed request. Inspect active grants.");
         return this.#keep(grant);
@@ -391,7 +391,7 @@ export class AgentGrants {
 
   /** The calls the device ran under a Bypass grant in the turn that just ended, for the gateway to compare (L-61). */
   report(grantId: string, calls: readonly string[], signal?: AbortSignal): Promise<GrantReport> {
-    return this.#agent.client.agent!.reportGrant(grantId, calls, signal);
+    return this.#agent.backend.reportGrant(grantId, calls, signal);
   }
 
   /**
@@ -405,7 +405,7 @@ export class AgentGrants {
     const known = this.#ended(this.#seen.get(grantId));
     if (known) return known;
     try {
-      const found = await this.#agent.client.agent!.getGrant(grantId, signal);
+      const found = await this.#agent.backend.getGrant(grantId, signal);
       this.#seen.set(found.id, structuredClone(found));
       return this.#ended(found);
     } catch (error) {
@@ -425,9 +425,9 @@ export class AgentGrants {
     return null;
   }
 
-  async pause(id: string, signal?: AbortSignal): Promise<AgentGrant> { return this.#keep(await this.#agent.client.agent!.pauseGrant(id, signal)); }
-  async resume(id: string, signal?: AbortSignal): Promise<AgentGrant> { return this.#keep(await this.#agent.client.agent!.resumeGrant(id, signal)); }
-  async revoke(id: string, signal?: AbortSignal): Promise<AgentGrant> { return this.#keep(await this.#agent.client.agent!.revokeGrant(id, signal)); }
+  async pause(id: string, signal?: AbortSignal): Promise<AgentGrant> { return this.#keep(await this.#agent.backend.pauseGrant(id, signal)); }
+  async resume(id: string, signal?: AbortSignal): Promise<AgentGrant> { return this.#keep(await this.#agent.backend.resumeGrant(id, signal)); }
+  async revoke(id: string, signal?: AbortSignal): Promise<AgentGrant> { return this.#keep(await this.#agent.backend.revokeGrant(id, signal)); }
 
   /** Ends every grant this device holds for the agent: the marker's Stop. */
   async revokeAll(signal?: AbortSignal): Promise<void> {
@@ -487,7 +487,7 @@ export class AgentGrants {
     if (this.#known.get(id)?.kind === "bypass") throw new Error("A Bypass grant is not extended: more time is a new Bypass, confirmed again.");
     const extension = { minutes: more > 0 ? minutesOf(more) : 0, targets: targetsOf(places),
       ...(shownText === undefined ? {} : { shownTextSha256: await bytesSha256(new TextEncoder().encode(shownText)) }) };
-    const before = await this.#agent.client.agent!.getGrant(id, signal);
+    const before = await this.#agent.backend.getGrant(id, signal);
     this.#owned(before);
     if (before.kind === "bypass" || !this.offers(before.kind === "work" ? "grant" : "time")) throw new Error("This grant cannot be extended.");
     if (extension.targets?.length) {
@@ -497,7 +497,7 @@ export class AgentGrants {
         if (!canonical || canonical.type !== target.type || canonical.identifier !== identifier) throw new Error("The added place is not canonical.");
       }
     }
-    return this.#keep(await this.#agent.client.agent!.extendGrant(id, extension, signal));
+    return this.#keep(await this.#agent.backend.extendGrant(id, extension, signal));
   }
 
   /** Internal: a grant_used event is mandatory. Every check rereads server state; no timer or cache authorizes. */
@@ -521,7 +521,7 @@ export class AgentGrants {
     if (dispatch ? this.#used.get(key) !== id : this.#used.has(key)) return no;
     const readOrWrite = ["read", "write"].includes(call.toolClass);
     try {
-      const grant = this.#keep(await this.#agent.client.agent!.getGrant(id, signal));
+      const grant = this.#keep(await this.#agent.backend.getGrant(id, signal));
       const bypass = grant.kind === "bypass";
       if (!bypass && (!readOrWrite || !this.offers(grant.kind === "time" ? "time" : "grant")
         || !this.#agent.profile.approvals!.grantClasses.includes(call.toolClass as "read" | "write"))) return no;
