@@ -1954,3 +1954,176 @@
   background: var(--fdn-warning-soft);
   color: var(--fdn-warning);
 }
+
+/* -- the skill library, editor and draft ---------------------------------------------------------- */
+
+/* The skill views are the wizard's column, a little wider (a skill is text to read), with the wizard's own fields, actions and
+   alerts; what follows is only what a skill needs beyond them. */
+.fdn-skills-column {
+  max-width: 720px;
+}
+
+.fdn-skills-column .fdn-wizard-actions,
+.fdn-skills-editor .fdn-wizard-actions {
+  flex-direction: row;
+  flex-wrap: wrap;
+}
+
+.fdn-skills-column .fdn-wizard-actions .fdn-button,
+.fdn-skills-editor .fdn-wizard-actions .fdn-button {
+  width: auto;
+}
+
+.fdn-skills-editor {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.fdn-skills-editor h3 {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.fdn-skills-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.fdn-skills-row {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.fdn-skills-row-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.fdn-skills-name {
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.fdn-skills-badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.fdn-skills-switch {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 6px;
+  color: var(--fdn-text-muted);
+}
+
+.fdn-skills-switch input {
+  accent-color: var(--fdn-accent);
+}
+
+.fdn-skills-message {
+  padding: 8px 12px;
+  border-radius: var(--fdn-radius);
+  background: var(--fdn-accent-soft);
+  color: var(--fdn-on-accent-soft);
+}
+
+.fdn-skills-ask {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.fdn-skills-ask > p {
+  margin: 0;
+}
+
+.fdn-skills-column textarea,
+.fdn-skills-editor textarea,
+.fdn-skills-column input[type="number"],
+.fdn-skills-editor input[type="number"] {
+  width: 100%;
+  padding: 6px 8px;
+  border: 1px solid var(--fdn-border);
+  border-radius: var(--fdn-radius);
+  background: var(--fdn-bg);
+  color: inherit;
+  font: inherit;
+}
+
+.fdn-skills-editor textarea[readonly],
+.fdn-skills-editor input[readonly] {
+  background: var(--fdn-surface);
+  color: var(--fdn-text-muted);
+}
+
+.fdn-skills-instructions {
+  min-height: 160px;
+  font-family: var(--fdn-mono);
+  resize: vertical;
+}
+
+.fdn-skills-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.fdn-skills-issues {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.fdn-skills-issue {
+  margin: 0;
+  font-size: 12px;
+  color: var(--fdn-warning);
+}
+
+.fdn-skills-issue-error {
+  color: var(--fdn-danger);
+}
+
+.fdn-skills-ok {
+  margin: 0;
+  color: var(--fdn-success);
+}
+
+.fdn-skills-preview {
+  background: var(--fdn-surface);
+}
+
+.fdn-skills-files {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.fdn-skills-try {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.fdn-skills-try ul {
+  margin: 0;
+  padding-inline-start: 18px;
+}
