@@ -20,6 +20,7 @@ export {
 export type { AgentEvent, AgentResult, ToolOutcome } from "./events.js";
 export {
   NO_TOOL_SERVICES,
+  RESERVED_TOOL_NAMES,
   checkArguments,
   defineTool,
   outputEditKind,

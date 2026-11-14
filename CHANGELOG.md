@@ -26,6 +26,14 @@ before 1.0, a minor version may break the API, and this file says where it does.
   with a `risk` still decides its class) and no server check per call; offered while any tool on request is left to find.
   A Fadenstack gateway from 0.7.1 takes it as read and never holds it back. **Breaking (unlikely to matter):**
   `addTools` refuses an app's tool named `find_tool`, and an app's tool source that brings one has it left out.
+- **Breaking:** four more tool names are the SDK's own, for its coming tools: `load_skill`, `read_skill_resource`,
+  `run_skill_script` (never offered) and `web_search`; all five are in `RESERVED_TOOL_NAMES`. `addTools`, a module's
+  `configure`, and `OnRequestTools` (constructor and `set`) refuse an app's tool of one of these names with a
+  `TypeError` (`OnRequestTools` used to drop a `find_tool` silently); rename it. An app's tool source that brings one has
+  it left out, now logged (event 2016). A Fadenstack gateway gives these names the class of the SDK's tool, so an app's
+  tool under one would be taken for it.
+- A tool source's tool that loses its name to the app's own tool or to an earlier source is still left out, and is now
+  logged with what won (event 2017).
 
 - **Breaking:** `AgentSession` (`@fadenstack/agents`) is now `ChatSession`, as in the .NET SDK, where the agent becomes
   a Microsoft Agent Framework `AIAgent` with an `AgentSession` of its own; only the name changes.

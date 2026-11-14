@@ -55,6 +55,23 @@ The second argument, `context`, describes the call:
 | `turnId` | The turn's id. |
 | `services` | What modules give tools for this call, by key: `context.services.get(Provenance)`. Undefined for a key no module gives. |
 
+### Names the SDK keeps
+
+Five names are the SDK's own (`RESERVED_TOOL_NAMES`). A Fadenstack gateway gives each the class of the SDK's tool, so an
+app's tool cannot take one:
+
+| Name | The SDK's tool |
+|---|---|
+| `find_tool` | The tool search of `OnRequestTools` (`FIND_TOOL_NAME`): read |
+| `load_skill`, `read_skill_resource` | Skills on the device (coming): read |
+| `run_skill_script` | Kept, and never offered: skill scripts stay off |
+| `web_search` | Web search (coming): read, open-world |
+
+- `addTools`, a module's `configure`, and `OnRequestTools` (its constructor and `set`) refuse a tool of one of these
+  names with a `TypeError`.
+- A tool source of the app's that brings one has it left out, and it is logged (event 2016). Only the SDK's own sources
+  bring them.
+
 ## Content people read
 
 A tool that writes content people read -- a reply into a mail, a paragraph into a document, a picture into a slide --
@@ -333,8 +350,9 @@ const agent = FadenstackAgent.createBuilder().useClient(client).addToolSource(pl
 
 `getTools(context, signal)` is called when the agent starts. `context` has the `client` and the agent's `profile`, and
 `report(event)`, which reports an event to the server (names and counts, never content). A host tool wins over a
-source's tool of the same name, and the first source over a later one. If the source has a `dispose()` method,
-`agent.dispose()` calls it.
+source's tool of the same name, and the first source over a later one; the tool left out is logged with what won
+(event 2017). A source never brings a [name the SDK keeps](#names-the-sdk-keeps). If the source has a `dispose()`
+method, `agent.dispose()` calls it.
 
 A source can also have a `declared()` method that returns the host tools it brings before the agent's contract settles
 them. The app manifest reports these, which is how the server learns of tools its contract does not list yet.

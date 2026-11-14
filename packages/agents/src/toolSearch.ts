@@ -1,6 +1,6 @@
 import type { ChatSession } from "./session.js";
 import type { AgentContext, ChangingToolSource } from "./stages.js";
-import { CORE_TOOL_SOURCE, FIND_TOOL_NAME, defineTool, settleHostTools, type AgentTool, type ToolScope } from "./tools.js";
+import { CORE_TOOL_SOURCE, FIND_TOOL_NAME, defineTool, refuseReservedToolNames, settleHostTools, type AgentTool, type ToolScope } from "./tools.js";
 
 /** The name of the tool that finds the other tools: the SDK's own (an app's tool cannot take it). */
 export { FIND_TOOL_NAME };
@@ -43,13 +43,16 @@ export class OnRequestTools implements ChangingToolSource {
     beforeCall: (tool, session) => this.#beforeCall(tool, session),
   };
 
+  /** `tools` are the app's: a name the SDK keeps for its own tools (`RESERVED_TOOL_NAMES`) is refused (`TypeError`). */
   constructor(tools: readonly AgentTool[] = [], options: OnRequestToolsOptions = {}) {
+    refuseReservedToolNames(tools);
     this.#declared = [...tools];
     this.#index = [...(options.index ?? [])];
   }
 
-  /** Replaces the tools on request; the agent asks for them again at the start of its next turn. */
+  /** Replaces the tools on request; the agent asks for them again at the start of its next turn. Reserved names are refused. */
   set(tools: readonly AgentTool[]): void {
+    refuseReservedToolNames(tools);
     this.#declared = [...tools];
     for (const listener of [...this.#listeners]) listener();
   }
@@ -63,7 +66,7 @@ export class OnRequestTools implements ChangingToolSource {
 
   /** The host tools this source brings, `find_tool` first: for the app manifest, which is how the server learns of them. */
   declared(): readonly AgentTool[] {
-    const tools = this.#declared.filter((t) => t.name !== FIND_TOOL_NAME);
+    const tools = this.#declared; // no reserved name: the constructor and set refuse them
     return tools.length ? [this.#findTool(), ...tools] : [];
   }
 

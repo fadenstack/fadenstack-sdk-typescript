@@ -10,6 +10,32 @@ import type { ChatSession } from "./session.js";
  */
 export const FIND_TOOL_NAME = "find_tool";
 
+/**
+ * The names the SDK keeps for its own tools (sdk/52 §10.5, the owner, 14 Nov 2026): `find_tool` (the tool search),
+ * `load_skill`, `read_skill_resource` and `run_skill_script` (skills on the device; scripts are never offered), and
+ * `web_search`. A Fadenstack gateway gives these names the class of the SDK's own tool, so no app's tool may carry one:
+ * `addTools` and `OnRequestTools` refuse it, and an app's tool source that brings one has it left out. Only the SDK's own
+ * sources bring them. The .NET SDK's `AgentTool.ReservedNames`.
+ */
+export const RESERVED_TOOL_NAMES: readonly string[] = Object.freeze([
+  FIND_TOOL_NAME, "load_skill", "read_skill_resource", "run_skill_script", "web_search",
+]);
+
+/** Whether `name` is one the SDK keeps for its own tools (`RESERVED_TOOL_NAMES`). */
+export function isReservedToolName(name: string): boolean {
+  return RESERVED_TOOL_NAMES.includes(name);
+}
+
+/** Throws for an app's tool under a name the SDK keeps for itself: the builder's and `OnRequestTools`' check. */
+export function refuseReservedToolNames(tools: readonly { readonly name: string }[]): void {
+  for (const tool of tools) {
+    if (isReservedToolName(tool.name)) {
+      throw new TypeError(
+        `'${tool.name}' is a name the SDK keeps for its own tools (${RESERVED_TOOL_NAMES.join(", ")}), so an app's tool cannot take it: name it differently.`);
+    }
+  }
+}
+
 /** Marks one of the SDK's own tool sources, the only kind that may bring `FIND_TOOL_NAME`. Not exported from the package. */
 export const CORE_TOOL_SOURCE: unique symbol = Symbol("fadenstack.coreToolSource");
 

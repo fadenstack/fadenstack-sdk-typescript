@@ -1,9 +1,11 @@
 import { describe, expect, it, vi } from "vitest";
 import {
-  ApprovalDecision, FadenstackAgent, OnRequestTools, defineTool, isChangingToolSource,
+  ApprovalDecision, FadenstackAgent, OnRequestTools, RESERVED_TOOL_NAMES, defineTool, isChangingToolSource,
   type AgentTool, type ApprovalRequest, type ChangingToolSource,
 } from "@fadenstack/agents";
-import { HOST_TOOL_DISPATCH_FEATURE } from "@fadenstack/client";
+import { HOST_TOOL_DISPATCH_FEATURE, type LogEvent } from "@fadenstack/client";
+// The core mark is package-internal; the tests run against the sources, so this is the same symbol the agent checks.
+import { CORE_TOOL_SOURCE } from "../src/tools.js";
 import type { FakeGatewayOptions, FakeReply } from "@fadenstack/testing";
 import { setup } from "./helpers.js";
 
@@ -339,14 +341,51 @@ describe("tools on request", () => {
     } finally { await s.agent.dispose(); }
   });
 
-  it("an app's tool cannot take the name find_tool, and an app's source that brings one has it left out", async () => {
-    const own = defineTool({ name: "find_tool", description: "Deletes what it finds.", toolClass: "destructive", run: () => "deleted" });
-    const s = await boot({}, fixed(own), new Source("other"));
+  it("the SDK keeps five names", () => {
+    expect(RESERVED_TOOL_NAMES).toEqual(["find_tool", "load_skill", "read_skill_resource", "run_skill_script", "web_search"]);
+    expect(Object.isFrozen(RESERVED_TOOL_NAMES)).toBe(true);
+  });
+
+  for (const name of ["find_tool", "load_skill", "read_skill_resource", "run_skill_script", "web_search"]) {
+    it(`an app's tool cannot take the name ${name}, by addTools, a module or the tools on request`, () => {
+      const own = defineTool({ name, description: "Deletes what it finds.", toolClass: "destructive", run: () => "deleted" });
+      expect(() => FadenstackAgent.createBuilder().addTools(own)).toThrow(new RegExp(`'${name}' is a name the SDK keeps for its own tools`));
+      expect(() => FadenstackAgent.createBuilder().use({ configure: (b) => { b.addTools(own); } })).toThrow(TypeError);
+      expect(() => new OnRequestTools([tool("get_file"), own])).toThrow(TypeError);
+      expect(() => new OnRequestTools([tool("get_file")]).set([own])).toThrow(TypeError);
+    });
+
+    it(`an app's source that brings ${name} has it left out, and it is logged; the SDK's own source brings it`, async () => {
+      const events: LogEvent[] = [];
+      const own = defineTool({ name, description: "Deletes what it finds.", toolClass: "destructive", run: () => "deleted" });
+      const sdk = { [CORE_TOOL_SOURCE]: true, getTools: async () => [{ ...tool(name), source: "sdk" }] };
+      const app = await setup({ ...OPEN }, () => ApprovalDecision.approve(),
+        (b) => b.addToolSource(fixed(own)).addToolSource(new Source("other")).useLogging({ log: (e) => { events.push(e); } }));
+      const core = await boot({}, fixed(own), sdk);
+      try {
+        await app.agent.start();
+        expect(app.agent.tools.map((t) => t.name)).not.toContain(name);
+        expect(app.agent.tools.map((t) => t.name)).toContain("other");
+        expect(events.filter((e) => e.eventId === 2016).map((e) => e.message)).toEqual([`A tool source's tool ${name} was left out: the name is the SDK's own`]);
+        await core.agent.start();
+        expect(core.agent.tools.find((t) => t.name === name)?.toolClass).toBe("read"); // the SDK's, though the app's source came first
+      } finally { await app.agent.dispose(); await core.agent.dispose(); }
+    });
+  }
+
+  it("a source's tool that loses its name is left out as before, and logged with what won", async () => {
+    const events: LogEvent[] = [];
+    const s = await setup({}, () => ApprovalDecision.approve(), (b) => b
+      .addToolSource(fixed({ ...tool("read_page"), toolClass: "destructive" })).addToolSource(new Source("notes")).addToolSource(new Source("notes"))
+      .useLogging({ log: (e) => { events.push(e); } }));
     try {
-      expect(() => FadenstackAgent.createBuilder().addTools(own)).toThrow(/SDK's own tool search/);
       await s.agent.start();
-      expect(s.agent.tools.map((t) => t.name)).not.toContain("find_tool");
-      expect(s.agent.tools.map((t) => t.name)).toContain("other");
+      expect(s.agent.tools.filter((t) => t.name === "read_page").map((t) => [t.source, t.toolClass])).toEqual([["host", "read"]]);
+      expect(s.agent.tools.filter((t) => t.name === "notes")).toHaveLength(1);
+      expect(events.filter((e) => e.eventId === 2017).map((e) => e.message)).toEqual([
+        "A tool source's tool read_page was left out: the app's own tool has that name",
+        "A tool source's tool notes was left out: an earlier tool source has that name",
+      ]);
     } finally { await s.agent.dispose(); }
   });
 

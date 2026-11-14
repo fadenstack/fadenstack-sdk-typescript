@@ -33,7 +33,7 @@ import { EventReporter } from "./reporter.js";
 import { ChatSession } from "./session.js";
 import { isChangingToolSource, type AgentContext, type ToolSource } from "./stages.js";
 import { AgentLog } from "./log.js";
-import { FIND_TOOL_NAME, isCoreToolSource, settleHostTools, toDefinition, type AgentTool, type ToolOutput } from "./tools.js";
+import { isCoreToolSource, isReservedToolName, settleHostTools, toDefinition, type AgentTool, type ToolOutput } from "./tools.js";
 import { newId, type SessionInfo } from "./transcript.js";
 import { AgentGrants, isGrantHandler, type GrantHandler } from "./grants.js";
 
@@ -288,17 +288,25 @@ export class FadenstackAgent {
   }
 
   /**
-   * The host tools, then each source's tools in the builder's order; a host tool wins over a source's of the same name, the
-   * first source over a later one. `find_tool` comes only from the SDK's own source: an app's source's is left out.
+   * The host tools, then each source's tools in the builder's order: a host tool wins over a source's of the same name, the
+   * first source over a later one, and the tool left out is logged with the reason. A name the SDK keeps for itself
+   * (`RESERVED_TOOL_NAMES`) comes only from the SDK's own sources: an app's source's is left out, and logged.
    */
   #compose(hosts: readonly AgentTool[], fromSources: readonly { source: ToolSource; tools: readonly AgentTool[] }[]): AgentTool[] {
     const tools = [...hosts];
-    const names = new Set(tools.map((t) => t.name));
+    const hostNames = new Set(hosts.map((t) => t.name));
+    const names = new Set(hostNames);
+    const logger = this.settings.logger;
     for (const { source, tools: list } of fromSources) for (const tool of list) {
-      if (tool.name === FIND_TOOL_NAME && !isCoreToolSource(source)) continue;
+      if (isReservedToolName(tool.name) && !isCoreToolSource(source)) {
+        writeLog(logger, AgentLog.toolNameReserved, { Tool: tool.name });
+        continue;
+      }
       if (!names.has(tool.name)) {
         names.add(tool.name);
         tools.push(tool);
+      } else {
+        writeLog(logger, AgentLog.toolNameTaken, { Tool: tool.name, Winner: hostNames.has(tool.name) ? "the app's own tool" : "an earlier tool source" });
       }
     }
     return tools;
