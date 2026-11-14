@@ -2514,3 +2514,82 @@ describe("wizard: the pairing keeper", () => {
     expect(keeper.calls).toEqual(["restore", "keep"]);
   });
 });
+
+// =====================================================================================================================
+// The texts (I15 step 3): the computed ones follow the state, in the rig's language (German). .NET: "The texts (I15 step 3)".
+// =====================================================================================================================
+
+describe("wizard: the texts", () => {
+  it("the waiting line counts down in minutes and seconds", async () => {
+    const rig = await pairCode();
+    expect(rig.vm.waitingText).toBe("Warten auf Ihre Bestätigung… Der Code läuft in 10:00 ab.");
+    await rig.advance(19_000);
+    expect(rig.vm.waitingText).toBe("Warten auf Ihre Bestätigung… Der Code läuft in 9:41 ab.");
+  });
+
+  it("an address error reads as the path it belongs to", async () => {
+    const server = make();
+    await server.start();
+    await server.press("chooseServer");
+    server.vm.serverAddressText = "http://ai.example.test";
+    await server.press("submitServer");
+
+    const own = await ownPick();
+    type(own, "http://8.8.8.8/v1");
+    await useEndpoint(own);
+
+    expect(server.vm.addressErrorText).toBe(server.vm.strings.wizardServerHttpsRequired);
+    expect(own.vm.addressErrorText).toBe(own.vm.strings.wizardEndpointHttpsRequired);
+    expect(server.vm.addressErrorText).not.toBe(own.vm.addressErrorText);
+  });
+
+  it("the result says in plain words what limits the connection and whether it watermarks text", async () => {
+    const report = makeReport(OLLAMA, {
+      toolCalls: false, problems: ["NoToolCalls", "OllamaDefaultContext"], watermark: { status: "Never", source: null, checked: null, requested: false, confirmed: null },
+    });
+    const rig = await ownPick(undefined, (r) => r.checker.report.returns(report));
+    type(rig, OLLAMA);
+    await useEndpoint(rig);
+
+    expect(rig.vm.step).toBe(WizardStep.OwnResult);
+    expect(rig.vm.resultLines).toEqual([
+      "Die Verbindung funktioniert.",
+      "Dieses Modell kann nur chatten: Es kann keine Werkzeuge nutzen.",
+      "Ollama betreibt dieses Modell mit seinem kurzen Standardkontext, der lange Eingaben abschneidet. Erhöhen Sie OLLAMA_CONTEXT_LENGTH.",
+      "Diese Verbindung kennzeichnet Texte nicht mit einem Wasserzeichen.",
+    ]);
+  });
+
+  it("a failed check names its problem and the signed-in line names the person", async () => {
+    const own = await ownPick(undefined, (r) => r.checker.report.returns(failingReport("https://api.example.test/v1", "KeyRejected")));
+    type(own, "https://api.example.test/v1");
+    await useEndpoint(own);
+    expect(own.vm.problemText).toBe("Der Server hat den Schlüssel abgelehnt.");
+
+    let wait!: PendingAnswer<PairingApproval>;
+    const server = await pairCode(undefined, (r) => { wait = r.sign.waitScript.pending(); });
+    wait.complete(approve("main-agent"));
+    await flush();
+    expect(server.vm.signedInText).toBe("Angemeldet als Ana.");
+  });
+
+  it("without texts given, English is the default", () => {
+    const plain = new ConnectionWizardViewModel(DEFAULT_OPTIONS, new FakeConnectionStore(), { server: new FakeServerSignIn(() => Date.now()), keys: new FakeKeyStore() });
+    expect(plain.strings.language).toBe("en");
+    expect(plain.signedInText).toBe("Signed in.");
+    expect(plain.addressErrorText).toBeUndefined();
+    expect(plain.resultLines).toEqual([]);
+    expect(plain.connectedText).toBeUndefined();
+    plain.dispose();
+  });
+
+  it("the connected line names the server or the endpoint, and nothing when there is none", () => {
+    const line = (current?: ConnectionResult): string | undefined =>
+      new ConnectionWizardViewModel({ ...DEFAULT_OPTIONS, entry: WizardEntry.Settings, ...(current ? { current } : {}) }, new FakeConnectionStore(), {
+        server: new FakeServerSignIn(() => Date.now()), keys: new FakeKeyStore(),
+      }).connectedText;
+    expect(line(SERVER_CONNECTION)).toBe("Connected to https://ai.example.test/.");
+    expect(line(ENDPOINT_CONNECTION)).toBe("Your own AI: https://api.openai.com/v1.");
+    expect(line()).toBeUndefined();
+  });
+});

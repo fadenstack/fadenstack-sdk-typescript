@@ -14,6 +14,7 @@ import {
   AgentAccess,
   ConnectionWizardViewModel,
   createPairingTicket,
+  germanStrings,
   type AcceptanceRecord,
   type AgentSignIn,
   type ConnectionResult,
@@ -436,7 +437,7 @@ export class WizardRig {
     this.sign = new FakeServerSignIn(() => this.clock.now());
     this.vm = new ConnectionWizardViewModel(this.options, this.store, {
       server: this.sign, keys: this.keys, checker: this.checker, clock: this.clock, clipboard: this.clipboard, links: this.links,
-      language: () => this.language,
+      language: () => this.language, strings: germanStrings,
     });
     this.vm.subscribe(() => {
       if (this.steps.at(-1) !== this.vm.step) this.steps.push(this.vm.step);

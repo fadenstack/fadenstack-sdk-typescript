@@ -9,6 +9,7 @@ import {
   englishStrings,
   germanStrings,
   immediateScheduler,
+  minutesAndSeconds,
   stringsFor,
   withStrings,
   type UiStrings,
@@ -47,8 +48,67 @@ describe("stringsFor", () => {
         const a = englishStrings[key as keyof UiStrings], b = strings[key as keyof UiStrings];
         return typeof a === "string" && a === b && key !== "direction";
       });
-      expect(same.length, `${tag}: ${same.join(", ")}`).toBeLessThanOrEqual(4);
+      expect(same.length, `${tag}: ${same.join(", ")}`).toBeLessThanOrEqual(6); // as the .NET test allows: the wizard's example address "https://…/v1" is no word
     }
+  });
+});
+
+describe("the connection wizard's texts", () => {
+  const wizardKeys = Object.keys(englishStrings).filter((key) => key.startsWith("wizard"));
+  const SENTINEL = "§x§";
+  /** What a text says for a sentinel (or a countdown of 9:41), whatever shape the text has. */
+  const said = (strings: UiStrings, key: string): string | Record<string, string> => {
+    const value = (strings as unknown as Record<string, unknown>)[key];
+    if (typeof value === "function") return (value as (arg: unknown) => string)(key.startsWith("wizardWaiting") ? 580_500 : SENTINEL);
+    return value as string | Record<string, string>;
+  };
+
+  it("has 137 texts: 106 members and the 31 values of four enum-keyed ones", () => {
+    let count = 0;
+    for (const key of wizardKeys) {
+      const value = said(englishStrings, key);
+      count += typeof value === "string" ? 1 : Object.keys(value).length;
+    }
+    expect(wizardKeys).toHaveLength(110);
+    expect(count).toBe(137);
+  });
+
+  it.each(Object.entries(builtInStrings))("%s has every wizard text, and its placeholders are English's", (tag, strings) => {
+    expect(wizardKeys.filter((key) => (strings as unknown as Record<string, unknown>)[key] === undefined)).toEqual([]);
+    for (const key of wizardKeys) {
+      const mine = said(strings, key), english = said(englishStrings, key);
+      if (typeof english === "string") {
+        expect(typeof mine, `${tag} ${key}`).toBe("string");
+        expect((mine as string).trim(), `${tag} ${key}`).not.toBe("");
+        // the argument, or the countdown, appears as often as it does in English
+        const filled = key.startsWith("wizardWaiting") ? "9:41" : SENTINEL;
+        expect((mine as string).split(filled).length, `${tag} ${key}`).toBe(english.split(filled).length);
+        expect(mine as string, `${tag} ${key}`).not.toMatch(/\{\d\}|[\u200B\u2060\uFEFF]/);
+      } else {
+        expect(Object.keys(mine as Record<string, string>).sort(), `${tag} ${key}`).toEqual(Object.keys(english).sort());
+        for (const [value, text] of Object.entries(mine as Record<string, string>)) {
+          expect(text.trim(), `${tag} ${key}.${value}`).not.toBe("");
+          expect(text, `${tag} ${key}.${value}`).not.toMatch(/\{\d\}|[\u200B\u2060\uFEFF]/);
+        }
+      }
+    }
+  });
+
+  it("counts down as m:ss, rounded up and never below zero", () => {
+    expect(minutesAndSeconds(581_000)).toBe("9:41");
+    expect(minutesAndSeconds(580_100)).toBe("9:41");
+    expect(minutesAndSeconds(600_000)).toBe("10:00");
+    expect(minutesAndSeconds(5_000)).toBe("0:05");
+    expect(minutesAndSeconds(-3_000)).toBe("0:00");
+    expect(englishStrings.wizardWaiting(581_000)).toBe("Waiting for your approval… The code expires in 9:41.");
+    expect(germanStrings.wizardWaitingRetry(0)).toContain("0:00");
+  });
+
+  it("keeps the French no-break spaces and a host's partial override of an enum-keyed text", () => {
+    expect(builtInStrings["fr"]!.wizardChooseTitle("X")).toContain("\u00A0");
+    const changed = withStrings({ wizardProblem: { KeyRejected: "Nein." } as UiStrings["wizardProblem"] }, germanStrings);
+    expect(changed.wizardProblem.KeyRejected).toBe("Nein.");
+    expect(changed.wizardProblem.Unreachable).toBe(germanStrings.wizardProblem.Unreachable);
   });
 });
 

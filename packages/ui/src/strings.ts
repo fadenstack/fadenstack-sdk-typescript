@@ -1,5 +1,7 @@
 import type { ReasoningLevel } from "@fadenstack/agents";
-import type { ToolClass, ToolMode } from "@fadenstack/client";
+import type { EndpointProblem, TextWatermark, ToolClass, ToolMode } from "@fadenstack/client";
+
+import type { PasswordFailure, StartFailure } from "./wizard/contracts.js";
 
 /**
  * Every text the chat shows, in one place, so skins hard-code none: a host passes a language (`stringsFor`, or its
@@ -383,6 +385,123 @@ export interface UiStrings {
   toolStatusDisabled: string;
   /** A server tool the agent's rules do not allow. */
   toolStatusNotAllowed: string;
+  // the connection wizard (sdk/51 F15)
+  wizardBack: string;
+  wizardContinue: string;
+  wizardCancel: string;
+  wizardClose: string;
+  wizardTryAgain: string;
+  wizardCheck: string;
+  wizardChooseTitle(app: string): string;
+  wizardChooseServer: string;
+  wizardChooseServerHelp: string;
+  wizardChooseOwnAi: string;
+  wizardChooseOwnAiHelp: string;
+  wizardChooseDemo: string;
+  wizardNothingAllowed: string;
+  wizardAppStepRefused: string;
+  wizardStoreFailed: string;
+  wizardServerTitle: string;
+  wizardServerLabel: string;
+  wizardServerPlaceholder: string;
+  wizardServerHelp: string;
+  wizardServerLocked: string;
+  wizardServerAddressInvalid: string;
+  wizardServerHttpsRequired: string;
+  wizardChecking: string;
+  wizardUnreachable: string;
+  wizardCertificateNotTrusted: string;
+  wizardNotFadenstack: string;
+  wizardRestarting(server: string): string;
+  wizardChangeServer: string;
+  wizardServerAt(server: string): string;
+  wizardStarting: string;
+  wizardCodeTitle(app: string): string;
+  wizardCodeIntro: string;
+  wizardCodeName: string;
+  wizardCopyCode: string;
+  wizardOpenPage: string;
+  wizardWaiting(leftMs: number): string;
+  wizardWaitingRetry(leftMs: number): string;
+  wizardDenied: string;
+  wizardExpired: string;
+  wizardNewCode: string;
+  wizardTooOld: string;
+  wizardTooOldPassword: string;
+  /** Why the first pairing request failed. */
+  wizardStartFailure: Record<StartFailure, string>;
+  wizardPairFailed: string;
+  wizardRedeeming: string;
+  wizardSignedInAs(person: string): string;
+  wizardSignedIn: string;
+  wizardNoAccess: string;
+  wizardSignInEnded: string;
+  wizardUsePassword: string;
+  wizardEmail: string;
+  wizardPassword: string;
+  wizardSignIn: string;
+  wizardBackToCode: string;
+  /** Why the password sign-in failed. */
+  wizardPasswordFailure: Record<PasswordFailure, string>;
+  wizardOwnTitle: string;
+  wizardOwnDataFlow: string;
+  wizardOwnProviderTerms: string;
+  /** The standalone notice (F15, owner 14 Nov): the report's draft without pictures (D17). Counsel reviews; German is binding. */
+  wizardOwnNotice: string;
+  /** The liability sentence (F15): counsel reviews; German is binding. */
+  wizardOwnLiability: string;
+  wizardOwnBindingVersion: string;
+  wizardOwnFullTerms: string;
+  wizardOwnConsent: string;
+  wizardOwnSearchConsent: string;
+  wizardOwnAccept: string;
+  wizardOwnServerInstead: string;
+  wizardOwnSearching: string;
+  wizardOwnPickTitle: string;
+  wizardOwnFound: string;
+  wizardOwnNothingFound: string;
+  wizardOwnPresets: string;
+  wizardOwnAddress: string;
+  wizardOwnAddressPlaceholder: string;
+  wizardOwnNeedsKey: string;
+  wizardOwnUse: string;
+  wizardEndpointAddressInvalid: string;
+  wizardEndpointHttpsRequired: string;
+  wizardAddressNotAllowed: string;
+  wizardAddressPlainHttpForbidden: string;
+  wizardAddressKeyNeedsHttps: string;
+  wizardPlainHttpTitle: string;
+  wizardPlainHttpWarning: string;
+  wizardPlainHttpConfirm: string;
+  wizardKeyTitle: string;
+  wizardKeyLabel: string;
+  wizardKeyHelp: string;
+  wizardOwnChecking: string;
+  /** What the endpoint check found, in plain words. */
+  wizardProblem: Record<EndpointProblem, string>;
+  wizardEnterKey: string;
+  wizardShowHelp: string;
+  wizardOwnHelpTitle: string;
+  wizardOwnHelp: string;
+  wizardOwnWorks: string;
+  /** Whether the connection watermarks text (F03 item 8). */
+  wizardWatermark: Record<TextWatermark, string>;
+  wizardWatermarkConfirmed: string;
+  wizardModelTitle: string;
+  wizardModelLabel: string;
+  wizardOwnDone: string;
+  wizardSettingsTitle: string;
+  wizardConnectedServer(server: string): string;
+  wizardConnectedEndpoint(endpoint: string): string;
+  wizardConnectOrganisation: string;
+  wizardChangeEndpoint: string;
+  wizardSignOut: string;
+  wizardRemoveEndpoint: string;
+  wizardSignOutTitle: string;
+  wizardSignOutBody: string;
+  wizardRemoveTitle: string;
+  wizardRemoveBody: string;
+  wizardDeleteChats: string;
 }
 
 export const englishStrings: UiStrings = {
@@ -668,7 +787,159 @@ export const englishStrings: UiStrings = {
   toolStatusAvailable: "Available to this agent",
   toolStatusDisabled: "Switched off by your administrator",
   toolStatusNotAllowed: "Not allowed for this agent",
+  // the connection wizard (sdk/51 F15)
+  wizardBack: "Back",
+  wizardContinue: "Continue",
+  wizardCancel: "Cancel",
+  wizardClose: "Close",
+  wizardTryAgain: "Try again",
+  wizardCheck: "Check",
+  wizardChooseTitle: (app) => `How do you want to use ${app}?`,
+  wizardChooseServer: "Connect to my organisation",
+  wizardChooseServerHelp: "Your organisation runs Fadenstack: sign in with your account.",
+  wizardChooseOwnAi: "Use my own AI",
+  wizardChooseOwnAiHelp: "Connect to an AI server you choose: on this computer, in your network or at a provider.",
+  wizardChooseDemo: "Try the demo",
+  wizardNothingAllowed: "The settings of this computer allow none of these. Ask your IT.",
+  wizardAppStepRefused: "Without this permission the app cannot go on.",
+  wizardStoreFailed: "The app could not save its settings. Try again.",
+  wizardServerTitle: "Connect to your organisation",
+  wizardServerLabel: "Server address",
+  wizardServerPlaceholder: "https://ai.example.com",
+  wizardServerHelp: "Your IT gives you this address.",
+  wizardServerLocked: "Your organisation set this address.",
+  wizardServerAddressInvalid: "Enter the server's address, for example https://ai.example.com.",
+  wizardServerHttpsRequired: "Enter the address as https://… Plain http works only for this computer.",
+  wizardChecking: "Checking the server…",
+  wizardUnreachable: "The server cannot be reached. Check the address and your network.",
+  wizardCertificateNotTrusted: "The server's certificate is not trusted on this computer. Ask your IT: your organisation's certificate is set up on the computer, never here.",
+  wizardNotFadenstack: "This address does not answer like a Fadenstack server. Check the address.",
+  wizardRestarting: (server) => `Connected to ${server}. The app starts again so that you can sign in.`,
+  wizardChangeServer: "Change the server",
+  wizardServerAt: (server) => `Server: ${server}`,
+  wizardStarting: "Asking the server for a code…",
+  wizardCodeTitle: (app) => `Sign in to ${app}`,
+  wizardCodeIntro: "Approve this computer in your browser. Your password stays in the browser.",
+  wizardCodeName: "Your sign-in code",
+  wizardCopyCode: "Copy the code",
+  wizardOpenPage: "Open the sign-in page",
+  wizardWaiting: (leftMs) => `Waiting for your approval… The code expires in ${minutesAndSeconds(leftMs)}.`,
+  wizardWaitingRetry: (leftMs) => `The server cannot be reached for the moment. Trying again… The code expires in ${minutesAndSeconds(leftMs)}.`,
+  wizardDenied: "The sign-in was denied in the browser.",
+  wizardExpired: "The code expired.",
+  wizardNewCode: "Get a new code",
+  wizardTooOld: "This server does not support signing in with a code yet. Ask your IT to update Fadenstack.",
+  wizardTooOldPassword: "You can sign in with your e-mail and password instead.",
+  wizardStartFailure: {
+    unreachable: "The server cannot be reached.",
+    certificateNotTrusted: "The server's certificate is not trusted on this computer. Ask your IT.",
+    rateLimited: "Too many sign-in attempts from this address. Try again in a moment.",
+    pageElsewhere: "The server named its sign-in page on another address than its own. Ask your IT to check the proxy's settings.",
+    serverError: "The server could not start a sign-in. Try again.",
+  },
+  wizardPairFailed: "The sign-in stopped. Try again.",
+  wizardRedeeming: "Signing in…",
+  wizardSignedInAs: (person) => `Signed in as ${person}.`,
+  wizardSignedIn: "Signed in.",
+  wizardNoAccess: "You have no access to this assistant. Ask your IT to give you access.",
+  wizardSignInEnded: "Your sign-in ended. Sign in again.",
+  wizardUsePassword: "Sign in with e-mail and password instead",
+  wizardEmail: "E-mail",
+  wizardPassword: "Password",
+  wizardSignIn: "Sign in",
+  wizardBackToCode: "Sign in with a code instead",
+  wizardPasswordFailure: {
+    badCredentials: "The e-mail or password is not right.",
+    httpsRequired: "A password goes only over https: use the server's https address.",
+    notFadenstack: "This address does not answer like a Fadenstack server.",
+    unreachable: "The server cannot be reached.",
+    certificateNotTrusted: "The server's certificate is not trusted on this computer. Ask your IT.",
+    other: "The sign-in did not work. Try again.",
+  },
+  wizardOwnTitle: "Use your own AI",
+  wizardOwnDataFlow: "What you write goes to the AI server you choose, and its answers come from there. Nothing goes to Fadenstack.",
+  wizardOwnProviderTerms: "The provider's terms are between you and the provider.",
+  wizardOwnNotice: "In this mode the agent connects directly to the model endpoint you choose. Fadenstack runs no server in this mode. On your device, the agent marks AI-generated content where this is technically feasible: it writes signed, machine-readable information into document and e-mail properties and keeps a local record. Whether chat text and inserted text also carry an invisible text watermark depends on your endpoint; the agent shows the status for your connection. Server mode can add a text watermark during generation. This mode makes no pictures. Metadata can be lost when content is copied, converted or edited. If you use AI-generated content in your work or publish it, you may have your own disclosure duties, for example under Article 50(4) of the EU AI Act for deep fakes and for texts published to inform the public on matters of public interest. Please do not remove or alter the markings, except for legitimate purposes such as security testing.",
+  wizardOwnLiability: "We provide the software free of charge and are therefore liable only for intent and gross negligence (Section 521 of the German Civil Code). Liability under the Product Liability Act and for injury to life, body or health remains unaffected.",
+  wizardOwnBindingVersion: "The German text is the binding version.",
+  wizardOwnFullTerms: "Read the full terms",
+  wizardOwnConsent: "I have read this and accept the terms.",
+  wizardOwnSearchConsent: "Look for AI servers on this computer (Ollama, LM Studio, vLLM, llama.cpp)",
+  wizardOwnAccept: "Accept and continue",
+  wizardOwnServerInstead: "Set up server mode instead",
+  wizardOwnSearching: "Looking for AI servers on this computer…",
+  wizardOwnPickTitle: "Choose your AI",
+  wizardOwnFound: "Found on this computer",
+  wizardOwnNothingFound: "No AI server was found on this computer.",
+  wizardOwnPresets: "Providers and servers",
+  wizardOwnAddress: "Address",
+  wizardOwnAddressPlaceholder: "https://…/v1",
+  wizardOwnNeedsKey: "This server needs a key",
+  wizardOwnUse: "Use this",
+  wizardEndpointAddressInvalid: "Enter an address that starts with https:// (or http:// for this computer).",
+  wizardEndpointHttpsRequired: "Use the https address. Plain http works only for this computer, and for your local network after you confirm it.",
+  wizardAddressNotAllowed: "The settings of this computer do not allow this address. Ask your IT.",
+  wizardAddressPlainHttpForbidden: "The settings of this computer do not allow plain http. Use the https address.",
+  wizardAddressKeyNeedsHttps: "A key never goes over plain http to another computer. Use the https address.",
+  wizardPlainHttpTitle: "Plain http in your local network",
+  wizardPlainHttpWarning: "This address is in your local network and uses plain http: others in the network could read what you send and receive. Use it only in a network you trust. No key can be used with it.",
+  wizardPlainHttpConfirm: "Use it anyway",
+  wizardKeyTitle: "The key",
+  wizardKeyLabel: "API key",
+  wizardKeyHelp: "The key is kept in this computer's key store, never in a file.",
+  wizardOwnChecking: "Checking the connection…",
+  wizardProblem: {
+    Unreachable: "The server cannot be reached. Is it running, and is the address right?",
+    CertificateNotTrusted: "The server's certificate is not trusted on this computer. Ask your IT.",
+    PlainHttpRefused: "Plain http is not allowed for this address.",
+    KeyRejected: "The server refused the key.",
+    OriginRefused: "The server refused this app's requests. It has to allow this app first.",
+    NotCompatible: "This server does not answer like an OpenAI-compatible endpoint.",
+    RateLimited: "The server has too many requests right now. Try again in a moment.",
+    ModelNotFound: "The server does not have this model.",
+    NoToolCalls: "This model can only chat: it cannot use tools.",
+    NoUsage: "The server does not report how many tokens were used.",
+    ContextTooShort: "The model's context is too short for the agent: choose a model with a longer context, or raise the server's setting.",
+    OllamaDefaultContext: "Ollama runs this model with its short default context, which cuts long prompts. Raise OLLAMA_CONTEXT_LENGTH.",
+    WatermarkRequestRefused: "The server does not add its text watermark, so requests go without it.",
+    KeyUnencryptedOnThisComputer: "The key goes unencrypted to the server on this computer (plain http).",
+    Failed: "The check did not work. Try again.",
+  },
+  wizardEnterKey: "Enter the key again",
+  wizardShowHelp: "How to allow it",
+  wizardOwnHelpTitle: "Allow this app",
+  wizardOwnHelp: "Ollama answers only to the apps it knows: add this app's origin to OLLAMA_ORIGINS and start Ollama again. In LM Studio, switch on CORS in the server's settings.",
+  wizardOwnWorks: "The connection works.",
+  wizardWatermark: {
+    Unknown: "Whether this connection marks text with a watermark is not known.",
+    Marks: "This connection marks text with an invisible watermark.",
+    IfAccountEnabled: "This connection marks text only when the account has it switched on.",
+    IfOperatorConfigured: "This connection marks text only when the server's operator set it up.",
+    Never: "This connection does not mark text with a watermark.",
+  },
+  wizardWatermarkConfirmed: "The server confirmed its watermark.",
+  wizardModelTitle: "Choose the model",
+  wizardModelLabel: "Model",
+  wizardOwnDone: "Your AI is ready.",
+  wizardSettingsTitle: "Connection",
+  wizardConnectedServer: (server) => `Connected to ${server}.`,
+  wizardConnectedEndpoint: (endpoint) => `Your own AI: ${endpoint}.`,
+  wizardConnectOrganisation: "Connect to my organisation",
+  wizardChangeEndpoint: "Change the AI",
+  wizardSignOut: "Sign out",
+  wizardRemoveEndpoint: "Remove this AI",
+  wizardSignOutTitle: "Sign out on this computer?",
+  wizardSignOutBody: "The sign-in ends at the server and on this computer.",
+  wizardRemoveTitle: "Remove this AI from this computer?",
+  wizardRemoveBody: "Its key is deleted from this computer's key store.",
+  wizardDeleteChats: "Also delete the chats kept on this computer",
 };
+
+/** Minutes and seconds as "9:41" (like .NET's `MinutesAndSeconds`): rounded up to the whole second, never negative. */
+export function minutesAndSeconds(ms: number): string {
+  const seconds = Math.max(0, Math.ceil(ms / 1000));
+  return `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, "0")}`;
+}
 
 /**
  * `base` (English by default) with the host's changes on top: what `changes` leaves out, `base` says. Groups
@@ -690,5 +961,9 @@ export function withStrings(changes: Partial<UiStrings> | undefined, base: UiStr
     bypassRecorded: { ...base.bypassRecorded, ...changes.bypassRecorded },
     bypassEnded: { ...base.bypassEnded, ...changes.bypassEnded },
     grantsEnded: { ...base.grantsEnded, ...changes.grantsEnded },
+    wizardStartFailure: { ...base.wizardStartFailure, ...changes.wizardStartFailure },
+    wizardPasswordFailure: { ...base.wizardPasswordFailure, ...changes.wizardPasswordFailure },
+    wizardProblem: { ...base.wizardProblem, ...changes.wizardProblem },
+    wizardWatermark: { ...base.wizardWatermark, ...changes.wizardWatermark },
   };
 }

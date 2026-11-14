@@ -8,6 +8,7 @@ before 1.0, a minor version may break the API, and this file says where it does.
 
 ### Added
 
+- **The connection wizard's texts in five languages** (sdk/51 F15, I15 step 3): 137 `wizard…` texts in `UiStrings` (English, German, French, Spanish, Simplified Chinese), copied from the .NET SDK's texts, and `ConnectionWizardViewModel` gets `services.strings` with the computed texts `addressErrorText`, `startFailureText`, `passwordFailureText`, `problemText`, `waitingText`, `signedInText`, `resultLines` and `connectedText`.
 - **Typed sign-in errors and `checkServer`** (sdk/51 I15 §2, §4): `FadenstackPairingPageElsewhereError` (the server named a sign-in
   page on another address than its own), `FadenstackHttpsRequiredError` (plain http where https is required; a `TypeError`
   still, so existing catches keep working) and `FadenstackBadCredentialsError` (`LOGIN_BAD_CREDENTIALS`; a

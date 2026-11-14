@@ -24,6 +24,7 @@ import {
 
 import { Observable } from "../observable.js";
 import type { Clipboard } from "../services.js";
+import { englishStrings, type UiStrings } from "../strings.js";
 import {
   AddressProblem,
   AgentAccess,
@@ -71,8 +72,13 @@ export interface WizardServices {
   clipboard?: Clipboard | undefined;
   /** Opens the pairing page in the browser. */
   links?: LinkOpener | undefined;
-  /** The language the acceptance record names (a BCP 47 tag): the app passes its panel's language; `en` by default. */
+  /**
+   * The language the acceptance record names (a BCP 47 tag): the app passes its panel's language; `strings.language` by
+   * default.
+   */
   language?: (() => string) | undefined;
+  /** The texts the computed ones (`addressErrorText`, ...) are made of, and a skin binds the fixed ones from; English by default. */
+  strings?: UiStrings | undefined;
 }
 
 /** Which commands the person can press now: one flag per command, named like it. The skin enables its buttons from them. */
@@ -165,6 +171,7 @@ export class ConnectionWizardViewModel extends Observable {
   readonly #clipboard: Clipboard | undefined;
   readonly #links: LinkOpener | undefined;
   readonly #language: () => string;
+  readonly #strings: UiStrings;
   readonly #completed = new Set<(outcome: WizardOutcome) => void>();
 
   #run: AbortController | undefined;
@@ -242,7 +249,8 @@ export class ConnectionWizardViewModel extends Observable {
     this.#clock = services.clock ?? createSystemClock();
     this.#clipboard = services.clipboard;
     this.#links = services.links;
-    this.#language = services.language ?? (() => "en");
+    this.#strings = services.strings ?? englishStrings;
+    this.#language = services.language ?? (() => this.#strings.language);
 
     const policy = this.#policy;
     this.presets = Object.freeze(EndpointPreset.all.filter((p) => p.baseUrl === undefined || policy.allowsEndpoint(p.baseUrl)));
@@ -502,6 +510,84 @@ export class ConnectionWizardViewModel extends Observable {
     if (value === this.#deleteLocalChats) return;
     this.#deleteLocalChats = value;
     this.notify();
+  }
+
+  // ---- Texts (UiStrings, five languages) ----
+
+  /** The texts; a skin binds the fixed ones (`strings.wizardServerTitle`) and the computed ones below. */
+  get strings(): UiStrings {
+    return this.#strings;
+  }
+
+  /** Why the typed address was not taken, for the step showing it; undefined when it was. */
+  get addressErrorText(): string | undefined {
+    const t = this.#strings;
+    switch (this.#addressError) {
+      case AddressProblem.None:
+        return undefined;
+      case AddressProblem.Invalid:
+        return this.#step === WizardStep.ServerAddress ? t.wizardServerAddressInvalid : t.wizardEndpointAddressInvalid;
+      case AddressProblem.HttpsRequired:
+        return this.#step === WizardStep.ServerAddress ? t.wizardServerHttpsRequired : t.wizardEndpointHttpsRequired;
+      case AddressProblem.NotAllowed:
+        return t.wizardAddressNotAllowed;
+      case AddressProblem.PlainHttpForbidden:
+        return t.wizardAddressPlainHttpForbidden;
+      default:
+        return t.wizardAddressKeyNeedsHttps;
+    }
+  }
+
+  get startFailureText(): string | undefined {
+    return this.#startFailure === undefined ? undefined : this.#strings.wizardStartFailure[this.#startFailure];
+  }
+
+  get passwordFailureText(): string | undefined {
+    return this.#passwordFailure === undefined ? undefined : this.#strings.wizardPasswordFailure[this.#passwordFailure];
+  }
+
+  /** Why the endpoint is unusable, in plain words. */
+  get problemText(): string | undefined {
+    return this.#problem === undefined ? undefined : this.#strings.wizardProblem[this.#problem];
+  }
+
+  /** "Waiting for your approval... The code expires in 9:41." (or the retrying line) while the code shows. */
+  get waitingText(): string | undefined {
+    if (this.#step !== WizardStep.PairCode) return undefined;
+    return this.#isRetrying ? this.#strings.wizardWaitingRetry(this.#timeLeftMs) : this.#strings.wizardWaiting(this.#timeLeftMs);
+  }
+
+  /** "Signed in as Ana." for the moment after the approval. */
+  get signedInText(): string {
+    const person = this.#person;
+    if (!person) return this.#strings.wizardSignedIn;
+    return this.#strings.wizardSignedInAs(person.displayName?.trim() ? person.displayName : person.email);
+  }
+
+  /**
+   * What the check found, in plain words (F15 step 4): that it works, what limits it (chat only, the context, the key
+   * unencrypted on this computer, ...), and whether the connection watermarks text.
+   */
+  get resultLines(): readonly string[] {
+    const report = this.#report;
+    if (!report || !report.usable) return [];
+    const t = this.#strings;
+    const lines = [t.wizardOwnWorks];
+    const problems = new Set(report.problems.filter((p) => !BLOCKING.includes(p) && p !== EndpointProblem.Failed));
+    for (const problem of problems) lines.push(t.wizardProblem[problem]);
+    lines.push(t.wizardWatermark[report.watermark.status]);
+    if (report.watermark.confirmed === true) lines.push(t.wizardWatermarkConfirmed);
+    return lines;
+  }
+
+  /** Settings' line for the connection the app has now. */
+  get connectedText(): string | undefined {
+    const current = this.#options.current;
+    if (current?.mode === ConnectionMode.Server && current.server) return this.#strings.wizardConnectedServer(current.server.href);
+    if (current?.mode === ConnectionMode.Endpoint && current.endpoint) {
+      return this.#strings.wizardConnectedEndpoint(new URL(String(current.endpoint.baseUrl)).href);
+    }
+    return undefined;
   }
 
   // ---- Entry ----
