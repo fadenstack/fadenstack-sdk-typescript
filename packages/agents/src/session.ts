@@ -584,6 +584,8 @@ class Turn {
   /** Tools the gateway hides in this turn's tool mode (`faden.tool_mode`): refused here too. */
   readonly #hidden = new Set<string>();
   readonly #grantUsed = new Map<string, { grantId: string; toolName: string }>();
+  // Where the device's copy of grants stood when this round's request went out: its faden.grants keeps what came later.
+  #grantsSince = 0;
   readonly #receipts: ReceiptNote[] = [];
   #text = "";
   #usage: Usage | undefined;
@@ -738,6 +740,7 @@ class Turn {
       const newest = history.map((m) => m.role).lastIndexOf("user");
       history.splice(Math.max(0, newest), 0, { role: "system", content: BYPASS_ENDED_NOTE });
     }
+    this.#grantsSince = this.#agent.grants.generation;
     for await (const update of this.#agent.settings.chat.stream(history, options)) {
       switch (update.type) {
         case "text":
@@ -821,7 +824,7 @@ class Turn {
     const value = event.value;
     switch (eventKind(event)) {
       case "faden.grants":
-        this.#agent.grants.snapshot(value);
+        this.#agent.grants.snapshot(value, this.#grantsSince);
         break;
       case "faden.grant_used": {
         const callId = str(value, "toolCallId"), toolName = str(value, "toolCallName"), grantId = str(value, "grantId");

@@ -390,6 +390,43 @@ describe("the second sign-in", () => {
     expect(new Set(s.grants.made.map((m) => m.headers["x-faden-step-up"])).size).toBe(1);
     expect(first.bypass).toBeDefined();
     expect(second.bypass).toBeDefined();
+    expect(first.bypass!.id).not.toBe(second.bypass!.id);
+  });
+
+  it("keeps a chat's grant when a list read before it started Bypass comes back after", async () => {
+    // Another chat's refresh (a chat opened again, the lifecycle's tick) read the server's list just before this chat's
+    // grant was made. Before, the copy became that list: the chat lost its grant, ran without it, and its Stop could not
+    // end it at the server. The .NET SDK's A_list_read_before_a_chat_started_bypass_does_not_lose_that_chats_grant.
+    const s = await fixture();
+    const session = await s.agent.startSession("ask");
+    const stale = await s.client.agent!.listGrants();
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => { release = resolve; });
+    vi.spyOn(s.client.agent!, "listGrants").mockImplementationOnce(async () => { await gate; return stale; });
+    const refresh = s.agent.grants.refresh();
+
+    const grant = await session.startBypass();
+    release();
+    await refresh;
+
+    expect(grant).toBeDefined();
+    expect(session.bypass?.id).toBe(grant!.id);
+    await session.stopBypass();
+    expect(s.grants.status(grant!.id)).toBe("revoked");
+  });
+
+  it("keeps a chat's grant under a stream's snapshot from before it started Bypass, and a later snapshot decides", async () => {
+    const s = await fixture();
+    const session = await s.agent.startSession("ask");
+    const before = s.grants.snapshot(); // another chat's stream: read when that chat's request came, before this grant
+    const since = s.agent.grants.generation;
+    const grant = await session.startBypass();
+
+    s.agent.grants.snapshot(before, since);
+    expect(session.bypass?.id).toBe(grant!.id);
+
+    s.agent.grants.snapshot(before, s.agent.grants.generation); // asked for after the grant came: the server's word
+    expect(session.bypass).toBeUndefined();
   });
 
   it("asks once more, without a new token, for a proof the server no longer takes", async () => {

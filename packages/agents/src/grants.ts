@@ -164,6 +164,16 @@ export class AgentGrants {
   readonly #used = new Map<string, string>();
   readonly #listeners = new Set<() => void>();
   #offsetMs = 0;
+  // Each answer of the server this copy took in (#keep), counted: a list or a stream's snapshot asked for before an answer
+  // came cannot know that grant yet, so replacing the copy with it keeps what came later (#replace).
+  #generation = 0;
+  readonly #keptAt = new Map<string, number>();
+
+  /**
+   * Where the copy stands, taken before a request whose answer replaces it (a list, a stream's snapshot): the server's
+   * answers the copy took in meanwhile stand (another chat's new Bypass). Internal: the session passes it to `snapshot`.
+   */
+  get generation(): number { return this.#generation; }
 
   constructor(agent: FadenstackAgent, resolver?: GrantPlaceResolver) { this.#agent = agent; this.#resolve = resolver; }
 
@@ -253,16 +263,26 @@ export class AgentGrants {
     this.#offsetMs = Date.parse(grant.serverNow) - this.#agent.clock();
     this.#known.set(grant.id, structuredClone(grant));
     this.#seen.set(grant.id, structuredClone(grant));
+    this.#keptAt.set(grant.id, ++this.#generation);
     this.#notify();
     return structuredClone(grant);
   }
 
-  #replace(grants: readonly AgentGrant[], serverNow: string | undefined): void {
+  /**
+   * The copy becomes `grants`, the server's list as it was when it was asked for. With `keptSince` (the `generation` at
+   * that moment), each grant the copy took in later -- made, extended, paused or ended by the server's answer to this
+   * device -- stays as that answer said: the list was read before it. Without it (fail closed) the copy is exactly
+   * `grants`. Before, a chat whose Bypass grant came while another chat's list was on its way lost it, and could not end it.
+   */
+  #replace(grants: readonly AgentGrant[], serverNow: string | undefined, keptSince?: number): void {
+    const later = keptSince === undefined ? []
+      : [...this.#keptAt].filter(([, at]) => at > keptSince).map(([id]) => this.#seen.get(id)).filter((g): g is AgentGrant => g !== undefined);
     this.#known.clear();
     for (const grant of grants) {
       this.#known.set(grant.id, structuredClone(grant));
       this.#seen.set(grant.id, structuredClone(grant));
     }
+    for (const grant of later) this.#known.set(grant.id, structuredClone(grant));
     if (serverNow !== undefined) this.#offsetMs = Date.parse(serverNow) - this.#agent.clock();
     this.#notify();
   }
@@ -271,13 +291,13 @@ export class AgentGrants {
    * Replace, never union an old authority snapshot with a new one. A malformed snapshot, or a grant of another agent
    * version or device, clears cached authority; a single grant this SDK cannot read is left out (`toAgentGrants`).
    */
-  snapshot(value: unknown): void {
+  snapshot(value: unknown, since?: number): void {
     try {
       const event = value as { serverNow?: unknown; grants?: unknown };
       if (typeof event?.serverNow !== "string" || !Array.isArray(event.grants)) throw new Error("Invalid grant snapshot.");
       const grants = toAgentGrants(event.grants, event.serverNow);
       for (const grant of grants) this.#owned(grant);
-      this.#replace(grants, event.serverNow);
+      this.#replace(grants, event.serverNow, since);
     } catch { this.#replace([], undefined); }
   }
 
@@ -285,9 +305,10 @@ export class AgentGrants {
   async refresh(signal?: AbortSignal): Promise<void> {
     if (!this.available) { this.#replace([], undefined); return; }
     try {
+      const since = this.#generation;
       const list = await this.#agent.client.agent!.listGrants(signal);
       for (const grant of list.data) this.#owned(grant);
-      this.#replace(list.data, list.serverNow);
+      this.#replace(list.data, list.serverNow, since);
     } catch (error) { this.#replace([], undefined); throw error; }
   }
 
