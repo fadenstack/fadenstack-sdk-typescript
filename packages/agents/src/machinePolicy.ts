@@ -9,6 +9,26 @@ export const PolicyAccess = Object.freeze({
 });
 export type PolicyAccess = (typeof PolicyAccess)[keyof typeof PolicyAccess];
 
+/** What the policy's `timestamping` says: on (the app's default authority), off, or the organisation's own server. .NET: `TimestampingMode`. */
+export const TimestampingMode = Object.freeze({
+  On: "on",
+  Off: "off",
+  /** The organisation's own time-stamp server (`TimestampingPolicy.server`). */
+  OwnServer: "ownServer",
+} as const);
+export type TimestampingMode = (typeof TimestampingMode)[keyof typeof TimestampingMode];
+
+/** The policy's `timestamping` (sdk/51 F09, F10): `on`, `off`, or the address of an own time-stamp server. .NET: `TimestampingPolicy`. */
+export interface TimestampingPolicy {
+  readonly mode: TimestampingMode;
+  /** The own server's address; set only for `ownServer`. */
+  readonly server?: URL;
+}
+export const TimestampingPolicy = Object.freeze({
+  on: Object.freeze<TimestampingPolicy>({ mode: TimestampingMode.On }),
+  off: Object.freeze<TimestampingPolicy>({ mode: TimestampingMode.Off }),
+});
+
 /** One key of a machine policy: its access and, for a list, the items. .NET: `PolicyRule`. */
 export class PolicyRule {
   static readonly allowed = new PolicyRule(PolicyAccess.Allowed, []);
@@ -44,7 +64,7 @@ export interface MachinePolicyInit {
   mcp?: PolicyRule;
   skills?: PolicyRule;
   webSearch?: PolicyAccess;
-  timestamping?: PolicyAccess;
+  timestamping?: TimestampingPolicy;
   locked?: readonly string[];
   warnings?: readonly string[];
 }
@@ -82,8 +102,8 @@ export class MachinePolicy {
   readonly skills: PolicyRule;
   /** The `web_search` tool. */
   readonly webSearch: PolicyAccess;
-  /** RFC 3161 time-stamps for records signed on the device (only a hash leaves the device; F10). */
-  readonly timestamping: PolicyAccess;
+  /** RFC 3161 time-stamps for records signed on the device (only a hash leaves the device; F10): on, off, or an own server. */
+  readonly timestamping: TimestampingPolicy;
   /** The keys the policy set itself (the app locks them in its UI and never writes them into the person's settings). */
   readonly locked: readonly string[];
   /** What was ignored or narrowed while reading: unknown keys, unknown values (never a value itself). */
@@ -97,7 +117,7 @@ export class MachinePolicy {
     this.mcp = init.mcp ?? PolicyRule.allowed;
     this.skills = init.skills ?? PolicyRule.allowed;
     this.webSearch = init.webSearch ?? PolicyAccess.Allowed;
-    this.timestamping = init.timestamping ?? PolicyAccess.Allowed;
+    this.timestamping = init.timestamping ?? TimestampingPolicy.on;
     this.locked = Object.freeze([...(init.locked ?? [])]);
     this.warnings = Object.freeze([...(init.warnings ?? [])]);
     Object.freeze(this);
@@ -174,7 +194,7 @@ export class MachinePolicy {
       mcp: rule(values, "mcp", byDefaultRule, warnings),
       skills: rule(values, "skills", byDefaultRule, warnings),
       webSearch: access(values, "webSearch", byDefault, warnings),
-      timestamping: access(values, "timestamping", PolicyAccess.Allowed, warnings),
+      timestamping: timestamps(values, warnings),
       locked,
       warnings,
     });
@@ -207,6 +227,21 @@ function access(values: Map<string, unknown>, key: string, fallback: PolicyAcces
   if (value === "forbidden") return PolicyAccess.Forbidden;
   warnings.push(`'${key}' has a value the SDK does not know: forbidden.`);
   return PolicyAccess.Forbidden;
+}
+
+/** `on`, `off`, or an http(s) address without user info; anything else narrows to `off` (less leaves the device). .NET: `Timestamps`. */
+function timestamps(values: Map<string, unknown>, warnings: string[]): TimestampingPolicy {
+  if (!values.has("timestamping")) return TimestampingPolicy.on;
+  const value = values.get("timestamping");
+  const text = typeof value === "string" ? value.trim() : undefined;
+  if (text === "on") return TimestampingPolicy.on;
+  if (text === "off") return TimestampingPolicy.off;
+  const server = text === undefined ? undefined : parseUrl(text);
+  if (server && (server.protocol === "https:" || server.protocol === "http:") && server.username === "" && server.password === "") {
+    return Object.freeze<TimestampingPolicy>({ mode: TimestampingMode.OwnServer, server });
+  }
+  warnings.push("'timestamping' is neither on, off nor an http(s) address: off.");
+  return TimestampingPolicy.off;
 }
 
 function rule(values: Map<string, unknown>, key: string, fallback: PolicyRule, warnings: string[]): PolicyRule {

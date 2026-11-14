@@ -24,7 +24,7 @@ const agent = FadenstackAgent.createBuilder()
 | `mcp` | `allowed`, `forbidden`, or a list of allowed local MCP sources | like `standalone` |
 | `skills` | `allowed`, `forbidden`, or a list of allowed skill folders | like `standalone` |
 | `webSearch` | `allowed`, `forbidden` | like `standalone` |
-| `timestamping` | `allowed`, `forbidden`: RFC 3161 time-stamps for records signed on the device (only a hash leaves) | `allowed` |
+| `timestamping` | `on` (DigiCert), `off`, or the address of the organisation's own time-stamp server: RFC 3161 time-stamps for records signed on the device (only a hash leaves); anything else is `off` | `on` |
 
 ## Rules
 
@@ -37,7 +37,8 @@ const agent = FadenstackAgent.createBuilder()
 - **Enforced in the SDK:** `build()` throws `MachinePolicyError` (with its `key`) for an agent on an endpoint the policy
   forbids or does not list; with only listed endpoints, a host's own streamer is refused, since it names none. Plain http
   forbidden takes the endpoint's LAN opt-in away (`EndpointPlainHttpRefusedError`, reason `forbiddenByPolicy`).
-- **Time-stamps:** the provenance module's device backend sends no RFC 3161 request where `timestamping` is forbidden.
+- **Time-stamps:** the provenance module's device backend asks the policy's own server where `timestamping` names one,
+  and sends no RFC 3161 request where it is `off`.
 - **Lists are the modules' to apply:** `agent.machinePolicy` gives a module the listed MCP sources and skill folders.
 - **Locked values:** `policy.locked` names the keys the policy set; the app locks them in its UI and never writes them into
   the person's settings.

@@ -10,6 +10,8 @@ import {
   MemorySessionStore,
   PolicyAccess,
   PolicyRule,
+  TimestampingMode,
+  TimestampingPolicy,
   type AgentBuilder,
   type LocalProfileOptions,
 } from "@fadenstack/agents";
@@ -37,7 +39,7 @@ describe("reading", () => {
   it("each key is read and locked", () => {
     const policy = MachinePolicy.fromJson(`
       {"server":"https://ai.example.test","standalone":"allowed","endpoints":["http://localhost:11434","https://llm.example.test/v1"],
-       "plainHttp":"forbidden","mcp":["notes-db"],"skills":"allowed","webSearch":"forbidden","timestamping":"forbidden"}`);
+       "plainHttp":"forbidden","mcp":["notes-db"],"skills":"allowed","webSearch":"forbidden","timestamping":"off"}`);
 
     expect(policy.server?.href).toBe("https://ai.example.test/");
     expect(policy.standalone).toBe(PolicyAccess.Allowed);
@@ -48,7 +50,7 @@ describe("reading", () => {
     expect(policy.mcp.allows("other")).toBe(false);
     expect(policy.skills).toBe(PolicyRule.allowed);
     expect(policy.webSearch).toBe(PolicyAccess.Forbidden);
-    expect(policy.timestamping).toBe(PolicyAccess.Forbidden);
+    expect(policy.timestamping).toBe(TimestampingPolicy.off);
     expect([...policy.locked].sort()).toEqual([...MachinePolicy.keys].sort());
     expect(policy.warnings).toEqual([]);
   });
@@ -61,7 +63,7 @@ describe("reading", () => {
     expect(policy.skills).toBe(PolicyRule.forbidden);
     expect(policy.webSearch).toBe(PolicyAccess.Forbidden);
     expect(policy.plainHttp).toBe(PolicyAccess.Allowed);
-    expect(policy.timestamping).toBe(PolicyAccess.Allowed);
+    expect(policy.timestamping).toBe(TimestampingPolicy.on);
     expect(policy.locked).toEqual(["server"]);
   });
 
@@ -74,13 +76,39 @@ describe("reading", () => {
     expect(policy.locked).toEqual([]);
   });
 
-  it.each(["standalone", "plainHttp", "webSearch", "mcp", "skills", "timestamping"])("an unknown value narrows to forbidden: %s", (key) => {
+  it.each(["standalone", "plainHttp", "webSearch", "mcp", "skills"])("an unknown value narrows to forbidden: %s", (key) => {
     const policy = MachinePolicy.fromJson(`{"${key}":"sometimes"}`);
 
     const access = { standalone: policy.standalone, plainHttp: policy.plainHttp, webSearch: policy.webSearch, mcp: policy.mcp.access,
-      skills: policy.skills.access, timestamping: policy.timestamping }[key];
+      skills: policy.skills.access }[key];
     expect(access).toBe(PolicyAccess.Forbidden);
     expect(policy.warnings.some((w) => w.includes(key) && !w.includes("sometimes"))).toBe(true); // never the value itself
+  });
+
+  it.each<[unknown, string, string | undefined]>([
+    ["on", "on", undefined],
+    ["off", "off", undefined],
+    [" off ", "off", undefined],
+    ["https://tsa.example.test/rfc3161", "ownServer", "https://tsa.example.test/rfc3161"],
+    ["http://tsa.example.internal", "ownServer", "http://tsa.example.internal/"],
+  ])("timestamping is on, off or an own server's address: %j", (value, mode, server) => {
+    const policy = MachinePolicy.from({ timestamping: value });
+
+    expect(policy.timestamping.mode).toBe(mode);
+    expect(policy.timestamping.server?.href).toBe(server);
+    expect(policy.warnings).toEqual([]);
+  });
+
+  it.each<unknown>(["sometimes", "ftp://tsa.example.test", true, 1, "https://u:p@tsa.example.test"])(
+    "any other timestamping value is off, with a warning: %j", (value) => {
+      const policy = MachinePolicy.from({ timestamping: value });
+
+      expect(policy.timestamping.mode).toBe(TimestampingMode.Off);
+      expect(policy.warnings).toEqual(["'timestamping' is neither on, off nor an http(s) address: off."]);
+    });
+
+  it("timestamping missing is on", () => {
+    expect(MachinePolicy.from({}).timestamping).toBe(TimestampingPolicy.on);
   });
 
   it("a value of the wrong shape narrows too: a list where a word belongs, a word where a list belongs, a number", () => {

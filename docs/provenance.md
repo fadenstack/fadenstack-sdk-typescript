@@ -219,10 +219,19 @@ For an agent on the person's own endpoint (`useEndpoint`) the module chooses the
   principal's own IndexedDB database. A page can sign with it but never read its bytes; only the public key is exported, for
   the certificate. Without IndexedDB (Node) it lives in memory for as long as the signer does. `deleteMyData()` removes the
   database, and the key with it; records signed before keep their own public key and still verify.
-- **The time-stamp:** an RFC 3161 token over the signature (only its SHA-256 leaves the device), when the app names an
-  authority: `provenanceModule({ localBackend: { timestampAuthority: "https://..." } })`. None is named by default: a
-  browser's `fetch` cannot reach DigiCert's http-only service from an https page. Offline, or without one, the record carries
-  no token and its signed `created_at` is the device's clock. `timestamping: false` switches it off.
+- **The time-stamp:** an RFC 3161 token from DigiCert (`DEFAULT_TIMESTAMP_AUTHORITY`, `http://timestamp.digicert.com`)
+  over the signature: only its SHA-256 leaves the device, and plain http is fine because the token is signed. A machine
+  policy's `timestamping` names the organisation's own server instead, or `off` sends nothing;
+  `provenanceModule({ localBackend: { timestampAuthority } })` names another default (`null`: none), and `timestampRoots`
+  adds the roots an own server's certificate chains to. A token counts only when its CMS signature checks out, its signer is
+  a certificate made for time-stamping that chains to DigiCert's root (`DIGICERT_TIMESTAMP_ROOTS`, embedded: a browser has
+  no store of its own) or to one of `timestampRoots`, and it covers the signature's hash with the request's nonce. In Chrome
+  the extension needs a host permission for the authority's origin; an https page cannot reach an http authority at all
+  (mixed content, CORS), so there the app names one it can reach, or the records wait.
+- **The local backup:** every record is kept with its token in the principal's IndexedDB database (`keptRecords()`). When
+  the authority cannot be reached, the record keeps the device's clock, labelled `device-clock`, and waits in a queue that
+  survives a restart; it is stamped when the authority answers again (signing the next record, or `flushTimestampQueue()`
+  at the app's start), and then also proves it existed no later than that time.
 - **Placements:** appended to a log in the principal's IndexedDB database, which keeps the newest 2,000 entries
   (`maxLogEntries`); `LocalProvenanceBackend.placements()` reads it. Hashes and outcomes, never content. Nothing leaves the
   device.

@@ -1,9 +1,16 @@
 import type { PlacementReport } from "@fadenstack/client";
 
-/** The database a principal's device signing key and placement log live in (one per principal, `userStoreName`). */
-const VERSION = 1;
+import type { KeptRecord } from "./localBackend.js";
+
+/**
+ * The database a principal's device signing key, kept records and placement log live in (one per principal, `userStoreName`),
+ * so deleting the principal's data (`deleteMyData`) removes all three (OWASP ASVS 5.0 V14). Version 2 added the `records` store;
+ * an upgrade makes only the stores that are missing, so an existing database keeps its key and its log.
+ */
+const VERSION = 2;
 const KEYS = "keys";
 const PLACEMENTS = "placements";
+const RECORDS = "records";
 const KEY_NAME = "signing";
 
 function request<T>(req: IDBRequest): Promise<T> {
@@ -21,7 +28,7 @@ function finished(tx: IDBTransaction): Promise<void> {
   });
 }
 
-/** Opens the database, making its two object stores (`keys`, `placements`) on first use. */
+/** Opens the database, making the object stores that are missing (`keys`, `placements`, `records`). */
 export function openProvenanceDatabase(factory: IDBFactory, name: string): Promise<IDBDatabase> {
   return new Promise<IDBDatabase>((resolve, reject) => {
     const open = factory.open(name, VERSION);
@@ -29,6 +36,7 @@ export function openProvenanceDatabase(factory: IDBFactory, name: string): Promi
       const db = open.result;
       if (!db.objectStoreNames.contains(KEYS)) db.createObjectStore(KEYS);
       if (!db.objectStoreNames.contains(PLACEMENTS)) db.createObjectStore(PLACEMENTS, { autoIncrement: true });
+      if (!db.objectStoreNames.contains(RECORDS)) db.createObjectStore(RECORDS); // keyed by the record's id
     };
     open.onsuccess = () => {
       const db = open.result;
@@ -78,4 +86,17 @@ export async function appendPlacement(db: IDBDatabase, report: PlacementReport, 
 /** Every report in the log, oldest first. */
 export async function readPlacements(db: IDBDatabase): Promise<PlacementReport[]> {
   return request<PlacementReport[]>(db.transaction([PLACEMENTS], "readonly").objectStore(PLACEMENTS).getAll());
+}
+
+/** Keeps a record (replacing the one with the same id): the record, its signature, its token or none, and where its time came from. */
+export async function putRecord(db: IDBDatabase, kept: KeptRecord): Promise<void> {
+  const tx = db.transaction([RECORDS], "readwrite");
+  const done = finished(tx);
+  tx.objectStore(RECORDS).put(structuredClone(kept), kept.signed.record.id);
+  await done;
+}
+
+/** Every kept record, in no particular order. */
+export async function readRecords(db: IDBDatabase): Promise<KeptRecord[]> {
+  return request<KeptRecord[]>(db.transaction([RECORDS], "readonly").objectStore(RECORDS).getAll());
 }

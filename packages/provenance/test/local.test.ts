@@ -1,19 +1,21 @@
-import { X509Certificate } from "node:crypto";
+import { X509Certificate, createHash } from "node:crypto";
 import { IDBFactory } from "fake-indexeddb";
-import { describe, expect, it } from "vitest";
+import { beforeAll, describe, expect, it } from "vitest";
 
 import { EndpointDialect, StaticTokenProvider, textSha256, type PlacementReport, type RecordRequest } from "@fadenstack/client";
-import { AgentDefinition, FadenstackAgent, MachinePolicy, MemoryApprovalStore, MemorySessionStore, StageOrder, defineTool } from "@fadenstack/agents";
 import {
-  DeviceSigner, LocalProvenanceBackend, MemoryBackend, Rfc3161, canonicalJson, provenanceModule, provenanceOf, type LocalProvenanceOptions,
-  type Placement, type ProvenanceBackend,
+  AgentDefinition, FadenstackAgent, MachinePolicy, MemoryApprovalStore, MemorySessionStore, StageOrder, TimestampingPolicy, defineTool,
+} from "@fadenstack/agents";
+import {
+  AUTHORITY_TIME, DEFAULT_TIMESTAMP_AUTHORITY, DEVICE_CLOCK_TIME, DIGICERT_TIMESTAMP_ROOTS, DeviceSigner, LocalProvenanceBackend, MemoryBackend,
+  Rfc3161, canonicalJson, provenanceModule, provenanceOf, type LocalProvenanceContext, type LocalProvenanceOptions, type Placement, type ProvenanceBackend,
 } from "@fadenstack/provenance";
 import { OpenAiFake } from "@fadenstack/testing";
 
-import {
-  DerReader, Tag, explicit0, generalizedTime, integerBytes, minimal, objectIdentifier, octetString, sequence, set, smallInteger, unsignedInteger,
-} from "../src/der.js";
+import { DerReader, Tag, minimal, unsignedInteger } from "../src/der.js";
+import { DIGICERT_TRUSTED_ROOT_G4_SHA256 } from "../src/timestampRoots.js";
 import { Editor, LONG } from "./helpers.js";
+import { TestAuthority, TsaFake, type AnswerOptions } from "./tsaAuthority.js";
 
 /**
  * sdk/51 F10: the device's own provenance backend, records signed on the device, the time-stamp, the local log. Port of the
@@ -26,50 +28,17 @@ const request = (): RecordRequest => ({ content_sha256: "a".repeat(64), media_ty
 const signal = () => new AbortController().signal;
 const b64url = (bytes: Uint8Array) => Buffer.from(bytes).toString("base64url");
 
-function bigintBytes(value: bigint): Uint8Array {
-  const hex = value.toString(16);
-  return Uint8Array.from(Buffer.from(hex.length % 2 ? `0${hex}` : hex, "hex"));
+
+let authority: TestAuthority;
+beforeAll(async () => {
+  authority = await TestAuthority.create();
+});
+
+/** A backend that trusts the test authority, and its fake `fetch`. */
+function withTsa(options: LocalProvenanceOptions = {}): { local: LocalProvenanceBackend; tsa: TsaFake } {
+  const tsa = new TsaFake(authority);
+  return { tsa, local: backend({ timestampAuthority: "https://tsa.example.test/", timestampRoots: [authority.root], fetch: tsa.fetch as typeof fetch, ...options }) };
 }
-
-/** A time-stamp authority: reads the request, answers a granted token over its hash and nonce (or not). */
-class TsaFake {
-  readonly requests: { contentType: string | null; body: Uint8Array; hash: Uint8Array; url: string }[] = [];
-  down = false;
-  wrongNonce = false;
-  status = 0;
-
-  readonly fetch = async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
-    if (this.down) throw new TypeError("offline");
-    const body = init!.body as Uint8Array;
-    const req = new DerReader(body).open(Tag.sequence);
-    req.expect(Tag.integer);
-    const imprint = req.open(Tag.sequence);
-    imprint.expect(Tag.sequence);
-    const hash = imprint.expect(Tag.octetString).content.slice();
-    const nonce = BigInt(`0x${Buffer.from(integerBytes(req.expect(Tag.integer))).toString("hex")}`);
-    this.requests.push({ contentType: new Headers(init!.headers).get("content-type"), body, hash, url: String(input) });
-    return new Response(this.response(hash, this.wrongNonce ? nonce + 1n : nonce) as BodyInit, { status: 200 });
-  };
-
-  response(hash: Uint8Array, nonce: bigint): Uint8Array {
-    const info = sequence(
-      smallInteger(1), objectIdentifier("1.2.3.4"),
-      sequence(sequence(objectIdentifier("2.16.840.1.101.3.4.2.1")), octetString(hash)),
-      smallInteger(42), generalizedTime(new Date()), unsignedInteger(minimal(bigintBytes(nonce))),
-    );
-    return sequence(
-      sequence(smallInteger(this.status)),
-      sequence(
-        objectIdentifier("1.2.840.113549.1.7.2"),
-        explicit0(sequence(
-          smallInteger(3), set(),
-          sequence(objectIdentifier("1.2.840.113549.1.9.16.1.4"), explicit0(octetString(info))),
-        )),
-      ),
-    );
-  }
-}
-
 function backend(options: LocalProvenanceOptions = {}): LocalProvenanceBackend {
   return new LocalProvenanceBackend({ indexedDB: new IDBFactory(), ...options });
 }
@@ -120,8 +89,7 @@ describe("signing", () => {
       expect(certificate.verify(certificate.publicKey)).toBe(true);
       expect(await DeviceSigner.verify(await signer.sign({ i }))).not.toBeNull();
     }
-    const tsa = new TsaFake();
-    const local = backend({ timestampAuthority: "https://tsa.example.test/", fetch: tsa.fetch as typeof fetch });
+    const { local, tsa } = withTsa();
     for (let i = 0; i < 600; i++) expect((await sign(local)).timestamp).not.toBeNull();
     for (const sent of tsa.requests) {
       const req = new DerReader(sent.body).open(Tag.sequence);
@@ -236,8 +204,7 @@ describe("the record", () => {
   });
 
   it("online, with an authority named, the signature gets a time-stamp and only its hash leaves", async () => {
-    const tsa = new TsaFake();
-    const local = backend({ timestampAuthority: "https://tsa.example.test/", fetch: tsa.fetch as typeof fetch });
+    const { local, tsa } = withTsa();
 
     const signed = await sign(local);
 
@@ -251,21 +218,72 @@ describe("the record", () => {
     expect(Buffer.from(sent.body).includes(Buffer.from(signed.record.content_hash))).toBe(false); // no record field, just the hash
   });
 
-  it("with no authority named (the browser default) nothing is sent at all", async () => {
-    const tsa = new TsaFake();
-    const local = backend({ fetch: tsa.fetch as typeof fetch });
-    expect((await sign(local)).timestamp).toBeNull();
+  it("with the authority set to null nothing is sent at all", async () => {
+    const { local, tsa } = withTsa({ timestampAuthority: null });
+    const signed = await sign(local);
+    expect(signed.timestamp).toBeNull();
     expect(tsa.requests).toHaveLength(0);
+    expect(await local.keptRecords()).toMatchObject([{ timeSource: DEVICE_CLOCK_TIME, queued: false }]); // kept, and nothing waits
   });
 
-  it.each([
-    ["offline", { down: true }],
-    ["with a wrong nonce", { wrongNonce: true }],
+  it("with no authority named the default is DigiCert's", async () => {
+    expect(DEFAULT_TIMESTAMP_AUTHORITY).toBe("http://timestamp.digicert.com");
+    const tsa = new TsaFake(authority);
+    const local = backend({ fetch: tsa.fetch as typeof fetch });
+    await sign(local);
+    expect(tsa.requests.map((r) => r.url)).toEqual(["http://timestamp.digicert.com"]);
+  });
+
+  it.each<[string, AnswerOptions]>([
+    ["tampered", { tamper: true }],
+    ["from a root nobody trusts", { chain: "untrusted" }],
+    ["from a certificate without the time-stamping purpose", { chain: "noEku" }],
+    ["from an expired certificate", { chain: "expired" }],
+    ["through an intermediate that is no CA", { chain: "intermediateNotCa" }],
+    ["over the wrong hash", { wrongHash: true }],
+    ["with the wrong nonce", { wrongNonce: true }],
     ["refused", { status: 2 }],
-  ])("%s the record goes without a token", async (_name, how) => {
-    const tsa = Object.assign(new TsaFake(), how);
-    const local = backend({ timestampAuthority: "https://tsa.example.test/", fetch: tsa.fetch as typeof fetch });
-    expect((await sign(local)).timestamp).toBeNull();
+    ["with a content type that is no TSTInfo", { wrongContentType: true }],
+    ["with a message digest that is not the TSTInfo's", { wrongMessageDigest: true }],
+    ["without signed attributes", { noSignedAttributes: true }],
+  ])("a token counts only when it checks out: %s leaves the record without a token and queued", async (_name, how) => {
+    const { local, tsa } = withTsa();
+    tsa.options = how;
+
+    const signed = await sign(local);
+
+    expect(signed.timestamp).toBeNull();
+    expect(tsa.requests).toHaveLength(1);
+    expect(await local.keptRecords()).toMatchObject([{ timeSource: DEVICE_CLOCK_TIME, queued: true }]);
+  });
+
+  it.each<[string, AnswerOptions]>([
+    ["issuer and serial number", {}],
+    ["subject key identifier", { subjectKeyIdentifier: true }],
+    ["an intermediate CA between", { chain: "intermediate" }],
+  ])("a good token counts: signer named by %s", async (_name, how) => {
+    const { local, tsa } = withTsa();
+    tsa.options = how;
+    expect((await sign(local)).timestamp).not.toBeNull();
+  });
+
+  it("a good token is kept next to its record", async () => {
+    const { local } = withTsa();
+
+    const signed = await sign(local);
+
+    const kept = await local.keptRecords();
+    expect(kept).toHaveLength(1);
+    expect(kept[0]).toMatchObject({ timeSource: AUTHORITY_TIME, queued: false });
+    expect(kept[0]!.signed.timestamp).toBe(signed.timestamp);
+    expect(kept[0]!.signed.record.id).toBe(signed.record.id);
+    expect(kept[0]!.stampedLaterAt).toBeUndefined();
+  });
+
+  it("without IndexedDB the kept records live in memory", async () => {
+    const { local } = withTsa({ indexedDB: undefined });
+    await sign(local);
+    expect(await local.keptRecords()).toMatchObject([{ timeSource: AUTHORITY_TIME, queued: false }]);
   });
 
   it("a slow authority costs the record its token, not the record", async () => {
@@ -288,10 +306,10 @@ describe("the record", () => {
   });
 
   it("time-stamping switched off sends nothing", async () => {
-    const tsa = new TsaFake();
-    const local = backend({ timestamping: false, timestampAuthority: "https://tsa.example.test/", fetch: tsa.fetch as typeof fetch });
+    const { local, tsa } = withTsa({ timestamping: false });
     await sign(local);
     expect(tsa.requests).toHaveLength(0);
+    expect(await local.keptRecords()).toMatchObject([{ queued: false }]);
   });
 
   it("the policy is the local default", async () => {
@@ -316,19 +334,283 @@ describe("the RFC 3161 messages", () => {
     expect(req.hasData).toBe(false);
   });
 
-  it("grants only over our hash with our nonce", () => {
-    const tsa = new TsaFake();
-    const n = BigInt(`0x${Buffer.from(nonce).toString("hex")}`);
-    expect(Rfc3161.grants(tsa.response(hash, n), hash, nonce)).toBe(true);
-    expect(Rfc3161.grants(tsa.response(hash, n + 1n), hash, nonce)).toBe(false);
-    expect(Rfc3161.grants(tsa.response(new Uint8Array(32).fill(8), n), hash, nonce)).toBe(false);
-    tsa.status = 1; // granted with modifications
-    expect(Rfc3161.grants(tsa.response(hash, n), hash, nonce)).toBe(true);
-    tsa.status = 2; // rejection
-    expect(Rfc3161.grants(tsa.response(hash, n), hash, nonce)).toBe(false);
-    expect(Rfc3161.grants(Uint8Array.of(0x30, 0x80, 0, 0), hash, nonce)).toBe(false); // indefinite length: not read
-    expect(Rfc3161.grants(new Uint8Array(), hash, nonce)).toBe(false);
+  const answer = (options: AnswerOptions = {}) => authority.answer(Rfc3161.request(hash, nonce), options);
+
+  it("grants only a signed token, over our hash with our nonce, from a chain to a root we trust", async () => {
+    const roots = [authority.root];
+    expect(await Rfc3161.grants(await answer(), hash, nonce, roots)).toBe(true);
+    expect(await Rfc3161.grants(await answer({ status: 1 }), hash, nonce, roots)).toBe(true); // granted with modifications
+    expect(await Rfc3161.grants(await answer({ wrongNonce: true }), hash, nonce, roots)).toBe(false);
+    expect(await Rfc3161.grants(await answer({ wrongHash: true }), hash, nonce, roots)).toBe(false);
+    expect(await Rfc3161.grants(await answer({ status: 2 }), hash, nonce, roots)).toBe(false); // rejection
+    expect(await Rfc3161.grants(await answer(), new Uint8Array(32).fill(8), nonce, roots)).toBe(false);
+    expect(await Rfc3161.grants(Uint8Array.of(0x30, 0x80, 0, 0), hash, nonce, roots)).toBe(false); // indefinite length: not read
+    expect(await Rfc3161.grants(new Uint8Array(), hash, nonce, roots)).toBe(false);
   });
+
+  it("the roots decide: none, another root, or the right one", async () => {
+    expect(await Rfc3161.grants(await answer(), hash, nonce, [])).toBe(false);
+    expect(await Rfc3161.grants(await answer(), hash, nonce, [authority.otherRoot])).toBe(false);
+    expect(await Rfc3161.grants(await answer(), hash, nonce, [Uint8Array.of(1, 2, 3), authority.root])).toBe(true); // a bad root is left out
+    expect(await Rfc3161.grants(await answer({ chain: "untrusted" }), hash, nonce, [authority.otherRoot])).toBe(true); // its own root
+  });
+
+  it("every certificate on the path must be valid at the time asked about", async () => {
+    const good = await answer();
+    const later = new Date(Date.now() + 2 * 365 * 86_400_000);
+    expect(await Rfc3161.grants(good, hash, nonce, [authority.root], globalThis.crypto, later)).toBe(false);
+    expect(await Rfc3161.grants(good, hash, nonce, [authority.root], globalThis.crypto, new Date(Date.now() - 365 * 86_400_000))).toBe(false);
+  });
+
+  it("a time-stamp request's own answer from nobody is never a token", async () => {
+    expect(await Rfc3161.grants(Rfc3161.request(hash, nonce), hash, nonce, [authority.root])).toBe(false);
+  });
+});
+
+/** Mulberry32, so a failing mutation repeats. */
+function random(seed: number): () => number {
+  let a = seed;
+  return () => {
+    a = (a + 0x6d2b79f5) | 0;
+    let t = Math.imul(a ^ (a >>> 15), 1 | a);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+describe("the authority's answer is input from outside", () => {
+  it("1,200 random mutations of a good answer each give true or false and never throw, and almost none still verify", async () => {
+    const hash = new Uint8Array(32).fill(7);
+    const nonce = Uint8Array.of(0x41, 1, 2, 3, 4, 5, 6, 7);
+    const good = await authority.answer(Rfc3161.request(hash, nonce), { chain: "intermediate" });
+    expect(await Rfc3161.grants(good, hash, nonce, [authority.root])).toBe(true);
+    const next = random(20261114);
+    const pick = (n: number) => Math.floor(next() * n);
+    let verified = 0;
+
+    for (let i = 0; i < 1200; i++) {
+      let bytes = Uint8Array.from(good);
+      const kind = i % 4;
+      if (kind === 0) bytes[pick(bytes.length)]! ^= 1 + pick(255); // flip
+      else if (kind === 1) bytes = bytes.slice(0, pick(bytes.length)); // truncate
+      else if (kind === 2) { // insert
+        const at = pick(bytes.length);
+        bytes = Uint8Array.of(...bytes.slice(0, at), pick(256), ...bytes.slice(at));
+      } else { // change a length byte: the byte after a tag, set to a short, a long, an indefinite or an oversized form
+        const at = pick(bytes.length - 1) + 1;
+        bytes[at] = [0x00, 0x7f, 0x80, 0x81, 0x82, 0x84, 0x85, 0xff][pick(8)]!;
+      }
+
+      const result = await Rfc3161.grants(bytes, hash, nonce, [authority.root]); // a throw fails the test here
+      expect(typeof result).toBe("boolean");
+      if (result) verified++;
+    }
+
+    expect(verified).toBeLessThan(30); // only bytes nothing signed or checked (a version, a parameter) can change and still verify
+  }, 120_000);
+});
+
+describe("the DigiCert roots", () => {
+  it("the embedded root is DigiCert Trusted Root G4, and its bytes hash to the fingerprint named in the source", () => {
+    expect(DIGICERT_TIMESTAMP_ROOTS).toHaveLength(1);
+    const der = DIGICERT_TIMESTAMP_ROOTS[0]!;
+    expect(createHash("sha256").update(der).digest("hex")).toBe(DIGICERT_TRUSTED_ROOT_G4_SHA256);
+    expect(DIGICERT_TRUSTED_ROOT_G4_SHA256).toBe("552f7bdcf1a7af9e6ce672017f4f12abf77240c78e761ac203d1d9d20ac89988");
+    const certificate = new X509Certificate(der);
+    expect(certificate.subject).toContain("CN=DigiCert Trusted Root G4");
+    expect(createHash("sha1").update(der).digest("hex").toUpperCase()).toBe("DDFB16CD4931C973A2037D3FC83A4D7D775D05E4");
+    expect(certificate.verify(certificate.publicKey)).toBe(true); // self-signed
+  });
+});
+
+describe("the local backup (F10)", () => {
+  /** A clock that moves a minute each time it is asked. */
+  const ticking = (): (() => Date) => {
+    let at = Date.UTC(2026, 10, 14, 9, 0, 0);
+    return () => new Date((at += 60_000));
+  };
+
+  it("offline, the record has the labelled clock and waits; after a restart the queue is stamped", async () => {
+    const factory = new IDBFactory();
+    const tsa = new TsaFake(authority);
+    const options = { indexedDB: factory, timestampAuthority: "https://tsa.example.test/", timestampRoots: [authority.root], fetch: tsa.fetch as typeof fetch, now: ticking() };
+    tsa.down = true;
+    const first = new LocalProvenanceBackend(options);
+    const signed = await sign(first);
+    expect(signed.timestamp).toBeNull();
+    expect(await first.keptRecords()).toMatchObject([{ timeSource: DEVICE_CLOCK_TIME, queued: true }]);
+
+    // A restart: a new backend on the same database. The authority answers again.
+    tsa.down = false;
+    const second = new LocalProvenanceBackend(options);
+    expect(await second.keptRecords()).toMatchObject([{ queued: true }]);
+    expect(await second.flushTimestampQueue()).toBe(1);
+
+    const [kept] = await second.keptRecords();
+    expect(kept!.queued).toBe(false);
+    expect(kept!.signed.timestamp).not.toBeNull();
+    expect(kept!.timeSource).toBe(DEVICE_CLOCK_TIME); // the record's own created_at is still the device's clock
+    expect(kept!.stampedLaterAt).toBeDefined();
+    expect(Date.parse(kept!.stampedLaterAt!)).toBeGreaterThan(Date.parse(kept!.signed.record.created_at));
+    expect(await second.flushTimestampQueue()).toBe(0); // nothing left
+  });
+
+  it("signing a record once the authority answers again also stamps what waited, oldest first", async () => {
+    const { local, tsa } = withTsa({ now: ticking() });
+    tsa.down = true;
+    const one = await sign(local);
+    const two = await sign(local);
+    tsa.down = false;
+    tsa.requests.length = 0;
+
+    const three = await sign(local);
+
+    expect(three.timestamp).not.toBeNull();
+    const kept = await local.keptRecords();
+    expect(kept.map((k) => k.signed.record.id)).toEqual([one.record.id, two.record.id, three.record.id]);
+    expect(kept.map((k) => k.queued)).toEqual([false, false, false]);
+    expect(kept.map((k) => k.timeSource)).toEqual([DEVICE_CLOCK_TIME, DEVICE_CLOCK_TIME, AUTHORITY_TIME]);
+    // Its own token first, then the waiting ones, the oldest first.
+    expect(tsa.requests.map((r) => Buffer.from(r.hash).toString("hex"))).toEqual([three, one, two].map((s) => createHash("sha256").update(DeviceSigner.signatureBytes(s.signature)).digest("hex")));
+  });
+
+  it("stamps at most queueBatch records in a round, and stops at the first failure", async () => {
+    const { local, tsa } = withTsa({ queueBatch: 2, now: ticking() });
+    tsa.down = true;
+    for (let i = 0; i < 5; i++) await sign(local);
+    tsa.down = false;
+
+    expect(await local.flushTimestampQueue()).toBe(2);
+    expect((await local.keptRecords()).filter((k) => k.queued)).toHaveLength(3);
+
+    tsa.options = { tamper: true }; // the authority answers, but with no token that counts
+    expect(await local.flushTimestampQueue()).toBe(0);
+    expect((await local.keptRecords()).filter((k) => k.queued)).toHaveLength(3);
+  });
+
+  it("a second flush while one runs returns 0 at once", async () => {
+    const { local, tsa } = withTsa({ now: ticking() });
+    tsa.down = true;
+    await sign(local);
+    await sign(local);
+    tsa.down = false;
+    let release!: () => void;
+    tsa.gate = new Promise<void>((resolve) => { release = resolve; });
+
+    const first = local.flushTimestampQueue();
+    await new Promise((resolve) => setTimeout(resolve, 20)); // the first round is waiting on the authority
+    expect(await local.flushTimestampQueue()).toBe(0);
+    release();
+
+    expect(await first).toBe(2);
+  });
+
+  it("with no authority a flush does nothing", async () => {
+    const { local } = withTsa({ timestampAuthority: null });
+    expect(await local.flushTimestampQueue()).toBe(0);
+  });
+
+  it("the records go with the database when the principal's data is deleted", async () => {
+    const factory = new IDBFactory();
+    const { local } = withTsa({ indexedDB: factory });
+    await sign(local);
+    await new Promise<void>((resolve, reject) => {
+      const del = factory.deleteDatabase("fadenstack-provenance:standalone:standalone");
+      del.onsuccess = () => resolve();
+      del.onerror = () => reject(del.error);
+      del.onblocked = () => reject(new Error("blocked"));
+    });
+
+    expect(await local.keptRecords()).toEqual([]);
+  });
+
+  it("a database from before the records store keeps its key and its log", async () => {
+    const factory = new IDBFactory();
+    const name = "fadenstack-provenance:standalone:standalone";
+    await new Promise<void>((resolve, reject) => { // version 1, as the first release made it
+      const open = factory.open(name, 1);
+      open.onupgradeneeded = () => {
+        open.result.createObjectStore("keys");
+        open.result.createObjectStore("placements", { autoIncrement: true });
+      };
+      open.onsuccess = () => { open.result.close(); resolve(); };
+      open.onerror = () => reject(open.error);
+    });
+    const old = await DeviceSigner.forInstallation({ name, indexedDB: factory }); // upgrades it, and stores a key
+    const { local } = withTsa({ indexedDB: factory, timestampAuthority: null });
+    await local.reportPlacement({ record_id: "before" } as PlacementReport);
+
+    await sign(local);
+
+    expect((await local.signer()).keyId).toBe(old.keyId);
+    expect((await local.placements()).map((r) => r.record_id)).toEqual(["before"]);
+    expect(await local.keptRecords()).toHaveLength(1);
+  });
+});
+
+describe("the machine policy decides the authority (F09)", () => {
+  const context = (timestamping: TimestampingPolicy): LocalProvenanceContext => ({
+    system: () => ({ name: "x", version: "1" }), timestamping: () => timestamping, principal: () => undefined,
+  });
+  const make = (timestamping: TimestampingPolicy, options: LocalProvenanceOptions = {}) => {
+    const tsa = new TsaFake(authority);
+    const local = new LocalProvenanceBackend(
+      { indexedDB: new IDBFactory(), timestampRoots: [authority.root], fetch: tsa.fetch as typeof fetch, ...options }, context(timestamping));
+    return { local, tsa };
+  };
+
+  it("an own server gets the hash, and DigiCert does not", async () => {
+    const own = MachinePolicy.from({ timestamping: "https://tsa.example.internal/rfc3161" }).timestamping;
+    const { local, tsa } = make(own);
+
+    expect((await sign(local)).timestamp).not.toBeNull();
+
+    expect(tsa.requests.map((r) => r.url)).toEqual(["https://tsa.example.internal/rfc3161"]);
+  });
+
+  it("off sends nothing and queues nothing", async () => {
+    const { local, tsa } = make(TimestampingPolicy.off, { timestampAuthority: "https://tsa.example.test/" });
+
+    const signed = await sign(local);
+
+    expect(signed.timestamp).toBeNull();
+    expect(tsa.requests).toHaveLength(0);
+    expect(await local.keptRecords()).toMatchObject([{ timeSource: DEVICE_CLOCK_TIME, queued: false }]);
+    expect(await local.flushTimestampQueue()).toBe(0);
+  });
+
+  it("on takes the app's authority, and the app's own switch still turns it off", async () => {
+    const on = make(TimestampingPolicy.on, { timestampAuthority: "https://tsa.example.test/" });
+    await sign(on.local);
+    expect(on.tsa.requests.map((r) => r.url)).toEqual(["https://tsa.example.test/"]);
+
+    const off = make(TimestampingPolicy.on, { timestamping: false });
+    await sign(off.local);
+    expect(off.tsa.requests).toHaveLength(0);
+
+    const own = make(MachinePolicy.from({ timestamping: "https://tsa.example.internal/" }).timestamping, { timestamping: false });
+    await sign(own.local);
+    expect(own.tsa.requests).toHaveLength(0);
+  });
+
+  it("with no policy at all the default is DigiCert's address", async () => {
+    const tsa = new TsaFake(authority);
+    const local = new LocalProvenanceBackend({ indexedDB: new IDBFactory(), fetch: tsa.fetch as typeof fetch });
+    await sign(local);
+    expect(tsa.requests.map((r) => r.url)).toEqual([DEFAULT_TIMESTAMP_AUTHORITY]);
+  });
+});
+
+// Opt in with FADEN_LIVE_TSA=1: DigiCert's public service (needs the network, no key). .NET uses the same variable.
+describe.skipIf(!process.env["FADEN_LIVE_TSA"])("the real DigiCert service (live)", () => {
+  it("answers with a token that checks out against the embedded root", async () => {
+    const local = new LocalProvenanceBackend({ indexedDB: new IDBFactory(), timestampTimeoutMs: 15_000 });
+
+    const signed = await sign(local);
+
+    expect(signed.timestamp).not.toBeNull();
+    expect(await local.keptRecords()).toMatchObject([{ timeSource: AUTHORITY_TIME, queued: false }]);
+  }, 30_000);
 });
 
 describe("the log", () => {
@@ -400,7 +682,7 @@ describe("which backend", () => {
       .useApprovalStore(new MemoryApprovalStore())
       .useApprovals(async () => ({ approved: true }))
       .addTools(fillField(editor, seen))
-      .use(provenanceModule({ ...(options.backend ? { backend: options.backend } : {}), localBackend: { indexedDB: new IDBFactory(), ...options.local } }));
+      .use(provenanceModule({ ...(options.backend ? { backend: options.backend } : {}), localBackend: { indexedDB: new IDBFactory(), timestampAuthority: null, ...options.local } }));
     if (options.app) builder = builder.describeApp(options.app);
     if (options.policy) builder = builder.useMachinePolicy(options.policy);
     const agent = builder.build();
@@ -425,7 +707,7 @@ describe("which backend", () => {
 
   it("the record names the app the agent runs in as its system", async () => {
     const local = new LocalProvenanceBackend({ indexedDB: new IDBFactory() }, {
-      system: () => ({ name: "Word add-in", version: "0.3.0" }), timestampingAllowed: () => true, principal: () => undefined,
+      system: () => ({ name: "Word add-in", version: "0.3.0" }), timestamping: () => TimestampingPolicy.on, principal: () => undefined,
     });
     expect((await sign(local)).record.system).toEqual({ name: "Word add-in", version: "0.3.0" });
     // And through an agent: the app's description reaches the module's own backend without error.
@@ -433,9 +715,9 @@ describe("which backend", () => {
   });
 
   it("the machine's time-stamp switch, when it says no, sends nothing", async () => {
-    const tsa = new TsaFake();
-    const local = new LocalProvenanceBackend({ indexedDB: new IDBFactory(), timestampAuthority: "https://tsa.example.test/", fetch: tsa.fetch as typeof fetch }, {
-      system: () => ({ name: "x", version: "1" }), timestampingAllowed: () => false, principal: () => undefined,
+    const tsa = new TsaFake(authority);
+    const local = new LocalProvenanceBackend({ indexedDB: new IDBFactory(), timestampAuthority: "https://tsa.example.test/", timestampRoots: [authority.root], fetch: tsa.fetch as typeof fetch }, {
+      system: () => ({ name: "x", version: "1" }), timestamping: () => TimestampingPolicy.off, principal: () => undefined,
     });
     const signed = await sign(local);
     expect(signed.timestamp).toBeNull();
@@ -443,10 +725,10 @@ describe("which backend", () => {
     expect(await DeviceSigner.verify(signed.signature)).not.toBeNull(); // still signed
   });
   it("the machine policy switches the time-stamp off through the agent, and nothing leaves", async () => {
-    const tsa = new TsaFake();
-    const local = { timestampAuthority: "https://tsa.example.test/", fetch: tsa.fetch as typeof fetch };
+    const tsa = new TsaFake(authority);
+    const local = { timestampAuthority: "https://tsa.example.test/", timestampRoots: [authority.root], fetch: tsa.fetch as typeof fetch };
 
-    await standaloneRun({ local, policy: MachinePolicy.fromJson('{"timestamping":"forbidden"}') });
+    await standaloneRun({ local, policy: MachinePolicy.fromJson('{"timestamping":"off"}') });
     expect(tsa.requests).toHaveLength(0);
 
     await standaloneRun({ local, policy: MachinePolicy.fromJson("{}") });
@@ -507,7 +789,7 @@ describe("the watermark layer for a standalone agent (F10)", () => {
       .useApprovalStore(new MemoryApprovalStore())
       .useApprovals(async () => ({ approved: true }))
       .addTools(write(editor, seen))
-      .use(provenanceModule({ localBackend: { indexedDB: new IDBFactory() } }));
+      .use(provenanceModule({ localBackend: { indexedDB: new IDBFactory(), timestampAuthority: null } }));
     if (greedy) builder = builder.addChatStage(StageOrder.custom, (inner) => ({ stream: (messages, options) => inner.stream(messages, { ...options, temperature: 0 }) }));
     const agent = builder.build();
 
@@ -529,7 +811,7 @@ describe("the watermark layer for a standalone agent (F10)", () => {
       .useEndpoint({ baseUrl: "http://localhost:11434/v1", model: "m", dialect: EndpointDialect.ollama, fetch: fake.fetch })
       .useLocalProfile(AgentDefinition.fromJson({ slug: "docs-assistant", version: { host_tool_contract: [{ name: "fill_field", risk: "write" }] } }))
       .useSessionStore(new MemorySessionStore()).useApprovalStore(new MemoryApprovalStore()).useApprovals(async () => ({ approved: true }))
-      .addTools(write(editor, seen)).use(provenanceModule({ localBackend: { indexedDB: new IDBFactory() } })).build();
+      .addTools(write(editor, seen)).use(provenanceModule({ localBackend: { indexedDB: new IDBFactory(), timestampAuthority: null } })).build();
     await (await agent.startSession("auto")).send("Hi.");
     expect(seen[0]!.layers.find((l) => l.layer === "watermark")).toMatchObject({ method: "endpoint", applied: false, reason: "short-text" });
   });
