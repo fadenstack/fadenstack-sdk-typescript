@@ -924,7 +924,7 @@ class Turn {
       undefined, false, true);
     if (settled.timedOut) return; // the gateway expires it on its own
     const scope = settled.scope === "chat" || settled.scope === "always" ? settled.scope : "once";
-    await this.#agent.client.agent!.answerApproval(approvalId, settled.approved, scope, signal);
+    await this.#agent.backend.answerApproval(approvalId, settled.approved, scope, signal);
     if (!settled.approved) this.#toolDenied = true;
   }
 
@@ -1012,7 +1012,7 @@ class Turn {
       try {
         await this.#agent.refreshPolicy(signal);
         const inputJson = commandJson(args);
-        const decision = await this.#agent.client.agent!.checkHostTool({ name: tool.name, arguments: JSON.parse(inputJson) as Record<string, unknown>,
+        const decision = await this.#agent.backend.checkHostTool({ name: tool.name, arguments: JSON.parse(inputJson) as Record<string, unknown>,
           origin: "model_tool", callId: call.id, phase: "prepare", toolMode: narrowestMode(this.#mode, this.#session.effectiveToolMode),
           schemaSha256: await commandSchemaHash(tool.parameters), conversationId: this.#session.id, turnId: this.#id }, signal);
         if (!this.#agent.profile.principal || commandJson(decision.principal) !== commandJson(this.#agent.profile.principal))
@@ -1141,7 +1141,7 @@ class Turn {
       throw new Error("Host arguments changed after policy review. Transformed host arguments require a reviewed disclosure contract.");
     await this.#agent.refreshPolicy(signal);
     if (this.#approvalControlsJson() !== policy.controlsJson) throw new Error("Approval limits changed. Review a new host call.");
-    const checked = await this.#agent.client.agent!.checkHostTool({ name: invocation.tool.name,
+    const checked = await this.#agent.backend.checkHostTool({ name: invocation.tool.name,
       arguments: JSON.parse(policy.inputJson) as Record<string, unknown>, origin: "model_tool", callId: invocation.context.callId,
       phase: "dispatch", prepared: policy.decision, toolMode: narrowestMode(this.#mode, this.#session.effectiveToolMode),
       schemaSha256: await commandSchemaHash(invocation.tool.parameters), conversationId: this.#session.id, turnId: this.#id }, signal);
@@ -1169,7 +1169,7 @@ class Turn {
     const base = { name: invocation.tool.name, arguments: args, toolMode: this.#mode,
       schemaSha256: await commandSchemaHash(invocation.tool.parameters), origin: this.#commandOrigin!,
       conversationId: this.#session.id, turnId: this.#id };
-    const resource = this.#agent.client.agent!;
+    const resource = this.#agent.backend;
     const prepared = await resource.checkHostTool({ ...base, phase: "prepare" }, signal);
     if (!this.#agent.profile.principal || commandJson(prepared.principal) !== commandJson(this.#agent.profile.principal)) {
       throw new Error("The command's authenticated identity does not match the active agent profile.");
