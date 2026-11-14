@@ -17,3 +17,4 @@ export {
 } from "./fakeGateway.js";
 export { toolContext, toolServices, type ToolContextOptions, type ToolServiceEntry } from "./tools.js";
 export { DEFAULT_APPROVALS, FakeGrants, type FakeGrantReply, type FakeGrantRequest, type FakeGrantsOptions } from "./fakeGrants.js";
+export { OpenAiFake, type FakeOpenAiAnswer, type OpenAiFakeRequest } from "./openAiFake.js";

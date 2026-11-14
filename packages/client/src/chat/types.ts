@@ -95,7 +95,27 @@ export type ChatUpdate =
    * (`faden.provenance`, which also comes as an `event` update), or the ids the `x-faden-provenance` header names.
    */
   | { type: "receipt"; receipt: ReceiptNote }
-  | { type: "finish"; reason: FinishReason; responseId?: string; model?: string };
+  | { type: "finish"; reason: FinishReason; responseId?: string; model?: string }
+  /**
+   * What an answer from a person's own endpoint says about its text watermark (see `EndpointMarking`). A `DirectChatClient`
+   * sends it once, as the stream's last update; the gateway's client never does. .NET: the trailing update whose
+   * `AdditionalProperties[FadenstackChatOptions.EndpointMarking]` carries it.
+   */
+  | { type: "endpoint_marking"; marking: EndpointMarking };
+
+/**
+ * What an endpoint's answer says about its text watermark (part of D18): whether the request asked for it, whether the
+ * server confirmed it (xAI's `x-watermark` header, the only per-answer confirmation found), and whether the sampling was
+ * deterministic (temperature 0 or `top_k` 1), which defeats a watermark.
+ */
+export interface EndpointMarking {
+  /** The request asked the server for its watermark (SGLang's per-request setting). */
+  requested: boolean;
+  /** The server said whether this answer is watermarked (`x-watermark`); undefined when it said nothing. */
+  confirmed?: boolean;
+  /** Temperature 0 or `top_k` 1: a watermark may not apply to this answer. */
+  deterministic: boolean;
+}
 
 /** A whole answer. */
 export interface ChatResponse {
@@ -111,6 +131,8 @@ export interface ChatResponse {
   receipts: ReceiptNote[];
   /** Set when the gateway refused the prompt or the answer. */
   refused?: GovernanceNotice;
+  /** Only an answer from a person's own endpoint (`DirectChatClient`): what it says about its text watermark. */
+  endpointMarking?: EndpointMarking;
 }
 
 export type ReasoningEffort = "none" | "minimal" | "low" | "medium" | "high" | "xhigh";
@@ -139,7 +161,13 @@ export interface ChatOptions {
   sessionId?: string;
   /** Skills picked by slug for this message (plain routes). */
   skills?: string[];
-  /** More request fields, sent as they are. */
+  /**
+   * The system message every request starts with: put in front of the messages. Nothing sets it in governed mode (the
+   * gateway has its own system prompt), so the gateway client's requests do not change; the agent's session sets it
+   * above the chat stages for a person's own endpoint. .NET: `ChatOptions.Instructions`.
+   */
+  instructions?: string;
+  /** More request fields, sent as they are (a `DirectChatClient` passes on only `top_k`, `min_p`, `repetition_penalty`, `parallel_tool_calls`). */
   extra?: Record<string, unknown>;
   signal?: AbortSignal;
 }

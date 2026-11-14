@@ -1,11 +1,11 @@
 import { FadenstackStreamError } from "../errors.js";
-import { ClientLog, writeLog } from "../logging.js";
+import { ClientLog, writeLog, type FadenstackLogger } from "../logging.js";
 import { isRefusal, readNotice, type GovernanceNotice } from "../governance.js";
 import { parseError, toApiError } from "../http/errorReader.js";
 import type { FadenstackTransport, RequestSpec } from "../http/transport.js";
 import { RECEIPT_EVENT, RECEIPT_HEADER, readReceiptEvent, readReceiptHeader } from "../provenance/receipts.js";
 import { TOOL_MODE_HEADER, type ToolMode } from "../tools/toolModes.js";
-import { readSse, type SseEvent } from "./sse.js";
+import { readSse, streamTooLarge, type SseEvent } from "./sse.js";
 import type { ReceiptNote } from "../provenance/receipts.js";
 import type {
   ChatMessage,
@@ -76,7 +76,7 @@ export class FadenstackChatClient implements ChatStreamer {
     }
     if (!response.body) throw new FadenstackStreamError("The answer had no body.");
     for (const receipt of readReceiptHeader(response.headers.get(RECEIPT_HEADER))) yield { type: "receipt", receipt };
-    const assembler = new StreamAssembler(this.#transport);
+    const assembler = new StreamAssembler(this.#transport.logger);
     for await (const sse of readSse(response.body, options.signal, this.#transport.streamIdleTimeoutMs)) {
       yield* assembler.read(sse);
       if (assembler.done) break;
@@ -104,9 +104,12 @@ export class FadenstackChatClient implements ChatStreamer {
   }
 }
 
-/** The request body in the OpenAI shape, with the gateway's own fields. */
+/**
+ * The request body in the OpenAI shape, with the gateway's own fields. `options.instructions`, when there is one, becomes
+ * the leading system message (.NET: `ChatWire.Messages`).
+ */
 export function requestBody(messages: readonly ChatMessage[], options: ChatOptions, model: string, stream: boolean): Json {
-  const body: Json = { model, messages };
+  const body: Json = { model, messages: options.instructions ? [{ role: "system", content: options.instructions }, ...messages] : messages };
   if (stream) {
     body["stream"] = true;
     body["stream_options"] = { include_usage: true };
@@ -205,13 +208,17 @@ function usage(root: Json): Usage | undefined {
   return result;
 }
 
-function toResponse(root: Json): ChatResponse {
+/**
+ * A whole answer. With `gateway` false (a person's own endpoint, which may be anything) its `faden` block is not read: an
+ * endpoint cannot hand the session a refusal, an event or a receipt.
+ */
+export function toResponse(root: Json, gateway = true): ChatResponse {
   const response: ChatResponse = { text: "", reasoning: "", toolCalls: [], events: [], receipts: [] };
   const id = str(root, "id");
   const model = str(root, "model");
   if (id) response.id = id;
   if (model) response.model = model;
-  const faden = root["faden"] as Json | undefined;
+  const faden = gateway ? (root["faden"] as Json | undefined) : undefined;
   if (faden && Array.isArray(faden["events"])) {
     response.events = (faden["events"] as Json[]).filter((e) => e && typeof e === "object").map(toFadenstackEvent);
     for (const event of response.events) {
@@ -248,30 +255,43 @@ function toResponse(root: Json): ChatResponse {
   return response;
 }
 
-/** Turns the chunks of a stream into updates; tool calls come out whole, at their end. */
-class StreamAssembler {
+/**
+ * Turns the chunks of a stream into updates; tool calls come out whole, at their end. Used for the gateway and, with
+ * `gateway` false, for a person's own endpoint (sdk/51 F03), which may be anything: it cannot speak the gateway's own
+ * events (a forged refusal, approval or receipt), and what is not an OpenAI chunk ends the answer with a typed error.
+ * .NET: `StreamAssembler`.
+ */
+export class StreamAssembler {
+  /** The longest a tool call's arguments may grow, in characters (N9). */
+  static readonly maxArgumentChars = 8 * 1024 * 1024;
+
   done = false;
-  readonly #transport: FadenstackTransport;
-
-  constructor(transport: FadenstackTransport) {
-    this.#transport = transport;
-  }
-
+  readonly #logger: FadenstackLogger | undefined;
+  readonly #gateway: boolean;
   readonly #calls = new Map<number, { id: string; name: string; args: string }>();
+  /** The wire's `index` -> the slot its call lives in (they differ only when a server reuses an index). */
+  readonly #slots = new Map<number, number>();
+  #current = -1;
   #responseId: string | undefined;
   #model: string | undefined;
 
+  constructor(logger: FadenstackLogger | undefined, gateway = true) {
+    this.#logger = logger;
+    this.#gateway = gateway;
+  }
+
   *read(sse: SseEvent): Generator<ChatUpdate> {
+    if (sse.name && sse.name !== "message" && !this.#gateway) return; // an endpoint's own named events (a ping, its progress) are no part of the answer
     if (sse.name === "faden") {
       let raw: Json;
       try {
         raw = JSON.parse(sse.data) as Json;
       } catch {
-        writeLog(this.#transport.logger, ClientLog.eventSkipped, { Reason: "not valid JSON" });
+        writeLog(this.#logger, ClientLog.eventSkipped, { Reason: "not valid JSON" });
         return; // a malformed event is skipped, as clients that do not know it do
       }
       if (raw === null || typeof raw !== "object" || Array.isArray(raw)) {
-        writeLog(this.#transport.logger, ClientLog.eventSkipped, { Reason: "not a JSON object" });
+        writeLog(this.#logger, ClientLog.eventSkipped, { Reason: "not a JSON object" });
         return;
       }
       const event = toFadenstackEvent(raw);
@@ -293,12 +313,19 @@ class StreamAssembler {
     try {
       root = JSON.parse(sse.data) as Json;
     } catch {
-      return;
+      throw notAnAnswer(); // the parser's message could quote what was sent
     }
+    if (root === null || typeof root !== "object" || Array.isArray(root)) throw notAnAnswer();
     const choices = Array.isArray(root["choices"]) ? (root["choices"] as Json[]) : [];
     const error = root["error"];
-    if (error && typeof error === "object" && choices.length === 0) {
-      throw new FadenstackStreamError(str(error, "message") ?? "The answer broke off.", str(error, "code"));
+    if (error !== undefined && error !== null && choices.length === 0) {
+      // OpenAI's {"error": {...}}; Ollama's {"error": "..."}
+      if (typeof error === "string") throw new FadenstackStreamError(error || "The answer broke off.");
+      if (typeof error === "object") throw new FadenstackStreamError(str(error, "message") ?? "The answer broke off.", str(error, "code"));
+    }
+    if (!this.#gateway && str(root, "object") === "error" && choices.length === 0) {
+      // vLLM's and SGLang's {"object": "error", "message": ...}
+      throw new FadenstackStreamError(str(root, "message") ?? "The answer broke off.", str(root, "type"));
     }
     this.#responseId ??= str(root, "id");
     this.#model ??= str(root, "model");
@@ -329,17 +356,52 @@ class StreamAssembler {
     if (calls.length) yield { type: "tool_calls", calls };
   }
 
+  /**
+   * Adds a tool call's chunk. A chunk names its call by `index` (the gateway always does); one without an index belongs to
+   * the call before it unless it brings a new id, which starts the next call (servers that omit the index), and a new id
+   * under an index already used starts a new call too (review R2), so parallel calls are never merged into one.
+   */
   #collect(call: Json): void {
-    const index = typeof call["index"] === "number" ? (call["index"] as number) : 0;
-    const entry = this.#calls.get(index) ?? { id: "", name: "", args: "" };
-    const fn = (call["function"] ?? {}) as Json;
-    entry.id = str(call, "id") || entry.id;
-    entry.name = str(fn, "name") || entry.name;
-    entry.args += str(fn, "arguments") ?? "";
-    this.#calls.set(index, entry);
+    const id = str(call, "id");
+    const hasId = !!id;
+    const wire = call["index"];
+    let slot: number;
+    if (typeof wire === "number" && Number.isInteger(wire)) {
+      const known = this.#slots.get(wire);
+      if (known === undefined) {
+        slot = this.#calls.has(wire) ? this.#next() : wire; // the gateway's own index whenever it is free
+        this.#slots.set(wire, slot);
+      } else {
+        slot = known;
+        const had = this.#calls.get(slot)?.id;
+        if (hasId && had && had !== id) {
+          slot = this.#next();
+          this.#slots.set(wire, slot);
+        }
+      }
+    } else {
+      const had = this.#current >= 0 ? this.#calls.get(this.#current)?.id : undefined;
+      slot = this.#current >= 0 && !(hasId && had && had !== id) ? this.#current : this.#next();
+    }
+    this.#current = slot;
+    const entry = this.#calls.get(slot) ?? { id: "", name: "", args: "" };
+    const fn = call["function"];
+    const name = fn && typeof fn === "object" ? str(fn, "name") : undefined;
+    const args = fn && typeof fn === "object" ? str(fn, "arguments") : undefined;
+    if (entry.args.length + (args?.length ?? 0) > StreamAssembler.maxArgumentChars) throw streamTooLarge("a tool call's arguments");
+    entry.id = hasId ? id : entry.id;
+    entry.name = name || entry.name;
+    entry.args += args ?? "";
+    this.#calls.set(slot, entry);
+  }
+
+  #next(): number {
+    return this.#calls.size === 0 ? 0 : Math.max(...this.#calls.keys()) + 1;
   }
 
   #takeCalls(): ToolCall[] {
+    this.#slots.clear();
+    this.#current = -1;
     const calls = [...this.#calls.entries()].sort(([a], [b]) => a - b).map(([index, c]) => toolCall(c.id, c.name, c.args, index));
     this.#calls.clear();
     return calls;
@@ -351,4 +413,8 @@ class StreamAssembler {
     if (this.#model) update.model = this.#model;
     return update;
   }
+}
+
+function notAnAnswer(): FadenstackStreamError {
+  return new FadenstackStreamError("The answer broke off: the server sent something that is not part of an answer.", "invalid_stream");
 }
