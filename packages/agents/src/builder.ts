@@ -1,5 +1,4 @@
 import {
-  BYPASS_SUPPORTS,
   FadenstackClient,
   type ChatStreamer,
   type FadenstackClientOptions,
@@ -10,6 +9,7 @@ import {
 } from "@fadenstack/client";
 
 import { FadenstackAgent } from "./agent.js";
+import { ServerBackend, type AgentBackend } from "./backend.js";
 import {
   approvalsFrom,
   denyAllApprovals,
@@ -31,9 +31,10 @@ import type { FadenstackLogger } from "@fadenstack/client";
 
 /** What an agent was built with. */
 export interface AgentSettings {
-  readonly client: FadenstackClient;
+  /** What the agent talks to: the server (`ServerBackend`, which holds the client). */
+  readonly backend: AgentBackend;
   readonly agent: string;
-  /** The gateway's chat, wrapped in the chat stages. */
+  /** The backend's chat (the gateway's), wrapped in the chat stages. */
   readonly chat: ChatStreamer;
   readonly tools: readonly AgentTool[];
   readonly sources: readonly ToolSource[];
@@ -337,15 +338,18 @@ export class AgentBuilder {
       if (names.has(tool.name)) throw new Error(`Two tools are named '${tool.name}'.`);
       names.add(tool.name);
     }
+    const backend = new ServerBackend(client);
     // Lower order is further from the transport: wrap from the transport outwards.
-    let chat: ChatStreamer = client.chat;
+    let chat: ChatStreamer = backend.chat; // the model, under the chat stages
     for (const stage of [...this.#chatStages].sort((a, b) => b.order - a.order)) chat = stage.wrap(chat);
     // The server offers Bypass only to a client that names the whole flow, so it is named only where the app can open the
-    // second sign-in.
-    if (this.#logger) client.transport.useLogger(this.#logger);
-    if (this.#stepUp ?? (isStepUpHandler(this.#approvals) ? this.#approvals : undefined)) client.transport.announce(...BYPASS_SUPPORTS);
+    // second sign-in. (The backend does it to the client, a host's own included, as the builder always did.)
+    backend.applyTransportRules({
+      logger: this.#logger,
+      announcesBypass: !!(this.#stepUp ?? (isStepUpHandler(this.#approvals) ? this.#approvals : undefined)),
+    });
     return FadenstackAgent.create({
-      client,
+      backend,
       agent,
       chat,
       tools: [...this.#tools],

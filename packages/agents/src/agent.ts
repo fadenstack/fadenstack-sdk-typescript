@@ -29,6 +29,7 @@ import {
 } from "./reasoning.js";
 
 import { AgentBuilder, UNDESCRIBED_APP_NAME, type AgentSettings, type AppDescription } from "./builder.js";
+import type { AgentBackend } from "./backend.js";
 import { EventReporter } from "./reporter.js";
 import { ChatSession } from "./session.js";
 import { isChangingToolSource, type AgentContext, type ToolSource } from "./stages.js";
@@ -80,7 +81,7 @@ export class FadenstackAgent {
 
   private constructor(settings: AgentSettings) {
     this.settings = settings;
-    this.reporter = new EventReporter(settings.client, settings.report);
+    this.reporter = new EventReporter(this.client, settings.report);
     this.grants = new AgentGrants(this, settings.grantPlaceResolver);
     this.stepUps = new StepUpProofs(this);
   }
@@ -98,8 +99,19 @@ export class FadenstackAgent {
     return this.settings.agent;
   }
 
+  /**
+   * The agent's Fadenstack client: the server's routes, its options, its transport for a module's own resources. An agent
+   * without a server has none: this throws there.
+   */
   get client(): FadenstackClient {
-    return this.settings.client;
+    const client = this.settings.backend.serverClient;
+    if (!client) throw new Error("This agent has no Fadenstack server, so it has no server client.");
+    return client;
+  }
+
+  /** @internal What the agent talks to: the server, or the person's own model endpoint (sdk/51 F02). */
+  get backend(): AgentBackend {
+    return this.settings.backend;
   }
 
   /** The app the agent runs in, as the host described it (`describeApp`); undefined when it did not. */
