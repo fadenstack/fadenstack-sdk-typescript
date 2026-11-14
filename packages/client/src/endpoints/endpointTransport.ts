@@ -189,7 +189,7 @@ function redirected(status: number, to: URL | undefined): FadenstackApiError {
  * D3: plain http only to this device, or to a private network after the endpoint's opt-in; never with a key. Decided by the
  * host's spelling (`hostScope`: a browser cannot resolve names). Throws `EndpointPlainHttpRefusedError`, before anything is sent.
  */
-export function checkPlainHttp(url: URL, endpoint: Pick<ModelEndpoint, "key" | "allowPlainHttpInLan">): void {
+export function checkPlainHttp(url: URL, endpoint: Pick<ModelEndpoint, "key" | "allowPlainHttpInLan" | "plainHttpForbidden">): void {
   if (url.protocol !== "http:") return;
   if (endpoint.key) {
     throw new EndpointPlainHttpRefusedError("keyOverPlainHttp", "A key never travels over plain http: use the endpoint's https address, or leave the key out.");
@@ -197,6 +197,9 @@ export function checkPlainHttp(url: URL, endpoint: Pick<ModelEndpoint, "key" | "
   const scope = hostScope(url.hostname);
   if (scope === "loopback") return;
   if (scope === "private") {
+    if (endpoint.plainHttpForbidden) {
+      throw new EndpointPlainHttpRefusedError("forbiddenByPolicy", "This computer's policy forbids plain http in the local network: use the endpoint's https address.");
+    }
     if (endpoint.allowPlainHttpInLan) return;
     throw new EndpointPlainHttpRefusedError("noOptIn",
       "Plain http to another computer in the local network needs the person's opt-in for this endpoint; https is better.");

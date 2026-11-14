@@ -3,6 +3,7 @@ export type { AgentConnection } from "./backend.js";
 export { AgentDefinition } from "./definition.js";
 export { type LocalLanguageStore, type LocalProfileOptions } from "./localBackend.js";
 export { AgentBuilder, type AgentSettings, type AppDescription } from "./builder.js";
+export { MachinePolicy, MachinePolicyError, PolicyAccess, PolicyRule, type MachinePolicyInit } from "./machinePolicy.js";
 export { ChatSession, BYPASS_ENDED_NOTE, resultText, type PickedSkill, type SendOptions, type HostCommandOptions, type HostCommandResult } from "./session.js";
 export {
   ApprovalDecision,

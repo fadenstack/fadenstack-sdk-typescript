@@ -10,6 +10,7 @@ import {
   type ReceiptNote,
 } from "@fadenstack/client";
 import {
+  PolicyAccess,
   StageOrder,
   outputEditKind,
   toolServiceKey,
@@ -186,7 +187,7 @@ class ModuleState {
     const agent = call.agent;
     return new LocalProvenanceBackend(this.options.localBackend, {
       system: () => ({ name: agent.app?.name || "Fadenstack SDK", version: agent.app?.version || SDK_VERSION }),
-      timestampingAllowed: () => true,
+      timestampingAllowed: () => agent.machinePolicy.timestamping === PolicyAccess.Allowed,
       principal: () => agent.profile.principal,
     });
   }

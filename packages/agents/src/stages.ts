@@ -2,6 +2,7 @@ import type { AgentClientEvent, AgentProfile, ChatStreamer, EndpointServer, Endp
 
 import type { AgentConnection } from "./backend.js";
 import type { AppDescription } from "./builder.js";
+import type { MachinePolicy } from "./machinePolicy.js";
 import type { AgentTool, ToolCallContext } from "./tools.js";
 
 /**
@@ -46,6 +47,8 @@ export interface AgentContext {
   readonly connection: AgentConnection;
   /** The app the agent runs in, as the host described it (describeApp); undefined when it did not. */
   readonly app: AppDescription | undefined;
+  /** What IT set for this machine (`AgentBuilder.useMachinePolicy`); `MachinePolicy.none` when the app gave none. */
+  readonly machinePolicy: MachinePolicy;
   /** For a standalone agent, its connection's text watermark status (FadenstackAgent.endpointWatermark); undefined with a server. */
   readonly endpointWatermark: EndpointWatermarkStatus | undefined;
   /** For a standalone agent, the kind of server behind its endpoint; undefined with a server. */

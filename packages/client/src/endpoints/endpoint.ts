@@ -27,6 +27,12 @@ export interface ModelEndpoint {
    * with a key; a machine policy can forbid it (F09).
    */
   allowPlainHttpInLan?: boolean;
+  /**
+   * The machine policy forbids plain http in the local network (F09): such a request is refused, saying so
+   * (`EndpointPlainHttpRefusedError`, reason `forbiddenByPolicy`). `AgentBuilder.useMachinePolicy` sets it, together with
+   * `allowPlainHttpInLan: false`; an app has no reason to. .NET: internal `PlainHttpForbidden`.
+   */
+  plainHttpForbidden?: boolean;
   /** How long a request may take, in ms (default 5 min); for a streamed answer, the wait for its headers. */
   timeoutMs?: number;
   /** How long a streamed answer may send nothing at all before it is given up, in ms (default 5 min; `Infinity` turns it off). */

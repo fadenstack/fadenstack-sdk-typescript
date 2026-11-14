@@ -30,6 +30,7 @@ import {
   type ReasoningLevel, type ReasoningStore,
 } from "./reasoning.js";
 
+import { MachinePolicy } from "./machinePolicy.js";
 import { AgentBuilder, UNDESCRIBED_APP_NAME, type AgentSettings, type AppDescription } from "./builder.js";
 import type { AgentBackend, AgentConnection } from "./backend.js";
 import { LocalBackend } from "./localBackend.js";
@@ -135,7 +136,29 @@ export class FadenstackAgent {
   }
 
   /**
-   * How the agent is connected: ``governed`` to an organisation's Fadenstack server, or `standalone` to the person's own model
+   * What IT set for this machine (`AgentBuilder.useMachinePolicy`): modules read its lists (the MCP sources, the skill
+   * folders); `MachinePolicy.none` when the app gave none. .NET: `MachinePolicy`.
+   */
+  get machinePolicy(): MachinePolicy {
+    return this.settings.machinePolicy ?? MachinePolicy.none;
+  }
+
+  /**
+   * The profile under the machine policy: what it forbids is off whatever the server or the person says (R3-8); it never
+   * turns on what they left off.
+   */
+  #narrowed(profile: AgentProfile): AgentProfile {
+    const policy = this.machinePolicy;
+    const off = { mode: "disable", developerMode: false };
+    return {
+      ...profile,
+      localMcp: policy.mcp.allowsAny ? profile.localMcp : off,
+      ...(policy.skills.allowsAny ? {} : { localSkills: off }),
+    };
+  }
+
+  /**
+   * How the agent is connected: `governed` to an organisation's Fadenstack server, or `standalone` to the person's own model
    * endpoint. For showing or hiding the server's parts; nothing decides security by it. .NET: `Connection`.
    */
   get connection(): AgentConnection {
@@ -189,7 +212,7 @@ export class FadenstackAgent {
   /** Refresh mutable approval controls; an identity/contract change requires a new reviewed agent context. */
   async refreshPolicy(signal?: AbortSignal): Promise<void> {
     const before = this.profile;
-    const fresh = await this.backend.getProfile(signal);
+    const fresh = this.#narrowed(await this.backend.getProfile(signal));
     this.#assertHostPolicySupport(fresh);
     const binding = (p: AgentProfile) => JSON.stringify({ id: p.id, slug: p.slug, version: p.version, draft: p.draft,
       principal: p.principal, contract: p.hostToolContract, instructions: p.instructionsSha256,
@@ -211,6 +234,7 @@ export class FadenstackAgent {
       serverClient: this.serverClient,
       connection: this.connection,
       app: this.app,
+      machinePolicy: this.machinePolicy,
       endpointWatermark: this.endpointWatermark,
       endpointServer: this.settings.backend instanceof LocalBackend ? this.settings.backend.server : undefined,
       profile,
@@ -230,7 +254,7 @@ export class FadenstackAgent {
     if (!before || this.clock() - this.#profileRead < PROFILE_MAX_AGE_MS) return;
     let fresh: AgentProfile;
     try {
-      fresh = await this.backend.getProfile(signal);
+      fresh = this.#narrowed(await this.backend.getProfile(signal));
       this.#checkModules(fresh);
     } catch (error) {
       if (signal?.aborted) throw signal.reason ?? error;
@@ -428,7 +452,7 @@ export class FadenstackAgent {
   }
 
   async #start(signal?: AbortSignal): Promise<void> {
-    const profile = await this.backend.getProfile(signal);
+    const profile = this.#narrowed(await this.backend.getProfile(signal));
     this.#assertHostPolicySupport(profile);
     this.#checkModules(profile);
     const hosts = settleHostTools(this.settings.tools, profile);

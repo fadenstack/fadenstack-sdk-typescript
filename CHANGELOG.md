@@ -8,6 +8,11 @@ before 1.0, a minor version may break the API, and this file says where it does.
 
 ### Added
 
+- **`MachinePolicy`** ([Machine policy](docs/machine-policy.md)): one vocabulary for managed installs (`server`, `standalone`,
+  `endpoints`, `plainHttp`, `mcp`, `skills`, `webSearch`, `timestamping`), read fail-closed (`MachinePolicy.from(object)`,
+  `fromJson`; a Chrome extension hands it `chrome.storage.managed`), enforced by `AgentBuilder.useMachinePolicy`
+  (`MachinePolicyError`, `EndpointPlainHttpRefusedError` reason `forbiddenByPolicy`), narrowing local MCP and skills with a
+  server too; `agent.machinePolicy`; the device's provenance backend sends no time-stamp request where it forbids it.
 - **Endpoint watermarks** (a standalone agent): the person's endpoint's text watermark is never switched off for text people
   read. `ChatOptions.unread` marks a call whose answer no person reads, and only then does a dialect with a switch send it
   (`EndpointDialect.watermarkSwitchOff`: vLLM, SGLang); each answer's transcript entry records `endpoint_marking`;

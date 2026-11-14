@@ -3,7 +3,7 @@ import { IDBFactory } from "fake-indexeddb";
 import { describe, expect, it } from "vitest";
 
 import { EndpointDialect, StaticTokenProvider, textSha256, type PlacementReport, type RecordRequest } from "@fadenstack/client";
-import { AgentDefinition, FadenstackAgent, MemoryApprovalStore, MemorySessionStore, StageOrder, defineTool } from "@fadenstack/agents";
+import { AgentDefinition, FadenstackAgent, MachinePolicy, MemoryApprovalStore, MemorySessionStore, StageOrder, defineTool } from "@fadenstack/agents";
 import {
   DeviceSigner, LocalProvenanceBackend, MemoryBackend, Rfc3161, canonicalJson, provenanceModule, provenanceOf, type LocalProvenanceOptions,
   type Placement, type ProvenanceBackend,
@@ -388,7 +388,7 @@ describe("which backend", () => {
     },
   });
 
-  async function standaloneRun(options: { backend?: ProvenanceBackend; local?: LocalProvenanceOptions; app?: { name: string; version: string } } = {}) {
+  async function standaloneRun(options: { backend?: ProvenanceBackend; local?: LocalProvenanceOptions; app?: { name: string; version: string }; policy?: MachinePolicy } = {}) {
     const fake = new OpenAiFake();
     fake.answers.push(OpenAiFake.calls(["call-1", "fill_field", JSON.stringify({ text: `<p>${LONG}</p>` })]), OpenAiFake.text("Done."));
     const editor = new Editor();
@@ -402,6 +402,7 @@ describe("which backend", () => {
       .addTools(fillField(editor, seen))
       .use(provenanceModule({ ...(options.backend ? { backend: options.backend } : {}), localBackend: { indexedDB: new IDBFactory(), ...options.local } }));
     if (options.app) builder = builder.describeApp(options.app);
+    if (options.policy) builder = builder.useMachinePolicy(options.policy);
     const agent = builder.build();
     const session = await agent.startSession("auto");
     await session.send("Tell the customer.");
@@ -441,6 +442,17 @@ describe("which backend", () => {
     expect(tsa.requests).toHaveLength(0);
     expect(await DeviceSigner.verify(signed.signature)).not.toBeNull(); // still signed
   });
+  it("the machine policy switches the time-stamp off through the agent, and nothing leaves", async () => {
+    const tsa = new TsaFake();
+    const local = { timestampAuthority: "https://tsa.example.test/", fetch: tsa.fetch as typeof fetch };
+
+    await standaloneRun({ local, policy: MachinePolicy.fromJson('{"timestamping":"forbidden"}') });
+    expect(tsa.requests).toHaveLength(0);
+
+    await standaloneRun({ local, policy: MachinePolicy.fromJson("{}") });
+    expect(tsa.requests).toHaveLength(1); // with no policy word, the authority is asked
+  });
+
   it("an app's own backend is used instead of the device's", async () => {
     const memory = new MemoryBackend();
     const run = await standaloneRun({ backend: memory });

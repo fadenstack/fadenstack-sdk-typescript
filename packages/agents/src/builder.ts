@@ -15,6 +15,7 @@ import { FadenstackAgent } from "./agent.js";
 import { ServerBackend, type AgentBackend } from "./backend.js";
 import type { AgentDefinition } from "./definition.js";
 import { LocalBackend, type LocalProfileOptions } from "./localBackend.js";
+import { MachinePolicy, MachinePolicyError, PolicyAccess } from "./machinePolicy.js";
 import {
   approvalsFrom,
   denyAllApprovals,
@@ -46,6 +47,8 @@ export interface AgentSettings {
    * the agent's own. The session sets them on every model call, above the chat stages (`ChatOptions.instructions`).
    */
   readonly instructions?: string;
+  /** What IT set for this machine (`useMachinePolicy`); `MachinePolicy.none` when the app gave none. */
+  readonly machinePolicy?: MachinePolicy;
   readonly tools: readonly AgentTool[];
   readonly sources: readonly ToolSource[];
   readonly toolStages: readonly ToolStage[];
@@ -117,6 +120,7 @@ export class AgentBuilder {
   #definition: AgentDefinition | undefined;
   #ownInstructions: string | undefined;
   #localOptions: LocalProfileOptions | undefined;
+  #policy: MachinePolicy = MachinePolicy.none;
   #agent: string | undefined;
   #approvals: ApprovalHandler = denyAllApprovals;
   #sessions: SessionStore | undefined;
@@ -173,6 +177,18 @@ export class AgentBuilder {
   useChatStreamer(streamer: ChatStreamer): this {
     if (typeof streamer?.stream !== "function") throw new TypeError("A chat streamer has a stream(messages, options) method.");
     this.#streamer = streamer;
+    return this;
+  }
+
+  /**
+   * What IT set for this machine (sdk/51 F09): `build()` refuses an endpoint the policy forbids or does not list, takes away
+   * the plain-http opt-in where it forbids plain http, and narrows local MCP and skills, with a server too. The app reads the
+   * policy from its managed location (Chrome: `MachinePolicy.from(await chrome.storage.managed.get())`) and locks what it
+   * sets. .NET: `UseMachinePolicy`.
+   */
+  useMachinePolicy(policy: MachinePolicy): this {
+    if (!(policy instanceof MachinePolicy)) throw new TypeError("A MachinePolicy is needed: MachinePolicy.from(object), MachinePolicy.fromJson(text) or MachinePolicy.none.");
+    this.#policy = policy;
     return this;
   }
 
@@ -392,12 +408,31 @@ export class AgentBuilder {
         throw new Error(`The definition is for '${definition.slug}', not '${this.#agent}': in standalone mode the slug comes from the definition.`);
       }
       agent = definition.slug;
+      const policy = this.#policy;
+      if (policy.standalone !== PolicyAccess.Allowed) {
+        throw new MachinePolicyError("standalone",
+          "This computer's policy does not allow an agent on its own model endpoint: connect to the organisation's server.");
+      }
+      if (this.#endpoint && !policy.allowsEndpoint(this.#endpoint.baseUrl)) {
+        throw new MachinePolicyError("endpoints", "This computer's policy does not list this endpoint.");
+      }
+      if (this.#streamer && policy.endpoints !== null) {
+        throw new MachinePolicyError("endpoints", "This computer's policy allows only listed endpoints, and a host's own chat client names none.");
+      }
       this.#assertNoDuplicateTools();
       // The builder's logger is the endpoint's unless it has its own.
-      const endpoint = this.#endpoint && this.#logger && !this.#endpoint.logger ? { ...this.#endpoint, logger: this.#logger } : this.#endpoint;
+      let endpoint = this.#endpoint && this.#logger && !this.#endpoint.logger ? { ...this.#endpoint, logger: this.#logger } : this.#endpoint;
+      // Plain http forbidden: the person's opt-in is taken away, and the transport says why (loopback stays).
+      if (endpoint && policy.plainHttp !== PolicyAccess.Allowed) endpoint = { ...endpoint, allowPlainHttpInLan: false, plainHttpForbidden: true };
+      // What the person turned on, under the policy: never more.
+      const local: LocalProfileOptions = {
+        ...this.#localOptions,
+        localMcp: this.#localOptions?.localMcp === true && policy.mcp.allowsAny,
+        localSkills: this.#localOptions?.localSkills !== false && policy.skills.allowsAny,
+      };
       // An endpoint's client is made here; a host's own streamer stays the host's.
       backend = new LocalBackend({ definition, chat: this.#streamer ?? new DirectChatClient(endpoint!), endpoint,
-        report: this.#endpointReport, options: this.#localOptions });
+        report: this.#endpointReport, options: local });
       // D7: the person's own instructions come after the definition's.
       instructions = [definition.instructions, this.#ownInstructions?.trim()].filter((part) => part).join("\n\n") || undefined;
     } else {
@@ -429,6 +464,7 @@ export class AgentBuilder {
       agent,
       chat,
       ...(instructions ? { instructions } : {}),
+      machinePolicy: this.#policy,
       tools: [...this.#tools],
       sources: [...this.#sources],
       toolStages: [...this.#toolStages].sort((a, b) => a.order - b.order).map((s) => s.stage),
