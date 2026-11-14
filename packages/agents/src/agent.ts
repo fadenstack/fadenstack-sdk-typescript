@@ -269,7 +269,7 @@ export class FadenstackAgent {
    * in this agent's profile. Returns the language kept.
    */
   async setUserLanguage(language: string | null, signal?: AbortSignal): Promise<string | null> {
-    const kept = await this.client.agent!.setUserLanguage(language, signal);
+    const kept = await this.backend.setUserLanguage(language, signal);
     if (this.#profile) this.#profile = { ...this.#profile, user: { ...this.#profile.user, language: kept } };
     return kept;
   }
@@ -283,7 +283,7 @@ export class FadenstackAgent {
     const options: { query?: string; limit: number; signal?: AbortSignal } = { limit: 100 };
     if (query) options.query = query;
     if (signal) options.signal = signal;
-    return (await this.client.agent!.listSkills(options)).skills;
+    return (await this.backend.listSkills(options)).skills;
   }
 
   /** Loads the profile again (after a new version was published) and settles the tools anew. */
