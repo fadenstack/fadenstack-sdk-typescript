@@ -22,6 +22,23 @@ describe("the person's own skills in IndexedDB", () => {
     store.close();
   });
 
+  it("works again after the person's data was deleted while it was open", async () => {
+    const factory = new IDBFactory();
+    const store = new IndexedDbSkillStore({ indexedDB: factory });
+    await store.add(standard());
+    await new Promise<void>((resolve, reject) => {
+      const del = factory.deleteDatabase("fadenstack-skills:standalone:standalone");
+      del.onsuccess = () => resolve();
+      del.onerror = () => reject(del.error);
+      del.onblocked = () => reject(new Error("blocked"));
+    });
+
+    expect(await store.list()).toEqual([]);
+    await store.add(standard());
+    expect((await store.list()).map((s) => s.name)).toEqual(["house-style"]);
+    store.close();
+  });
+
   it("keeps the skills for the next time the database is opened", async () => {
     const factory = new IDBFactory();
     const first = new IndexedDbSkillStore({ indexedDB: factory });

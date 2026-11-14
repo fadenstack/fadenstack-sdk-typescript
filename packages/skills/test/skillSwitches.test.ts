@@ -25,6 +25,22 @@ describe("the switches in memory", () => {
 });
 
 describe("the switches in IndexedDB", () => {
+  it("work again after the person's data was deleted while they were open", async () => {
+    const factory = new IDBFactory();
+    const switches = new IndexedDbSkillSwitches({ indexedDB: factory });
+    await switches.set("a-skill", false);
+    await new Promise<void>((resolve, reject) => {
+      const del = factory.deleteDatabase("fadenstack-skill-switches:standalone:standalone");
+      del.onsuccess = () => resolve();
+      del.onerror = () => reject(del.error);
+      del.onblocked = () => reject(new Error("blocked"));
+    });
+
+    expect(await switches.isEnabled("a-skill")).toBe(true);
+    expect(await switches.set("a-skill", false)).toBe(true);
+    switches.close();
+  });
+
   it("are kept, and survive a new instance on the same database", async () => {
     const factory = new IDBFactory();
     const first = new IndexedDbSkillSwitches({ indexedDB: factory });
