@@ -8,32 +8,29 @@
  */
 import { computed, ref, useId } from "vue";
 
-import type { SkillLibraryViewModel, StringsSource } from "@fadenstack/ui";
+import type { SkillLibraryViewModel } from "@fadenstack/ui";
 import { readFileBytes } from "@fadenstack/ui-web";
 
 import { useViewModel } from "./composables.js";
+import SkillDraftBody from "./SkillDraftBody.vue";
 import SkillEditorBody from "./SkillEditorBody.vue";
 import SkillIssues from "./SkillIssues.vue";
 import SkillRow from "./SkillRow.vue";
 import SkillShell from "./SkillShell.vue";
 import Spinner from "./Spinner.vue";
-import { defaultStrings, editorEscape, useFirstFocus } from "./skills.js";
+import { editorEscape, useFirstFocus } from "./skills.js";
 import type { ChatTheme } from "./types.js";
 
 const props = withDefaults(defineProps<{
   /** The library's view model; the app calls `refresh()` (and `retext()` when the language changes). */
   library: SkillLibraryViewModel;
-  /** The texts, asked for on every draw so that a language change shows at once: the function the view model was given. English by default. */
-  strings?: StringsSource;
+
   /** `system` (default) follows the browser's light or dark setting. */
   theme?: ChatTheme;
-}>(), { strings: defaultStrings, theme: "system" });
+}>(), { theme: "system" });
 
 const vm = useViewModel(() => props.library);
-const s = computed(() => {
-  void vm.value;
-  return props.strings();
-});
+const s = computed(() => vm.value.strings); // the view model's texts
 const id = useId();
 const shell = ref<{ $el: Element } | null>(null);
 const picker = ref<HTMLInputElement | null>(null);
@@ -41,7 +38,7 @@ const picker = ref<HTMLInputElement | null>(null);
 const asking = computed(() => (vm.value.pendingDelete !== undefined ? "delete" : vm.value.pendingImport !== undefined ? "import" : "list"));
 
 // The list's first button, or the question that opened (the editor focuses itself).
-useFirstFocus(shell, () => [vm.value.editor === undefined, asking.value], () => vm.value.editor === undefined);
+useFirstFocus(shell, () => `${vm.value.editor === undefined}|${asking.value}`, () => vm.value.editor === undefined); // a value, so only a new state (not every change) moves the focus
 
 function onKeyDown(e: KeyboardEvent): void {
   const v = vm.value;
@@ -65,10 +62,12 @@ function chosen(e: Event): void {
 
 <template>
   <SkillShell ref="shell" :strings="s" :theme="theme" :busy="vm.isLoading || (vm.editor?.isSaving ?? false)" @keydown="onKeyDown">
-    <SkillEditorBody v-if="vm.editor" :editor="vm.editor" :strings="strings" />
+    <SkillEditorBody v-if="vm.editor" :editor="vm.editor" />
     <template v-else>
       <h2 class="fdn-wizard-title" tabindex="-1" data-wizard-title dir="auto">{{ s.skillLibraryTitle }}</h2>
-      <p v-if="vm.message" class="fdn-skills-message" role="status" dir="auto">{{ vm.message }}</p>
+      <p v-if="vm.messageIsError" class="fdn-wizard-error" role="alert" dir="auto">{{ vm.message }}</p>
+      <p v-else-if="vm.messageIsWarning" class="fdn-skills-message fdn-skills-message-warning" role="status" dir="auto">{{ vm.message }}</p>
+      <p v-else-if="vm.messageIsInformation" class="fdn-skills-message" role="status" dir="auto">{{ vm.message }}</p>
       <template v-if="vm.note">
         <p v-if="vm.failed" class="fdn-wizard-error" role="alert" dir="auto">{{ vm.note }}</p>
         <p v-else class="fdn-wizard-busy" role="status" dir="auto"><Spinner v-if="vm.isLoading" /><span>{{ vm.note }}</span></p>
@@ -78,7 +77,10 @@ function chosen(e: Event): void {
         <button type="button" class="fdn-button fdn-primary" :disabled="!vm.canNew" :data-wizard-focus="asking === 'list' ? '' : undefined"
           @click="vm.newSkill()">{{ s.skillNew }}</button>
         <button type="button" class="fdn-button" :disabled="!vm.canImport" @click="picker?.click()">{{ s.skillImport }}</button>
+        <button v-if="vm.hasDraft" type="button" class="fdn-button" :disabled="!vm.canToggleDraft" @click="vm.toggleDraft()">{{ s.skillDraftTitle }}</button>
       </div>
+      <!-- "Draft from this chat": only when the app gave the library its conversation. -->
+      <SkillDraftBody v-if="vm.draft && vm.draftOpen" :draft="vm.draft" />
       <label :for="`${id}-zip`" class="fdn-sr-only">{{ s.skillImport }}</label>
       <input :id="`${id}-zip`" ref="picker" class="fdn-sr-only" type="file" accept=".zip" tabindex="-1" aria-hidden="true" @change="chosen">
 

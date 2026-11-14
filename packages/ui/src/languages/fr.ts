@@ -1,3 +1,4 @@
+import { formatNumber } from "../format.js";
 import { minutesAndSeconds, type UiStrings } from "../strings.js";
 
 /** French, formal ("vous"), in the console's words ("conversation", "outil"). A no-break space goes before ? : « ». */
@@ -528,6 +529,17 @@ export const frenchStrings: UiStrings = {
   skillDraftFailed: "Le brouillon n’a pas pu être écrit.",
   skillDraftUnreadable: "La réponse du modèle n’est pas une compétence. Réessayez.",
   skillDraftBroken: "Le brouillon enfreint les règles ci-dessous. Corrigez-le dans l’éditeur avant d’enregistrer.",
+  skillBroken: (reason) => `Cette compétence ne peut pas être lue : ${reason}`,
+  skillBrokenNoReason: "Cette compétence ne peut pas être lue. Ouvrez-la pour la corriger, ou supprimez-la.",
+  skillTestMatchesHeading: "Correspond à ce message :",
+  skillTokens: (tokens, limit) => `environ ${formatNumber(tokens, "fr")} sur ${formatNumber(limit, "fr")} jetons`,
+  skillDraftNothingSaved: "Rien n’est enregistré tant que vous n’appuyez pas sur Enregistrer.",
+  skillDraftOpen: "Ouvrir la proposition",
+  skillEditNamed: (name) => `Modifier ${name}`,
+  skillViewNamed: (name) => `Afficher ${name}`,
+  skillDeleteNamed: (name) => `Supprimer ${name}`,
+  skillExportNamed: (name) => `Exporter ${name}`,
+  skillDuplicateNamed: (name) => `Dupliquer ${name}`,
   skillIssue: {
     NameMissing: "Le nom est vide.",
     NameForm: "Le nom ne peut contenir que des minuscules, des chiffres et des tirets simples.",

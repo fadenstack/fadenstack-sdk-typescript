@@ -68,8 +68,8 @@ export class SkillHarness {
 
   readonly source = (): UiStrings => this.strings;
 
-  library(workshop = this.workshop): SkillLibraryViewModel {
-    return new SkillLibraryViewModel({ workshop, files: this.rig.files, model: this.model, strings: this.source });
+  library(workshop = this.workshop, draftSource?: () => readonly SkillDraftMessage[]): SkillLibraryViewModel {
+    return new SkillLibraryViewModel({ workshop, files: this.rig.files, model: this.model, strings: this.source, draftSource });
   }
 
   gate(): Gate {

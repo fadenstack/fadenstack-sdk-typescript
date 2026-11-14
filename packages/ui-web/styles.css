@@ -2104,6 +2104,20 @@
   color: var(--fdn-success);
 }
 
+.fdn-skills-message-warning {
+  color: var(--fdn-warning);
+}
+
+.fdn-skills-tokens {
+  margin: 0;
+  font-size: 12px;
+  color: var(--fdn-text-muted);
+}
+
+.fdn-skills-tokens-over {
+  color: var(--fdn-warning);
+}
+
 .fdn-skills-preview {
   background: var(--fdn-surface);
 }

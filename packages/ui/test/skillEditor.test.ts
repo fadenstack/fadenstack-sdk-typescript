@@ -1,9 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { SkillLimits } from "@fadenstack/agents";
+import { SkillLimits, SkillSaveStatus, skillSaveResult } from "@fadenstack/agents";
 import type { ChatUpdate } from "@fadenstack/client";
-import { SkillEditorMode, SkillModelAnswer, parseMarkdown, type SkillEditorClosed, type SkillEditorViewModel } from "@fadenstack/ui";
+import { SkillEditorMode, SkillLibraryViewModel, SkillMessageKind, SkillModelAnswer, englishStrings, parseMarkdown, type SkillEditorClosed, type SkillEditorViewModel } from "@fadenstack/ui";
 
-import { Gate, ScriptedModel, SkillRig, doc, flush, inLanguage, textFile, waitUntil } from "./skillFakes.js";
+import { Gate, ScriptedModel, SkillRig, SpyWorkshop, doc, flush, inLanguage, textFile, waitUntil } from "./skillFakes.js";
 
 // The skill editor's view model: the fields, the checks as you type, Save, Cancel, the files, the preview and the Test step.
 // (.NET: SkillEditorTests.cs.) Commands are methods with `can*` getters; the Closed event is `onClosed`.
@@ -568,5 +568,68 @@ describe("the skill editor", () => {
     language = "fr";
     editor.retext();
     expect(texts(editor)).toContain("Le nom est vide.");
+  });
+});
+
+describe("the gaps the skin builders found: the editor", () => {
+  it("exposes its texts and says so when the language changes", () => {
+    const rig = new SkillRig();
+    let current = englishStrings;
+    const library = rig.library(undefined, () => current);
+    library.newSkill();
+    const editor = library.editor!;
+    let changed = 0;
+    editor.subscribe(() => changed++);
+
+    expect(editor.strings.skillName).toBe("Name");
+    current = inLanguage("es");
+    editor.retext();
+
+    expect(changed).toBeGreaterThan(0);
+    expect(editor.strings.skillName).toBe(inLanguage("es").skillName);
+    expect(editor.strings.skillTestMatchesHeading).toBe("Coinciden con este mensaje:");
+  });
+
+  it("says whether its message is information or an error", async () => {
+    const rig = new SkillRig();
+    class FailingSave extends SpyWorkshop {
+      failing = true;
+      override save(...args: Parameters<SpyWorkshop["save"]>) {
+        return this.failing ? Promise.resolve(skillSaveResult(SkillSaveStatus.Failed, [], "contract-review")) : super.save(...args);
+      }
+    }
+    const workshop = new FailingSave(rig.real);
+    const library = new SkillLibraryViewModel({ workshop, files: rig.files, strings: () => englishStrings });
+    library.newSkill();
+    const editor = library.editor!;
+    expect([editor.message, editor.messageIsError, editor.messageIsInformation]).toEqual(["", false, false]);
+    editor.name = "contract-review";
+    editor.description = "Reviews a contract.";
+    editor.instructions = "## Goal\nReview.\n";
+
+    await editor.save();
+    expect(editor.message).toBe("The skill could not be written. Nothing was changed.");
+    expect(editor.messageKind).toBe(SkillMessageKind.Error);
+    expect([editor.messageIsError, editor.messageIsInformation]).toEqual([true, false]);
+
+    workshop.failing = false;
+    await editor.save();
+    expect(editor.message).toBe("contract-review was saved.");
+    expect(editor.messageKind).toBe(SkillMessageKind.Information);
+    expect([editor.messageIsInformation, editor.messageIsError]).toEqual([true, false]);
+  });
+
+  it("counts the instructions' tokens against the advisory limit, and says when it is over", () => {
+    const rig = new SkillRig();
+    const editor = newEditor(rig);
+
+    expect(editor.instructionsTokensText).toBe("about 0 of 5,000 tokens");
+    expect(editor.instructionsOverLimit).toBe(false);
+    editor.instructions = "w".repeat(1200 * 4);
+    expect(editor.instructionsTokensText).toBe("about 1,200 of 5,000 tokens");
+    expect(editor.instructionsOverLimit).toBe(false);
+    editor.instructions = "w".repeat(5001 * 4);
+    expect(editor.instructionsTokensText).toBe("about 5,001 of 5,000 tokens");
+    expect(editor.instructionsOverLimit).toBe(true);
   });
 });

@@ -18,8 +18,9 @@ import type { ChatMessage, ChatOptions } from "@fadenstack/client";
 import { parseMarkdown } from "../markdown/parse.js";
 import type { MarkdownBlock } from "../markdown/model.js";
 import { Observable } from "../observable.js";
-import { englishStrings } from "../strings.js";
+import { englishStrings, type UiStrings } from "../strings.js";
 import {
+  SkillMessageKind,
   skillActivationLabel,
   skillIssueView,
   skillMatchLabel,
@@ -187,6 +188,7 @@ export class SkillEditorViewModel extends Observable {
   #needsReplace = false;
   #showPreview = false;
   #message = "";
+  #messageKind: SkillMessageKind = SkillMessageKind.Information;
   #saveVersion = 0;
   #askVersion = 0;
   #testVersion = 0;
@@ -440,6 +442,36 @@ export class SkillEditorViewModel extends Observable {
     return this.#message;
   }
 
+  /** Whether `message` is information, a warning or an error; a skin shows an error as an alert (assertive) and the rest as a status (polite). */
+  get messageKind(): SkillMessageKind {
+    return this.#messageKind;
+  }
+
+  /** There is a message and it is an error: a skin shows it as an alert. */
+  get messageIsError(): boolean {
+    return this.#message.length > 0 && this.#messageKind === SkillMessageKind.Error;
+  }
+
+  /** There is a message and it is a warning. */
+  get messageIsWarning(): boolean {
+    return this.#message.length > 0 && this.#messageKind === SkillMessageKind.Warning;
+  }
+
+  /** There is a message and it is information: a skin shows it as a status. */
+  get messageIsInformation(): boolean {
+    return this.#message.length > 0 && this.#messageKind === SkillMessageKind.Information;
+  }
+
+  #say(text: string, kind: SkillMessageKind = SkillMessageKind.Information): void {
+    this.#message = text;
+    this.#messageKind = kind;
+  }
+
+  /** The texts; a skin reads the fixed ones (`strings.skillName`) and the computed ones below, and follows `version` when the language changes. */
+  get strings(): UiStrings {
+    return this.#strings();
+  }
+
   get showPreview(): boolean {
     return this.#showPreview;
   }
@@ -467,6 +499,16 @@ export class SkillEditorViewModel extends Observable {
   /** The instructions' size in tokens as the advisory limit counts them (4 characters each), for a counter under the field. */
   get instructionsTokens(): number {
     return Math.trunc(this.#instructions.length / SkillLimits.charactersPerToken);
+  }
+
+  /** "about 1,200 of 5,000 tokens": the counter under the instructions. */
+  get instructionsTokensText(): string {
+    return this.#strings().skillTokens(this.instructionsTokens, SkillLimits.bodyAdvisoryTokens);
+  }
+
+  /** The instructions are past the advisory limit: the counter is a warning (the checks say so too; it does not stop the save). */
+  get instructionsOverLimit(): boolean {
+    return this.instructionsTokens > SkillLimits.bodyAdvisoryTokens;
   }
 
   // -- Test --------------------------------------------------------------------------------------------
@@ -754,7 +796,7 @@ export class SkillEditorViewModel extends Observable {
     const version = ++this.#saveVersion;
     this.#saving = true;
     this.#needsReplace = false;
-    this.#message = "";
+    this.#say("");
     this.notify();
     let result: SkillSaveResult;
     try {
@@ -770,7 +812,7 @@ export class SkillEditorViewModel extends Observable {
         this.#originalName = document.name;
         this.#mode = SkillEditorMode.Edit;
         this.#dirty = false;
-        this.#message = this.#strings().skillSaved(document.name);
+        this.#say(this.#strings().skillSaved(document.name));
         this.notify();
         for (const listener of [...this.#closed]) listener({ saved: true, name: document.name });
         return;
@@ -782,7 +824,7 @@ export class SkillEditorViewModel extends Observable {
         this.#recheck();
         return;
       default:
-        this.#message = this.#strings().skillSaveFailed;
+        this.#say(this.#strings().skillSaveFailed, SkillMessageKind.Error);
         this.notify();
     }
   }

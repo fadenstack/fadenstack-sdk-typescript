@@ -1,10 +1,10 @@
 import { useId, useRef, type FormEvent, type KeyboardEvent, type ReactElement } from "react";
 
-import { type SkillResourceViewModel, type SkillEditorViewModel, type StringsSource, type UiStrings } from "@fadenstack/ui";
+import { type SkillResourceViewModel, type SkillEditorViewModel, type UiStrings } from "@fadenstack/ui";
 
 import { useViewModel } from "./hooks.js";
 import { Markdown } from "./Markdown.js";
-import { Actions, Alert, Ask, Button, Field, Issues, Shell, Title, defaultStrings, useFirstFocus, type SkillViewProps } from "./SkillParts.js";
+import { Actions, Alert, Ask, Button, Field, Issues, Shell, Title, useFirstFocus, type SkillViewProps } from "./SkillParts.js";
 
 export interface SkillEditorProps extends SkillViewProps {
   /** The editor's view model (new, edit, a bundled skill to read, or a draft's proposal). Closing it (Save, Cancel) is the app's: `onClosed`. */
@@ -14,17 +14,16 @@ export interface SkillEditorProps extends SkillViewProps {
 /**
  * The skill editor (sdk/51 F04) in the wizard's column: the name and the description with the checks' words as you type, the instructions
  * with a Markdown preview (the chat's own rendering), the `faden.yaml` fields, the files, the checks, Save (on only when the view model
- * says so), Cancel and the Try panel. It only renders: every text is the app's `strings`, every command is called in the click's own
- * turn, and **nothing is saved but by Save** (or by confirming a replacement). A skill's text is untrusted: it is drawn as text and as
+ * says so), Cancel and the Try panel. It only renders: every text is the view model's, every command is called in the click's own
+ * turn, and **nothing is saved but by Save** (or by confirming a replacement). The texts are the view model's (`strings`). A skill's text is untrusted: it is drawn as text and as
  * Markdown blocks, never as HTML.
  */
 export function SkillEditor(props: SkillEditorProps): ReactElement {
-  const { strings = defaultStrings } = props;
   const vm = useViewModel(props.editor);
   const column = useRef<HTMLDivElement>(null);
   return (
-    <Shell s={strings()} theme={props.theme} className={props.className} busy={vm.isSaving} columnRef={column} onKeyDown={(e) => editorEscape(vm, e)}>
-      <SkillEditorBody editor={props.editor} strings={strings} />
+    <Shell s={vm.strings} theme={props.theme} className={props.className} busy={vm.isSaving} columnRef={column} onKeyDown={(e) => editorEscape(vm, e)}>
+      <SkillEditorBody editor={props.editor} />
     </Shell>
   );
 }
@@ -39,9 +38,9 @@ export function editorEscape(vm: SkillEditorViewModel, e: KeyboardEvent): void {
 }
 
 /** The editor inside a shell (the library draws it in place of its list). */
-export function SkillEditorBody({ editor, strings }: { editor: SkillEditorViewModel; strings: StringsSource }): ReactElement {
+export function SkillEditorBody({ editor }: { editor: SkillEditorViewModel }): ReactElement {
   const vm = useViewModel(editor);
-  const s = strings();
+  const s = vm.strings;
   const id = useId();
   const root = useRef<HTMLDivElement>(null);
   const readOnly = vm.isReadOnly;
@@ -60,13 +59,14 @@ export function SkillEditorBody({ editor, strings }: { editor: SkillEditorViewMo
   const descriptionIssues = about("description");
   const instructionsIssues = about("instructions");
   const invalid = (items: readonly { isError: boolean }[]) => (items.some((i) => i.isError) ? true : undefined);
-  const failed = vm.message === s.skillSaveFailed;
 
   return (
     <div className="fdn-skills-editor" ref={root} aria-busy={vm.isSaving}>
       <Title>{vm.heading}</Title>
       {vm.isProposal && <p className="fdn-wizard-note" dir="auto">{vm.proposalNote}</p>}
-      {vm.message && (failed ? <Alert>{vm.message}</Alert> : <p className="fdn-skills-message" role="status" dir="auto">{vm.message}</p>)}
+      {vm.messageIsError && <Alert>{vm.message}</Alert>}
+      {vm.messageIsWarning && <p className="fdn-skills-message fdn-skills-message-warning" role="status" dir="auto">{vm.message}</p>}
+      {vm.messageIsInformation && <p className="fdn-skills-message" role="status" dir="auto">{vm.message}</p>}
       {asking && (
         <Ask id={`${id}-replace`} title={vm.replaceTitle} body={vm.replaceBody}>
           <Actions>
@@ -100,8 +100,10 @@ export function SkillEditorBody({ editor, strings }: { editor: SkillEditorViewMo
         </div>
         <textarea id={`${id}-instructions`} className="fdn-skills-instructions" rows={10} dir="auto" spellCheck={false} value={vm.instructions}
           readOnly={readOnly} aria-invalid={invalid(instructionsIssues)}
-          aria-describedby={instructionsIssues.length > 0 ? `${id}-instructions-issues` : undefined}
+          aria-describedby={instructionsIssues.length > 0 ? `${id}-instructions-issues ${id}-tokens` : `${id}-tokens`}
           onChange={(e) => { vm.instructions = e.target.value; }} />
+        {/* The size against the advisory limit: a note, and a warning when over. Not live: it changes with every key. */}
+        <p id={`${id}-tokens`} className={`fdn-skills-tokens${vm.instructionsOverLimit ? " fdn-skills-tokens-over" : ""}`} dir="auto">{vm.instructionsTokensText}</p>
         <Issues id={`${id}-instructions-issues`} items={instructionsIssues} />
         {vm.showPreview && (
           <div className="fdn-card fdn-skills-preview" role="region" aria-label={s.skillPreview}>
@@ -242,7 +244,12 @@ function TryPanel({ vm, s, id }: { vm: SkillEditorViewModel; s: UiStrings; id: s
                 <ul>{vm.testListed.map((name) => <li key={name} dir="auto">{name}</li>)}</ul>
               </>
             )}
-            {vm.testMatches.length > 0 && <ul>{vm.testMatches.map((line) => <li key={line} dir="auto">{line}</li>)}</ul>}
+            {vm.testMatches.length > 0 && (
+              <>
+                <p><strong dir="auto">{s.skillTestMatchesHeading}</strong></p>
+                <ul>{vm.testMatches.map((line) => <li key={line} dir="auto">{line}</li>)}</ul>
+              </>
+            )}
             {vm.testPreloaded.length > 0 && (
               <>
                 <p><strong dir="auto">{s.skillTestPreloaded}</strong></p>

@@ -5,8 +5,9 @@ import { readFileBytes } from "@fadenstack/ui-web";
 
 import { Spinner } from "./icons.js";
 import { useViewModel } from "./hooks.js";
+import { SkillDraftBody } from "./SkillDraft.js";
 import { SkillEditorBody, editorEscape } from "./SkillEditor.js";
-import { Actions, Alert, Ask, Button, Issues, Shell, Title, defaultStrings, useFirstFocus, type SkillViewProps } from "./SkillParts.js";
+import { Actions, Alert, Ask, Button, Issues, Shell, Title, useFirstFocus, type SkillViewProps } from "./SkillParts.js";
 
 export interface SkillLibraryProps extends SkillViewProps {
   /** The library's view model; the app calls `refresh()` (and `retext()` when the language changes). */
@@ -21,9 +22,8 @@ export interface SkillLibraryProps extends SkillViewProps {
  * download). Every command is called in the click's own turn.
  */
 export function SkillLibrary(props: SkillLibraryProps): ReactElement {
-  const { strings = defaultStrings } = props;
   const vm = useViewModel(props.library);
-  const s = strings();
+  const s = vm.strings;
   const id = useId();
   const column = useRef<HTMLDivElement>(null);
   const picker = useRef<HTMLInputElement>(null);
@@ -59,10 +59,12 @@ export function SkillLibrary(props: SkillLibraryProps): ReactElement {
   const pending = vm.pendingImport;
   return (
     <Shell s={s} theme={props.theme} className={props.className} busy={vm.isLoading || (editor?.isSaving ?? false)} onKeyDown={onKeyDown} columnRef={column}>
-      {editor ? <SkillEditorBody editor={editor} strings={strings} /> : (
+      {editor ? <SkillEditorBody editor={editor} /> : (
         <>
           <Title>{s.skillLibraryTitle}</Title>
-          {vm.message && <p className="fdn-skills-message" role="status" dir="auto">{vm.message}</p>}
+          {vm.messageIsError && <Alert>{vm.message}</Alert>}
+          {vm.messageIsWarning && <p className="fdn-skills-message fdn-skills-message-warning" role="status" dir="auto">{vm.message}</p>}
+          {vm.messageIsInformation && <p className="fdn-skills-message" role="status" dir="auto">{vm.message}</p>}
           {vm.note && (vm.failed
             ? <Alert>{vm.note}</Alert>
             : <p className="fdn-wizard-busy" role="status" dir="auto">{vm.isLoading && <Spinner />}<span>{vm.note}</span></p>)}
@@ -70,7 +72,10 @@ export function SkillLibrary(props: SkillLibraryProps): ReactElement {
           <Actions>
             <Button primary disabled={!vm.canNew} focus={asking === "list"} onClick={() => vm.newSkill()}>{s.skillNew}</Button>
             <Button disabled={!vm.canImport} onClick={() => picker.current?.click()}>{s.skillImport}</Button>
+            {vm.hasDraft && <Button disabled={!vm.canToggleDraft} onClick={() => vm.toggleDraft()}>{s.skillDraftTitle}</Button>}
           </Actions>
+          {/* "Draft from this chat": only when the app gave the library its conversation. */}
+          {vm.draft && vm.draftOpen && <SkillDraftBody draft={vm.draft} />}
           <label htmlFor={`${id}-zip`} className="fdn-sr-only">{s.skillImport}</label>
           <input id={`${id}-zip`} ref={picker} className="fdn-sr-only" type="file" accept=".zip" tabIndex={-1} aria-hidden="true" onChange={chosen} />
 
@@ -119,6 +124,8 @@ function RowView({ library, row: model, s }: { library: SkillLibraryViewModel; r
         <div>
           <div id={`${id}-name`} className="fdn-skills-name" dir="auto">{row.name}</div>
           <div className="fdn-muted" dir="auto">{row.description}</div>
+          {/* A skill that cannot be read: why, and that it can be opened or deleted. */}
+          {row.isBroken && <p className="fdn-skills-issue fdn-skills-issue-error" dir="auto">{row.brokenText}</p>}
         </div>
         {library.canToggle(row) && (
           <label className="fdn-skills-switch">
@@ -132,10 +139,10 @@ function RowView({ library, row: model, s }: { library: SkillLibraryViewModel; r
         {row.isNotReviewed && <span className="fdn-badge fdn-class-write" dir="auto">{row.statusLabel}</span>}
       </div>
       <div className="fdn-wizard-actions">
-        {row.canOpen && <Button disabled={!library.canEdit(row)} describedBy={`${id}-name`} onClick={() => void library.edit(row)}>{row.isReadOnly ? s.skillView : s.skillEdit}</Button>}
-        {row.canDuplicate && <Button quiet disabled={!library.canDuplicate(row)} describedBy={`${id}-name`} onClick={() => void library.duplicate(row)}>{s.skillDuplicate}</Button>}
-        {row.canExport && <Button quiet disabled={!library.canExport(row)} describedBy={`${id}-name`} onClick={() => void library.export(row)}>{s.skillExport}</Button>}
-        {library.canAskDelete(row) && <Button quiet describedBy={`${id}-name`} onClick={() => library.askDelete(row)}>{s.skillDelete}</Button>}
+        {row.canOpen && <Button disabled={!library.canEdit(row)} label={row.isReadOnly ? row.viewLabel : row.editLabel} onClick={() => void library.edit(row)}>{row.isReadOnly ? s.skillView : s.skillEdit}</Button>}
+        {row.canDuplicate && <Button quiet disabled={!library.canDuplicate(row)} label={row.duplicateLabel} onClick={() => void library.duplicate(row)}>{s.skillDuplicate}</Button>}
+        {row.canExport && <Button quiet disabled={!library.canExport(row)} label={row.exportLabel} onClick={() => void library.export(row)}>{s.skillExport}</Button>}
+        {library.canAskDelete(row) && <Button quiet label={row.deleteLabel} onClick={() => library.askDelete(row)}>{s.skillDelete}</Button>}
       </div>
     </li>
   );

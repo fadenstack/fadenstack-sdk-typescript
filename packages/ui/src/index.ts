@@ -170,6 +170,7 @@ export {
 export { createEndpointChecker, createServerSignIn, createSystemClock, type ServerSignInOptions } from "./wizard/services.js";
 // The skill library, the skill editor and "Draft from this chat" (sdk/51 F04, the third slice). .NET: Fadenstack.UI.Skills.
 export {
+  SkillMessageKind,
   skillActivationLabel,
   skillIssueText,
   skillIssueView,
@@ -178,6 +179,7 @@ export {
   type SkillFileHost,
   type SkillIssueView,
   type SkillModel,
+  type SkillTexts,
   type StringsSource,
 } from "./skills/contracts.js";
 export {

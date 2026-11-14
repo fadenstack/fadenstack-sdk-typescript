@@ -1,3 +1,4 @@
+import { formatNumber } from "../format.js";
 import { minutesAndSeconds, type UiStrings } from "../strings.js";
 
 /** German, formal ("Sie"), in the console's words ("Tools", "Freigabe"). */
@@ -527,6 +528,17 @@ export const germanStrings: UiStrings = {
   skillDraftFailed: "Der Entwurf konnte nicht geschrieben werden.",
   skillDraftUnreadable: "Die Antwort des Modells ist kein Skill. Versuchen Sie es noch einmal.",
   skillDraftBroken: "Der Entwurf verstößt gegen die unten genannten Regeln. Beheben Sie das im Editor, bevor Sie speichern.",
+  skillBroken: (reason) => `Dieser Skill kann nicht gelesen werden: ${reason}`,
+  skillBrokenNoReason: "Dieser Skill kann nicht gelesen werden. Öffnen Sie ihn, um ihn zu beheben, oder löschen Sie ihn.",
+  skillTestMatchesHeading: "Passend zu dieser Nachricht:",
+  skillTokens: (tokens, limit) => `etwa ${formatNumber(tokens, "de")} von ${formatNumber(limit, "de")} Tokens`,
+  skillDraftNothingSaved: "Gespeichert wird erst, wenn Sie auf „Speichern“ klicken.",
+  skillDraftOpen: "Vorschlag öffnen",
+  skillEditNamed: (name) => `${name} bearbeiten`,
+  skillViewNamed: (name) => `${name} ansehen`,
+  skillDeleteNamed: (name) => `${name} löschen`,
+  skillExportNamed: (name) => `${name} exportieren`,
+  skillDuplicateNamed: (name) => `${name} duplizieren`,
   skillIssue: {
     NameMissing: "Der Name ist leer.",
     NameForm: "Der Name darf nur Kleinbuchstaben, Ziffern und einzelne Bindestriche enthalten.",

@@ -63,10 +63,10 @@ function keep<T extends VueWrapper>(wrapper: T): T {
   wrappers.push(wrapper);
   return wrapper;
 }
-const drawLibrary = (h: SkillHarness, vm: SkillLibraryViewModel) => keep(mount(SkillLibrary, { props: { library: vm, strings: h.source }, attachTo: document.body }));
-const drawEditor = (h: SkillHarness, vm: SkillEditorViewModel) => keep(mount(SkillEditor, { props: { editor: vm, strings: h.source }, attachTo: document.body }));
-const drawDraft = (h: SkillHarness, vm: SkillDraftViewModel, onOpenProposal?: (e: SkillEditorViewModel) => void) =>
-  keep(mount(SkillDraft, { props: { draft: vm, strings: h.source, ...(onOpenProposal ? { onOpenProposal } : {}) }, attachTo: document.body }));
+// The views take their texts from the view model (`vm.strings`), so none is given here; `h` is kept so the calls read as before.
+const drawLibrary = (_h: SkillHarness, vm: SkillLibraryViewModel) => keep(mount(SkillLibrary, { props: { library: vm }, attachTo: document.body }));
+const drawEditor = (_h: SkillHarness, vm: SkillEditorViewModel) => keep(mount(SkillEditor, { props: { editor: vm }, attachTo: document.body }));
+const drawDraft = (_h: SkillHarness, vm: SkillDraftViewModel) => keep(mount(SkillDraft, { props: { draft: vm }, attachTo: document.body }));
 
 const column = (w: VueWrapper) => w.get(".fdn-wizard-column");
 const nameOf = (b: Element): string => (b.getAttribute("aria-label") ?? b.textContent ?? "").trim();
@@ -175,14 +175,14 @@ describe("SkillLibrary", () => {
     const bundled = rowOf(w, "slide-design");
     expect(bundled.textContent).toContain(s.skillOriginBundled);
     expect(bundled.textContent).not.toContain(s.skillNotReviewed);
-    expect(maybeButton(bundled, s.skillView)).toBeTruthy();
-    expect(maybeButton(bundled, s.skillDelete)).toBeUndefined();
+    expect(maybeButton(bundled, s.skillViewNamed("slide-design"))).toBeTruthy();
+    expect(maybeButton(bundled, s.skillDeleteNamed("slide-design"))).toBeUndefined();
     expect(bundled.querySelector('[role="switch"]')!.getAttribute("aria-label")).toBe("slide-design");
 
     const own = rowOf(w, "contract-review");
     expect(own.textContent).toContain(s.skillOriginOwn);
     expect(own.textContent).toContain(s.skillNotReviewed);
-    for (const name of [s.skillEdit, s.skillDuplicate, s.skillExport, s.skillDelete]) expect(maybeButton(own, name)).toBeTruthy();
+    for (const name of [s.skillEditNamed("contract-review"), s.skillDuplicateNamed("contract-review"), s.skillExportNamed("contract-review"), s.skillDeleteNamed("contract-review")]) expect(maybeButton(own, name)).toBeTruthy();
 
     const org = rowOf(w, "org-policy");
     expect(org.textContent).toContain(s.skillOriginOrganisation);
@@ -228,13 +228,13 @@ describe("SkillLibrary", () => {
     await click(button(w, englishStrings.skillCancel));
     expect(vm.editor).toBeUndefined();
 
-    await click(button(rowOf(w, "slide-design"), englishStrings.skillView));
+    await click(button(rowOf(w, "slide-design"), englishStrings.skillViewNamed("slide-design")));
     expect(vm.editor!.mode).toBe(SkillEditorMode.View);
     expect(field(w, englishStrings.skillName).readOnly).toBe(true);
     expect(maybeButton(w, englishStrings.skillSave)).toBeUndefined();
     await click(button(w, englishStrings.skillCancel));
 
-    await click(button(rowOf(w, "contract-review"), englishStrings.skillEdit));
+    await click(button(rowOf(w, "contract-review"), englishStrings.skillEditNamed("contract-review")));
     expect(vm.editor!.mode).toBe(SkillEditorMode.Edit);
     expect(w.get("h2").text()).toBe(englishStrings.skillEditorEditing("contract-review"));
   });
@@ -242,7 +242,7 @@ describe("SkillLibrary", () => {
   it("duplicates a skill into an editor that has written nothing", async () => {
     const { h, library: vm } = await library("list");
     const w = drawLibrary(h, vm);
-    await click(button(rowOf(w, "contract-review"), englishStrings.skillDuplicate));
+    await click(button(rowOf(w, "contract-review"), englishStrings.skillDuplicateNamed("contract-review")));
     expect(vm.editor!.mode).toBe(SkillEditorMode.New);
     expect(field(w, englishStrings.skillName).value).toBe("contract-review-copy");
     expect(h.workshop.saves).toBe(0);
@@ -251,7 +251,7 @@ describe("SkillLibrary", () => {
   it("asks before deleting, with Cancel focused, and deletes only on Delete", async () => {
     const { h, library: vm } = await library("list");
     const w = drawLibrary(h, vm);
-    await click(button(rowOf(w, "contract-review"), englishStrings.skillDelete));
+    await click(button(rowOf(w, "contract-review"), englishStrings.skillDeleteNamed("contract-review")));
     expect(vm.pendingDelete?.name).toBe("contract-review");
     expect(roleOf(w, "alert")[0]!.textContent).toBe(englishStrings.skillDeleteTitle("contract-review"));
     expect(w.text()).toContain(englishStrings.skillDeleteBody);
@@ -264,7 +264,7 @@ describe("SkillLibrary", () => {
     expect(vm.pendingDelete).toBeUndefined();
     expect(h.workshop.deletes).toBe(0);
 
-    await click(button(rowOf(w, "contract-review"), englishStrings.skillDelete));
+    await click(button(rowOf(w, "contract-review"), englishStrings.skillDeleteNamed("contract-review")));
     await click(button(roleOf(w, "group")[0]!, englishStrings.skillDelete));
     expect(h.workshop.deletes).toBe(1);
     expect(vm.rows.some((r) => r.name === "contract-review")).toBe(false);
@@ -343,7 +343,7 @@ describe("SkillLibrary", () => {
     const vm = new SkillLibraryViewModel({ workshop: h.workshop, files: browserSkillFiles() as SkillFileHost, strings: h.source });
     await vm.refresh();
     const w = drawLibrary(h, vm);
-    await click(button(rowOf(w, "contract-review"), englishStrings.skillExport));
+    await click(button(rowOf(w, "contract-review"), englishStrings.skillExportNamed("contract-review")));
     await waitUntil(() => links.length > 0);
     await flushPromises();
     expect(links).toEqual([{ href: "blob:skill", download: "contract-review.zip" }]);
@@ -618,18 +618,20 @@ describe("SkillDraft", () => {
     expect(h.workshop.saves).toBe(0);
   });
 
-  it("says in words that nothing is saved until Save, and offers the proposal's editor only when the app gave a way to it", async () => {
+  it("says in words that nothing is saved until Save, and 'Open the proposal' is the view model's command, there only when there is a proposal", async () => {
     const { h, draft } = await draftAt("ready");
-    const open = vi.fn();
-    const first = drawDraft(h, draft, open);
+    const opened: unknown[] = [];
+    draft.onProposal((editor) => opened.push(editor));
+    const first = drawDraft(h, draft);
     expect(first.text()).toContain(englishStrings.skillDraftReady);
     expect(first.text()).toContain(englishStrings.skillEditorProposal);
-    await click(button(first, englishStrings.skillEdit));
-    expect(open).toHaveBeenCalledWith(draft.proposal);
+    await click(button(first, englishStrings.skillDraftOpen));
+    expect(opened).toEqual([draft.proposal]);
     expect(h.workshop.saves).toBe(0);
     first.unmount();
-    const second = drawDraft(h, draft);
-    expect(maybeButton(second, englishStrings.skillEdit)).toBeUndefined();
+    const idle = await draftAt("idle");
+    const second = drawDraft(idle.h, idle.draft);
+    expect(maybeButton(second, englishStrings.skillDraftOpen)).toBeUndefined();
   });
 
   it("marks the state: working is busy and Escape stops it, failed and unreadable are alerts, the others statuses", async () => {
@@ -654,5 +656,144 @@ describe("SkillDraft", () => {
       expect(roleOf(view, "status")[0]!.textContent).toBe(text);
       view.unmount();
     }
+  });
+});
+
+describe("the gaps the skin builders found", () => {
+  it("takes every text from the view model and follows a language change (retext)", async () => {
+    const h = new SkillHarness(englishStrings);
+    harnesses.push(h);
+    let current: UiStrings = englishStrings;
+    const vm = new SkillLibraryViewModel({ workshop: h.workshop, files: h.rig.files, strings: () => current });
+    await vm.refresh();
+    const w = keep(mount(SkillLibrary, { props: { library: vm }, attachTo: document.body }));
+    expect(w.get("h2").text()).toBe(englishStrings.skillLibraryTitle);
+    expect(w.get(".fdn-skills").attributes("lang")).toBe("en");
+    current = germanStrings;
+    vm.retext();
+    await nextTick();
+    expect(w.get("h2").text()).toBe(germanStrings.skillLibraryTitle);
+    expect(w.get(".fdn-skills").attributes("lang")).toBe("de");
+  });
+
+  it("shows information as a status and an error as an alert, in the library", async () => {
+    const { h, library: vm } = await library("list");
+    const w = drawLibrary(h, vm);
+    const own = vm.rows.find((r) => r.name === "contract-review")!;
+    vm.askDelete(own);
+    await flushPromises();
+    await click(button(roleOf(w, "group")[0]!, englishStrings.skillDelete));
+    await flushPromises();
+    expect(vm.messageKind).toBe("information");
+    expect(roleOf(w, "status")[0]!.textContent).toContain(englishStrings.skillDeleted("contract-review"));
+    expect(roleOf(w, "alert")).toHaveLength(0);
+
+    await h.rig.workshop.save(doc("other-skill"));
+    await vm.refresh();
+    const other = vm.rows.find((r) => r.name === "other-skill")!;
+    await h.rig.workshop.delete("other-skill");
+    await vm.edit(other);
+    await flushPromises();
+    expect(vm.messageKind).toBe("error");
+    expect(vm.messageIsError).toBe(true);
+    expect(roleOf(w, "alert")[0]!.textContent).toBe(vm.message);
+  });
+
+  it.each(languages)("says a broken skill cannot be read, and why (%s)", async (_name, strings) => {
+    const h = new SkillHarness(strings);
+    harnesses.push(h);
+    h.rig.store.putRaw({ name: "extra-key", description: "Has a stray field.", body: "Body", version: 2 });
+    await h.rig.workshop.save(doc());
+    const vm = h.library();
+    await vm.refresh();
+    const w = drawLibrary(h, vm);
+    const broken = vm.rows.find((r) => r.name === "extra-key")!;
+    const lead = strings.skillBroken("").split(/[:：]/)[0]!;
+    expect(broken.isBroken).toBe(true);
+    expect(broken.brokenText).toContain("version");
+    expect(broken.brokenText.startsWith(lead)).toBe(true);
+    expect(rowOf(w, "extra-key").textContent).toContain(broken.brokenText);
+    expect(rowOf(w, "contract-review").textContent).not.toContain(lead);
+    expect(vm.rows.find((r) => r.name === "contract-review")!.brokenText).toBe("");
+  });
+
+  it("names a row's buttons for the row", async () => {
+    const { h, library: vm } = await library("list");
+    const w = drawLibrary(h, vm);
+    const own = rowOf(w, "contract-review");
+    expect(button(own, "Edit contract-review").textContent).toBe(englishStrings.skillEdit);
+    expect(maybeButton(own, "Duplicate contract-review")).toBeTruthy();
+    expect(maybeButton(own, "Export contract-review")).toBeTruthy();
+    expect(maybeButton(own, "Delete contract-review")).toBeTruthy();
+    expect(maybeButton(rowOf(w, "slide-design"), "View slide-design")).toBeTruthy();
+  });
+
+  it("offers 'Draft from this chat' only when the host gave a conversation", async () => {
+    const without = await library("list");
+    const first = drawLibrary(without.h, without.library);
+    expect(maybeButton(first, englishStrings.skillDraftTitle)).toBeUndefined();
+    first.unmount();
+
+    const h = new SkillHarness(englishStrings);
+    harnesses.push(h);
+    h.model.says(GOOD_ANSWER);
+    const vm = h.library(h.workshop, () => CHAT);
+    await vm.refresh();
+    const w = drawLibrary(h, vm);
+    expect(w.text()).not.toContain(englishStrings.skillDraftNothingSaved);
+    await click(button(w, englishStrings.skillDraftTitle));
+    expect(vm.draftOpen).toBe(true);
+    expect(w.text()).toContain(englishStrings.skillDraftNothingSaved);
+    expect(document.activeElement).toBe(field(w, englishStrings.skillDraftGuidance));
+
+    await vm.draft!.draft();
+    await flushPromises();
+    expect(vm.editor?.isProposal).toBe(true);
+    expect(vm.draftOpen).toBe(false);
+    expect(w.text()).toContain(englishStrings.skillEditorProposal);
+    expect(h.workshop.saves).toBe(0);
+  });
+
+  it.each(languages)("counts the instructions' tokens against the advisory limit, and warns when over (%s)", async (_name, strings) => {
+    const { h, editor } = await editorAt("new", strings);
+    const w = drawEditor(h, editor);
+    const counter = () => w.get(".fdn-skills-tokens").element as HTMLElement;
+    editor.instructions = "w".repeat(1200 * 4);
+    await nextTick();
+    expect(counter().textContent).toBe(strings.skillTokens(1200, 5000));
+    expect(counter().classList.contains("fdn-skills-tokens-over")).toBe(false);
+    expect(field(w, strings.skillInstructions).getAttribute("aria-describedby")).toContain(counter().id);
+    editor.instructions = "w".repeat(5001 * 4);
+    await nextTick();
+    expect(counter().textContent).toBe(strings.skillTokens(5001, 5000));
+    expect(counter().classList.contains("fdn-skills-tokens-over")).toBe(true);
+  });
+
+  it("has a heading for the matched list of the Try panel", async () => {
+    const { h, editor } = await editorAt("edit");
+    const w = drawEditor(h, editor);
+    expect(w.text()).not.toContain(englishStrings.skillTestMatchesHeading);
+    editor.keywordsText = "contract";
+    editor.testPrompt = "Please review this contract";
+    await editor.runTest();
+    await nextTick();
+    expect(editor.testMatches.length).toBeGreaterThan(0);
+    expect(w.text()).toContain(englishStrings.skillTestMatchesHeading);
+  });
+
+  it("shows the editor's error as an alert and its information as a status", async () => {
+    const { h, editor } = await editorAt("saveFailed");
+    const w = drawEditor(h, editor);
+    expect(editor.messageKind).toBe("error");
+    expect(roleOf(w, "alert")[0]!.textContent).toBe(englishStrings.skillSaveFailed);
+    expect(w.element.querySelector(".fdn-skills-message")).toBeNull();
+  });
+
+  it.each(DRAFT_STATES)("says that nothing is saved until Save in every state of the draft: %s", async (state) => {
+    const { h, draft } = await draftAt(state);
+    const w = drawDraft(h, draft);
+    expect(draft.standingNote).toBe(englishStrings.skillDraftNothingSaved);
+    expect(w.text()).toContain(englishStrings.skillDraftNothingSaved);
+    expect(maybeButton(w, englishStrings.skillDraftOpen) !== undefined).toBe(draft.hasProposal);
   });
 });
