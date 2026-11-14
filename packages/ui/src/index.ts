@@ -117,7 +117,7 @@ export {
   type ClipboardContent,
   type UiScheduler,
 } from "./services.js";
-export { englishStrings, withStrings, type UiStrings } from "./strings.js";
+export { englishStrings, minutesAndSeconds, withStrings, type UiStrings } from "./strings.js";
 export { MemoryPreferenceStore, type PreferenceStore } from "./preferences.js";
 export {
   builtInStrings,
