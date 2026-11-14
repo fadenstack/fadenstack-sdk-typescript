@@ -81,7 +81,7 @@ export class FadenstackAgent {
 
   private constructor(settings: AgentSettings) {
     this.settings = settings;
-    this.reporter = new EventReporter(this.client, settings.report);
+    this.reporter = new EventReporter(settings.backend, settings.report);
     this.grants = new AgentGrants(this, settings.grantPlaceResolver);
     this.stepUps = new StepUpProofs(this);
   }
@@ -554,7 +554,7 @@ export class FadenstackAgent {
       ...(app.ui ? { ui: app.ui } : {}),
     };
     try {
-      await this.client.agent!.reportManifest(manifest);
+      await this.backend.reportManifest(manifest);
     } catch {
       // nothing to do: the server learns of the tools at the next start
     }
