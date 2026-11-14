@@ -205,6 +205,27 @@ A tool that declares `output` and does not place its content is recorded and rep
 `development: true` its call fails, so you notice while you build. A marker that throws is recorded
 (`failed: <error>`) and the placement goes on, in development too.
 
+## Without a server: records signed on the device
+
+For an agent on the person's own endpoint (`useEndpoint`) the module chooses the device's own backend,
+`LocalProvenanceBackend`, unless the app set one (`backend`):
+
+- **The policy:** the local defaults (mark everything but standard editing; record what is missing).
+- **The record:** the server's format, signed on the device. A compact JWS (ES256, P-256) over the record's canonical JSON,
+  with `kid` `device:<16 hex>` and, in `x5c`, a self-signed certificate of the device's public key: anyone can check the
+  signature (`DeviceSigner.verify`), and the signer shows as unknown, since no trust list names it. `content_hash` is the
+  plain SHA-256 (`hash_key_version` 0); a server's is a keyed HMAC.
+- **The key:** one per principal in a browser profile, made on first use: a non-extractable WebCrypto key kept in the
+  principal's own IndexedDB database. A page can sign with it but never read its bytes; only the public key is exported, for
+  the certificate. Without IndexedDB (Node) it lives in memory for as long as the signer does. `deleteMyData()` removes the
+  database, and the key with it; records signed before keep their own public key and still verify.
+- **The time-stamp:** an RFC 3161 token over the signature (only its SHA-256 leaves the device), when the app names an
+  authority: `provenanceModule({ localBackend: { timestampAuthority: "https://..." } })`. None is named by default: a
+  browser's `fetch` cannot reach DigiCert's http-only service from an https page. Offline, or without one, the record carries
+  no token and its signed `created_at` is the device's clock. `timestamping: false` switches it off.
+- **Placements:** appended to a log in the principal's IndexedDB database, which keeps the newest 2,000 entries
+  (`maxLogEntries`); `LocalProvenanceBackend.placements()` reads it. Hashes and outcomes, never content. Nothing leaves the
+  device.
 ## Receipts
 
 Every answer ends with the server's receipt: what model made it, when, and whether the text is watermarked. The

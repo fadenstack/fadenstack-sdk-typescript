@@ -8,6 +8,12 @@ before 1.0, a minor version may break the API, and this file says where it does.
 
 ### Added
 
+- **Records signed on the device** (@fadenstack/provenance): for an agent without a server the module chooses
+  LocalProvenanceBackend: the server's record format (a compact ES256 JWS with kid device:<16 hex> and a self-signed
+  certificate in x5c, hash_key_version 0), signed by a non-extractable WebCrypto key kept per principal in IndexedDB
+  (DeviceSigner, DeviceSigner.verify), an RFC 3161 time-stamp when the app names an authority (Rfc3161, off by default in a
+  browser), and a placement log in IndexedDB that keeps the newest entries. provenanceModule({ localBackend }) sets it up;
+  deleteMyData() removes its database.
 - `AgentTokenProviderOptions.locks` (`LockManagerLike`, `navigator.locks` by default where there is one): contexts that
   share a token store (an extension's side panel and its service worker, several tabs) renew a sign-in one at a time.
 - `TransportOptions.streamIdleTimeoutMs` and `FadenstackClientOptions.streamIdleTimeoutMs` (5 minutes): a streamed

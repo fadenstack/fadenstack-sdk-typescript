@@ -1,6 +1,7 @@
 import type { AgentClientEvent, AgentProfile, ChatStreamer, FadenstackClient, GovernanceNotice, ToolClass } from "@fadenstack/client";
 
 import type { AgentConnection } from "./backend.js";
+import type { AppDescription } from "./builder.js";
 import type { AgentTool, ToolCallContext } from "./tools.js";
 
 /**
@@ -43,6 +44,8 @@ export interface AgentContext {
   readonly serverClient: FadenstackClient | undefined;
   /** How the agent is connected (`FadenstackAgent.connection`). */
   readonly connection: AgentConnection;
+  /** The app the agent runs in, as the host described it (describeApp); undefined when it did not. */
+  readonly app: AppDescription | undefined;
   readonly profile: AgentProfile;
   /** Reports an event to the server (names and counts, never content). */
   report(event: AgentClientEvent): Promise<void>;

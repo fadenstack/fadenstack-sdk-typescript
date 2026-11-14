@@ -40,6 +40,9 @@ export {
   type SinkInfo,
 } from "./types.js";
 export { MemoryBackend, ServerBackend } from "./backend.js";
+export { DeviceSigner, canonicalJson, type DeviceSignerStorage } from "./deviceSigner.js";
+export { LocalProvenanceBackend, type LocalProvenanceContext, type LocalProvenanceOptions } from "./localBackend.js";
+export { Rfc3161 } from "./rfc3161.js";
 export { tightenPolicy } from "./policy.js";
 export { ProvenanceReader, type FoundMark, type ProvenanceReaderOptions } from "./reader.js";
 export { editSimilarity, similarityClassifier, suggestEditKind, type EditSimilarityOptions } from "./editKind.js";

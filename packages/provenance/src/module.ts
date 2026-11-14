@@ -1,6 +1,7 @@
 import {
   DEFAULT_PROVENANCE_POLICY,
   FadenstackApiError,
+  SDK_VERSION,
   type ChatStreamer,
   type PlacementReport,
   type ProvenancePolicy,
@@ -18,6 +19,7 @@ import {
 } from "@fadenstack/agents";
 
 import { ServerBackend } from "./backend.js";
+import { LocalProvenanceBackend, type LocalProvenanceOptions } from "./localBackend.js";
 import { isCode, isLabel, lengthClass, tokensOf } from "./content.js";
 import { HtmlAttributeMarker } from "./markers/htmlAttribute.js";
 import { HttpHeaderMarker } from "./markers/httpHeader.js";
@@ -79,8 +81,16 @@ export interface ProvenanceOptions {
   enrichers?: readonly RecordEnricher[];
   /** See every placement. */
   observers?: readonly PlacementObserver[];
-  /** The server calls; the agent's server by default. */
+  /**
+   * Where policies, signatures and reports go; by default the agent's server, or the device for an agent without one (a
+   * standalone agent: LocalProvenanceBackend, sdk/51 F10).
+   */
   backend?: ProvenanceBackend;
+  /**
+   * How the device's own backend works for an agent without a server: the time-stamp authority, or none; the log's size. The
+   * machine policy may switch time-stamping off (F09). .NET: UseLocalBackend.
+   */
+  localBackend?: LocalProvenanceOptions;
   /** Local policy: it can only tighten the server's (refuse, a lower threshold, fewer exempt kinds, a label). */
   policy?: ProvenancePolicy;
   /**
@@ -166,7 +176,16 @@ class ModuleState {
   }
 
   backend(call: ToolServiceCall): ProvenanceBackend {
-    return (this.#backend ??= this.options.backend ?? new ServerBackend(call.agent.client));
+    return (this.#backend ??= this.options.backend ?? (call.agent.connection === "standalone" ? this.#local(call) : new ServerBackend(call.agent.client)));
+  }
+
+  #local(call: ToolServiceCall): LocalProvenanceBackend {
+    const agent = call.agent;
+    return new LocalProvenanceBackend(this.options.localBackend, {
+      system: () => ({ name: agent.app?.name || "Fadenstack SDK", version: agent.app?.version || SDK_VERSION }),
+      timestampingAllowed: () => true,
+      principal: () => agent.profile.principal,
+    });
   }
 
   policy(call: ToolServiceCall): Promise<Required<ProvenancePolicy>> {

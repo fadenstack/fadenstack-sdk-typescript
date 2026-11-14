@@ -200,6 +200,7 @@ export class FadenstackAgent {
       get client() { return agent.client; },
       serverClient: this.serverClient,
       connection: this.connection,
+      app: this.app,
       profile,
       report: (event) => this.reporter.reportNow([event]),
     };
