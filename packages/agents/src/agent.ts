@@ -8,6 +8,7 @@ import {
   narrowestMode,
   type AgentPrincipal,
   type AgentProfile,
+  type AgentToolInfo,
   type AppManifest,
   type FadenstackClient,
   type ManifestTool,
@@ -29,7 +30,7 @@ import {
 } from "./reasoning.js";
 
 import { AgentBuilder, UNDESCRIBED_APP_NAME, type AgentSettings, type AppDescription } from "./builder.js";
-import type { AgentBackend } from "./backend.js";
+import type { AgentBackend, AgentConnection } from "./backend.js";
 import { EventReporter } from "./reporter.js";
 import { ChatSession } from "./session.js";
 import { isChangingToolSource, type AgentContext, type ToolSource } from "./stages.js";
@@ -109,6 +110,27 @@ export class FadenstackAgent {
     return client;
   }
 
+  /** The agent's Fadenstack client; undefined for an agent without a server (on the person's own model endpoint). */
+  get serverClient(): FadenstackClient | undefined {
+    return this.settings.backend.serverClient;
+  }
+
+  /**
+   * How the agent is connected: `governed` to an organisation's Fadenstack server, or `standalone` to the person's own model
+   * endpoint. For showing or hiding the server's parts; nothing decides security by it. .NET: `Connection`.
+   */
+  get connection(): AgentConnection {
+    return this.settings.backend.connection;
+  }
+
+  /**
+   * The tools of the organisation's MCP servers that the user and this agent can have, with what the agent's tool rules make of
+   * each (`GET /v1/agents/{agent}/tools`). Null when the server does not list them (an older one). .NET: `ListServerToolsAsync`.
+   */
+  listServerTools(signal?: AbortSignal): Promise<AgentToolInfo[] | null> {
+    return this.settings.backend.listTools(signal);
+  }
+
   /** @internal What the agent talks to: the server, or the person's own model endpoint (sdk/51 F02). */
   get backend(): AgentBackend {
     return this.settings.backend;
@@ -156,7 +178,22 @@ export class FadenstackAgent {
     if (binding(before) !== binding(fresh)) throw new FadenstackError("The agent identity or published contract changed. Reconnect before running tools.");
     this.#profile = fresh;
     this.#profileRead = this.clock();
-    if (this.#context) this.#context = { ...this.#context, profile: fresh };
+    if (this.#context) this.#context = this.#contextFor(fresh);
+  }
+
+  /**
+   * What tool sources and modules see: a getter for the client, so that an agent without a server throws the clear error at
+   * the use, not at the start (a spread of the context would read it).
+   */
+  #contextFor(profile: AgentProfile): AgentContext {
+    const agent = this;
+    return {
+      get client() { return agent.client; },
+      serverClient: this.serverClient,
+      connection: this.connection,
+      profile,
+      report: (event) => this.reporter.reportNow([event]),
+    };
   }
 
   /**
@@ -188,7 +225,7 @@ export class FadenstackAgent {
     this.#profile = fresh;
     this.#applyRetention(fresh);
     this.#profileRead = this.clock();
-    if (this.#context) this.#context = { ...this.#context, profile: fresh };
+    if (this.#context) this.#context = this.#contextFor(fresh);
   }
 
   #assertHostPolicySupport(profile: AgentProfile): void {
@@ -373,11 +410,7 @@ export class FadenstackAgent {
     this.#assertHostPolicySupport(profile);
     this.#checkModules(profile);
     const hosts = settleHostTools(this.settings.tools, profile);
-    const context: AgentContext = {
-      client: this.client,
-      profile,
-      report: (event) => this.reporter.reportNow([event]),
-    };
+    const context = this.#contextFor(profile);
     const fromSources: { source: ToolSource; tools: readonly AgentTool[] }[] = [];
     for (const source of this.settings.sources) {
       if (isChangingToolSource(source)) this.#unsubscribe.push(source.onChanged(() => { this.#changed.add(source); }));

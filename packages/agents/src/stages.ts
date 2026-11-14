@@ -1,5 +1,6 @@
 import type { AgentClientEvent, AgentProfile, ChatStreamer, FadenstackClient, GovernanceNotice, ToolClass } from "@fadenstack/client";
 
+import type { AgentConnection } from "./backend.js";
 import type { AgentTool, ToolCallContext } from "./tools.js";
 
 /**
@@ -36,7 +37,12 @@ export interface ToolStage {
 
 /** What a tool source or module can see of the running agent. */
 export interface AgentContext {
+  /** The agent's Fadenstack client. An agent without a server (standalone) has none: this throws there; see `serverClient`. */
   readonly client: FadenstackClient;
+  /** The agent's Fadenstack client; undefined for an agent without a server. */
+  readonly serverClient: FadenstackClient | undefined;
+  /** How the agent is connected (`FadenstackAgent.connection`). */
+  readonly connection: AgentConnection;
   readonly profile: AgentProfile;
   /** Reports an event to the server (names and counts, never content). */
   report(event: AgentClientEvent): Promise<void>;

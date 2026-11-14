@@ -93,3 +93,37 @@ describe("the server's errors pass through the backend unchanged", () => {
     }
   });
 });
+
+describe("the public additions", () => {
+  it("an agent on a server is governed, and its server client is its client", async () => {
+    const s = await setup();
+    expect(s.agent.connection).toBe("governed");
+    expect(s.agent.serverClient).toBe(s.client);
+    expect(s.agent.client).toBe(s.client);
+  });
+
+  it("lists the server's tools as the route gives them, and null from a server without the route", async () => {
+    const listed = await setup({ agents: [{ slug: "docs", serverTools: [{ name: "search", server: "wiki", enabled: false }] }] });
+    expect(await listed.agent.listServerTools()).toEqual([
+      expect.objectContaining({ name: "search", server: "wiki", enabled: false }),
+    ]);
+    const older = await setup();
+    expect(await older.agent.listServerTools()).toBeNull();
+  });
+
+  it("a tool source sees the client, the server client and the connection, also after a profile refresh", async () => {
+    const seen: { client: unknown; serverClient: unknown; connection: unknown }[] = [];
+    const s = await setup({}, undefined, (b) => b.addToolSource({
+      getTools: (context) => {
+        seen.push({ client: context.client, serverClient: context.serverClient, connection: context.connection });
+        return Promise.resolve([]);
+      },
+    }));
+    await s.agent.start();
+    expect(seen).toEqual([{ client: s.client, serverClient: s.client, connection: "governed" }]);
+    s.agent.clock = () => Date.now() + 120_000;
+    await s.agent.refreshProfile();
+    expect(s.agent.context.client).toBe(s.client);
+    expect(s.agent.context.connection).toBe("governed");
+  });
+});
