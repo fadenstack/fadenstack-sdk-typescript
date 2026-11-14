@@ -132,3 +132,39 @@ export { MarkdownDocument } from "./markdown/document.js";
 export { parseBlocks, parseMarkdown, type PlacedBlock } from "./markdown/parse.js";
 export { inlineText, type Inline, type ListItem, type MarkdownBlock } from "./markdown/model.js";
 export { markdownToHtml, markdownToPlainText, tableCellText, tableToTsv, tablesIn, tablesOf, toHtml, toPlainText } from "./markdown/serialize.js";
+// The connection wizard (sdk/51 F15, I15). .NET: Fadenstack.UI.Wizard.
+export {
+  AddressProblem,
+  AgentAccess,
+  ConnectionMode,
+  PasswordFailure,
+  StartFailure,
+  WizardEntry,
+  WizardOutcome,
+  WizardPoint,
+  WizardStep,
+  createPairingTicket,
+  type AcceptanceRecord,
+  type AgentSignIn,
+  type ConnectionResult,
+  type ConnectionStore,
+  type EndpointChecker,
+  type EndpointKeyStore,
+  type LinkOpener,
+  type LocalEndpoint,
+  type PairingApproval,
+  type PairingKeeper,
+  type PairingTicket,
+  type SavedPairing,
+  type ServerSignIn,
+  type WizardClock,
+  type WizardOptions,
+  type WizardStepContext,
+  type WizardStepHandler,
+} from "./wizard/contracts.js";
+export {
+  ConnectionWizardViewModel,
+  type WizardCommandAvailability,
+  type WizardServices,
+} from "./wizard/connectionWizard.js";
+export { createEndpointChecker, createServerSignIn, createSystemClock, type ServerSignInOptions } from "./wizard/services.js";

@@ -52,6 +52,23 @@ before 1.0, a minor version may break the API, and this file says where it does.
   `browserOpenLink` (a new tab, `noopener,noreferrer`).
 - `@fadenstack/ui`: `ChatHostServices` (the four services a host passes), and `storedPromptStore` with
   `KeyedTextStorage`, the prompt store's rules over any synchronous key-value storage.
+- **The connection wizard's view model** (`@fadenstack/ui`, sdk/51 F15, I15): `ConnectionWizardViewModel`, one state machine
+  for "Connect to my organisation" (the address rule, the server check, pairing with one approval for all of the app's
+  agents, the password fallback) and "Use my own AI" (the acceptance and its record, presets and a typed address, plain http
+  to the local network only after confirming and never with a key, the key straight into the key store, the check, the
+  model), and for Settings > Connection; the same steps, transitions and commands as .NET's, as methods with a `can` flag
+  each. The app gives a `ConnectionStore`, an `EndpointKeyStore`, its own `WizardStepHandler`s and its `WizardOptions`; the
+  machine policy shapes the choices. `createServerSignIn`, `createEndpointChecker` and `createSystemClock` drive the SDK
+  (`AgentPairing`, `loginWithPassword`, `checkServer`, `EndpointCheck`). The wizard names its enums as frozen consts
+  (`WizardStep`, `WizardEntry`, `WizardOutcome`, `WizardPoint`, `ConnectionMode`, `AgentAccess`, `AddressProblem`,
+  `StartFailure`, `PasswordFailure`). Two things are TypeScript's own: the app's step before an endpoint check (Chrome's host
+  permission) runs inside the user gesture, before the command's first `await` where it can, and a pairing survives a
+  closed side panel (`WizardOptions.pairingKeeper`: kept when the code shows, forgotten when the wait ends or is cancelled,
+  resumed at the code on start while it has not expired). `placeOf` answers at once and there is no local search (a browser
+  cannot resolve names or scan ports).
+- **`AgentPairing.export` and `resume`** (`@fadenstack/client`): a pairing written out with its pairing code
+  (`PairingExport`, a secret for session storage only, never a log or a file) and made again, so the wait for an approval
+  can go on in a side panel that was closed and opened again. The saved pages must be on the server's own origin.
 
 ### Changed
 

@@ -102,6 +102,26 @@ export class PairingStart {
   }
 }
 
+/**
+ * A pairing written out so a wait can go on later (a Chrome side panel that was closed and opens again): everything
+ * `AgentPairing.resume` needs, **the pairing code included, which is the secret.** For session storage only
+ * (`chrome.storage.session`, which lives in memory for the browser session): never a log, a file, `localStorage` or a
+ * message to anyone (OWASP ASVS 5.0 V13). sdk/51 F15, I15 §2. .NET: none (a window that closes ends the process).
+ */
+export interface PairingExport {
+  readonly agent: string;
+  readonly agents: readonly string[];
+  readonly ignoredAgents: readonly string[];
+  readonly userCode: string;
+  readonly verificationUri: string;
+  readonly verificationUriComplete: string;
+  /** In ms since the epoch. */
+  readonly expiresAt: number;
+  readonly intervalMs: number;
+  /** The secret the app polls with. */
+  readonly pairingCode: string;
+}
+
 /** Where a wait for approval stands. */
 export type PairingState = "waiting" | "slowed_down" | "retrying";
 
@@ -234,6 +254,44 @@ export class AgentPairing {
     const ignored = further.filter((a) => !offered.includes(a));
     writeLog(this.#logger, ClientLog.pairingStarted, { Agent: agent, ExpiresInS: expiresIn });
     return new PairingStart(agent, stored, ignored, pairingCode, userCode, uri, complete, this.#now() + expiresIn * 1000, interval * 1000);
+  }
+
+  /**
+   * Writes a pairing out with its pairing code, so `resume` can make it again after the panel was closed. **The result is
+   * a secret: session storage only, never a log or a file** (see `PairingExport`). The `start` object itself stays secret-free.
+   * @throws TypeError `start` is not one that `start()` returned.
+   */
+  export(start: PairingStart): PairingExport {
+    const pairingCode = codes.get(start);
+    if (pairingCode === undefined) throw new TypeError("Export a pairing that start() returned.");
+    return {
+      agent: start.agent, agents: [...start.agents], ignoredAgents: [...start.ignoredAgents], userCode: start.userCode,
+      verificationUri: start.verificationUri.href, verificationUriComplete: start.verificationUriComplete.href,
+      expiresAt: start.expiresAt, intervalMs: start.intervalMs, pairingCode,
+    };
+  }
+
+  /**
+   * Makes a `PairingStart` again from `export`'s result, to `wait` on it. Reads it as untrusted: the pages must be on this
+   * server's own origin (the same rule as `start`), the lists strings, the times numbers. A pairing that has expired is still
+   * made (the wait then ends with `FadenstackPairingExpiredError`); the caller decides what to show.
+   * @throws TypeError The saved pairing is not one `export` made.
+   * @throws FadenstackPairingPageElsewhereError A page is not on this server's origin.
+   */
+  resume(saved: PairingExport): PairingStart {
+    const unreadable = () => new TypeError("The saved pairing is not readable.");
+    const list = (value: unknown): string[] => {
+      if (!Array.isArray(value) || !value.every((a) => typeof a === "string" && a)) throw unreadable();
+      return [...(value as string[])];
+    };
+    if (saved === null || typeof saved !== "object") throw unreadable();
+    const { agent, userCode, pairingCode, expiresAt, intervalMs } = saved;
+    if (typeof agent !== "string" || !agent || typeof userCode !== "string" || !userCode || typeof pairingCode !== "string" || !pairingCode
+      || typeof expiresAt !== "number" || !Number.isFinite(expiresAt) || typeof intervalMs !== "number" || !Number.isFinite(intervalMs) || intervalMs < 1) {
+      throw unreadable();
+    }
+    return new PairingStart(agent, list(saved.agents), list(saved.ignoredAgents), pairingCode, userCode,
+      this.#page(saved.verificationUri), this.#page(saved.verificationUriComplete), expiresAt, intervalMs);
   }
 
   /**

@@ -38,6 +38,7 @@ export {
   PairingStart,
   type AgentPairingOptions,
   type PairingClient,
+  type PairingExport,
   type PairingProgress,
   type PairingResult,
   type PairingStartOptions,
