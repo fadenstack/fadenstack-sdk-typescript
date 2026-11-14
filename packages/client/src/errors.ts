@@ -55,6 +55,30 @@ export class FadenstackStreamError extends FadenstackError {
   }
 }
 
+/**
+ * The server named a sign-in page on another address than its own (a proxy passing on another `Host` or
+ * `X-Forwarded-Proto`); it was not used (sdk/51 I15 §4). .NET: `FadenstackPairingPageElsewhereException`.
+ */
+export class FadenstackPairingPageElsewhereError extends FadenstackError {}
+
+/**
+ * Plain http where https is required (OWASP ASVS 5.0 V12 transport; sdk/51 I15 §4). A `TypeError` still, as the plain one
+ * it replaces was, so a catch of that keeps working. .NET: `FadenstackHttpsRequiredException` (an `ArgumentException`).
+ */
+export class FadenstackHttpsRequiredError extends TypeError {
+  constructor(message: string) {
+    super(message);
+    this.name = "FadenstackHttpsRequiredError";
+  }
+}
+
+/** The e-mail or password was refused (`LOGIN_BAD_CREDENTIALS`; sdk/51 I15 §4). .NET: `FadenstackBadCredentialsException`. */
+export class FadenstackBadCredentialsError extends FadenstackApiError {
+  constructor() {
+    super(400, "The e-mail or password is not right.", { code: "LOGIN_BAD_CREDENTIALS" });
+  }
+}
+
 /** The agent's sign-in is gone (never made, expired, or revoked): sign in again. */
 export class FadenstackSignInRequiredError extends FadenstackError {}
 

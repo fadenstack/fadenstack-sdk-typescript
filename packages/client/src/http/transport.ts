@@ -1,5 +1,5 @@
 import type { TokenProvider } from "../auth/tokens.js";
-import { FadenstackApiError, FadenstackError, FadenstackUnreachableError } from "../errors.js";
+import { FadenstackApiError, FadenstackError, FadenstackHttpsRequiredError, FadenstackUnreachableError } from "../errors.js";
 import { ClientLog, writeLog, type FadenstackLogger } from "../logging.js";
 import { toApiError } from "./errorReader.js";
 
@@ -270,7 +270,7 @@ function requireUrl(value: string | URL, name: string, allowInsecureHttp: boolea
     throw new TypeError(`${name} is not a URL: ${String(value)}`);
   }
   if (url.protocol === "http:" && !allowInsecureHttp) {
-    throw new TypeError(`Fadenstack is reached over https. Set allowInsecureHttp only for a development server (${name}).`);
+    throw new FadenstackHttpsRequiredError(`Fadenstack is reached over https. Set allowInsecureHttp only for a development server (${name}).`);
   }
   if (url.protocol !== "http:" && url.protocol !== "https:") {
     throw new TypeError(`${name} must be an http(s) URL.`);

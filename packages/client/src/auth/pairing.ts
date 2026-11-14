@@ -1,4 +1,4 @@
-import { FadenstackError, FadenstackUnreachableError } from "../errors.js";
+import { FadenstackError, FadenstackPairingPageElsewhereError, FadenstackUnreachableError } from "../errors.js";
 import { toApiError, retryAfterMs } from "../http/errorReader.js";
 import { redirectError, requireSecureUrl, type FetchLike } from "../http/transport.js";
 import { ClientLog, writeLog, type FadenstackLogger } from "../logging.js";
@@ -437,7 +437,8 @@ export class AgentPairing {
       throw new FadenstackError("The server's sign-in address is not a web address.");
     }
     if ((url.protocol !== "https:" && url.protocol !== "http:") || url.username || url.password || url.origin !== this.#api.origin) {
-      throw new FadenstackError("The pairing page is not on the server's own address.");
+      throw new FadenstackPairingPageElsewhereError(
+        "The server named a sign-in page on another address than its own; it was not used. Use the address the console uses (https, its public name): a proxy in front of the server may pass on another one.");
     }
     return url;
   }

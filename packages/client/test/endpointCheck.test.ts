@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   EndpointCheck,
   EndpointDialect,
+  EndpointPlace,
   EndpointPreset,
   EndpointProblem,
   EndpointReport,
@@ -291,5 +292,51 @@ describe("the presets and the versions", () => {
     ["nightly", undefined],
   ])("versions read as numbers: %s", (text, expected) => {
     expect(TextWatermarks.parse(text)).toEqual(expected);
+  });
+});
+
+describe("no model named yet, and where an address points", () => {
+  it("probes with the first listed model when the endpoint names none, and the report says which", async () => {
+    const fake = new OpenAiFake();
+    fake.models = ["llama3:8b", "qwen3:14b"];
+    fake.answers.push(OpenAiFake.text("OK"), OpenAiFake.calls(["call-1", "report_ready", "{}"]));
+    const check = new EndpointCheck({ baseUrl: "http://localhost:11434/v1", model: "", dialect: EndpointDialect.ollama, fetch: fake.fetch });
+    fake.ollamaShow = { model_info: { "llama.context_length": 8192 }, parameters: "num_ctx 4096" };
+
+    const report = await check.run({ probeVision: true });
+
+    expect(report.model).toBe("llama3:8b");
+    expect(report.chat).toBe(true);
+    expect(report.toolCalls).toBe(true);
+    expect(report.contextLength).toBe(4096);
+    const chats = fake.requests.filter(isChat);
+    expect(chats.length).toBeGreaterThan(2);
+    expect(chats.every((r) => r.json()["model"] === "llama3:8b")).toBe(true);
+    expect(fake.requests.find((r) => r.url.pathname.endsWith("/api/show"))!.json()["model"]).toBe("llama3:8b");
+  });
+
+  it("keeps a model the endpoint names", async () => {
+    const { check, fake } = make("http://localhost:11434/v1", EndpointDialect.ollama, undefined, "qwen3:14b");
+    fake.models = ["llama3:8b", "qwen3:14b"];
+
+    const report = await check.run();
+
+    expect(report.model).toBe("qwen3:14b");
+    expect(fake.requests.filter(isChat).every((r) => r.json()["model"] === "qwen3:14b")).toBe(true);
+  });
+
+  it.each<[string, EndpointPlace]>([
+    ["http://127.0.0.1:11434/v1", EndpointPlace.ThisComputer],
+    ["http://[::1]:1234", EndpointPlace.ThisComputer],
+    ["http://localhost:8000", EndpointPlace.ThisComputer],
+    ["http://192.168.1.20", EndpointPlace.LocalNetwork],
+    ["http://10.0.0.5", EndpointPlace.LocalNetwork],
+    ["http://nas.local", EndpointPlace.LocalNetwork],
+    ["http://8.8.8.8", EndpointPlace.Internet],
+    ["http://100.64.0.1", EndpointPlace.Internet],
+    ["http://example.com", EndpointPlace.Internet],
+  ])("placeOf %s", (url, place) => {
+    expect(EndpointCheck.placeOf(url)).toBe(place);
+    expect(EndpointCheck.placeOf(new URL(url))).toBe(place);
   });
 });

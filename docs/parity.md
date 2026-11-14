@@ -10,11 +10,13 @@ This table is for SDK 0.3.0, against Fadenstack server 0.7.1. TypeScript names a
 |---|---|---|---|
 | The client for an agent | `FadenstackClient.ForAgent(serverUrl, agent, out tokens, store)` | `FadenstackClient.forAgent({ serverUrl, agent, store })`, which returns `{ client, tokens }` | |
 | Agent sign-in | `AgentTokenProvider`, `SignInAsync(loginToken, deviceLabel)` | `AgentTokenProvider`, `signIn(loginToken, deviceLabel)` | |
-| Password login | A login token from your own flow | `loginWithPassword({ apiUrl, email, password })` | |
+| Password login | `PasswordLogin.LoginAsync` | `loginWithPassword({ apiUrl, email, password })` | |
 | Where the sign-in is kept | `FileTokenStore` (default; DPAPI on Windows), `MemoryTokenStore`, `ITokenStore` | `MemoryTokenStore` (default), your own `TokenStore` | No file by default: a store over `chrome.storage` in an extension, over a file in Node. |
 | Sign in by pairing | `AgentPairing`: `StartAsync`, `WaitAsync`, `RedeemAsync` | `AgentPairing`: `start`, `wait`, `redeem` | |
 | One pairing for several agents | `PairingStart.Agents`, `AgentsLeft`, `FadenstackPairingAgentException` | `PairingStart.agents`, `ignoredAgents`, `FadenstackPairingAgentError` | |
-| The sign-in page on the server's own address | Refused otherwise, with `FadenstackException` | Refused otherwise, with `FadenstackError` | |
+| The sign-in page on the server's own address | Refused otherwise, with `FadenstackPairingPageElsewhereException` | Refused otherwise, with `FadenstackPairingPageElsewhereError` | |
+| Typed sign-in errors | `FadenstackUnreachableException`, `ServerCertificateException`, `FadenstackHttpsRequiredException` (an `ArgumentException`), `FadenstackBadCredentialsException` | `FadenstackUnreachableError`, `FadenstackHttpsRequiredError` (a `TypeError`), `FadenstackBadCredentialsError` | No certificate error: a browser does not say whether the certificate was the reason, so it is `FadenstackUnreachableError`. |
+| Is it a Fadenstack server (the wizard's Checking) | `ServerCheck.CheckAsync(server, http, allowInsecureHttp, trustedCaCertificate)`, `ServerCheck.Timeout` | `checkServer({ server, fetch, signal, allowInsecureHttp })`, `SERVER_CHECK_TIMEOUT_MS` | No `trustedCaCertificate`: the platform's trust decides. |
 | A server too old for pairing (404, 405) | `FadenstackPairingUnsupportedException` | `FadenstackPairingUnsupportedError` | |
 | Plain chat completions | `FadenstackClient` without an agent | `FadenstackClient` without an agent | |
 
@@ -66,6 +68,7 @@ This table is for SDK 0.3.0, against Fadenstack server 0.7.1. TypeScript names a
 | Content marking | `Fadenstack.Provenance` | `@fadenstack/provenance` | |
 | The machine policy | `MachinePolicy.Load(path)`, `FromJson`, `From(JsonElement)`; `UseMachinePolicy(policy)`; `MachinePolicyException` | `MachinePolicy.from(object)`, `fromJson`; `useMachinePolicy(policy)`; `MachinePolicyError` | A browser has no policy file, so no `Load`: an extension hands `chrome.storage.managed`'s object to `from`. `fromJson` is strict JSON (no comments or trailing commas). |
 | Endpoint watermarks (no server) | `FadenstackChatOptions.Unread` (`faden.unread`), `EndpointDialect.WatermarkSwitchOff`, `FadenstackAgent.EndpointWatermark`, `EndpointCheck.WatermarkOf`/`ServerOf` | `ChatOptions.unread`, `EndpointDialect.watermarkSwitchOff`, `agent.endpointWatermark`, `EndpointCheck.watermarkOf`/`serverOf` | `unread` is a plain option: TypeScript has no `AdditionalProperties` bag. |
+| Where an endpoint points | `EndpointCheck.PlaceOfAsync(baseUrl)` (resolves the name), `EndpointPlace` | `EndpointCheck.placeOf(url)`, `EndpointPlace` | Synchronous, by the host's spelling: a browser cannot resolve names. The check also uses the first listed model when the endpoint names none, as .NET. |
 | Records signed on the device (no server) | `LocalProvenanceBackend`, `DeviceSigner`, `UseLocalBackend`: the key in the OS key store, the log a rotating file, DigiCert by default | `LocalProvenanceBackend`, `DeviceSigner`, `localBackend`: a non-extractable WebCrypto key, the log and the kept records in IndexedDB per principal, DigiCert by default with the token check in WebCrypto and DigiCert's root embedded | A browser has no key store, files or certificate store, and `fetch` cannot reach an http-only authority from an https page (the records wait in the queue). The log keeps a number of entries, not bytes. |
 
 ## Sessions and a person's data

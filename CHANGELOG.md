@@ -8,6 +8,15 @@ before 1.0, a minor version may break the API, and this file says where it does.
 
 ### Added
 
+- **Typed sign-in errors and `checkServer`** (sdk/51 I15 §2, §4): `FadenstackPairingPageElsewhereError` (the server named a sign-in
+  page on another address than its own), `FadenstackHttpsRequiredError` (plain http where https is required; a `TypeError`
+  still, so existing catches keep working) and `FadenstackBadCredentialsError` (`LOGIN_BAD_CREDENTIALS`; a
+  `FadenstackApiError`), thrown where the plain errors were. `checkServer({ server })` asks `/api/health` within
+  `SERVER_CHECK_TIMEOUT_MS` (15 s): `not_fadenstack` for an answer that is not a JSON object, `redirect` for a redirect,
+  `FadenstackUnreachableError` for no answer. There is no certificate error: a browser does not say.
+- **The endpoint check names a model, and `EndpointCheck.placeOf`** (sdk/51 I15 §2, §3): an endpoint without a model is checked
+  with the first model `/models` lists, and the report names it. `EndpointCheck.placeOf(url)` says `EndpointPlace.ThisComputer`,
+  `LocalNetwork` or `Internet` by the host's spelling (a browser cannot resolve names, as .NET's `PlaceOfAsync` does).
 - **`MachinePolicy`** ([Machine policy](docs/machine-policy.md)): one vocabulary for managed installs (`server`, `standalone`,
   `endpoints`, `plainHttp`, `mcp`, `skills`, `webSearch`, `timestamping`), read fail-closed (`MachinePolicy.from(object)`,
   `fromJson`; a Chrome extension hands it `chrome.storage.managed`), enforced by `AgentBuilder.useMachinePolicy`
