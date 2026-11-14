@@ -1,7 +1,7 @@
 export { MCP_MODULE, McpModule, McpServerState, mcpModule, type McpImportOutcome, type McpOptions, type McpServerStatus, type McpToolInfo } from "./module.js";
 export { McpConfigError, McpConnectError, McpError, McpPolicyError, McpStoreError, type McpConnectFailure } from "./errors.js";
 export { toolClassFor, type McpToolHints } from "./hints.js";
-export { coreLocalMcpPolicy, type LocalMcpDecision, type LocalMcpPolicy } from "./policy.js";
+export { coreLocalMcpPolicy, mcpSourceNames, type LocalMcpDecision, type LocalMcpPolicy } from "./policy.js";
 export {
   DEFAULT_CALL_TIMEOUT_S,
   HEADERS_MAX,

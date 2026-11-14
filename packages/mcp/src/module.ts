@@ -339,7 +339,7 @@ export class McpModule implements FadenstackModule, ChangingToolSource {
   async #settle(entry: Entry, context: AgentContext, policy: LocalMcpPolicy, signal: AbortSignal | undefined): Promise<void> {
     const logger = this.#options.logger;
     const record = entry.record;
-    const decision = policy.decide({ label: record.label }, context.profile, context.machinePolicy);
+    const decision = policy.decide({ label: record.label, url: record.url }, context.profile, context.machinePolicy);
     if (!decision.allowed) {
       await this.#detach(entry);
       entry.status = { ...entry.status, state: McpServerState.NotAllowed, detail: decision.reason };

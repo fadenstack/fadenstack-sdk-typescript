@@ -7,7 +7,7 @@ import { FakeMcpServer } from "./fakeServer.js";
 import { ask, governed, server, standalone } from "./rig.js";
 
 const decide = (mode: string | undefined, developerMode: boolean, policy = MachinePolicy.none) =>
-  coreLocalMcpPolicy.decide({ label: "notes" }, { localMcp: mode === undefined ? { mode: "", developerMode } : { mode, developerMode } } as never, policy);
+  coreLocalMcpPolicy.decide({ label: "notes", url: "https://notes.example.test/mcp" }, { localMcp: mode === undefined ? { mode: "", developerMode } : { mode, developerMode } } as never, policy);
 
 /**
  * sdk/51 F05, "Policy": governed follows the profile's `local_mcp.mode` as the .NET module reads it; standalone follows the person's
@@ -35,13 +35,17 @@ describe("the core policy", () => {
   });
 
   it("is off for a profile that says nothing about local MCP", () => {
-    expect(coreLocalMcpPolicy.decide({ label: "x" }, {} as never, MachinePolicy.none).allowed).toBe(false);
+    expect(coreLocalMcpPolicy.decide({ label: "x", url: "https://x.example.test/mcp" }, {} as never, MachinePolicy.none).allowed).toBe(false);
   });
 
-  it("lets the machine policy forbid every server, or allow the listed ones only, without regard to case", () => {
+  it("lets the machine policy forbid every server, or allow the listed sources only: the address, its origin, never the label", () => {
     expect(decide("allow", true, MachinePolicy.fromJson('{"mcp":"forbidden"}')).allowed).toBe(false);
-    expect(decide("allow", false, MachinePolicy.fromJson('{"mcp":["Notes"]}')).allowed).toBe(true);
-    const other = coreLocalMcpPolicy.decide({ label: "files" }, { localMcp: { mode: "allow", developerMode: false } } as never, MachinePolicy.fromJson('{"mcp":["Notes"]}'));
+    expect(decide("allow", false, MachinePolicy.fromJson('{"mcp":["https://notes.example.test"]}')).allowed).toBe(true);
+    expect(decide("allow", false, MachinePolicy.fromJson('{"mcp":["https://notes.example.test/mcp"]}')).allowed).toBe(true);
+    // The label is the person's own word: listing it allows nothing (.NET McpSources).
+    expect(decide("allow", false, MachinePolicy.fromJson('{"mcp":["notes"]}')).allowed).toBe(false);
+    const other = coreLocalMcpPolicy.decide({ label: "files", url: "https://files.example.test/mcp" }, { localMcp: { mode: "allow", developerMode: false } } as never,
+      MachinePolicy.fromJson('{"mcp":["https://notes.example.test"]}'));
     expect(other).toEqual({ allowed: false, reason: "The machine policy does not list this MCP source." });
   });
 });
@@ -106,7 +110,7 @@ describe("standalone", () => {
 
   it("attaches only the sources the machine policy lists", async () => {
     const fake = new FakeMcpServer();
-    const rig = standalone(fake, { policy: MachinePolicy.fromJson('{"mcp":["notes"]}') });
+    const rig = standalone(fake, { policy: MachinePolicy.fromJson(JSON.stringify({ mcp: [fake.urls.both] })) }); // by its address, not its label
     await rig.store.save(server("notes", fake.urls.both));
     await rig.store.save(server("other", fake.urls.legacy));
 

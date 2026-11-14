@@ -13,20 +13,33 @@ export interface LocalMcpDecision {
  * configuration can only tighten this, never widen it. .NET: `ILocalMcpPolicy`.
  */
 export interface LocalMcpPolicy {
-  decide(server: { readonly label: string }, profile: AgentProfile, machinePolicy: MachinePolicy): LocalMcpDecision;
+  decide(server: { readonly label: string; readonly url: string }, profile: AgentProfile, machinePolicy: MachinePolicy): LocalMcpDecision;
 }
 
 /**
  * The core rule (sdk/51 F05, "Policy"):
  * - governed: the profile's `local_mcp.mode` is `allow`, or the user's developer mode is on; absent or unknown means off;
  * - standalone: the profile says `allow` unless the person switched local MCP off (the person's settings), and the machine policy
- *   (`mcp`) comes first: `forbidden` turns every server off, and a list allows only the servers whose label it names;
+ *   (`mcp`) comes first: `forbidden` turns every server off, and a list allows only the servers whose source it names: the
+ *   address, its origin, or the address without a final slash (`mcpSourceNames`). A label is the person's own word, so it is
+ *   never a source (as .NET's `McpSources`, which also takes a program's path; a browser starts none);
  * - a server that was imported arrives off, whatever the policy says (the person switches each on; `McpServerRecord.enabled`).
- * .NET: `CoreLocalMcpPolicy`, which does not read the machine policy's list (the host narrows by `AllowsAny`); here the module enforces the list.
+ * .NET: `CoreLocalMcpPolicy` with `McpSources.Decide`.
  */
+/** The names a machine policy's `mcp` list can name a server by: its address, its origin, the address without a final slash. */
+export function mcpSourceNames(url: string): string[] {
+  let parsed: URL;
+  try {
+    parsed = new URL(url);
+  } catch {
+    return [];
+  }
+  return [...new Set([parsed.href, parsed.origin, parsed.href.replace(/\/+$/, "")])];
+}
+
 export const coreLocalMcpPolicy: LocalMcpPolicy = Object.freeze({
-  decide(server: { readonly label: string }, profile: AgentProfile, machinePolicy: MachinePolicy): LocalMcpDecision {
-    if (!machinePolicy.mcp.allows(server.label)) {
+  decide(server: { readonly label: string; readonly url: string }, profile: AgentProfile, machinePolicy: MachinePolicy): LocalMcpDecision {
+    if (!mcpSourceNames(server.url).some((name) => machinePolicy.mcp.allows(name))) {
       return { allowed: false, reason: machinePolicy.mcp.allowsAny ? "The machine policy does not list this MCP source." : "The machine policy does not allow local MCP servers." };
     }
     const settings = profile.localMcp;
