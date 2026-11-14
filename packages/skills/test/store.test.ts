@@ -133,7 +133,7 @@ describe("the person's own skills in IndexedDB", () => {
     const names = await new Promise<string[]>((resolve) => {
       void (factory as IDBFactory & { databases(): Promise<{ name?: string }[]> }).databases().then((all) => resolve(all.map((d) => d.name ?? "")));
     });
-    expect(names).toEqual(["fadenstack-skills:standalone:standalone"]);
+    expect(names.sort()).toEqual(["fadenstack-skill-switches:standalone:standalone", "fadenstack-skills:standalone:standalone"]); // the skills and the person's switches
     module.store!.close();
   });
 });

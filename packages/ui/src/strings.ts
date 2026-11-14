@@ -1,4 +1,4 @@
-import type { ReasoningLevel } from "@fadenstack/agents";
+import type { ReasoningLevel, SkillIssueCode } from "@fadenstack/agents";
 import type { EndpointProblem, TextWatermark, ToolClass, ToolMode } from "@fadenstack/client";
 
 import type { PasswordFailure, StartFailure } from "./wizard/contracts.js";
@@ -502,6 +502,98 @@ export interface UiStrings {
   wizardRemoveTitle: string;
   wizardRemoveBody: string;
   wizardDeleteChats: string;
+  // the skill library, the editor and "Draft from this chat" (sdk/51 F04)
+  skillLibraryTitle: string;
+  skillLibraryLoading: string;
+  skillLibraryFailed: string;
+  skillLibraryEmpty: string;
+  skillOriginBundled: string;
+  skillOriginOwn: string;
+  skillOriginOrganisation: string;
+  skillNotReviewed: string;
+  skillOn: string;
+  skillOff: string;
+  skillNew: string;
+  skillEdit: string;
+  skillView: string;
+  skillDuplicate: string;
+  skillDelete: string;
+  skillImport: string;
+  skillExport: string;
+  skillCancel: string;
+  skillSave: string;
+  skillReplace: string;
+  skillDeleteTitle(name: string): string;
+  skillDeleteBody: string;
+  skillImportTitle(name: string): string;
+  skillImportBody: string;
+  skillImportReplaceBody(name: string): string;
+  skillImportRefused: string;
+  skillImported(name: string): string;
+  skillSaved(name: string): string;
+  skillDeleted(name: string): string;
+  skillExported(name: string): string;
+  skillExportFailed(name: string): string;
+  skillSaveFailed: string;
+  skillExistsTitle(name: string): string;
+  skillExistsBody: string;
+  skillEditorEditing(name: string): string;
+  skillEditorReadOnly(name: string): string;
+  skillEditorProposal: string;
+  skillName: string;
+  skillDescription: string;
+  skillInstructions: string;
+  skillPreview: string;
+  skillLicense: string;
+  skillCompatibility: string;
+  skillMatching: string;
+  skillTitleField: string;
+  skillTags: string;
+  skillKeywords: string;
+  skillFileTypes: string;
+  skillPreferredTools: string;
+  skillPriority: string;
+  skillActivation: string;
+  skillActivationAuto: string;
+  skillActivationAlways: string;
+  skillActivationManual: string;
+  skillResources: string;
+  skillNoResources: string;
+  skillAddFile: string;
+  skillRenameFile: string;
+  skillRemoveFile: string;
+  skillDropUnknownKeys: string;
+  skillChecksHeading: string;
+  skillChecksOk: string;
+  skillTestHeading: string;
+  skillTestPrompt: string;
+  skillTestRun: string;
+  skillTestListed: string;
+  skillTestPreloaded: string;
+  skillTestNone: string;
+  skillTestEditedNotListed: string;
+  skillMatchExplicit: string;
+  skillMatchAlways: string;
+  skillMatchTrigger: string;
+  skillAskModel: string;
+  skillModelNote: string;
+  skillModelAsking: string;
+  skillModelWouldLoad(name: string): string;
+  skillModelWouldLoadOther(name: string): string;
+  skillModelWouldNot: string;
+  skillModelFailed: string;
+  skillDraftTitle: string;
+  skillDraftGuidance: string;
+  skillDraftStart: string;
+  skillDraftWorking: string;
+  skillDraftReady: string;
+  skillDraftNoChat: string;
+  skillDraftNoModel: string;
+  skillDraftFailed: string;
+  skillDraftUnreadable: string;
+  skillDraftBroken: string;
+  /** What a check found, in words, by its code: `{0}` the field or file, `{1}` the limit, `{2}` the size, `{3}` the detail (`skillIssueText` fills it). */
+  skillIssue: Record<SkillIssueCode, string>;
 }
 
 export const englishStrings: UiStrings = {
@@ -933,6 +1025,126 @@ export const englishStrings: UiStrings = {
   wizardRemoveTitle: "Remove this AI from this computer?",
   wizardRemoveBody: "Its key is deleted from this computer's key store.",
   wizardDeleteChats: "Also delete the chats kept on this computer",
+  // the skill library, the editor and "Draft from this chat" (sdk/51 F04)
+  skillLibraryTitle: "Skills on this device",
+  skillLibraryLoading: "Reading the skills…",
+  skillLibraryFailed: "The skills could not be read.",
+  skillLibraryEmpty: "There are no skills yet. Create one, or import a folder or a zip.",
+  skillOriginBundled: "Built in",
+  skillOriginOwn: "Yours",
+  skillOriginOrganisation: "Your organisation",
+  skillNotReviewed: "Not reviewed",
+  skillOn: "On",
+  skillOff: "Off",
+  skillNew: "New skill",
+  skillEdit: "Edit",
+  skillView: "View",
+  skillDuplicate: "Duplicate",
+  skillDelete: "Delete",
+  skillImport: "Import…",
+  skillExport: "Export",
+  skillCancel: "Cancel",
+  skillSave: "Save",
+  skillReplace: "Replace",
+  skillDeleteTitle: (name) => `Delete ${name}?`,
+  skillDeleteBody: "Its folder and files are removed from this computer. This cannot be undone.",
+  skillImportTitle: (name) => `Import ${name}?`,
+  skillImportBody: "It is added to your skills and marked as not reviewed. Read it first: it is text from outside, and the model will follow it.",
+  skillImportReplaceBody: (name) => `A skill named ${name} is already here. Importing replaces it.`,
+  skillImportRefused: "This cannot be imported. Nothing was written.",
+  skillImported: (name) => `${name} was imported.`,
+  skillSaved: (name) => `${name} was saved.`,
+  skillDeleted: (name) => `${name} was deleted.`,
+  skillExported: (name) => `${name} was exported.`,
+  skillExportFailed: (name) => `${name} could not be exported.`,
+  skillSaveFailed: "The skill could not be written. Nothing was changed.",
+  skillExistsTitle: (name) => `Replace ${name}?`,
+  skillExistsBody: "A skill with this name already exists. Saving replaces it.",
+  skillEditorEditing: (name) => `Editing ${name}`,
+  skillEditorReadOnly: (name) => `${name} is read only.`,
+  skillEditorProposal: "A proposed skill. Read it, and save it only if you want to keep it.",
+  skillName: "Name",
+  skillDescription: "Description",
+  skillInstructions: "Instructions",
+  skillPreview: "Preview",
+  skillLicense: "License",
+  skillCompatibility: "Compatibility",
+  skillMatching: "When to use it",
+  skillTitleField: "Title",
+  skillTags: "Tags",
+  skillKeywords: "Keywords",
+  skillFileTypes: "File types",
+  skillPreferredTools: "Preferred tools",
+  skillPriority: "Priority",
+  skillActivation: "Activation",
+  skillActivationAuto: "When the message matches",
+  skillActivationAlways: "Always",
+  skillActivationManual: "Only when named",
+  skillResources: "Files",
+  skillNoResources: "No other files.",
+  skillAddFile: "Add a file…",
+  skillRenameFile: "Rename",
+  skillRemoveFile: "Remove",
+  skillDropUnknownKeys: "Remove the extra fields",
+  skillChecksHeading: "Checks",
+  skillChecksOk: "All checks pass.",
+  skillTestHeading: "Try it",
+  skillTestPrompt: "A message to try",
+  skillTestRun: "Try",
+  skillTestListed: "The model is told about:",
+  skillTestPreloaded: "Loaded at once:",
+  skillTestNone: "No skill is offered for this message.",
+  skillTestEditedNotListed: "This skill is not offered for this message.",
+  skillMatchExplicit: "named in the message",
+  skillMatchAlways: "always on",
+  skillMatchTrigger: "matches its keywords",
+  skillAskModel: "Ask the model once",
+  skillModelNote: "One model call. No tool runs.",
+  skillModelAsking: "Asking the model…",
+  skillModelWouldLoad: (name) => `The model would load ${name}.`,
+  skillModelWouldLoadOther: (name) => `The model would load another skill instead: ${name}.`,
+  skillModelWouldNot: "The model would not load a skill for this message.",
+  skillModelFailed: "The model could not be asked.",
+  skillDraftTitle: "Draft from this chat",
+  skillDraftGuidance: "What should the skill be for? (optional)",
+  skillDraftStart: "Write a draft",
+  skillDraftWorking: "Writing a draft…",
+  skillDraftReady: "The draft is open for review. Nothing is saved until you press Save.",
+  skillDraftNoChat: "There is nothing in this chat to draft from yet.",
+  skillDraftNoModel: "No model is available to write a draft.",
+  skillDraftFailed: "The draft could not be written.",
+  skillDraftUnreadable: "The model’s answer is not a skill. Try again.",
+  skillDraftBroken: "The draft breaks the rules listed below. Fix it in the editor before saving.",
+  skillIssue: {
+    NameMissing: "The name is empty.",
+    NameForm: "The name may use only lower-case letters, digits and single hyphens.",
+    NameTooLong: "The name is {2} characters long; the limit is {1}.",
+    NameNotFolder: "The name is not the folder’s name ({3}).",
+    NameReserved: "A built-in skill already has this name.",
+    DescriptionMissing: "The description is empty. It tells the model when to use the skill.",
+    DescriptionTooLong: "The description is {2} characters long; the limit is {1}.",
+    CompatibilityTooLong: "The compatibility note is {2} characters long; the limit is {1}.",
+    UnknownKey: "SKILL.md has a field the standard does not have: {3}. Remove it.",
+    InvisibleCharacter: "{0} contains an invisible character ({3}). Remove it.",
+    ControlCharacter: "{0} contains a control character ({3}). Remove it.",
+    BodyEmpty: "The instructions are empty.",
+    BodyLarge: "The instructions are long (about {2} tokens; about {1} is advisable). The model may follow them less well.",
+    TotalTooLarge: "The skill is larger than {1} bytes in all.",
+    FileTooLarge: "{0} is larger than {1} bytes.",
+    TooManyFiles: "The skill has more than {1} files.",
+    ScriptFile: "{0} is a script or a program. Scripts never run here; remove it.",
+    UnsafePath: "The file name {0} is not allowed ({3}).",
+    DuplicatePath: "The file name {0} appears twice.",
+    LinkEntry: "{0} is a link. Links are not taken in.",
+    ZipBomb: "The zip expands to far more than it should. It was not opened.",
+    NotAZip: "{0} is not a zip file.",
+    SkillMdMissing: "There is no SKILL.md.",
+    SkillMdUnreadable: "SKILL.md cannot be read: {3}",
+    FadenYamlUnreadable: "faden.yaml cannot be read: {3}",
+    FadenYamlUnknownKey: "faden.yaml has a field this editor does not keep: {3}. Saving drops it.",
+    ReadFailed: "{0} could not be read.",
+    BinaryFile: "{0} is not a text file. A skill keeps text files only.",
+  },
 };
 
 /** Minutes and seconds as "9:41" (like .NET's `MinutesAndSeconds`): rounded up to the whole second, never negative. */
@@ -965,5 +1177,6 @@ export function withStrings(changes: Partial<UiStrings> | undefined, base: UiStr
     wizardPasswordFailure: { ...base.wizardPasswordFailure, ...changes.wizardPasswordFailure },
     wizardProblem: { ...base.wizardProblem, ...changes.wizardProblem },
     wizardWatermark: { ...base.wizardWatermark, ...changes.wizardWatermark },
+    skillIssue: { ...base.skillIssue, ...changes.skillIssue },
   };
 }

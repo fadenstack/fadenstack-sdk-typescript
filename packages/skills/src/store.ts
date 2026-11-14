@@ -18,6 +18,11 @@ export interface SkillStore {
   get(name: string): Promise<SkillDefinition | undefined>;
   /** Keeps the skill, replacing one of the same name. Throws `SkillRuleError` for a skill that breaks the six-field rule. */
   add(skill: SkillDefinition): Promise<void>;
+  /**
+   * Keeps the skill and, when it was renamed (`previousName`, another name), removes the skill it came from, in one step: both or
+   * neither. A store without it is written with `add` and then `remove`. Throws `SkillRuleError` for a skill that breaks the rule.
+   */
+  save?(skill: SkillDefinition, previousName?: string): Promise<void>;
   /** Removes the skill; whether there was one. */
   remove(name: string): Promise<boolean>;
   /** Calls `listener` after a change; returns the unsubscribe. */
@@ -68,6 +73,13 @@ export class MemorySkillStore extends ObservableStore implements SkillStore {
 
   async add(skill: SkillDefinition): Promise<void> {
     const kept = checked(skill);
+    this.#skills.set(kept.name, kept);
+    this.changed();
+  }
+
+  async save(skill: SkillDefinition, previousName?: string): Promise<void> {
+    const kept = checked(skill);
+    if (previousName !== undefined && previousName !== kept.name) this.#skills.delete(previousName);
     this.#skills.set(kept.name, kept);
     this.changed();
   }
@@ -154,6 +166,17 @@ export class IndexedDbSkillStore extends ObservableStore implements SkillStore {
     const db = await this.#db();
     const tx = db.transaction([SKILLS], "readwrite");
     const done = finished(tx);
+    tx.objectStore(SKILLS).put(kept, kept.name);
+    await done;
+    this.changed();
+  }
+
+  async save(skill: SkillDefinition, previousName?: string): Promise<void> {
+    const kept = checked(skill);
+    const db = await this.#db();
+    const tx = db.transaction([SKILLS], "readwrite");
+    const done = finished(tx);
+    if (previousName !== undefined && previousName !== kept.name) tx.objectStore(SKILLS).delete(previousName);
     tx.objectStore(SKILLS).put(kept, kept.name);
     await done;
     this.changed();
