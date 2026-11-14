@@ -241,6 +241,26 @@ describe("my data on this device", () => {
       await bens.dispose();
     });
 
+    it("takes the person's own skills with them (sdk/51 F04)", async () => {
+      const gateway = gatewayFor();
+      const anna = await agentFor(gateway, "anna@example.com");
+      await chat(anna);
+      // The skills package keeps the person's skills in this database; the agents package does not import it.
+      await new Promise<void>((resolve, reject) => {
+        const open = globalThis.indexedDB.open("fadenstack-skills:tenant-1:user-1", 1); // Anna, the only user here
+        open.onupgradeneeded = () => open.result.createObjectStore("skills");
+        open.onsuccess = () => { open.result.close(); resolve(); };
+        open.onerror = () => reject(open.error);
+      });
+      expect((await names()).filter((n) => n?.startsWith("fadenstack-skills:"))).toHaveLength(1);
+
+      const result = await anna.deleteMyData();
+
+      expect(result.storesCleared).toBe(4);
+      expect((await names()).filter((n) => n?.startsWith("fadenstack-skills:"))).toEqual([]);
+      await anna.dispose();
+    });
+
     it("takes the user's thinking level with it, as .NET removes the user's whole folder", async () => {
       const gateway = gatewayFor();
       const anna = await agentFor(gateway, "anna@example.com");

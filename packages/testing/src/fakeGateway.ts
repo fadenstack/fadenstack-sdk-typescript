@@ -52,6 +52,8 @@ export interface FakeAgent {
   contract?: { name: string; risk?: "read" | "write" | "destructive"; approval?: string; target_type?: string; target_argument?: string }[];
   ui?: Record<string, unknown>;
   localMcpMode?: "disable" | "allow";
+  /** The profile's `local_skills`, as the wire carries it (core 0.7.1); `mode` is left out when undefined. Not sent at all unless set, as an older server. */
+  localSkills?: { mode?: string; developerMode?: boolean };
   /** A tool-mode ceiling, as an administrator's rules set it. */
   ceiling?: "off" | "read_only" | "ask" | "auto";
   /** The agent version's default level (`tool_modes.default`; `ask` unless set). Any string, as a later server may send. */
@@ -856,6 +858,7 @@ export class FakeGateway {
       skills: agent.skills !== undefined, instructions_sha256: "0".repeat(64),
       host_tool_contract: agent.contract ?? [], server_tools: null, knowledge: [],
       local_mcp: { mode: agent.localMcpMode ?? "disable", developer_mode: user.developerMode ?? false },
+      ...(agent.localSkills ? { local_skills: { ...(agent.localSkills.mode !== undefined ? { mode: agent.localSkills.mode } : {}), developer_mode: agent.localSkills.developerMode ?? false } } : {}),
       tool_modes: { default: agent.defaultLevel ?? "ask", ceiling: agent.ceiling ?? null,
         ...(agent.maxLevel !== undefined ? { max: agent.maxLevel } : {}), open_world_enforced: false },
       ui: agent.ui ?? {}, extensions: {}, required_client_modules: agent.requiredClientModules ?? [],

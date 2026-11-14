@@ -23,6 +23,7 @@ export {
 } from "./approvalStore.js";
 export type { AgentEvent, AgentResult, ToolOutcome } from "./events.js";
 export {
+  CORE_TOOL_SOURCE,
   NO_TOOL_SERVICES,
   RESERVED_TOOL_NAMES,
   checkArguments,

@@ -19,6 +19,7 @@ export default defineConfig({
       "@fadenstack/testing/provenance": fileURLToPath(new URL("./packages/testing/src/provenance.ts", import.meta.url)),
       "@fadenstack/testing": src("testing"),
       "@fadenstack/provenance": src("provenance"),
+      "@fadenstack/skills": src("skills"),
     },
   },
   test: {
