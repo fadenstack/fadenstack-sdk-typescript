@@ -28,6 +28,7 @@ import type {
   ContentMarker,
   EditClassifier,
   ExemptReason,
+  EndpointLayer,
   ExtensionValue,
   MarkableContent,
   MarkOutcome,
@@ -92,6 +93,8 @@ export interface PlaceContext {
   readonly declaredEditKind?: EditKind | null;
   /** The receipt of the answer that made the call. */
   readonly receipt?: ReceiptNote;
+  /** Without a server: the person's endpoint's text watermark and what its answer said (F10). */
+  readonly endpoint?: EndpointLayer;
   /** The agent's model, where no receipt names one. */
   readonly model?: string;
   readonly signal: AbortSignal;
@@ -205,7 +208,9 @@ export async function placeContent<T>(settings: PipelineSettings, request: Place
     watermark: isImage(mediaType) || (text !== undefined && !shortText),
     label: policy.visible_label && text !== undefined,
   };
-  const watermark = watermarkOf(receipt, mediaType, shortText);
+  // A picture has no endpoint watermark layer (pictures in standalone are off until D17).
+  const endpoint = isImage(mediaType) ? undefined : ctx.endpoint;
+  const watermark = watermarkOf(receipt, mediaType, shortText, endpoint);
 
   // What the content needs, checked before anything is signed or placed.
   const before: MissingLayer[] = [];
@@ -239,6 +244,7 @@ export async function placeContent<T>(settings: PipelineSettings, request: Place
     createdAt: signed.record.created_at,
     model: signed.record.model?.id ?? undefined,
     receipt,
+    endpoint,
     receiptId,
     watermark: receipt?.status === "signed" ? receipt.receipt.watermark : undefined,
     extensions: Object.freeze({ ...facts }),

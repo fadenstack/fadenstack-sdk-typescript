@@ -1,11 +1,13 @@
-import { MAX_EVENTS_PER_REPORT, type AgentClientEvent, type FadenstackClient } from "@fadenstack/client";
+import { MAX_EVENTS_PER_REPORT, type AgentClientEvent } from "@fadenstack/client";
+
+import type { EventSink } from "./backend.js";
 
 /**
  * Tells the server what happened on the device -- tool runs, approvals, session counts -- as names, durations
  * and outcomes, never content. Sent after each turn; a report that fails is dropped, never the turn.
  */
 export class EventReporter {
-  readonly #client: FadenstackClient;
+  readonly #sink: EventSink;
   readonly #enabled: boolean;
   #pending: AgentClientEvent[] = [];
   #flushing: Promise<void> = Promise.resolve();
@@ -13,9 +15,9 @@ export class EventReporter {
   /** The last report that failed, for diagnostics. */
   lastError: unknown;
 
-  constructor(client: FadenstackClient, enabled: boolean) {
-    this.#client = client;
-    this.#enabled = enabled && client.agent !== undefined;
+  constructor(sink: EventSink, enabled: boolean) {
+    this.#sink = sink;
+    this.#enabled = enabled && sink.acceptsEvents;
   }
 
   add(event: AgentClientEvent): void {
@@ -40,7 +42,7 @@ export class EventReporter {
 
   async #send(events: readonly AgentClientEvent[]): Promise<void> {
     try {
-      await this.#client.agent!.report(events, AbortSignal.timeout(30_000));
+      await this.#sink.report(events, AbortSignal.timeout(30_000));
     } catch (error) {
       this.lastError = error;
     }

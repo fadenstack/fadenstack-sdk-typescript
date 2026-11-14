@@ -8,6 +8,22 @@ before 1.0, a minor version may break the API, and this file says where it does.
 
 ### Added
 
+- **`MachinePolicy`** ([Machine policy](docs/machine-policy.md)): one vocabulary for managed installs (`server`, `standalone`,
+  `endpoints`, `plainHttp`, `mcp`, `skills`, `webSearch`, `timestamping`), read fail-closed (`MachinePolicy.from(object)`,
+  `fromJson`; a Chrome extension hands it `chrome.storage.managed`), enforced by `AgentBuilder.useMachinePolicy`
+  (`MachinePolicyError`, `EndpointPlainHttpRefusedError` reason `forbiddenByPolicy`), narrowing local MCP and skills with a
+  server too; `agent.machinePolicy`; the device's provenance backend sends no time-stamp request where it forbids it.
+- **Endpoint watermarks** (a standalone agent): the person's endpoint's text watermark is never switched off for text people
+  read. `ChatOptions.unread` marks a call whose answer no person reads, and only then does a dialect with a switch send it
+  (`EndpointDialect.watermarkSwitchOff`: vLLM, SGLang); each answer's transcript entry records `endpoint_marking`;
+  `agent.endpointWatermark`, `EndpointCheck.watermarkOf` and `EndpointCheck.serverOf`; the provenance module's
+  watermark layer relies on the endpoint (`endpoint-<server>`) and never claims more.
+- **Records signed on the device** (@fadenstack/provenance): for an agent without a server the module chooses
+  LocalProvenanceBackend: the server's record format (a compact ES256 JWS with kid device:<16 hex> and a self-signed
+  certificate in x5c, hash_key_version 0), signed by a non-extractable WebCrypto key kept per principal in IndexedDB
+  (DeviceSigner, DeviceSigner.verify), an RFC 3161 time-stamp when the app names an authority (Rfc3161, off by default in a
+  browser), and a placement log in IndexedDB that keeps the newest entries. provenanceModule({ localBackend }) sets it up;
+  deleteMyData() removes its database.
 - `AgentTokenProviderOptions.locks` (`LockManagerLike`, `navigator.locks` by default where there is one): contexts that
   share a token store (an extension's side panel and its service worker, several tabs) renew a sign-in one at a time.
 - `TransportOptions.streamIdleTimeoutMs` and `FadenstackClientOptions.streamIdleTimeoutMs` (5 minutes): a streamed
@@ -68,6 +84,11 @@ before 1.0, a minor version may break the API, and this file says where it does.
 
 ### Fixed
 
+- **An approval answer lost on the way is sent once more.** Answering a call the gateway holds now waits 10 seconds for a
+  word back, then sends the same answer once more when none came (no answer, the server unreachable, a proxy's 502, 503 or
+  504). A Fadenstack gateway from 0.7.1 (`approvals.idempotent`) takes a repeated answer once; an older one answers the
+  repeat of a taken answer 404, which now counts as taken. A 409 is never sent again. Before, a lost decline left the call
+  waiting until the gateway's own timeout (5 minutes). Log event 2053 (`ApprovalAnswerRetried`).
 - **A chat no longer loses its own grant to another chat's refresh.** The device's copy of grants took the server's list
   (or a stream's `faden.grants`) as it was when it was asked for; a grant made meanwhile in another chat, a Bypass
   started in parallel, was dropped from the copy, so that chat ran without it and its `stopBypass` could not end it at

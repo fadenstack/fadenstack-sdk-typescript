@@ -95,15 +95,16 @@ export async function buildExport(sessions: SessionStore, approvals: ApprovalSto
 }
 
 /**
- * The names of the databases a user has on this device: sessions, "Allow always", their key, and their preferences (the
+ * The names of the databases a user has on this device: sessions, "Allow always", their key, their preferences and their provenance key and log (the
  * thinking level picked per agent, `reasoningStoreName`).
  */
-export function userDatabaseNames(principal: StorePrincipal | undefined): { sessions: string; approvals: string; keys: string; preferences: string } {
+export function userDatabaseNames(principal: StorePrincipal | undefined): { sessions: string; approvals: string; keys: string; preferences: string; provenance: string } {
   return {
     sessions: userStoreName("fadenstack-sessions", principal),
     approvals: userStoreName("fadenstack-approvals", principal),
     keys: userStoreName("fadenstack-keys", principal),
     preferences: userStoreName("fadenstack-preferences", principal),
+    provenance: userStoreName("fadenstack-provenance", principal),
   };
 }
 
@@ -115,7 +116,7 @@ export async function deleteUserDatabases(principal: StorePrincipal | undefined,
   if (!factory) return 0;
   const names = userDatabaseNames(principal);
   let removed = 0;
-  for (const name of [names.sessions, names.approvals, names.keys, names.preferences]) if (await deleteDatabase(factory, name)) removed++;
+  for (const name of [names.sessions, names.approvals, names.keys, names.preferences, names.provenance]) if (await deleteDatabase(factory, name)) removed++;
   return removed;
 }
 

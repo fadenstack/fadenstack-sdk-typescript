@@ -1,5 +1,8 @@
-import type { AgentClientEvent, AgentProfile, ChatStreamer, FadenstackClient, GovernanceNotice, ToolClass } from "@fadenstack/client";
+import type { AgentClientEvent, AgentProfile, ChatStreamer, EndpointServer, EndpointWatermarkStatus, FadenstackClient, GovernanceNotice, ToolClass } from "@fadenstack/client";
 
+import type { AgentConnection } from "./backend.js";
+import type { AppDescription } from "./builder.js";
+import type { MachinePolicy } from "./machinePolicy.js";
 import type { AgentTool, ToolCallContext } from "./tools.js";
 
 /**
@@ -36,7 +39,20 @@ export interface ToolStage {
 
 /** What a tool source or module can see of the running agent. */
 export interface AgentContext {
+  /** The agent's Fadenstack client. An agent without a server (standalone) has none: this throws there; see `serverClient`. */
   readonly client: FadenstackClient;
+  /** The agent's Fadenstack client; undefined for an agent without a server. */
+  readonly serverClient: FadenstackClient | undefined;
+  /** How the agent is connected (`FadenstackAgent.connection`). */
+  readonly connection: AgentConnection;
+  /** The app the agent runs in, as the host described it (describeApp); undefined when it did not. */
+  readonly app: AppDescription | undefined;
+  /** What IT set for this machine (`AgentBuilder.useMachinePolicy`); `MachinePolicy.none` when the app gave none. */
+  readonly machinePolicy: MachinePolicy;
+  /** For a standalone agent, its connection's text watermark status (FadenstackAgent.endpointWatermark); undefined with a server. */
+  readonly endpointWatermark: EndpointWatermarkStatus | undefined;
+  /** For a standalone agent, the kind of server behind its endpoint; undefined with a server. */
+  readonly endpointServer: EndpointServer | undefined;
   readonly profile: AgentProfile;
   /** Reports an event to the server (names and counts, never content). */
   report(event: AgentClientEvent): Promise<void>;

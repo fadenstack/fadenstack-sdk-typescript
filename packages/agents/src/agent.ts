@@ -8,7 +8,9 @@ import {
   narrowestMode,
   type AgentPrincipal,
   type AgentProfile,
+  type AgentToolInfo,
   type AppManifest,
+  type EndpointWatermarkStatus,
   type FadenstackClient,
   type ManifestTool,
   type ReasoningEffort,
@@ -28,7 +30,10 @@ import {
   type ReasoningLevel, type ReasoningStore,
 } from "./reasoning.js";
 
+import { MachinePolicy } from "./machinePolicy.js";
 import { AgentBuilder, UNDESCRIBED_APP_NAME, type AgentSettings, type AppDescription } from "./builder.js";
+import type { AgentBackend, AgentConnection } from "./backend.js";
+import { LocalBackend } from "./localBackend.js";
 import { EventReporter } from "./reporter.js";
 import { ChatSession } from "./session.js";
 import { isChangingToolSource, type AgentContext, type ToolSource } from "./stages.js";
@@ -54,6 +59,8 @@ export class FadenstackAgent {
   readonly stepUps: StepUpProofs;
   /** @internal The time, in milliseconds, for the profile's age and the grants' remaining time; tests set it. */
   clock: () => number = () => Date.now();
+  /** @internal How long one try at answering a gateway's approval may take, in milliseconds, before it is sent once more; tests shorten it. */
+  approvalAnswerTimeoutMs = 10_000;
   #profile: AgentProfile | undefined;
   #profileRead = 0;
   #context: AgentContext | undefined;
@@ -80,7 +87,7 @@ export class FadenstackAgent {
 
   private constructor(settings: AgentSettings) {
     this.settings = settings;
-    this.reporter = new EventReporter(settings.client, settings.report);
+    this.reporter = new EventReporter(settings.backend, settings.report);
     this.grants = new AgentGrants(this, settings.grantPlaceResolver);
     this.stepUps = new StepUpProofs(this);
   }
@@ -98,8 +105,79 @@ export class FadenstackAgent {
     return this.settings.agent;
   }
 
+  /**
+   * The agent's Fadenstack client: the server's routes, its options, its transport for a module's own resources. An agent
+   * without a server has none: this throws there.
+   */
   get client(): FadenstackClient {
-    return this.settings.client;
+    const client = this.settings.backend.serverClient;
+    if (!client) throw new Error("This agent has no Fadenstack server, so it has no server client.");
+    return client;
+  }
+
+  /** The agent's Fadenstack client; undefined for an agent without a server (on the person's own model endpoint). */
+  get serverClient(): FadenstackClient | undefined {
+    return this.settings.backend.serverClient;
+  }
+
+  /**
+   * The person's own model endpoint (its base) for a standalone agent built with `useEndpoint`; undefined with a server, or
+   * with a host's own streamer (`useChatStreamer`). .NET: `EndpointUrl`.
+   */
+  get endpointUrl(): URL | undefined {
+    return this.settings.backend instanceof LocalBackend ? this.settings.backend.endpointUrl : undefined;
+  }
+
+  /**
+   * For a standalone agent, whether its connection marks text with the server's watermark (sdk/51 F03 item 8, F10): the
+   * endpoint check's report, else the sourced table by the endpoint's host and dialect. Undefined with a Fadenstack server,
+   * whose receipts say it per answer. .NET: `EndpointWatermark`.
+   */
+  get endpointWatermark(): EndpointWatermarkStatus | undefined {
+    return this.settings.backend instanceof LocalBackend ? this.settings.backend.watermark : undefined;
+  }
+
+  /**
+   * What IT set for this machine (`AgentBuilder.useMachinePolicy`): modules read its lists (the MCP sources, the skill
+   * folders); `MachinePolicy.none` when the app gave none. .NET: `MachinePolicy`.
+   */
+  get machinePolicy(): MachinePolicy {
+    return this.settings.machinePolicy ?? MachinePolicy.none;
+  }
+
+  /**
+   * The profile under the machine policy: what it forbids is off whatever the server or the person says (R3-8); it never
+   * turns on what they left off.
+   */
+  #narrowed(profile: AgentProfile): AgentProfile {
+    const policy = this.machinePolicy;
+    const off = { mode: "disable", developerMode: false };
+    return {
+      ...profile,
+      localMcp: policy.mcp.allowsAny ? profile.localMcp : off,
+      ...(policy.skills.allowsAny ? {} : { localSkills: off }),
+    };
+  }
+
+  /**
+   * How the agent is connected: `governed` to an organisation's Fadenstack server, or `standalone` to the person's own model
+   * endpoint. For showing or hiding the server's parts; nothing decides security by it. .NET: `Connection`.
+   */
+  get connection(): AgentConnection {
+    return this.settings.backend.connection;
+  }
+
+  /**
+   * The tools of the organisation's MCP servers that the user and this agent can have, with what the agent's tool rules make of
+   * each (`GET /v1/agents/{agent}/tools`). Null when the server does not list them (an older one). .NET: `ListServerToolsAsync`.
+   */
+  listServerTools(signal?: AbortSignal): Promise<AgentToolInfo[] | null> {
+    return this.settings.backend.listTools(signal);
+  }
+
+  /** @internal What the agent talks to: the server, or the person's own model endpoint (sdk/51 F02). */
+  get backend(): AgentBackend {
+    return this.settings.backend;
   }
 
   /** The app the agent runs in, as the host described it (`describeApp`); undefined when it did not. */
@@ -136,7 +214,7 @@ export class FadenstackAgent {
   /** Refresh mutable approval controls; an identity/contract change requires a new reviewed agent context. */
   async refreshPolicy(signal?: AbortSignal): Promise<void> {
     const before = this.profile;
-    const fresh = await this.client.agent!.getProfile(signal);
+    const fresh = this.#narrowed(await this.backend.getProfile(signal));
     this.#assertHostPolicySupport(fresh);
     const binding = (p: AgentProfile) => JSON.stringify({ id: p.id, slug: p.slug, version: p.version, draft: p.draft,
       principal: p.principal, contract: p.hostToolContract, instructions: p.instructionsSha256,
@@ -144,7 +222,26 @@ export class FadenstackAgent {
     if (binding(before) !== binding(fresh)) throw new FadenstackError("The agent identity or published contract changed. Reconnect before running tools.");
     this.#profile = fresh;
     this.#profileRead = this.clock();
-    if (this.#context) this.#context = { ...this.#context, profile: fresh };
+    if (this.#context) this.#context = this.#contextFor(fresh);
+  }
+
+  /**
+   * What tool sources and modules see: a getter for the client, so that an agent without a server throws the clear error at
+   * the use, not at the start (a spread of the context would read it).
+   */
+  #contextFor(profile: AgentProfile): AgentContext {
+    const agent = this;
+    return {
+      get client() { return agent.client; },
+      serverClient: this.serverClient,
+      connection: this.connection,
+      app: this.app,
+      machinePolicy: this.machinePolicy,
+      endpointWatermark: this.endpointWatermark,
+      endpointServer: this.settings.backend instanceof LocalBackend ? this.settings.backend.server : undefined,
+      profile,
+      report: (event) => this.reporter.reportNow([event]),
+    };
   }
 
   /**
@@ -159,7 +256,7 @@ export class FadenstackAgent {
     if (!before || this.clock() - this.#profileRead < PROFILE_MAX_AGE_MS) return;
     let fresh: AgentProfile;
     try {
-      fresh = await this.client.agent!.getProfile(signal);
+      fresh = this.#narrowed(await this.backend.getProfile(signal));
       this.#checkModules(fresh);
     } catch (error) {
       if (signal?.aborted) throw signal.reason ?? error;
@@ -176,7 +273,7 @@ export class FadenstackAgent {
     this.#profile = fresh;
     this.#applyRetention(fresh);
     this.#profileRead = this.clock();
-    if (this.#context) this.#context = { ...this.#context, profile: fresh };
+    if (this.#context) this.#context = this.#contextFor(fresh);
   }
 
   #assertHostPolicySupport(profile: AgentProfile): void {
@@ -257,7 +354,7 @@ export class FadenstackAgent {
    * in this agent's profile. Returns the language kept.
    */
   async setUserLanguage(language: string | null, signal?: AbortSignal): Promise<string | null> {
-    const kept = await this.client.agent!.setUserLanguage(language, signal);
+    const kept = await this.backend.setUserLanguage(language, signal);
     if (this.#profile) this.#profile = { ...this.#profile, user: { ...this.#profile.user, language: kept } };
     return kept;
   }
@@ -271,7 +368,7 @@ export class FadenstackAgent {
     const options: { query?: string; limit: number; signal?: AbortSignal } = { limit: 100 };
     if (query) options.query = query;
     if (signal) options.signal = signal;
-    return (await this.client.agent!.listSkills(options)).skills;
+    return (await this.backend.listSkills(options)).skills;
   }
 
   /** Loads the profile again (after a new version was published) and settles the tools anew. */
@@ -357,15 +454,11 @@ export class FadenstackAgent {
   }
 
   async #start(signal?: AbortSignal): Promise<void> {
-    const profile = await this.client.agent!.getProfile(signal);
+    const profile = this.#narrowed(await this.backend.getProfile(signal));
     this.#assertHostPolicySupport(profile);
     this.#checkModules(profile);
     const hosts = settleHostTools(this.settings.tools, profile);
-    const context: AgentContext = {
-      client: this.client,
-      profile,
-      report: (event) => this.reporter.reportNow([event]),
-    };
+    const context = this.#contextFor(profile);
     const fromSources: { source: ToolSource; tools: readonly AgentTool[] }[] = [];
     for (const source of this.settings.sources) {
       if (isChangingToolSource(source)) this.#unsubscribe.push(source.onChanged(() => { this.#changed.add(source); }));
@@ -542,7 +635,7 @@ export class FadenstackAgent {
       ...(app.ui ? { ui: app.ui } : {}),
     };
     try {
-      await this.client.agent!.reportManifest(manifest);
+      await this.backend.reportManifest(manifest);
     } catch {
       // nothing to do: the server learns of the tools at the next start
     }

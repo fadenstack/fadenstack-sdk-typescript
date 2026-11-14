@@ -1,5 +1,7 @@
 import type {
   EditKind,
+  EndpointMarking,
+  EndpointWatermarkStatus,
   LayerOutcome,
   MarkLayer,
   PlacementReport,
@@ -105,6 +107,17 @@ export function withHostValue(content: MarkableContent, key: string, value: stri
   return { ...content, hostValues: Object.freeze({ ...content.hostValues, [key]: value }) };
 }
 
+/**
+ * What a standalone agent knows of its endpoint's text watermark (sdk/51 F10): the connection's status, and what the answer
+ * the content came from said about its marking. Absent with a server, whose receipt says it. .NET: `EndpointLayer`.
+ */
+export interface EndpointLayer {
+  readonly connection: EndpointWatermarkStatus;
+  readonly answer?: EndpointMarking | undefined;
+  /** The kind of server, lower case, for the layer's method (`endpoint-ollama`); `unknown` when it is not known. */
+  readonly server: string;
+}
+
 /** Content the host has taken. */
 export interface PlacedContent extends MarkableContent {
   /** What the host's insert returned. */
@@ -173,6 +186,8 @@ export interface ProvenanceRecord {
   readonly model: string | undefined;
   /** What the server said made the content. */
   readonly receipt: ReceiptNote | undefined;
+  /** Without a server: the person's endpoint and its answer, as far as their text watermark goes (F10). */
+  readonly endpoint: EndpointLayer | undefined;
   readonly receiptId: string | undefined;
   /** What the receipt says about the watermark, when there is a signed receipt. */
   readonly watermark: ReceiptWatermark | undefined;

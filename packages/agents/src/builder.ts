@@ -1,8 +1,10 @@
 import {
-  BYPASS_SUPPORTS,
+  DirectChatClient,
   FadenstackClient,
   type ChatStreamer,
+  type EndpointReport,
   type FadenstackClientOptions,
+  type ModelEndpoint,
   type ManifestContext,
   type ReasoningEffort,
   type TokenProvider,
@@ -10,6 +12,10 @@ import {
 } from "@fadenstack/client";
 
 import { FadenstackAgent } from "./agent.js";
+import { ServerBackend, type AgentBackend } from "./backend.js";
+import type { AgentDefinition } from "./definition.js";
+import { LocalBackend, type LocalProfileOptions } from "./localBackend.js";
+import { MachinePolicy, MachinePolicyError, PolicyAccess } from "./machinePolicy.js";
 import {
   approvalsFrom,
   denyAllApprovals,
@@ -31,10 +37,18 @@ import type { FadenstackLogger } from "@fadenstack/client";
 
 /** What an agent was built with. */
 export interface AgentSettings {
-  readonly client: FadenstackClient;
+  /** What the agent talks to: the server (`ServerBackend`, which holds the client) or the person's endpoint (`LocalBackend`). */
+  readonly backend: AgentBackend;
   readonly agent: string;
-  /** The gateway's chat, wrapped in the chat stages. */
+  /** The backend's chat (the gateway's, or the person's endpoint), wrapped in the chat stages. */
   readonly chat: ChatStreamer;
+  /**
+   * A standalone agent's instructions, its definition's then the person's own (D7); undefined with a server, whose gateway adds
+   * the agent's own. The session sets them on every model call, above the chat stages (`ChatOptions.instructions`).
+   */
+  readonly instructions?: string;
+  /** What IT set for this machine (`useMachinePolicy`); `MachinePolicy.none` when the app gave none. */
+  readonly machinePolicy?: MachinePolicy;
   readonly tools: readonly AgentTool[];
   readonly sources: readonly ToolSource[];
   readonly toolStages: readonly ToolStage[];
@@ -100,6 +114,13 @@ export class AgentBuilder {
   readonly #modules: string[] = [];
   #client: FadenstackClient | undefined;
   #options: FadenstackClientOptions | undefined;
+  #endpoint: ModelEndpoint | undefined;
+  #endpointReport: EndpointReport | undefined;
+  #streamer: ChatStreamer | undefined;
+  #definition: AgentDefinition | undefined;
+  #ownInstructions: string | undefined;
+  #localOptions: LocalProfileOptions | undefined;
+  #policy: MachinePolicy = MachinePolicy.none;
   #agent: string | undefined;
   #approvals: ApprovalHandler = denyAllApprovals;
   #sessions: SessionStore | undefined;
@@ -133,6 +154,54 @@ export class AgentBuilder {
     this.#client = client;
     this.#agent ??= client.options.agent;
     this.#options = undefined;
+    return this;
+  }
+
+  /**
+   * Standalone mode (sdk/51 F03): the person's own OpenAI-compatible endpoint, with no Fadenstack server. Needs
+   * `useLocalProfile`; never together with `useServer` or `useClient`. The endpoint check's `report`, if the app kept one,
+   * says whether the model sees pictures. .NET: `UseEndpoint`.
+   */
+  useEndpoint(endpoint: ModelEndpoint, report?: EndpointReport): this {
+    if (!endpoint) throw new TypeError("An endpoint is required.");
+    this.#endpoint = endpoint;
+    this.#endpointReport = report;
+    return this;
+  }
+
+  /**
+   * Standalone mode with any `ChatStreamer` as the model, instead of `useEndpoint`: the host's own (a provider's SDK behind
+   * it, a test's), which stays the host's -- the agent never closes it. Its answers count as `external` for the model's
+   * residency. Needs `useLocalProfile`. .NET: `UseChatClient`.
+   */
+  useChatStreamer(streamer: ChatStreamer): this {
+    if (typeof streamer?.stream !== "function") throw new TypeError("A chat streamer has a stream(messages, options) method.");
+    this.#streamer = streamer;
+    return this;
+  }
+
+  /**
+   * What IT set for this machine (sdk/51 F09): `build()` refuses an endpoint the policy forbids or does not list, takes away
+   * the plain-http opt-in where it forbids plain http, and narrows local MCP and skills, with a server too. The app reads the
+   * policy from its managed location (Chrome: `MachinePolicy.from(await chrome.storage.managed.get())`) and locks what it
+   * sets. .NET: `UseMachinePolicy`.
+   */
+  useMachinePolicy(policy: MachinePolicy): this {
+    if (!(policy instanceof MachinePolicy)) throw new TypeError("A MachinePolicy is needed: MachinePolicy.from(object), MachinePolicy.fromJson(text) or MachinePolicy.none.");
+    this.#policy = policy;
+    return this;
+  }
+
+  /**
+   * The agent's definition for standalone mode (the app's own `contracts/*.json`): its slug, instructions, host tool contract
+   * and greeting. The person's own instructions, if any, come after the definition's (D7). The person's settings (`options`)
+   * say whether local MCP servers and skills are on. .NET: `UseLocalProfile`.
+   */
+  useLocalProfile(definition: AgentDefinition, ownInstructions?: string, options?: LocalProfileOptions): this {
+    if (!definition) throw new TypeError("A definition is required.");
+    this.#definition = definition;
+    this.#ownInstructions = ownInstructions;
+    this.#localOptions = options;
     return this;
   }
 
@@ -323,31 +392,79 @@ export class AgentBuilder {
   }
 
   build(): FadenstackAgent {
-    const agent = this.#agent;
-    if (!agent) throw new Error("Call useAgent(slug).");
-    let client = this.#client;
-    if (!client) {
-      if (!this.#options) throw new Error("Call useServer(...) or useClient(...).");
-      client = new FadenstackClient({ ...this.#options, agent });
-    } else if (client.options.agent !== agent) {
-      throw new Error(`The client is for '${client.options.agent ?? "(no agent)"}', not '${agent}': one agent per client.`);
+    const standalone = this.#endpoint !== undefined || this.#streamer !== undefined;
+    if (standalone && (this.#client || this.#options)) {
+      throw new Error("An agent talks to a Fadenstack server (useServer, useClient) or to an endpoint (useEndpoint, useChatStreamer), never both.");
     }
-    const names = new Set<string>();
-    for (const tool of this.#tools) {
-      if (names.has(tool.name)) throw new Error(`Two tools are named '${tool.name}'.`);
-      names.add(tool.name);
+    let backend: AgentBackend;
+    let server: ServerBackend | undefined;
+    let agent: string;
+    let instructions: string | undefined;
+    if (standalone) {
+      if (this.#endpoint && this.#streamer) throw new Error("Give the agent one model: useEndpoint or useChatStreamer, not both.");
+      const definition = this.#definition;
+      if (!definition) throw new Error("An agent on an endpoint needs its definition: call useLocalProfile(AgentDefinition.fromJson(...)).");
+      if (this.#agent !== undefined && this.#agent !== definition.slug) {
+        throw new Error(`The definition is for '${definition.slug}', not '${this.#agent}': in standalone mode the slug comes from the definition.`);
+      }
+      agent = definition.slug;
+      const policy = this.#policy;
+      if (policy.standalone !== PolicyAccess.Allowed) {
+        throw new MachinePolicyError("standalone",
+          "This computer's policy does not allow an agent on its own model endpoint: connect to the organisation's server.");
+      }
+      if (this.#endpoint && !policy.allowsEndpoint(this.#endpoint.baseUrl)) {
+        throw new MachinePolicyError("endpoints", "This computer's policy does not list this endpoint.");
+      }
+      if (this.#streamer && policy.endpoints !== null) {
+        throw new MachinePolicyError("endpoints", "This computer's policy allows only listed endpoints, and a host's own chat client names none.");
+      }
+      this.#assertNoDuplicateTools();
+      // The builder's logger is the endpoint's unless it has its own.
+      let endpoint = this.#endpoint && this.#logger && !this.#endpoint.logger ? { ...this.#endpoint, logger: this.#logger } : this.#endpoint;
+      // Plain http forbidden: the person's opt-in is taken away, and the transport says why (loopback stays).
+      if (endpoint && policy.plainHttp !== PolicyAccess.Allowed) endpoint = { ...endpoint, allowPlainHttpInLan: false, plainHttpForbidden: true };
+      // What the person turned on, under the policy: never more.
+      const local: LocalProfileOptions = {
+        ...this.#localOptions,
+        localMcp: this.#localOptions?.localMcp === true && policy.mcp.allowsAny,
+        localSkills: this.#localOptions?.localSkills !== false && policy.skills.allowsAny,
+      };
+      // An endpoint's client is made here; a host's own streamer stays the host's.
+      backend = new LocalBackend({ definition, chat: this.#streamer ?? new DirectChatClient(endpoint!), endpoint,
+        report: this.#endpointReport, options: local });
+      // D7: the person's own instructions come after the definition's.
+      instructions = [definition.instructions, this.#ownInstructions?.trim()].filter((part) => part).join("\n\n") || undefined;
+    } else {
+      if (this.#definition) throw new Error("useLocalProfile is for an agent on an endpoint: with a server the agent's definition is the server's.");
+      const named = this.#agent;
+      if (!named) throw new Error("Call useAgent(slug).");
+      agent = named;
+      let client = this.#client;
+      if (!client) {
+        if (!this.#options) throw new Error("Call useServer(...) or useClient(...).");
+        client = new FadenstackClient({ ...this.#options, agent });
+      } else if (client.options.agent !== agent) {
+        throw new Error(`The client is for '${client.options.agent ?? "(no agent)"}', not '${agent}': one agent per client.`);
+      }
+      this.#assertNoDuplicateTools();
+      backend = server = new ServerBackend(client);
     }
     // Lower order is further from the transport: wrap from the transport outwards.
-    let chat: ChatStreamer = client.chat;
+    let chat: ChatStreamer = backend.chat; // the model, under the chat stages
     for (const stage of [...this.#chatStages].sort((a, b) => b.order - a.order)) chat = stage.wrap(chat);
     // The server offers Bypass only to a client that names the whole flow, so it is named only where the app can open the
-    // second sign-in.
-    if (this.#logger) client.transport.useLogger(this.#logger);
-    if (this.#stepUp ?? (isStepUpHandler(this.#approvals) ? this.#approvals : undefined)) client.transport.announce(...BYPASS_SUPPORTS);
+    // second sign-in. (The backend does it to the client, a host's own included, as the builder always did.)
+    server?.applyTransportRules({
+      logger: this.#logger,
+      announcesBypass: !!(this.#stepUp ?? (isStepUpHandler(this.#approvals) ? this.#approvals : undefined)),
+    });
     return FadenstackAgent.create({
-      client,
+      backend,
       agent,
       chat,
+      ...(instructions ? { instructions } : {}),
+      machinePolicy: this.#policy,
       tools: [...this.#tools],
       sources: [...this.#sources],
       toolStages: [...this.#toolStages].sort((a, b) => a.order - b.order).map((s) => s.stage),
@@ -373,6 +490,14 @@ export class AgentBuilder {
       ...(this.#secretProtector ? { secretProtector: this.#secretProtector } : {}),
       ...(this.#onStoreProblem ? { onStoreProblem: this.#onStoreProblem } : {}),
     });
+  }
+
+  #assertNoDuplicateTools(): void {
+    const names = new Set<string>();
+    for (const tool of this.#tools) {
+      if (names.has(tool.name)) throw new Error(`Two tools are named '${tool.name}'.`);
+      names.add(tool.name);
+    }
   }
 
   /**

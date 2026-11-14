@@ -39,6 +39,11 @@ export interface AgentProfile {
   serverTools: string[] | null;
   knowledge: string[];
   localMcp: { mode: string; developerMode: boolean };
+  /**
+   * Whether the agent may load skills kept on this device (`local_skills`, core 0.7.1): `disable` unless the administrator
+   * allowed them. Absent from a server that does not say (read as `disable`). .NET: `AgentProfile.LocalSkills`.
+   */
+  localSkills?: { mode: string; developerMode: boolean };
   toolModes: ToolModeSettings;
   /** Absent on pre-0.7 servers. Never infer grants from the feature name alone. */
   approvals?: ApprovalSettings;
@@ -194,6 +199,8 @@ export function toAgentProfile(json: unknown): AgentProfile {
     serverTools: Array.isArray(p["server_tools"]) ? strings(p["server_tools"]) : null,
     knowledge: strings(p["knowledge"]),
     localMcp: { mode: str(localMcp["mode"]) ?? "disable", developerMode: localMcp["developer_mode"] === true },
+    ...(p["local_skills"] !== undefined ? { localSkills: { mode: str(obj(p["local_skills"])["mode"]) ?? "disable",
+      developerMode: obj(p["local_skills"])["developer_mode"] === true } } : {}),
     toolModes: {
       // Never Bypass (sdk/38 D2): a default the server names as Bypass is Ask.
       default: ((d) => (d && d !== "bypass" ? d : "ask"))(parseToolMode(str(modes["default"]))),

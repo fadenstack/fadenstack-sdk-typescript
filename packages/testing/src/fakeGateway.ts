@@ -163,6 +163,8 @@ export interface FakeToolRule {
 }
 
 export interface FakeGatewayOptions {
+  /** More features the profile lists (`approvals.idempotent`, ...), after the ones the fake always has. */
+  features?: readonly string[];
   agents?: FakeAgent[];
   users?: FakeUser[];
   model?: FakeModel;
@@ -858,7 +860,7 @@ export class FakeGateway {
         ...(agent.maxLevel !== undefined ? { max: agent.maxLevel } : {}), open_world_enforced: false },
       ui: agent.ui ?? {}, extensions: {}, required_client_modules: agent.requiredClientModules ?? [],
       ...(agent.localRetention !== undefined ? { local_retention: agent.localRetention } : {}),
-      edition: "community", features: this.grants ? ["agents", "approval_scopes.grant"] : ["agents"], user: { language: user.language ?? null },
+      edition: "community", features: [...(this.grants ? ["agents", "approval_scopes.grant"] : ["agents"]), ...(this.#options.features ?? [])], user: { language: user.language ?? null },
       ...(this.grants || this.#options.principal
         ? { principal: { tenant_id: "tenant-1", user_id: user.id, agent_id: agent.id, device_id: signIn.deviceId } } : {}),
       ...(this.grants && slug === [...this.#agents.keys()][0] ? { approvals: this.grants.profileApprovals(supports) } : {}),

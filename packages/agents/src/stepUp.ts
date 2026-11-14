@@ -140,7 +140,7 @@ export class StepUpProofs {
 
   async #signInAgain(handler: StepUpHandler, conversationId: string | undefined, longestMinutes: number | undefined,
     signal: AbortSignal): Promise<string> {
-    const api = this.#agent.client.agent!;
+    const api = this.#agent.backend;
     let started;
     try {
       started = await api.startStepUp(longestMinutes, this.#agent.grants.clientVersion, signal);

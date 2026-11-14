@@ -347,7 +347,7 @@ export class AgentChatViewModel extends Observable implements TurnHost {
     });
     this.tools = new ToolsViewModel({
       hostTools: () => (agent.isStarted ? agent.tools : []),
-      load: (signal) => agent.client.agent!.listTools(signal),
+      load: (signal) => agent.listServerTools(signal),
       strings: () => this.strings,
     });
     this.#unsubscribe = approvals.onRequested((pending) => this.#onApprovalRequested(pending), () => this.#session?.id);
@@ -462,7 +462,7 @@ export class AgentChatViewModel extends Observable implements TurnHost {
     return aboutView({
       agent: profile && { name: profile.name, version: profile.version, draft: profile.draft, model: profile.model },
       app: agent.app,
-      server: agent.client.transport.serverUrl,
+      server: agent.serverClient?.transport.serverUrl,
       refSource: this.#refSource,
     }, this.strings);
   }

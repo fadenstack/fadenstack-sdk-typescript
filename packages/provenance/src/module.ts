@@ -1,12 +1,16 @@
 import {
   DEFAULT_PROVENANCE_POLICY,
+  EndpointServer,
   FadenstackApiError,
+  SDK_VERSION,
   type ChatStreamer,
+  type EndpointMarking,
   type PlacementReport,
   type ProvenancePolicy,
   type ReceiptNote,
 } from "@fadenstack/client";
 import {
+  PolicyAccess,
   StageOrder,
   outputEditKind,
   toolServiceKey,
@@ -18,6 +22,7 @@ import {
 } from "@fadenstack/agents";
 
 import { ServerBackend } from "./backend.js";
+import { LocalProvenanceBackend, type LocalProvenanceOptions } from "./localBackend.js";
 import { isCode, isLabel, lengthClass, tokensOf } from "./content.js";
 import { HtmlAttributeMarker } from "./markers/htmlAttribute.js";
 import { HttpHeaderMarker } from "./markers/httpHeader.js";
@@ -34,6 +39,7 @@ import type { MarkStringsOption } from "./titles.js";
 import type {
   ContentMarker,
   EditClassifier,
+  EndpointLayer,
   Placement,
   PlacementObserver,
   PlaceRequest,
@@ -79,8 +85,16 @@ export interface ProvenanceOptions {
   enrichers?: readonly RecordEnricher[];
   /** See every placement. */
   observers?: readonly PlacementObserver[];
-  /** The server calls; the agent's server by default. */
+  /**
+   * Where policies, signatures and reports go; by default the agent's server, or the device for an agent without one (a
+   * standalone agent: LocalProvenanceBackend, sdk/51 F10).
+   */
   backend?: ProvenanceBackend;
+  /**
+   * How the device's own backend works for an agent without a server: the time-stamp authority, or none; the log's size. The
+   * machine policy may switch time-stamping off (F09). .NET: UseLocalBackend.
+   */
+  localBackend?: LocalProvenanceOptions;
   /** Local policy: it can only tighten the server's (refuse, a lower threshold, fewer exempt kinds, a label). */
   policy?: ProvenancePolicy;
   /**
@@ -166,7 +180,16 @@ class ModuleState {
   }
 
   backend(call: ToolServiceCall): ProvenanceBackend {
-    return (this.#backend ??= this.options.backend ?? new ServerBackend(call.agent.client));
+    return (this.#backend ??= this.options.backend ?? (call.agent.connection === "standalone" ? this.#local(call) : new ServerBackend(call.agent.client)));
+  }
+
+  #local(call: ToolServiceCall): LocalProvenanceBackend {
+    const agent = call.agent;
+    return new LocalProvenanceBackend(this.options.localBackend, {
+      system: () => ({ name: agent.app?.name || "Fadenstack SDK", version: agent.app?.version || SDK_VERSION }),
+      timestampingAllowed: () => agent.machinePolicy.timestamping === PolicyAccess.Allowed,
+      principal: () => agent.profile.principal,
+    });
   }
 
   policy(call: ToolServiceCall): Promise<Required<ProvenancePolicy>> {
@@ -215,6 +238,19 @@ class TurnReceipts {
   forCall(turnId: string, callId: string): ReceiptNote | undefined {
     return this.#turns.get(turnId)?.get(callId);
   }
+
+  readonly #markings = new Map<string, EndpointMarking>();
+
+  /** A person's own endpoint said what it did about its watermark for the turn's latest model call (F10). */
+  keepMarking(turnId: string, marking: EndpointMarking): void {
+    this.#markings.delete(turnId);
+    this.#markings.set(turnId, marking);
+    while (this.#markings.size > KEPT_TURNS) this.#markings.delete(this.#markings.keys().next().value!);
+  }
+
+  latestMarking(turnId: string): EndpointMarking | undefined {
+    return this.#markings.get(turnId);
+  }
 }
 
 /** Keeps the receipts a model call's answer ends with, with the tool calls the answer made. */
@@ -226,6 +262,7 @@ function receiptStage(inner: ChatStreamer, receipts: TurnReceipts): ChatStreamer
       try {
         for await (const update of inner.stream(messages, options)) {
           if (update.type === "receipt") notes.push(update.receipt);
+          else if (update.type === "endpoint_marking" && options?.turnId) receipts.keepMarking(options.turnId, update.marking);
           else if (update.type === "tool_calls") calls.push(...update.calls.map((c) => c.id));
           yield update;
         }
@@ -281,12 +318,16 @@ class CallProvenance implements Provenance {
     const call = this.#call;
     const output = call.tool.output;
     const receipt = this.receipt;
+    const connection = call.agent.endpointWatermark;
+    const endpoint: EndpointLayer | undefined = connection
+      ? { connection, answer: this.#state.receipts.latestMarking(call.turnId), server: serverName(call.agent.endpointServer) } : undefined;
     const model = call.agent.profile.model;
     return placeContent<Awaited<T>>(this.#state.settings, request, insert as Insert<Awaited<T>>, {
       tool: call.tool.name,
       callId: call.callId,
       ...(output ? { argument: output.argument, declaredEditKind: outputEditKind(output, call.arguments) } : {}),
       ...(receipt ? { receipt } : {}),
+      ...(endpoint ? { endpoint } : {}),
       ...(model ? { model } : {}),
       signal: call.signal,
       policy: () => this.policy(),
@@ -332,6 +373,11 @@ class CallProvenance implements Provenance {
         + "place it through place(), so it is not marked. Place it with provenanceOf(context).place(...) in the tool.");
     }
   }
+}
+
+/** The kind of server behind a standalone agent's endpoint, lower case, for the layer's method (ndpoint-ollama). */
+function serverName(server: string | undefined): string {
+  return !server || server === EndpointServer.Unknown ? "unknown" : server.toLowerCase();
 }
 
 const warned = new Set<string>();

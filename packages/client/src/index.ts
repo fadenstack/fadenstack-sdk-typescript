@@ -56,8 +56,8 @@ export {
 export { toAgentToolList, type AgentToolInfo } from "./serverTools.js";
 export { BYPASS_SUPPORTS, CLIENT_SUPPORTS_HEADER, FadenstackTransport, jsonRequest, type FetchLike, type RequestSpec, type TransportOptions } from "./http/transport.js";
 export { parseError, toApiError, retryAfterMs, type ParsedError } from "./http/errorReader.js";
-export { FadenstackChatClient, requestBody, toolCall, toFadenstackEvent, type ChatClientSettings } from "./chat/chatClient.js";
-export { readSse, type SseEvent } from "./chat/sse.js";
+export { FadenstackChatClient, StreamAssembler, requestBody, toolCall, toFadenstackEvent, type ChatClientSettings } from "./chat/chatClient.js";
+export { readSse, SSE_ENDPOINT_LIMITS, SSE_GATEWAY_LIMITS, type SseEvent, type SseLimits } from "./chat/sse.js";
 export {
   eventKind,
   type ChatMessage,
@@ -66,6 +66,7 @@ export {
   type ChatStreamer,
   type ChatUpdate,
   type ContentPart,
+  type EndpointMarking,
   type FadenstackEvent,
   type FinishReason,
   type JsonSchema,
@@ -180,3 +181,40 @@ export {
   type ToolMode,
   type ToolModeDecision,
 } from "./tools/toolModes.js";
+
+// The person's own model endpoint (sdk/51 F03; standalone mode). .NET: Fadenstack.Endpoints.
+export {
+  EndpointDialect,
+  EndpointPreset,
+  EndpointServer,
+  type KeyHeader,
+  type MaxTokensField,
+  type ModelEndpoint,
+  type ThinkingSwitch,
+  type WatermarkSwitchOff,
+} from "./endpoints/endpoint.js";
+export { endpointBase, endpointChatCompletions, endpointModels, endpointOrigin, endpointRoot, endpointRoute } from "./endpoints/endpointUrl.js";
+export { hostScope, type AddressScope } from "./endpoints/hostScope.js";
+export {
+  EndpointContextLengthError,
+  EndpointKeyRejectedError,
+  EndpointModelNotFoundError,
+  EndpointNotCompatibleError,
+  EndpointOriginRefusedError,
+  EndpointPlainHttpRefusedError,
+  EndpointUnreachableError,
+  ServerCertificateError,
+  type PlainHttpRefusal,
+} from "./endpoints/endpointErrors.js";
+export { ENDPOINT_PASS_THROUGH, endpointRequest, isDeterministic, isUnread, parseWatermarkHeader } from "./endpoints/endpointWire.js";
+export { EndpointTransport, checkPlainHttp, parseEndpointError, toEndpointError, ENDPOINT_MAX_BODY_CHARS, type EndpointRequest } from "./endpoints/endpointTransport.js";
+export { DirectChatClient } from "./endpoints/directChatClient.js";
+export { TextWatermark, TextWatermarks, type EndpointWatermarkStatus } from "./endpoints/textWatermarks.js";
+export {
+  EndpointCheck,
+  EndpointProblem,
+  EndpointReport,
+  byHost as endpointServerByHost,
+  type EndpointCheckOptions,
+  type EndpointReportData,
+} from "./endpoints/endpointCheck.js";

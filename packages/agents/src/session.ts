@@ -1,4 +1,6 @@
 import {
+  FadenstackApiError,
+  FadenstackError,
   FadenstackRateLimitedError,
   writeLog,
   conversationOnly,
@@ -10,8 +12,10 @@ import {
   parseToolMode,
   readNotice,
   receiptIdOf,
+  type AnswerScope,
   type ChatMessage,
   type ChatOptions,
+  type EndpointMarking,
   type AgentGrant,
   type ChatOutcome,
   type ReasoningEffort,
@@ -30,7 +34,7 @@ import type { FadenstackAgent } from "./agent.js";
 import { ApprovalDecision, type ApprovalHandler, type ApprovalRequest, type ApprovalScope } from "./approvals.js";
 import { BypassSignInError } from "./stepUp.js";
 import { attachmentData, type MessageAttachment } from "./attachments.js";
-import { ContextBuilder, isBlank } from "./contextBuilder.js";
+import { ContextBuilder, instructionsTokens, isBlank } from "./contextBuilder.js";
 import { EventQueue } from "./eventQueue.js";
 import type { AgentEvent, AgentResult, ToolOutcome } from "./events.js";
 import type { ToolInvocation, ToolInvoker, ToolServiceCall } from "./stages.js";
@@ -229,7 +233,7 @@ export class ChatSession {
 
   /** What the next request would carry as history. */
   get history(): ChatMessage[] {
-    return this.#context.build(this.#entries);
+    return this.#context.build(this.#entries, instructionsTokens(this.agent.settings.instructions));
   }
 
   /** Tools the user approved for the rest of this session ("Allow for this chat"), while this object lives. */
@@ -730,10 +734,14 @@ class Turn {
     // On every call of the turn, not the first only: the gateway gives a request the skills it names.
     if (this.#skills.length) options.skills = this.#skills;
     if (this.#effort) options.reasoningEffort = this.#effort;
+    // A standalone agent's instructions (its definition's, then the person's own, D7): set here, above the chat stages, so the
+    // stages see them and the history budget counts them (review R2). With a server the gateway adds the agent's.
+    if (this.#agent.settings.instructions) options.instructions = this.#agent.settings.instructions;
     let text = "";
     let finish: FinishReason | undefined;
     const calls: ToolCall[] = [];
     const receipts: ReceiptNote[] = [];
+    let marking: EndpointMarking | undefined;
     const history = this.#session.history;
     if (this.#bypassEnded) {
       // Before the person's newest message, every round of this turn: what the model may and may not do now.
@@ -765,6 +773,9 @@ class Turn {
         case "receipt":
           receipts.push(update.receipt);
           break;
+        case "endpoint_marking":
+          marking = update.marking; // a person's own endpoint says what it did about its watermark (F10)
+          break;
         case "finish":
           finish = update.reason;
           if (update.reason === "content_filter" && !this.#blocked) {
@@ -786,6 +797,16 @@ class Turn {
         origin: "model",
         // What made the answer, by the receipts' ids: never more of them than that.
         ...(receipts.length ? { receipts: receipts.map(receiptData) } : {}),
+        // Without a server: the endpoint's text watermark for this answer, as far as anyone can tell (F10): the connection's
+        // status, whether the request asked for it, the server's word (when it gave one), and deterministic sampling.
+        ...(marking ? {
+          endpoint_marking: {
+            status: this.#agent.endpointWatermark?.status,
+            requested: marking.requested,
+            ...(marking.confirmed === undefined ? {} : { confirmed: marking.confirmed }),
+            deterministic: marking.deterministic,
+          },
+        } : {}),
       });
     }
     if (this.#blocked) await this.#notice(this.#blocked);
@@ -924,8 +945,43 @@ class Turn {
       undefined, false, true);
     if (settled.timedOut) return; // the gateway expires it on its own
     const scope = settled.scope === "chat" || settled.scope === "always" ? settled.scope : "once";
-    await this.#agent.client.agent!.answerApproval(approvalId, settled.approved, scope, signal);
+    await this.#answerGateway(approvalId, settled.approved, scope, signal);
     if (!settled.approved) this.#toolDenied = true;
+  }
+
+  /**
+   * Sends the person's answer to a call the gateway holds: a short wait for it, then once more with the same body when
+   * nothing came back (no answer in time, the server unreachable, a proxy's 502, 503 or 504), since an answer lost on the way
+   * leaves the call waiting until the gateway's own timeout (the lost decline, release gate of 14 Nov). A gateway with
+   * `approvals.idempotent` takes a repeated answer once (core 0.7.1 rc17); an older one answers the repeat of a taken answer
+   * 404, which counts as taken: the stream says which. Any other refusal (409 and the rest) is not retried. .NET:
+   * `ChatSession.AnswerGatewayAsync`.
+   */
+  async #answerGateway(approvalId: string, approved: boolean, scope: AnswerScope, signal: AbortSignal): Promise<void> {
+    for (let attempt = 0; ; attempt++) {
+      // A controller and a timer of our own, not AbortSignal.any with AbortSignal.timeout: Node holds those weakly, and a
+      // collected one never fires, which would leave the answer hanging.
+      const waiting = new AbortController();
+      const timer = setTimeout(() => { waiting.abort(new DOMException("No word came back in time.", "TimeoutError")); }, this.#agent.approvalAnswerTimeoutMs);
+      const stop = () => { waiting.abort(signal.reason); };
+      signal.addEventListener("abort", stop, { once: true });
+      if (signal.aborted) stop();
+      try {
+        await this.#agent.backend.answerApproval(approvalId, approved, scope, waiting.signal);
+        return;
+      } catch (error) {
+        if (attempt === 0 && !signal.aborted && (waiting.signal.aborted || unanswered(error))) {
+          writeLog(this.#agent.settings.logger, AgentLog.approvalAnswerRetried, { Kind: error instanceof Error ? error.name : typeof error }, this.#scope);
+          continue;
+        }
+        // An older gateway: the first try was most likely taken.
+        if (attempt === 1 && error instanceof FadenstackApiError && error.status === 404 && !this.#agent.profile.features.includes(IDEMPOTENT_APPROVALS)) return;
+        throw error;
+      } finally {
+        clearTimeout(timer);
+        signal.removeEventListener("abort", stop);
+      }
+    }
   }
 
   /** The gateway's word on a call of the agent's own tool, kept until the round's calls are planned. */
@@ -1012,7 +1068,7 @@ class Turn {
       try {
         await this.#agent.refreshPolicy(signal);
         const inputJson = commandJson(args);
-        const decision = await this.#agent.client.agent!.checkHostTool({ name: tool.name, arguments: JSON.parse(inputJson) as Record<string, unknown>,
+        const decision = await this.#agent.backend.checkHostTool({ name: tool.name, arguments: JSON.parse(inputJson) as Record<string, unknown>,
           origin: "model_tool", callId: call.id, phase: "prepare", toolMode: narrowestMode(this.#mode, this.#session.effectiveToolMode),
           schemaSha256: await commandSchemaHash(tool.parameters), conversationId: this.#session.id, turnId: this.#id }, signal);
         if (!this.#agent.profile.principal || commandJson(decision.principal) !== commandJson(this.#agent.profile.principal))
@@ -1141,7 +1197,7 @@ class Turn {
       throw new Error("Host arguments changed after policy review. Transformed host arguments require a reviewed disclosure contract.");
     await this.#agent.refreshPolicy(signal);
     if (this.#approvalControlsJson() !== policy.controlsJson) throw new Error("Approval limits changed. Review a new host call.");
-    const checked = await this.#agent.client.agent!.checkHostTool({ name: invocation.tool.name,
+    const checked = await this.#agent.backend.checkHostTool({ name: invocation.tool.name,
       arguments: JSON.parse(policy.inputJson) as Record<string, unknown>, origin: "model_tool", callId: invocation.context.callId,
       phase: "dispatch", prepared: policy.decision, toolMode: narrowestMode(this.#mode, this.#session.effectiveToolMode),
       schemaSha256: await commandSchemaHash(invocation.tool.parameters), conversationId: this.#session.id, turnId: this.#id }, signal);
@@ -1169,7 +1225,7 @@ class Turn {
     const base = { name: invocation.tool.name, arguments: args, toolMode: this.#mode,
       schemaSha256: await commandSchemaHash(invocation.tool.parameters), origin: this.#commandOrigin!,
       conversationId: this.#session.id, turnId: this.#id };
-    const resource = this.#agent.client.agent!;
+    const resource = this.#agent.backend;
     const prepared = await resource.checkHostTool({ ...base, phase: "prepare" }, signal);
     if (!this.#agent.profile.principal || commandJson(prepared.principal) !== commandJson(this.#agent.profile.principal)) {
       throw new Error("The command's authenticated identity does not match the active agent profile.");
@@ -1553,4 +1609,13 @@ function abortReason(): Error {
   const error = new Error("The turn was stopped.");
   error.name = "AbortError";
   return error;
+}
+
+/** The server's feature: a repeated approval answer is taken once (core 0.7.1 rc17). */
+const IDEMPOTENT_APPROVALS = "approvals.idempotent";
+
+/** No word came back: the answer may or may not have been taken. A proxy's 502, 503 or 504, or an error that is not the server's word. */
+function unanswered(error: unknown): boolean {
+  if (error instanceof FadenstackApiError) return error.status === 502 || error.status === 503 || error.status === 504;
+  return error instanceof FadenstackError; // unreachable, or no answer within the transport's time
 }
