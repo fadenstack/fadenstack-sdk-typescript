@@ -12,6 +12,7 @@ import {
   ServerCertificateError,
 } from "./endpointErrors.js";
 import { EndpointTransport, toEndpointError } from "./endpointTransport.js";
+import { hostScope } from "./hostScope.js";
 import { endpointModels, endpointRoot } from "./endpointUrl.js";
 import { TextWatermarks, type EndpointWatermarkStatus } from "./textWatermarks.js";
 
@@ -40,6 +41,17 @@ export const EndpointProblem = Object.freeze({
   Failed: "Failed",
 } as const);
 export type EndpointProblem = (typeof EndpointProblem)[keyof typeof EndpointProblem];
+
+/** Where an endpoint's address points (`EndpointCheck.placeOf`). The strings are .NET's `EndpointPlace` names. */
+export const EndpointPlace = Object.freeze({
+  /** Loopback: 127.0.0.0/8, ::1, `localhost`. */
+  ThisComputer: "thisComputer",
+  /** A private range: RFC 1918, link-local, fc00::/7. */
+  LocalNetwork: "localNetwork",
+  /** Anything else, CGNAT included. */
+  Internet: "internet",
+} as const);
+export type EndpointPlace = (typeof EndpointPlace)[keyof typeof EndpointPlace];
 
 /** What the check is to do. */
 export interface EndpointCheckOptions {
@@ -236,16 +248,27 @@ export class EndpointCheck {
     return TextWatermarks.for(EndpointCheck.serverOf(endpoint), null, (endpoint.dialect ?? EndpointDialect.openAiCompatible).requestWatermark, null);
   }
 
+  /**
+   * Where an endpoint's address points, for the wizard's plain-http step (sdk/51 I15 §3, D3; OWASP ASVS 5.0 V12). **This
+   * differs from .NET's `PlaceOfAsync`, which resolves the name:** a browser cannot resolve names, so only the host's own
+   * spelling decides (`hostScope`), and a name that merely looks local counts as local. The transport decides again on what
+   * it sends. .NET: `EndpointCheck.PlaceOfAsync`.
+   */
+  static placeOf(url: string | URL): EndpointPlace {
+    const scope = hostScope(new URL(url).hostname);
+    return scope === "loopback" ? EndpointPlace.ThisComputer : scope === "private" ? EndpointPlace.LocalNetwork : EndpointPlace.Internet;
+  }
+
   /** The kind of server behind an endpoint by its host and dialect alone, with no request. .NET: `EndpointCheck.ServerOf`. */
   static serverOf(endpoint: ModelEndpoint): EndpointServer {
     return (endpoint?.baseUrl ? byHost(endpoint.baseUrl) : undefined) ?? byDialect(endpoint?.dialect ?? EndpointDialect.openAiCompatible);
   }
 
   async run(options: EndpointCheckOptions = {}): Promise<EndpointReport> {
-    const endpoint = this.#endpoint;
+    let endpoint = this.#endpoint;
     const signal = options.signal;
     const dialect = endpoint.dialect ?? EndpointDialect.openAiCompatible;
-    const model = endpoint.model ?? "";
+    let model = endpoint.model ?? "";
     const problems: EndpointProblem[] = [];
     let server = byHost(endpoint.baseUrl) ?? byDialect(dialect);
     let report: EndpointReportData = {
@@ -275,6 +298,14 @@ export class EndpointCheck {
         if (!stop) throw e;
         return finish({ ...report, reachable: stop.reachable, keyAccepted: stop.keyAccepted }, problems);
       }
+    }
+
+    // No model named yet (the wizard checks before the person picks one, F15): the first listed model stands in for the
+    // probes (the chat, the tools, the picture, the context lookup), and the report names it. .NET: the same block.
+    if (model.length === 0 && report.models.length > 0) {
+      model = report.models[0]!;
+      endpoint = { ...endpoint, model };
+      report = { ...report, model };
     }
 
     // The server's version where it says (vLLM's and SGLang's /version), for the watermark table.

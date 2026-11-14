@@ -1,4 +1,4 @@
-import { FadenstackApiError, FadenstackError, FadenstackSignInRequiredError, FadenstackUnreachableError } from "../errors.js";
+import { FadenstackApiError, FadenstackBadCredentialsError, FadenstackError, FadenstackSignInRequiredError, FadenstackUnreachableError } from "../errors.js";
 import { toApiError } from "../http/errorReader.js";
 import { redirectError, requireSecureUrl, type FetchLike } from "../http/transport.js";
 import { ClientLog, writeLog, type FadenstackLogger } from "../logging.js";
@@ -418,7 +418,7 @@ export async function loginWithPassword(options: PasswordLoginOptions): Promise<
   const text = await response.text();
   if (!response.ok) {
     if (response.status === 400 && text.includes("LOGIN_BAD_CREDENTIALS")) {
-      throw new FadenstackApiError(400, "The e-mail or password is not right.", { code: "LOGIN_BAD_CREDENTIALS" });
+      throw new FadenstackBadCredentialsError();
     }
     throw toApiError(response, text);
   }

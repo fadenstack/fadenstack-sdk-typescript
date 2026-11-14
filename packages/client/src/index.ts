@@ -8,6 +8,9 @@ export {
   FadenstackRateLimitedError,
   FadenstackStreamError,
   FadenstackSignInRequiredError,
+  FadenstackPairingPageElsewhereError,
+  FadenstackHttpsRequiredError,
+  FadenstackBadCredentialsError,
   isAbortError,
 } from "./errors.js";
 export {
@@ -24,6 +27,7 @@ export {
   type TokenSet,
   type TokenStore,
 } from "./auth/tokens.js";
+export { SERVER_CHECK_TIMEOUT_MS, checkServer, type ServerCheckOptions } from "./auth/serverCheck.js";
 export {
   AgentPairing,
   FadenstackPairingAgentError,
@@ -212,6 +216,7 @@ export { DirectChatClient } from "./endpoints/directChatClient.js";
 export { TextWatermark, TextWatermarks, type EndpointWatermarkStatus } from "./endpoints/textWatermarks.js";
 export {
   EndpointCheck,
+  EndpointPlace,
   EndpointProblem,
   EndpointReport,
   byHost as endpointServerByHost,

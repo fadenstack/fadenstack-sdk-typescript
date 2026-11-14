@@ -7,6 +7,7 @@ import {
   FadenstackPairingAgentError,
   FadenstackPairingDeniedError,
   FadenstackPairingExpiredError,
+  FadenstackPairingPageElsewhereError,
   FadenstackPairingUnsupportedError,
   FadenstackRateLimitedError,
   FadenstackSignInRequiredError,
@@ -97,7 +98,8 @@ describe("pairing: start", () => {
     for (const page of ["https://evil.example/pair", "https://faden.test:8443/pair", "http://faden.test/pair", "https://user:pw@faden.test/pair", "javascript:alert(1)"]) {
       const rig = new Rig();
       rig.startBody = { ...startAnswer(), verification_uri: page, verification_uri_complete: `${page}#code=BDWP-HTQX` };
-      await expect(rig.pairing().start(AGENT, "PC", APP)).rejects.toThrow(/pairing page is not on the server|not a web address/);
+      await expect(rig.pairing().start(AGENT, "PC", APP)).rejects.toThrow(/another address than its own|not a web address/);
+      if (page !== "javascript:alert(1)") await expect(rig.pairing().start(AGENT, "PC", APP)).rejects.toBeInstanceOf(FadenstackPairingPageElsewhereError);
     }
     const rig = new Rig();
     rig.startBody = { ...startAnswer(), verification_uri: "/pair", verification_uri_complete: "/pair#code=BDWP-HTQX" }; // relative: the server's own
@@ -343,7 +345,7 @@ describe("pairing against the fake server", () => {
 
   it("refuses a server whose page lies on another origin, and a limit is a rate-limit error", async () => {
     const hostile = new FakeGateway(options({ pairing: { pageOrigin: "https://evil.example" } }));
-    await expect(new AgentPairing({ apiUrl: hostile.serverUrl, fetch: hostile.fetch }).start("docs", "PC", APP)).rejects.toThrow(/not on the server/);
+    await expect(new AgentPairing({ apiUrl: hostile.serverUrl, fetch: hostile.fetch }).start("docs", "PC", APP)).rejects.toThrow(/another address than its own/);
     const limited = new FakeGateway(options({ pairing: { startLimit: 1 } }));
     const p = new AgentPairing({ apiUrl: limited.serverUrl, fetch: limited.fetch });
     await p.start("docs", "PC", APP);
