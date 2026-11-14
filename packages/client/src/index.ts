@@ -170,6 +170,7 @@ export {
   OPEN_WORLD_ENFORCED,
   TOOL_MODES,
   TOOL_MODE_HEADER,
+  conversationOnly,
   decideTool,
   effectiveToolClass,
   narrowestMode,

@@ -34,6 +34,12 @@ before 1.0, a minor version may break the API, and this file says where it does.
   tool under one would be taken for it.
 - A tool source's tool that loses its name to the app's own tool or to an earlier source is still left out, and is now
   logged with what won (event 2017).
+- **Open-world calls ask below auto** (`OPEN_WORLD_ENFORCED` is now true). In `read_only` and `ask`, a call to a tool
+  marked `openWorld` (or one the gateway marks `openWorld`) asks, a read one too; `auto` and `bypass` run it. Its card
+  offers Allow for this chat at most: Allow always and time grants are not offered below `auto`, and an "always"
+  saved before no longer answers it. `decideTool` takes the mark as a fourth argument; `conversationOnly` says when
+  the rule applies. What such a tool is given leaves the organisation, and injected text can put private data into it.
+  `@fadenstack/testing`: a `gatewayTool`'s `approval` can carry `openWorld`.
 
 - **Breaking:** `AgentSession` (`@fadenstack/agents`) is now `ChatSession`, as in the .NET SDK, where the agent becomes
   a Microsoft Agent Framework `AIAgent` with an `AgentSession` of its own; only the name changes.

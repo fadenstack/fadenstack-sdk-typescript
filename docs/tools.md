@@ -31,7 +31,7 @@ const readPage = defineTool<{ page: number }>({
 | `description` | What the tool does. The model reads it to decide when to call the tool. |
 | `parameters` | The arguments, as a JSON Schema object. Without it, the tool takes no arguments. |
 | `toolClass` | `read`, `write`, `destructive` or `unknown`. Without it, the class is `unknown`, and the tool asks before it runs in every mode that offers it. |
-| `openWorld` | The tool reaches outside the organisation. It is recorded and shown; no tool mode acts on it yet. |
+| `openWorld` | The tool reaches outside the organisation. Below `auto`, a call to it asks ([Open-world tools](#open-world-tools)). |
 | `output` | What the tool writes for people to read: `{ argument, mediaType, edit }`. See [Content people read](#content-people-read). |
 | `describe(args, signal)` | What a call acts on, in the user's words (`button "Send" on mail.example.com`), for the approval card. Called only when the user is asked; may return a promise. A failure, nothing, or no answer within 3 seconds leaves the card with the arguments. |
 | `run(args, context)` | The tool's body. Required. |
@@ -263,9 +263,11 @@ A call the tool mode or an administrator's rule asks about is settled by the fir
 1. An administrator's "Ask first" rule covers it: it asks, with Allow and Deny only, every time. Nothing below
    changes that.
 2. The tool is `destructive` or `unknown`: it asks, with Allow and Deny only, every time.
-3. The user allowed the tool always, under the class it has now: it runs without asking.
+3. The user allowed the tool always, under the class it has now: it runs without asking. Not for an open-world call
+   below `auto`.
 4. The user allowed the tool for this chat: it runs without asking.
-5. It asks, with Allow, Allow for this chat, Allow always and Deny.
+5. It asks, with Allow, Allow for this chat, Allow always and Deny; an open-world call below `auto` with Allow, Allow
+   for this chat and Deny.
 
 The chat panel's card for such a tool says where it comes from and, when nobody classified the tool, "Your organisation
 has not checked this tool." followed by the server's own hint (the warning wins when it gave both). The entry also keeps
@@ -277,6 +279,24 @@ Every outcome goes in the session's transcript as an `approval.decision` entry, 
 reported to the server the same way. A call a grant let through also records `grant_id`, and, where the person picked a
 time, `grant_minutes` (what they picked) and `grant_confirmed_minutes` (what the server confirmed); `outside_grant` says
 a link led the call's place out of a work grant's places and the person was asked: the same keys as the .NET SDK's.
+
+### Open-world tools
+
+A tool that reaches outside the organisation (`openWorld`, such as a web search) is open-world. What it is given leaves
+the organisation, and text the model read (a page, a mail, a file) can try to put private data into it (OWASP Top 10
+for LLM Applications 2025, LLM02 and LLM06). So:
+
+- In `read_only` and `ask`, a call to an open-world tool asks, a read one too. `auto` and `bypass` run it as its class
+  says.
+- The person may allow it for the rest of the conversation (Allow for this chat). Below `auto`, Allow always and a time
+  grant are not offered for it, and an "always" saved before does not answer it: the next conversation asks again. A
+  server grant that covers the call still covers it.
+- The mark is the stricter of the tool's own (`openWorld`) and the gateway's: a Fadenstack gateway from 0.7.1 says
+  `openWorld` when an administrator's class rule marks a tool, and for the SDK's `web_search`.
+- An agent's contract that sets `approval: "never"` for a read or write tool still runs it unasked, as for any tool the
+  mode would ask about.
+- `decideTool(mode, toolClass, approval, openWorld)` and `conversationOnly(mode, openWorld)` (`@fadenstack/client`)
+  say what applies.
 
 ### Allow always
 

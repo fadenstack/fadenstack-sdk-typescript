@@ -130,7 +130,8 @@ Call `chat.dispose()` when you remove the panel. It stops a running turn and sto
   are not `read` show their class, and server tools a badge. The line expands to the tool's input and output.
 - **Approvals are cards** with Allow, Allow for this chat, Allow always and Deny, above their tool's line. A tool
   that cannot be undone or that nobody classified, and a call an administrator's rule asks about, offer Allow and Deny
-  only: they ask every time. The title has a row of its own, with the tool's name in code; under it are the class and,
+  only: they ask every time. A tool that reaches outside the organisation offers Allow for this chat at most below
+  `auto` ([Open-world tools](tools.md#open-world-tools)). The title has a row of its own, with the tool's name in code; under it are the class and,
   for a tool from a local MCP server, where it comes from ("From Files, an MCP server on this computer") with the
   server's own hint (only reads, may delete or overwrite). A chat opened again draws the same cards. In the view model:
   `ApprovalPart.titleParts`, `sourceLine`, `hasSourceLine` and `reason`.

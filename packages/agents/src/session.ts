@@ -1,6 +1,7 @@
 import {
   FadenstackRateLimitedError,
   writeLog,
+  conversationOnly,
   decideTool,
   eventKind,
   isRefusal,
@@ -83,12 +84,19 @@ interface SessionAccess {
 
 /**
  * A call of the agent's own tool the gateway marked (`faden.approval_required` without an approvalId): an admin's
- * "Ask first" rule, or the class the gateway holds for the tool, which the session never takes looser than its own.
+ * "Ask first" rule, or the class the gateway holds for the tool, which the session never takes looser than its own; and
+ * whether the gateway holds it open-world (taken with the tool's own mark: either makes it open-world).
  */
 interface GatewayMark {
   rule: boolean;
   toolClass: ToolClass | undefined;
   message: string;
+  openWorld?: boolean;
+}
+
+/** Whether the gateway's word says it holds the tool open-world (`openWorld: true`; from 0.7.1). */
+function saysOpenWorld(value: unknown): boolean {
+  return typeof value === "object" && value !== null && (value as Record<string, unknown>)["openWorld"] === true;
 }
 
 /**
@@ -117,12 +125,13 @@ interface PlannedCall {
   mark: GatewayMark | undefined;
 }
 
-/** Two marks on one call: a rule wins, the stricter class wins. */
+/** Two marks on one call: a rule wins, the stricter class wins, open-world wins. */
 function mergeMarks(a: GatewayMark, b: GatewayMark): GatewayMark {
   return {
     rule: a.rule || b.rule,
     toolClass: a.toolClass === undefined ? b.toolClass : stricterClass(a.toolClass, b.toolClass),
     message: b.rule && !a.rule ? b.message : a.message,
+    ...(a.openWorld || b.openWorld ? { openWorld: true } : {}),
   };
 }
 
@@ -903,6 +912,7 @@ class Turn {
       source: "gateway",
       reason: str(value, "message") ?? "",
       arguments: {},
+      ...(saysOpenWorld(value) ? { openWorld: true } : {}),
     };
     const timeoutS = (value as Data)["timeoutS"];
     // A gateway that does not say whether a rule asks is taken as one: it asks every time.
@@ -922,6 +932,7 @@ class Turn {
       rule: (value as Data)["rule"] !== false,
       toolClass: toolClass === undefined ? undefined : parseToolClass(toolClass),
       message: str(value, "message") ?? "",
+      ...(saysOpenWorld(value) ? { openWorld: true } : {}),
     } });
   }
 
@@ -1017,7 +1028,9 @@ class Turn {
       }
     }
     const contractApproval = this.#agent.profile.hostToolContract.find(entry => entry.name === tool.name)?.approval;
-    const decision = decideTool(this.#mode, toolClass, contractApproval);
+    // The stricter mark: the tool's own or the gateway's makes the call open-world, which asks below auto (F08 §4).
+    const openWorld = tool.openWorld === true || mark?.openWorld === true;
+    const decision = decideTool(this.#mode, toolClass, contractApproval, openWorld);
     if (decision === "hidden") {
       this.#toolDenied = true;
       const why = `the tool mode is ${this.#mode}`;
@@ -1041,9 +1054,11 @@ class Turn {
         source: tool.source,
         reason: rule ? mark?.message ?? "This tool requires individual approval."
           : toolClass === "unknown" ? "Nobody has said what this tool does."
+          : openWorld && decideTool(this.#mode, toolClass) === "run"
+            ? `What '${tool.name}' is given leaves the organisation; the tool mode is ${this.#mode}.`
           : `'${tool.name}' is ${toolClass}; the tool mode is ${this.#mode}.`,
         arguments: args,
-        ...(tool.openWorld ? { openWorld: true } : {}),
+        ...(openWorld ? { openWorld: true } : {}),
         ...(tool.server ? { server: tool.server } : {}),
         ...(tool.readOnlyHint !== undefined ? { readOnlyHint: tool.readOnlyHint } : {}),
         ...(tool.destructiveHint !== undefined ? { destructiveHint: tool.destructiveHint } : {}),
@@ -1158,7 +1173,7 @@ class Turn {
     }
     const toolClass = stricterClass(invocation.toolClass, prepared.toolClass);
     const mode = narrowestMode(this.#mode, prepared.effectiveToolMode);
-    const decision = decideTool(mode, toolClass);
+    const decision = decideTool(mode, toolClass, undefined, invocation.tool.openWorld);
     if (prepared.decision === "deny" || decision === "hidden") {
       this.#toolDenied = true;
       await this.#notice({ outcome: "tool_denied", stage: "tool", message: prepared.message });
@@ -1203,7 +1218,10 @@ class Turn {
     const open = !individual && !rule && !asksEveryTime(toolClass);
     const allowed = (kind: "chat" | "always") => this.#agent.profile.approvals?.standing == null
       || this.#agent.profile.approvals.standing.includes(kind);
-    const chatAllowed = open && allowed("chat"), alwaysAllowed = open && allowed("always");
+    // An open-world call below auto is approved for this conversation at most: "always" and a time grant do not answer it
+    // and are not offered (F08 §4). A grant the server says covers it still does: the grant is the server's.
+    const chatOnly = conversationOnly(this.#mode, base.openWorld);
+    const chatAllowed = open && allowed("chat"), alwaysAllowed = open && !chatOnly && allowed("always");
     // A grant the gateway said covers the call (the first line) and the server's current grant holds for it (the second). A
     // destructive or unclassified call only under the conversation's Bypass grant while the turn runs in Bypass; a person's
     // own command, an admin's rule and a tool that asks every time never.
@@ -1228,7 +1246,7 @@ class Turn {
       return { approved: true, scope: standing, timedOut: false, waitedMs: undefined, reason: undefined };
     }
     const described = target ? await target() : undefined;
-    const grantDurations = open && this.#agent.grants.offers("time") && ["read", "write"].includes(toolClass)
+    const grantDurations = open && !chatOnly && this.#agent.grants.offers("time") && ["read", "write"].includes(toolClass)
       && this.#agent.profile.approvals!.grantClasses.includes(toolClass as "read" | "write") ? this.#agent.grants.choices : [];
     const request: ApprovalRequest = {
       ...base, canAllowForSession: chatAllowed, canAllowAlways: alwaysAllowed,

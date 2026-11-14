@@ -129,10 +129,11 @@ export interface FakeReply {
     arguments?: Record<string, unknown>;
     result?: string;
     /**
-     * It waits for the client's answer. `rule` (whether an admin's rule asks) and `toolClass` are sent when given,
-     * as a current gateway sends them; without them the event is an older gateway's.
+     * It waits for the client's answer. `rule` (whether an admin's rule asks), `toolClass` and `openWorld` (the
+     * gateway holds the tool open-world, from 0.7.1) are sent when given, as a current gateway sends them; without them
+     * the event is an older gateway's.
      */
-    approval?: { message?: string; timeoutS?: number; rule?: boolean; toolClass?: string };
+    approval?: { message?: string; timeoutS?: number; rule?: boolean; toolClass?: string; openWorld?: boolean };
   };
   /** A client tool the gateway refuses (`faden.tool_denied`), e.g. by a tool rule. */
   deniedTool?: { name: string; message: string; callId?: string };
@@ -1117,6 +1118,7 @@ export class FakeGateway {
         timeoutS: tool.approval.timeoutS ?? 300,
         ...(tool.approval.toolClass !== undefined ? { toolClass: tool.approval.toolClass } : {}),
         ...(tool.approval.rule !== undefined ? { rule: tool.approval.rule } : {}),
+        ...(tool.approval.openWorld !== undefined ? { openWorld: tool.approval.openWorld } : {}),
       } }));
       const approved = await answered;
       this.#pendingApprovals.delete(approvalId);

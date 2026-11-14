@@ -51,6 +51,7 @@ This table is for SDK 0.3.0, against Fadenstack server 0.7.1. TypeScript names a
 | Local MCP servers, `find_tool` | `Fadenstack.Mcp`: `AddLocalMcp`, `LocalMcpModule` | `OnRequestTools` over the host's own tools | A browser cannot start a process. See [Local tools](local-tools.md). |
 | The SDK's own tool names (`find_tool`, `load_skill`, `read_skill_resource`, `run_skill_script`, `web_search`) | `AgentTool.ReservedNames`; `AddTool`/`AddTools` refuse them (`ArgumentException`); a local MCP server's are left out | `RESERVED_TOOL_NAMES`; `addTools` and `OnRequestTools` refuse them (`TypeError`) | |
 | A tool source's tool whose name is taken | Left out (the app's tool wins, then the first source), logged (event 2017) | The same (event 2017) | |
+| Open-world calls ask below Auto | `ToolModes.Decide(mode, class, openWorld)`, `ToolModes.ConversationOnly`, `OpenWorldEnforced` true | `decideTool(mode, class, approval, openWorld)`, `conversationOnly`, `OPEN_WORLD_ENFORCED` true | |
 | SDK ids for empty or repeated call ids | `fs-{turn}-{round}-{index}` | `fs-{turn}-{round}-{index}` | |
 
 ## Stages, modules and services
