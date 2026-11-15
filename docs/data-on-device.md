@@ -9,7 +9,7 @@ data in folders ([.NET: Data on the device](../dotnet/data-on-device.md)).
 
 | Where the agent runs | What the SDK writes |
 |---|---|
-| A web page | IndexedDB databases of the page's origin, below. |
+| A web page | IndexedDB databases of the page's origin, below, and `localStorage` keys of the chat helpers. |
 | A browser extension | The same, in the extension's own origin: its pages and its service worker share them. |
 | Node, or anywhere without IndexedDB | Nothing. Sessions, "Allow always", the thinking level, skills, MCP servers and the provenance key live in memory for the run, and no encryption key is made. |
 
@@ -32,12 +32,12 @@ A database's name is its base name, the tenant and the user, each escaped (`user
 |---|---|---|---|---|---|
 | `fadenstack-sessions` | `@fadenstack/agents` | The chats: each session's transcript, entry by entry, and a small list entry per session ([The transcript](sessions.md#the-transcript)). | Encrypted with the person's key (see [Encryption](sessions.md#encryption)); only the record keys stay in the clear: the agent, the session id and the sequence number. | The newest 50 sessions per agent, none older than 90 days; the others go when a new session starts. `useSessionRetention` and the server's `local_retention` lower the limits ([Retention](sessions.md#retention)). | Exported, decrypted; deleted. |
 | `fadenstack-approvals` | `@fadenstack/agents` | "Allow always": each tool, its class, and when it was allowed. | Encrypted; the agent and the tool's name stay in the clear. | Until the person resets them (`resetApprovals`). | Exported; deleted. |
-| `fadenstack-keys` | `@fadenstack/agents` | The person's AES-GCM key for the two databases above: a WebCrypto key that is not extractable. Script can use it, never read its bytes. | The browser's. | Until deleted; a new key is made afterwards. | Never exported; deleted, so a copy of the profile restored later can never be read. |
-| `fadenstack-preferences` | `@fadenstack/agents` | How long the person lets each agent think. | Not encrypted. | Until the person changes it. | Not exported; deleted. |
-| `fadenstack-skills` | `@fadenstack/skills` | The person's own skills ([Skills](skills.md)). | Not encrypted. | Until the person deletes a skill in the editor. | Not exported (the editor exports a skill as a zip); deleted. |
-| `fadenstack-skill-switches` | `@fadenstack/skills` | The skills the person turned off. | Not encrypted. | Until the person changes it. | Not exported; deleted. |
-| `fadenstack-mcp` | `@fadenstack/mcp` | The person's own MCP servers: the address, on or off, the trust mark, the person's raises, the local-network switch, and the header names and values. Beside them, the device's audit log of that switch: the time, the server's origin, on or off, the warning's version and the person ([Local MCP servers](local-mcp.md)). | The header values are sealed with the person's key; the rest is not encrypted. | The servers: until the person removes one. The audit log: the newest 500 lines. | Not exported; deleted. |
-| `fadenstack-provenance` (standalone) | `@fadenstack/provenance` | The device's signing key, the signed provenance records with their time-stamps, and the log of placements: hashes, the media type and the kind of edit, never the content ([Marking AI-generated content](provenance.md)). | The key is a WebCrypto key that is not extractable; the records and the log are not encrypted. | The key and the records: until deleted. The log: the newest 2,000 entries. | Not exported (`keptRecords()` and `placements()` read them); deleted. |
+| `fadenstack-keys` | `@fadenstack/agents` | The person's AES-GCM key for the two databases above: a WebCrypto key that is not extractable. Script can use it, never read its bytes. | The browser's. | Until deleted; a new key is made afterwards. | Never exported (a key); deleted, so a copy of the profile restored later can never be read. |
+| `fadenstack-preferences` | `@fadenstack/agents` | How long the person lets each agent think. | Not encrypted. | Until the person changes it. | Exported as the records are; deleted. |
+| `fadenstack-skills` | `@fadenstack/skills` | The person's own skills ([Skills](skills.md)). The skills module learns whose they are from the agent's profile when the agent first asks for tools, whatever the policy says (local skills off included; standalone: the standalone principal). Before that its list holds the bundled skills only and a change is refused (`SkillsPersonUnknownError`: "Whose skills these are is not known yet: start the agent first"), so no skill reaches the wrong person's database. | Not encrypted. | Until the person deletes a skill in the editor. | Exported as the records are (the editor also exports a skill as a zip); deleted. |
+| `fadenstack-skill-switches` | `@fadenstack/skills` | The skills the person turned off. | Not encrypted. | Until the person changes it. | Exported as the records are; deleted. |
+| `fadenstack-mcp` | `@fadenstack/mcp` | The person's own MCP servers: the address, on or off, the trust mark, the person's raises, the local-network switch, and the header names and values. Beside them, the device's audit log of that switch: the time, the server's origin, on or off, the warning's version and the person ([Local MCP servers](local-mcp.md)). | The header values are sealed with the person's key; the rest is not encrypted. | The servers: until the person removes one. The audit log: the newest 500 lines. | Exported without the sealed header values: per server the label, the address without user, password, query and fragment, on or off, the trust mark, the raises, the time limit, where it was imported from, whether it was reviewed, the local-network switch and the header names (a field not on that list stays out); the audit log as it is. Deleted. |
+| `fadenstack-provenance` (standalone) | `@fadenstack/provenance` | The device's signing key, the signed provenance records with their time-stamps, and the log of placements: hashes, the media type and the kind of edit, never the content ([Marking AI-generated content](provenance.md)). | The key is a WebCrypto key that is not extractable; the records and the log are not encrypted. | The key and the records: until deleted. The log: the newest 2,000 entries. | The records and the log are exported (`keptRecords()` and `placements()` read them too); the key never is. Deleted. |
 
 In governed mode the server signs and keeps the provenance records, so nothing of provenance is written to the person's
 databases.
@@ -46,17 +46,25 @@ Earlier TypeScript versions wrote the sessions and "Allow always" as plain recor
 opened with a key, they are read once and written back encrypted. Where the page has no WebCrypto (an insecure page),
 the stores keep plain records.
 
-## Shared by the origin
+## A person's `localStorage` keys
 
-Two helpers of `@fadenstack/ui-web` keep a chat panel's choices in the browser's `localStorage`, when the app uses them.
-They are not per person: every panel of the site or extension shares them.
+Two helpers of `@fadenstack/ui-web` keep a chat panel's choices in the browser's `localStorage`, when the app uses them. They
+are per person: the key carries the principal as `userStoreName` writes it (`userLocalKey`, in `@fadenstack/agents`), as in
+`fadenstack.prompts:<tenant>:<user>`, and the standalone principal is its own person (`...:standalone:standalone`). The chat
+tells them whose they are (the principal of the agent's profile, once the agent has started) and they follow a sign-in as
+another person; until then they read nothing and a prompt is not saved. A server that names no user keeps the one shared key
+(`fadenstack.prompts`), as an older SDK did.
 
 | Key | Written by | What it holds | Export and delete |
 |---|---|---|---|
-| `fadenstack.language`, `fadenstack.unmarkedNotice` | `browserPreferences()` | The language picked in the panel; the notice for an answer without an AI mark ([The chat panel](chat-panel.md)). | Not in `exportMyData` or `deleteMyData`. |
-| `fadenstack.prompts` | `browserPromptStore()` | The person's saved prompts. | Not in `exportMyData` or `deleteMyData`. |
+| `fadenstack.language:<person>`, `fadenstack.unmarkedNotice:<person>` | `browserPreferences()` | The language picked in the panel; the notice for an answer without an AI mark ([The chat panel](chat-panel.md)). | Exported (`localStorage`); deleted and counted in `storesCleared`. |
+| `fadenstack.prompts:<person>` | `browserPromptStore()` | The person's saved prompts. | Exported (`localStorage`); deleted and counted in `storesCleared`. |
 
-Where there is no `localStorage`, or the browser refuses a write, they keep the choice in memory.
+Where there is no `localStorage`, or the browser refuses a write, they keep the choice in memory. Earlier versions kept these
+three under the shared keys above for everyone in the browser profile. The standalone principal reads the shared key while it
+has none of its own (the choices were made by the one person of a standalone app) and writes its own on the next change; the
+shared key is left alone, and `deleteMyData` removes it for the standalone principal too, so that a deletion is not undone by the
+next read. Another person never adopts it.
 
 ## There is no older shared store to move
 
@@ -71,8 +79,8 @@ A person can ask for the data a device holds about them (GDPR Art. 15 and 20) an
 
 | Call | What it covers | What it leaves |
 |---|---|---|
-| `agent.exportMyData()` | One JSON document with the person's sessions, decrypted, and their "Allow always" approvals. | Tokens and secrets, which are never exported; the thinking level; skills and their switches; the MCP servers and their audit log; the standalone provenance records and log; the `localStorage` keys; what the server keeps. |
-| `agent.deleteMyData()` | The person's databases, all eight, their key with them. Afterwards the stores start empty, with a new key. From a server that names no user: the shared databases. | The sign-in (sign out for that); the `localStorage` keys; another person's databases (deleting a governed person's data leaves the standalone principal's, and the other way round); a store your app passed (`hostStoresLeft`); what the server keeps. |
+| `agent.exportMyData()` | One JSON document (`format` and `version` 1; the newer fields are optional) with everything the deletion removes, without secrets: the person's sessions, decrypted, and their "Allow always" approvals; `databases`: the preferences, skills and switches as the records are, the provenance records and placement log, the MCP servers (without header values, the address without user, password, query and fragment) and their audit log, each read by an allowlist per database and object store; `localStorage`: the person's keys. A row that is not plain JSON data is counted in `counts.unreadable`, not exported. | Tokens and secrets, never exported; the `fadenstack-keys` database and the provenance signing key; the MCP header values; what the server keeps. |
+| `agent.deleteMyData()` | The person's databases, all eight, their key with them, and their `localStorage` keys (`storesCleared` counts both). Afterwards the stores start empty, with a new key. From a server that names no user: the shared databases and keys. | The sign-in (sign out for that); another person's databases (deleting a governed person's data leaves the standalone principal's, and the other way round); a store your app passed (`hostStoresLeft`); what the server keeps. |
 | `tokens.signOut()` | Revokes the sign-in on the server where it can be reached, and deletes it from the token store. | The person's databases. |
 | `agent.deleteSession(id)`, `agent.resetApprovals()` | One session; this agent's "Allow always". | |
 

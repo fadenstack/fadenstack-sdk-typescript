@@ -84,8 +84,10 @@ person as a download):
 | `format`, `version`, `exportedAt` | `"fadenstack-my-data"`, `1`, and when. |
 | `sessions` | Every session of every agent the SDK's stores hold: `agent`, `id`, `started`, `lastActivity`, `title` and all `entries`, decrypted. |
 | `approvals` | Per agent, the tools allowed always. |
-| `counts` | `agents`, `sessions`, `approvals`, and `unreadable`: records that did not decrypt, which cannot be handed over. |
-| `notIncluded` | What is not in it: sign-in tokens and secrets (never exported) and what the server keeps (ask its operator). |
+| `databases` | The person's other databases, by an allowlist per database and object store: `preferences`, `skills`, `skill-switches`, `provenance` (the records and the placement log, never the key), `mcp` (the servers without their header values, the address without user, password, query and fragment; and the audit log). A database that does not exist is absent. |
+| `localStorage` | The person's `localStorage` entries (the panel's language and notice, the saved prompts): `name` and `value`. |
+| `counts` | `agents`, `sessions`, `approvals`, `databases`, `records`, `localStorage`, and `unreadable`: records that did not decrypt or are not plain data, which cannot be handed over. |
+| `notIncluded` | What is not in it: sign-in tokens, keys and the MCP header values (never exported) and what the server keeps (ask its operator). |
 
 A store you passed yourself is read for this agent only (it cannot name its agents). [Data on the device](data-on-device.md#export-and-delete)
 lists what the export and the deletion leave.
@@ -99,7 +101,7 @@ clears the shared databases of an older SDK. The result:
 
 | Field | What it is |
 |---|---|
-| `storesCleared` | How many of the SDK's IndexedDB databases existed and were removed (at most eight). Stores in memory are simply dropped. The .NET SDK reports folders (`FoldersRemoved`). |
+| `storesCleared` | How many of the SDK's IndexedDB databases existed and were removed (at most eight), plus the person's `localStorage` keys removed. Stores in memory are simply dropped. The .NET SDK reports folders (`FoldersRemoved`). |
 | `hostSessionStoreLeft`, `hostApprovalStoreLeft` | A store you passed with `useSessionStore` / `useApprovalStore` is **not** deleted: it may hold other people's data. The flag says it was left. |
 | `hostStoresLeft` | Either of them: the person's data may still be in a store the host keeps. Delete their part there. |
 
