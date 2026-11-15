@@ -139,7 +139,7 @@ export function runChecks(root: HTMLElement, palette: Palette): { failures: Fail
     // -- boundaries of fields, check boxes, radios, switches, outlined buttons (1.4.11) --
     for (const el of all) {
       if ((el as HTMLButtonElement).disabled) continue;
-      const outlined = el.matches("button.fdn-button:not(.fdn-primary):not(.fdn-quiet)");
+      const outlined = el.matches("button.fdn-button:not(.fdn-primary):not(.fdn-quiet), button.fdn-suggestion");
       const filled = el.matches("button.fdn-button.fdn-primary");
       if (!(isField(el) || isCheck(el) || outlined || filled)) continue;
       const b = boundaryOf(el, base);
@@ -183,7 +183,21 @@ export function runChecks(root: HTMLElement, palette: Palette): { failures: Fail
       }
     }
   };
+  // Which of the three each kind of element takes: controls 6, chips 8, cards and choice cards 12.
+  const roleRadius = (el: Element): number | undefined => {
+    if (el.matches("input[type=radio], [role=switch], .fdn-spinner")) return undefined;
+    if (isField(el) || isCheck(el)) return 6;
+    if (el.matches(".fdn-wizard-presets > button, .fdn-badge")) return 8;
+    if (el.matches("button.fdn-suggestion")) return 12;
+    if (el.matches("button.fdn-button")) return 6;
+    return undefined;
+  };
   for (const el of all) {
+    const want = roleRadius(el);
+    if (want !== undefined) {
+      const got = getComputedStyle(el).borderTopLeftRadius;
+      if (parseFloat(got) !== want || got.includes("%")) fail("radius-role", el, `radius ${got}, this kind takes ${want}px`);
+    }
     seeRadius(el, null);
     seeRadius(el, "::before");
     seeRadius(el, "::after");
