@@ -28,7 +28,7 @@ const mcp = mcpModule({
 const agent = FadenstackAgent.createBuilder().useEndpoint(endpoint).useLocalProfile(definition).use(mcp).build();
 ```
 
-**The person's own servers** live in IndexedDB, one database per principal (`fadenstack-mcp`). Standalone is its own principal, and `deleteMyData` removes them. A header value (a token) is sealed with the principal's WebCrypto key.
+**The person's own servers** live in IndexedDB, one database per principal (`fadenstack-mcp`). Standalone is its own principal, and `deleteMyData` removes them. A header value (a token) is sealed with the principal's WebCrypto key. [Data on the device](data-on-device.md) lists it with the SDK's other databases.
 
 The person's list (`McpModule`):
 

@@ -11,7 +11,7 @@ data in folders ([.NET: Data on the device](../dotnet/data-on-device.md)).
 |---|---|
 | A web page | IndexedDB databases of the page's origin, below. |
 | A browser extension | The same, in the extension's own origin: its pages and its service worker share them. |
-| Node, or anywhere without IndexedDB | Nothing. Sessions, "Allow always", the thinking level, skills and the provenance key live in memory for the run, and no encryption key is made. |
+| Node, or anywhere without IndexedDB | Nothing. Sessions, "Allow always", the thinking level, skills, MCP servers and the provenance key live in memory for the run, and no encryption key is made. |
 
 IndexedDB belongs to one origin: other websites and other extensions cannot read it. Clearing the site's data in the
 browser, or removing the extension, deletes everything below. The SDK writes no cookies, no `sessionStorage`, no Cache
@@ -36,6 +36,7 @@ A database's name is its base name, the tenant and the user, each escaped (`user
 | `fadenstack-preferences` | `@fadenstack/agents` | How long the person lets each agent think. | Not encrypted. | Until the person changes it. | Not exported; deleted. |
 | `fadenstack-skills` | `@fadenstack/skills` | The person's own skills ([Skills](skills.md)). | Not encrypted. | Until the person deletes a skill in the editor. | Not exported (the editor exports a skill as a zip); deleted. |
 | `fadenstack-skill-switches` | `@fadenstack/skills` | The skills the person turned off. | Not encrypted. | Until the person changes it. | Not exported; deleted. |
+| `fadenstack-mcp` | `@fadenstack/mcp` | The person's own MCP servers: the address, on or off, the trust mark, the person's raises, the local-network switch, and the header names and values. Beside them, the device's audit log of that switch: the time, the server's origin, on or off, the warning's version and the person ([Local MCP servers](local-mcp.md)). | The header values are sealed with the person's key; the rest is not encrypted. | The servers: until the person removes one. The audit log: the newest 500 lines. | Not exported; deleted. |
 | `fadenstack-provenance` (standalone) | `@fadenstack/provenance` | The device's signing key, the signed provenance records with their time-stamps, and the log of placements: hashes, the media type and the kind of edit, never the content ([Marking AI-generated content](provenance.md)). | The key is a WebCrypto key that is not extractable; the records and the log are not encrypted. | The key and the records: until deleted. The log: the newest 2,000 entries. | Not exported (`keptRecords()` and `placements()` read them); deleted. |
 
 In governed mode the server signs and keeps the provenance records, so nothing of provenance is written to the person's
@@ -70,8 +71,8 @@ A person can ask for the data a device holds about them (GDPR Art. 15 and 20) an
 
 | Call | What it covers | What it leaves |
 |---|---|---|
-| `agent.exportMyData()` | One JSON document with the person's sessions, decrypted, and their "Allow always" approvals. | Tokens and secrets, which are never exported; the thinking level; skills and their switches; the standalone provenance records and log; the `localStorage` keys; what the server keeps. |
-| `agent.deleteMyData()` | The person's databases, all seven, their key with them. Afterwards the stores start empty, with a new key. From a server that names no user: the shared databases. | The sign-in (sign out for that); the `localStorage` keys; another person's databases (deleting a governed person's data leaves the standalone principal's, and the other way round); a store your app passed (`hostStoresLeft`); what the server keeps. |
+| `agent.exportMyData()` | One JSON document with the person's sessions, decrypted, and their "Allow always" approvals. | Tokens and secrets, which are never exported; the thinking level; skills and their switches; the MCP servers and their audit log; the standalone provenance records and log; the `localStorage` keys; what the server keeps. |
+| `agent.deleteMyData()` | The person's databases, all eight, their key with them. Afterwards the stores start empty, with a new key. From a server that names no user: the shared databases. | The sign-in (sign out for that); the `localStorage` keys; another person's databases (deleting a governed person's data leaves the standalone principal's, and the other way round); a store your app passed (`hostStoresLeft`); what the server keeps. |
 | `tokens.signOut()` | Revokes the sign-in on the server where it can be reached, and deletes it from the token store. | The person's databases. |
 | `agent.deleteSession(id)`, `agent.resetApprovals()` | One session; this agent's "Allow always". | |
 
@@ -103,8 +104,9 @@ The conversation stays on the device. The server keeps usage and governance data
 - **Model requests** pass through the server's gateway on their way to the model, where the organisation's policies
   apply ([Personal data](../../concepts/personal-data.md)), and are counted for usage.
 - **The agent's events,** with the session's id: `tool.executed` (the tool, its source, its duration and outcome),
-  `approval.decided` (the tool, the decision, how long the person took, what let it through) and `session.stats`
-  (counts, and the retention in force).
+  `approval.decided` (the tool, the decision, how long the person took, what let it through), `session.stats`
+  (counts, and the retention in force) and `local_mcp.plain_http` (an MCP server's origin, and whether its local-network
+  switch is on, where the profile's features list `client_events.local_mcp_plain_http`).
 - **The app manifest:** the app's name and version, the SDK's version, the host tools with their classes, and the
   context and greeting the app describes ([The app manifest](tools.md#the-app-manifest)).
 - **The person's settings,** such as their language, and the device's sign-in with its label, until it is revoked.
