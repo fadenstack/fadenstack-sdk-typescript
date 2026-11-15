@@ -117,7 +117,7 @@ export {
   type ClipboardContent,
   type UiScheduler,
 } from "./services.js";
-export { englishStrings, minutesAndSeconds, withStrings, type UiStrings } from "./strings.js";
+export { PLAIN_HTTP_WARNING_VERSION, englishStrings, minutesAndSeconds, withStrings, type UiStrings } from "./strings.js";
 export { MemoryPreferenceStore, type PreferenceStore } from "./preferences.js";
 export {
   builtInStrings,
@@ -209,3 +209,17 @@ export {
   type SkillDraftMessage,
   type SkillDraftOptions,
 } from "./skills/skillDraft.js";
+// The Tools view (sdk/51 F05). .NET: Fadenstack.UI.Tools.
+export { ToolsPageViewModel, type ToolsPageOptions, type ToolsSheet } from "./localTools/toolsPage.js";
+export { LocalServerViewModel, ServerStatusKind, originName, refusalText, toolCountText, type ToolChipViewModel } from "./localTools/serverCards.js";
+export { CloudGroupViewModel, type CloudToolViewModel } from "./localTools/toolsCloud.js";
+export {
+  LocalToolViewModel,
+  ServerDetailsViewModel,
+  durationText,
+  type FactRowViewModel,
+  type RaiseOptionViewModel,
+} from "./localTools/serverDetails.js";
+export { SecretRowViewModel, ServerSheetViewModel, problemText, testLine } from "./localTools/serverSheet.js";
+export { ImportRowViewModel, ImportSheetViewModel, type SkippedRowViewModel } from "./localTools/importSheet.js";
+export { containsText, type ToolsHost } from "./localTools/contracts.js";

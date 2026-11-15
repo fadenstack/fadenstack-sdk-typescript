@@ -48,7 +48,7 @@ describe("stringsFor", () => {
         const a = englishStrings[key as keyof UiStrings], b = strings[key as keyof UiStrings];
         return typeof a === "string" && a === b && key !== "direction";
       });
-      expect(same.length, `${tag}: ${same.join(", ")}`).toBeLessThanOrEqual(6); // as the .NET test allows: the wizard's example address "https://…/v1" is no word
+      expect(same.length, `${tag}: ${same.join(", ")}`).toBeLessThanOrEqual(9); // 6 as the .NET test allows, and the Tools view's "Name" (twice in German) and its row of dots, which are no words: the wizard's example address "https://…/v1" is no word
     }
   });
 });
