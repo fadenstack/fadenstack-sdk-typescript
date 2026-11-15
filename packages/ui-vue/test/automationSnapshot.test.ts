@@ -24,7 +24,7 @@ afterEach(() => {
 });
 
 const take = (key: string, component: never, props: Record<string, unknown>) => {
-  const w = mount(component, { props, attachTo: document.body });
+  const w = mount(component, { props, attachTo: document.body } as never);
   wrappers.push(w);
   found[key] = collectAutomation(w.element as Element);
 };
