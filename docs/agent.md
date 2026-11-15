@@ -307,7 +307,7 @@ Bypass (`session.bypass` is the grant, with its time left); see [Server-held gra
 | `agent.listSessions()` | This agent's sessions on the device, newest first. |
 | `agent.deleteSession(sessionId)` | Deletes a session from the store. |
 | `agent.exportMyData()` | The signed-in user's sessions and approvals on this device as one decrypted JSON document. See [Export and delete my data](sessions.md#export-and-delete-my-data). |
-| `agent.deleteMyData()` | Deletes the user's databases and their key; says when a store you passed was left. |
+| `agent.deleteMyData()` | Deletes the user's databases and their key; says when a store you passed was left. [Data on the device](data-on-device.md) lists the databases. |
 
 A session runs one turn at a time. Starting a second turn while one runs throws; `session.isRunning` says whether a
 turn is running. See [Sessions on the device](sessions.md) for where sessions are kept and for how long.
@@ -414,7 +414,8 @@ what the question was about.
 The chat panel shows a "thinking" pill in its header, where the person picks how long the agent thinks before it
 answers. The levels are `ReasoningLevel`: `auto`, `off`, `low`, `medium` and `high`. `off` goes on the wire as `none`.
 The pick is kept per person and per agent on the device, in the signed-in user's own IndexedDB database
-(`fadenstack-preferences:<tenant>:<user>`), and a change applies from the next message.
+(`fadenstack-preferences:<tenant>:<user>`; see [Data on the device](data-on-device.md)), and a change applies from the
+next message.
 
 In code:
 

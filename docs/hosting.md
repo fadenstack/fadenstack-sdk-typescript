@@ -27,7 +27,7 @@ The packages are ES modules and use standard web APIs only: `fetch`, Web Streams
 Create the client with `FadenstackClient.forAgent`, build the agent, and put the panel in the page. The default stores are
 the signed-in user's own IndexedDB databases, so two people in one browser profile never see each other's chats. Script
 that runs in your origin can ask the SDK for the sessions; see [Sessions on the device](sessions.md#indexeddb-in-a-browser)
-for what that protects. The default token store keeps the sign-in in memory, so the person signs in again on the next
+for what that protects, and [Data on the device](data-on-device.md) for every database. The default token store keeps the sign-in in memory, so the person signs in again on the next
 load; pass a `TokenStore` to keep it longer.
 
 `openInBrowser(link)` opens a page in a new window or tab with no `opener` and returns `false` when the browser blocked
