@@ -26,6 +26,7 @@ export {
   type SkillStore,
   type StorePrincipal,
 } from "./store.js";
+export { SkillsPersonUnknownError } from "./personGuard.js";
 export { FadenYamlError, MAX_YAML_BYTES, MAX_YAML_DEPTH, parseFadenYaml, type YamlValue } from "./fadenYaml.js";
 export { SkillExtension, type Activation } from "./skillExtension.js";
 export {

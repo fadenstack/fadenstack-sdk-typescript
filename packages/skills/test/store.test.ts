@@ -141,12 +141,13 @@ describe("the person's own skills in IndexedDB", () => {
   it("is the module's default store, in the standalone principal's database", async () => {
     const factory = new IDBFactory();
     const module = skillsModule({ indexedDB: factory });
-    await module.store!.add(standard("kept-on-device"));
     const rig = standalone({ module });
+    await ask(rig, "Hello"); // the agent starts: the module learns the person (standalone) from the profile
+    await module.store!.add(standard("kept-on-device"));
 
     await ask(rig, "Hi");
 
-    expect(calls(rig.fake)[0]!.instructions).toContain("kept-on-device");
+    expect(calls(rig.fake).at(-1)!.instructions).toContain("kept-on-device");
     const names = await new Promise<string[]>((resolve) => {
       void (factory as IDBFactory & { databases(): Promise<{ name?: string }[]> }).databases().then((all) => resolve(all.map((d) => d.name ?? "")));
     });

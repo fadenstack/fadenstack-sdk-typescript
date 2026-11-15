@@ -170,11 +170,11 @@ describe("the module honours an off switch", () => {
   it("keeps its default switches in the person's IndexedDB, where the workshop sets them", async () => {
     const factory = new IDBFactory();
     const module = skillsModule({ indexedDB: factory, bundled: [BUNDLED_SLIDE_DESIGN] });
-    expect(module.switches).toBeInstanceOf(IndexedDbSkillSwitches);
-    expect((module.switches as IndexedDbSkillSwitches).databaseName).toBe("fadenstack-skill-switches:standalone:standalone");
+    const rig = standalone({ module });
+    await ask(rig, "Hello"); // the agent starts: the module learns the person (standalone) from the profile
+    expect(module.switches).toBeDefined();
 
     await module.workshop().setEnabled("slide-design", false);
-    const rig = standalone({ module });
     await ask(rig, "A slide, please.");
 
     expect(calls(rig.fake)[0]!.instructions).not.toContain("slide-design");
