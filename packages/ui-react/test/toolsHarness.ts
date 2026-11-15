@@ -83,7 +83,7 @@ export async function reachTools(state: ToolsState, strings: UiStrings): Promise
   const open = (label: string) => page.servers.find((x) => x.label === label)!.open();
   switch (state) {
     case "noMatch": page.filter = "zzz"; break;
-    case "cloud": case "cloudNone": case "cloudUnavailable": page.selectTab(false); break;
+    case "cloud": case "cloudNone": case "cloudUnavailable": page.selectTab("server"); break;
     case "details": case "detailsAdmin": case "confirmRemove": open("notes"); break;
     case "detailsAdvanced": open("nas"); break;
     case "warning": open("nas"); page.details!.plainHttpOn = true; break;

@@ -14,6 +14,7 @@ import {
   cloudToolOf,
   type AgentConnection,
   type AgentContext,
+  type AppToolInfo,
   type CloudToolsResult,
   type FadenstackAgent,
   type ImportCandidateInfo,
@@ -41,6 +42,8 @@ export interface AgentToolsView {
   readonly connection: AgentConnection;
   /** The running agent's profile and this computer's policy; undefined before it started. */
   readonly context: Pick<AgentContext, "profile" | "machinePolicy"> | undefined;
+  /** The tools the agent runs, once started (the app's own have source `host`); empty before. */
+  readonly tools?: readonly { readonly name: string; readonly description?: string | undefined; readonly toolClass: AppToolInfo["toolClass"]; readonly source: string }[];
   /** The cloud tools of the agent's server (`null`: the server does not list them); rejects when it cannot. */
   listCloudTools(signal?: AbortSignal): Promise<AgentToolInfo[] | null>;
   /** The agent started, or the person signed out. */
@@ -57,6 +60,7 @@ export function agentToolsView(agent: FadenstackAgent): FadenstackAgentToolsView
   return {
     get isRunning() { return agent.isStarted; },
     get connection() { return agent.connection; },
+    get tools() { return agent.isStarted ? agent.tools : []; },
     get context() { return agent.isStarted ? { profile: agent.profile, machinePolicy: agent.machinePolicy } : undefined; },
     listCloudTools: (signal) => agent.listServerTools(signal),
     onChanged(listener) {
@@ -211,6 +215,18 @@ export class McpToolsCatalog implements LocalToolsCatalog {
     if (settings?.mode === "allow") return ToolsPolicy.Allowed;
     if (settings?.developerMode === true) return ToolsPolicy.DeveloperMode;
     return ToolsPolicy.NotAllowed;
+  }
+
+  get governed(): boolean {
+    return this.#agent?.connection === "governed";
+  }
+
+  get appTools(): readonly AppToolInfo[] {
+    const agent = this.#agent;
+    if (!agent?.isRunning) return [];
+    return (agent.tools ?? [])
+      .filter((t) => t.source === "host")
+      .map((t) => ({ name: t.name, description: t.description ?? "", toolClass: t.toolClass }));
   }
 
   get plainHttpPermitted(): boolean {

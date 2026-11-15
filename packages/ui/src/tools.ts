@@ -56,7 +56,8 @@ export function serverToolStatus(tool: Pick<AgentToolInfo, "allowed" | "enabled"
   return !tool.enabled ? "disabled" : !tool.allowed ? "not_allowed" : "available";
 }
 
-function plain(text: string | undefined): string {
+/** Description text as the Tools views show it: one line of plain text, cut to a few hundred characters. */
+export function plain(text: string | undefined): string {
   const flat = (text ?? "").replace(/\s+/g, " ").trim();
   const characters = Array.from(flat);
   return characters.length <= MAX_DESCRIPTION ? flat : `${characters.slice(0, MAX_DESCRIPTION - 1).join("").trimEnd()}…`;

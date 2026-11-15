@@ -60,11 +60,12 @@ function Main({ vm, s }: { vm: ToolsPageViewModel; s: UiStrings }): ReactElement
   const id = useId();
   const tabKeys = (e: KeyboardEvent) => {
     if (e.key !== "ArrowLeft" && e.key !== "ArrowRight") return;
-    const rtl = s.direction === "rtl";
-    const toLocal = (e.key === "ArrowLeft") !== rtl;
-    vm.selectTab(toLocal);
+    const tabs = vm.tabs;
+    const step = (e.key === "ArrowLeft") !== (s.direction === "rtl") ? -1 : 1;
+    const to = tabs[Math.min(tabs.length - 1, Math.max(0, tabs.indexOf(vm.tab) + step))]!;
+    vm.selectTab(to);
     e.preventDefault();
-    requestAnimationFrame(() => document.getElementById(`${id}-${toLocal ? "local" : "server"}-tab`)?.focus());
+    requestAnimationFrame(() => document.getElementById(`${id}-${to}-tab`)?.focus());
   };
   return (
     <>
@@ -76,10 +77,14 @@ function Main({ vm, s }: { vm: ToolsPageViewModel; s: UiStrings }): ReactElement
           {vm.showsBanner && <p className="fdn-wizard-note" role="status" dir="auto">{vm.bannerText}</p>}
           <div className="fdn-tp-bar">
             <div className="fdn-tp-tabs" role="tablist" aria-label={s.toolsTitle} onKeyDown={tabKeys}>
-              <button type="button" role="tab" id={`${id}-local-tab`} className="fdn-tp-tab" aria-selected={vm.showsLocal} aria-controls={`${id}-local`}
-                tabIndex={vm.showsLocal ? 0 : -1} onClick={() => vm.selectTab(true)} dir="auto">{vm.localTabText}</button>
-              <button type="button" role="tab" id={`${id}-server-tab`} className="fdn-tp-tab" aria-selected={vm.showsServer} aria-controls={`${id}-server`}
-                tabIndex={vm.showsServer ? 0 : -1} onClick={() => vm.selectTab(false)} dir="auto">{vm.serverTabText}</button>
+              <button type="button" role="tab" id={`${id}-app-tab`} className="fdn-tp-tab" aria-selected={vm.showsApp} aria-controls={`${id}-app`}
+                tabIndex={vm.showsApp ? 0 : -1} onClick={() => vm.selectTab("app")} dir="auto">{vm.appTabText}</button>
+              <button type="button" role="tab" id={`${id}-computer-tab`} className="fdn-tp-tab" aria-selected={vm.showsLocal} aria-controls={`${id}-computer`}
+                tabIndex={vm.showsLocal ? 0 : -1} onClick={() => vm.selectTab("computer")} dir="auto">{vm.localTabText}</button>
+              {vm.showsServerTab && (
+                <button type="button" role="tab" id={`${id}-server-tab`} className="fdn-tp-tab" aria-selected={vm.showsServer} aria-controls={`${id}-server`}
+                  tabIndex={vm.showsServer ? 0 : -1} onClick={() => vm.selectTab("server")} dir="auto">{vm.serverTabText}</button>
+              )}
             </div>
             {vm.showsLocalChip && (
               <span className={`fdn-badge fdn-tp-policy${vm.policyIsWarning ? " fdn-tp-policy-warning" : ""}`} title={vm.policyTip} dir="auto">
@@ -91,12 +96,38 @@ function Main({ vm, s }: { vm: ToolsPageViewModel; s: UiStrings }): ReactElement
             <input type="text" aria-label={s.toolsFilterPlaceholder} placeholder={s.toolsFilterPlaceholder} autoComplete="off" value={vm.filter}
               onChange={(e) => { vm.filter = e.target.value; }} dir="auto" />
           </div>
-          {vm.showsLocal
-            ? <LocalPanel vm={vm} s={s} panelId={`${id}-local`} tabId={`${id}-local-tab`} />
-            : <ServerPanel vm={vm} s={s} panelId={`${id}-server`} tabId={`${id}-server-tab`} />}
+          {vm.showsApp
+            ? <AppPanel vm={vm} panelId={`${id}-app`} tabId={`${id}-app-tab`} />
+            : vm.showsLocal
+              ? <LocalPanel vm={vm} s={s} panelId={`${id}-computer`} tabId={`${id}-computer-tab`} />
+              : <ServerPanel vm={vm} s={s} panelId={`${id}-server`} tabId={`${id}-server-tab`} />}
         </>
       )}
     </>
+  );
+}
+
+function AppPanel({ vm, panelId, tabId }: { vm: ToolsPageViewModel; panelId: string; tabId: string }): ReactElement {
+  return (
+    <div className="fdn-tp-section" role="tabpanel" id={panelId} aria-labelledby={tabId}>
+      {vm.showsAppEmpty && <p className="fdn-muted" role="status" dir="auto">{vm.appEmptyText}</p>}
+      {vm.showsAppNoMatch && <p className="fdn-muted" role="status" dir="auto">{vm.appNoMatchText}</p>}
+      {vm.appTools.length > 0 && (
+        <section className="fdn-card">
+          <ul className="fdn-tp-cloud-list">
+            {vm.appTools.map((t) => (
+              <li key={t.name} className="fdn-tp-cloud-tool">
+                <div>
+                  <div className="fdn-tp-name" dir="auto">{t.name}</div>
+                  {t.hasDescription && <div className="fdn-muted" dir="auto">{t.description}</div>}
+                </div>
+                <span className="fdn-badge" dir="auto">{t.classLabel}</span>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
+    </div>
   );
 }
 

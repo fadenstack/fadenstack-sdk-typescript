@@ -8,6 +8,7 @@ import {
   ServerProblem,
   TestOutcome,
   ToolsPolicy,
+  type AppToolInfo,
   type CloudToolInfo,
   type CloudToolsResult,
   type ImportPreview,
@@ -43,6 +44,8 @@ export class FakeCatalog implements LocalToolsCatalog {
   serversUnreadable = false;
   localServers: LocalServerInfo[] = [];
   plainHttpPermitted = false;
+  governed = true;
+  appTools: AppToolInfo[] = [];
   marksAreYours = true;
   cloud: CloudToolsResult = { status: CloudToolsStatus.Listed, tools: [] };
   cloudFails = false;

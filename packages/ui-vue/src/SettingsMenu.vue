@@ -83,7 +83,7 @@ function closeAbout(returnFocus: boolean): void {
       <ApprovalsSection :grants="chat.grants" />
       <div v-if="slots.default" v-bind="languages ? { class: 'fdn-menu-extra' } : {}"><slot /></div>
       <div v-bind="languages || slots.default ? { class: 'fdn-menu-extra' } : {}">
-        <button type="button" role="menuitem" aria-haspopup="dialog" class="fdn-menu-item" @click="chat.setToolsOpen(true)">
+        <button type="button" role="menuitem" aria-haspopup="dialog" class="fdn-menu-item" @click="chat.pickTools()">
           <span class="fdn-menu-check" />
           <span class="fdn-menu-label">{{ chat.strings.tools }}</span>
         </button>

@@ -101,3 +101,22 @@ describe("the Tools view (Vue)", () => {
     expect(wrapper.text()).toContain("Ändert Daten");
   });
 });
+
+describe("the settings' Tools item with a host Tools page (Vue)", () => {
+  it("calls openTools, closes the settings and opens no panel when the host gave it", async () => {
+    let calls = 0;
+    const { chat, wrapper } = await panel({ serverTools: SERVER_TOOLS }, { openTools: () => { calls++; } });
+    await openTools(wrapper);
+    expect(calls).toBe(1);
+    expect(chat.isToolsOpen).toBe(false);
+    expect(chat.isSettingsOpen).toBe(false);
+    expect(wrapper.find("[role=dialog]").exists()).toBe(false);
+  });
+
+  it("opens the read-only panel when the host gave none", async () => {
+    const { chat, wrapper } = await panel({ serverTools: SERVER_TOOLS });
+    await openTools(wrapper);
+    expect(chat.isToolsOpen).toBe(true);
+    expect(wrapper.find("[role=dialog]").exists()).toBe(true);
+  });
+});

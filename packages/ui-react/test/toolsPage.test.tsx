@@ -6,7 +6,7 @@ import { LocalServerState } from "@fadenstack/agents";
 import { ServerSheetViewModel, englishStrings, germanStrings, type UiStrings } from "@fadenstack/ui";
 import { ToolsPage } from "@fadenstack/ui-react";
 
-import { SECRET, serverInfo } from "../../ui/test/toolsFakes.js";
+import { FakeCatalog, SECRET, serverInfo } from "../../ui/test/toolsFakes.js";
 import { TOOLS_STATES, ToolsHarness, reachTools, type ToolsState } from "./toolsHarness.js";
 
 // The Tools view of the React skin, over the real view models on a catalog in memory.
@@ -58,7 +58,7 @@ describe("every state renders", () => {
 describe("the tabs and the cards", () => {
   it("switches between the tabs, with the arrow keys too, and filters", async () => {
     const { tools } = await at("cloud");
-    tools.selectTab(true);
+    tools.selectTab("computer");
     render(<ToolsPage tools={tools} />);
     const local = screen.getByRole("tab", { name: /On this computer/ });
     expect(local.getAttribute("aria-selected")).toBe("true");
@@ -214,5 +214,37 @@ describe("the paste import", () => {
     await settle();
     expect(catalog.imported).toEqual([{ labels: ["remote"] }]);
     expect(screen.getByText("Added: 1")).toBeTruthy();
+  });
+});
+
+describe("the tab In this app and the server tab", () => {
+  function drawn(configure: (catalog: FakeCatalog) => void) {
+    const catalog = new FakeCatalog([serverInfo("notes")]);
+    configure(catalog);
+    const h = new ToolsHarness(englishStrings, catalog);
+    harnesses.push(h);
+    return { h, ...render(<ToolsPage tools={h.page} />) };
+  }
+
+  it("draws the app's tools with their class and the empty line", () => {
+    const { h } = drawn((c) => { c.appTools = [{ name: "read_page", description: "Reads the page", toolClass: "read" }]; });
+    act(() => h.page.selectTab("app"));
+    expect(screen.getByRole("tab", { name: "In this app · 1" }).getAttribute("aria-selected")).toBe("true");
+    expect(screen.getByText("read_page")).toBeTruthy();
+    expect(screen.getByText("Reads the page")).toBeTruthy();
+    expect(screen.getByText(englishStrings.approvalClass.read)).toBeTruthy();
+    cleanup();
+    const empty = drawn(() => undefined);
+    act(() => empty.h.page.selectTab("app"));
+    expect(screen.getByText("This app gives the assistant no tools of its own.")).toBeTruthy();
+  });
+
+  it("shows no server tab in standalone and has it when governed, in order", () => {
+    const standalone = drawn((c) => { c.governed = false; });
+    expect(screen.getAllByRole("tab").map((t) => t.textContent)).toEqual(["In this app · 0", "On this computer · 1"]);
+    expect(standalone.h.catalog.cloudCalls).toBe(0);
+    cleanup();
+    drawn(() => undefined);
+    expect(screen.getAllByRole("tab").map((t) => t.textContent)).toEqual(["In this app · 0", "On this computer · 1", expect.stringContaining("On your server")]);
   });
 });

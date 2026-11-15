@@ -131,3 +131,22 @@ describe("the Tools view (React)", () => {
     expect(within(dialog).getByText("Ändert Daten")).toBeTruthy();
   });
 });
+
+describe("the settings' Tools item with a host Tools page (React)", () => {
+  it("calls openTools, closes the settings and opens no panel when the host gave it", async () => {
+    let calls = 0;
+    const { chat } = await panel({ serverTools: SERVER_TOOLS }, { openTools: () => { calls++; } });
+    await openTools();
+    expect(calls).toBe(1);
+    expect(chat.isToolsOpen).toBe(false);
+    expect(chat.isSettingsOpen).toBe(false);
+    expect(screen.queryByRole("dialog", { name: "Tools" })).toBeNull();
+  });
+
+  it("opens the read-only panel when the host gave none", async () => {
+    const { chat } = await panel({ serverTools: SERVER_TOOLS });
+    await openTools();
+    expect(chat.isToolsOpen).toBe(true);
+    expect(await screen.findByRole("dialog", { name: "Tools" })).toBeTruthy();
+  });
+});

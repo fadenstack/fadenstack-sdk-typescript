@@ -1,6 +1,7 @@
 import { CloudToolsStatus, ToolsPolicy, newServerDraft, type CloudToolsResult, type LocalToolsCatalog } from "@fadenstack/agents";
 
 import { Observable } from "../observable.js";
+import { plain } from "../tools.js";
 import { englishStrings, type UiStrings } from "../strings.js";
 import type { ToolsHost } from "./contracts.js";
 import { ImportSheetViewModel } from "./importSheet.js";
@@ -18,6 +19,20 @@ export interface ToolsPageOptions {
 
 /** The add or edit sheet, or the import sheet. */
 export type ToolsSheet = ServerSheetViewModel | ImportSheetViewModel;
+
+/** The tabs: what the app itself gives the agent, the person's MCP servers, the organisation's tools (governed only). */
+export type ToolsTab = "app" | "computer" | "server";
+
+/** A tool of this app as the "In this app" tab lists it. */
+export interface AppToolRow {
+  readonly name: string;
+  /** Plain text, cut to a few hundred characters. */
+  readonly description: string;
+  readonly hasDescription: boolean;
+  /** "Read", "Changes data", "Cannot be undone". */
+  readonly classLabel: string;
+  readonly toolClass: string;
+}
 
 /**
  * The Tools view (sdk/51 F05): a header with Add, a bar with the two places tools run (on this computer, on your server), the policy
@@ -41,7 +56,11 @@ export class ToolsPageViewModel extends Observable implements ToolsHost {
   #cloudLoaded = false;
   #abort: AbortController | undefined;
   #filter = "";
-  #showsLocal = true;
+  #tab: ToolsTab = "computer";
+  #appRows: readonly AppToolRow[] = [];
+  #appCount = 0;
+  #appTab = "";
+  #governed = false;
   #needsSignIn = true;
   #policyText = "";
   #policyTip = "";
@@ -115,24 +134,49 @@ export class ToolsPageViewModel extends Observable implements ToolsHost {
     return this.#plainHttp;
   }
 
-  /** The tab "On this computer" is selected (otherwise "On your server"). */
+  /** The selected tab. */
+  get tab(): ToolsTab {
+    return this.#tab;
+  }
+
+  /** The tab "In this app" is selected. */
+  get showsApp(): boolean {
+    return this.#tab === "app";
+  }
+
+  /** The tab "On this computer" is selected. */
   get showsLocal(): boolean {
-    return this.#showsLocal;
+    return this.#tab === "computer";
   }
 
+  /** The tab "On your server" is selected. */
   get showsServer(): boolean {
-    return !this.#showsLocal;
+    return this.#tab === "server";
   }
 
-  selectTab(local: boolean): void {
-    if (local === this.#showsLocal) return;
-    this.#showsLocal = local;
+  /** "On your server" is a tab only when the agent is connected to an organisation's server. */
+  get showsServerTab(): boolean {
+    return this.#governed;
+  }
+
+  /** The tabs now shown, in order. */
+  get tabs(): readonly ToolsTab[] {
+    return this.#governed ? ["app", "computer", "server"] : ["app", "computer"];
+  }
+
+  selectTab(tab: ToolsTab): void {
+    if (tab === this.#tab || (tab === "server" && !this.#governed)) return;
+    this.#tab = tab;
     this.notify();
   }
 
   /** The policy chip belongs to the computer's tab. */
   get showsLocalChip(): boolean {
-    return this.#showsLocal && this.#hasPolicy;
+    return this.#tab === "computer" && this.#hasPolicy;
+  }
+
+  get appTabText(): string {
+    return this.#appTab;
   }
 
   get localTabText(): string {
@@ -152,13 +196,53 @@ export class ToolsPageViewModel extends Observable implements ToolsHost {
     if (value === this.#filter) return;
     this.#filter = value;
     this.#rebuild();
+    this.#buildApp();
     this.#buildCloud();
     this.notify();
   }
 
   /** The header's Add server: on the computer's tab only (the server's tab is read only). */
   get showsAddButton(): boolean {
-    return this.#showsLocal;
+    return this.#tab === "computer";
+  }
+
+  // ---- in this app --------------------------------------------------------------------------------------------------
+
+  /** The app's own tools the filter lets through, by name. */
+  get appTools(): readonly AppToolRow[] {
+    return this.#appRows;
+  }
+
+  /** The app gives the agent no tools of its own: one short line. */
+  get showsAppEmpty(): boolean {
+    return this.#appCount === 0;
+  }
+
+  /** The filter hides every one of the app's tools. */
+  get showsAppNoMatch(): boolean {
+    return this.#appCount > 0 && this.#appRows.length === 0;
+  }
+
+  get appEmptyText(): string {
+    return this.strings.toolsAppNone;
+  }
+
+  get appNoMatchText(): string {
+    return this.strings.toolsNoToolsMatch;
+  }
+
+  #buildApp(): void {
+    const s = this.strings;
+    const all = this.catalog.appTools;
+    const needle = this.#filter.trim().toLowerCase();
+    this.#appCount = all.length;
+    this.#appTab = s.toolsTabApp(all.length);
+    this.#appRows = all
+      .filter((t) => needle === "" || t.name.toLowerCase().includes(needle))
+      .map((t) => {
+        const description = plain(t.description);
+        return { name: t.name, description, hasDescription: description !== "", classLabel: s.approvalClass[t.toolClass], toolClass: t.toolClass };
+      });
   }
 
   // ---- on this computer ---------------------------------------------------------------------------------------------
@@ -305,6 +389,7 @@ export class ToolsPageViewModel extends Observable implements ToolsHost {
   retext(): void {
     this.refresh();
     this.#buildCloud();
+    this.#buildApp();
     for (const server of this.#all) server.retext();
     this.#details?.retext();
     this.#sheet?.retext();
@@ -326,6 +411,9 @@ export class ToolsPageViewModel extends Observable implements ToolsHost {
     const s = this.strings;
     const catalog = this.catalog;
     this.#needsSignIn = !catalog.signedIn;
+    this.#governed = catalog.governed;
+    if (!this.#governed && this.#tab === "server") this.#tab = "computer";
+    this.#buildApp();
     this.#plainHttp = catalog.plainHttpPermitted;
     const policy = catalog.policy;
     [this.#policyText, this.#policyTip, this.#policyIsWarning, this.#hasPolicy] =
@@ -361,7 +449,7 @@ export class ToolsPageViewModel extends Observable implements ToolsHost {
     if (!this.#cloud) this.#serverTab = s.toolsTabServer(0);
     this.notify();
 
-    if (!this.#needsSignIn && !this.#cloudLoaded && !this.#loadingCloud) void this.loadCloud();
+    if (!this.#needsSignIn && this.#governed && !this.#cloudLoaded && !this.#loadingCloud) void this.loadCloud();
   }
 
   // The cards the filter lets through.
@@ -373,7 +461,7 @@ export class ToolsPageViewModel extends Observable implements ToolsHost {
 
   /** Loads the cloud tools again (opening the page, Try again). */
   async loadCloud(): Promise<void> {
-    if (!this.catalog.signedIn) {
+    if (!this.catalog.signedIn || !this.catalog.governed) {
       this.#cloud = undefined;
       this.#cloudGroups = [];
       this.#cloudMessage = "";

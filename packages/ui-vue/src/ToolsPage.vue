@@ -51,10 +51,12 @@ function onKeyDown(e: KeyboardEvent): void {
 
 function tabKeys(e: KeyboardEvent): void {
   if (e.key !== "ArrowLeft" && e.key !== "ArrowRight") return;
-  const toLocal = (e.key === "ArrowLeft") !== (s.value.direction === "rtl");
-  vm.value.selectTab(toLocal);
+  const tabs = vm.value.tabs;
+  const step = (e.key === "ArrowLeft") !== (s.value.direction === "rtl") ? -1 : 1;
+  const to = tabs[Math.min(tabs.length - 1, Math.max(0, tabs.indexOf(vm.value.tab) + step))]!;
+  vm.value.selectTab(to);
   e.preventDefault();
-  void nextTick(() => document.getElementById(`${id}-${toLocal ? "local" : "server"}-tab`)?.focus());
+  void nextTick(() => document.getElementById(`${id}-${to}-tab`)?.focus());
 }
 </script>
 
@@ -71,10 +73,12 @@ function tabKeys(e: KeyboardEvent): void {
         <p v-if="vm.showsBanner" class="fdn-wizard-note" role="status" dir="auto">{{ vm.bannerText }}</p>
         <div class="fdn-tp-bar">
           <div class="fdn-tp-tabs" role="tablist" :aria-label="s.toolsTitle" @keydown="tabKeys">
-            <button :id="`${id}-local-tab`" type="button" role="tab" class="fdn-tp-tab" :aria-selected="vm.showsLocal" :aria-controls="`${id}-local`"
-              :tabindex="vm.showsLocal ? 0 : -1" dir="auto" @click="vm.selectTab(true)">{{ vm.localTabText }}</button>
-            <button :id="`${id}-server-tab`" type="button" role="tab" class="fdn-tp-tab" :aria-selected="vm.showsServer" :aria-controls="`${id}-server`"
-              :tabindex="vm.showsServer ? 0 : -1" dir="auto" @click="vm.selectTab(false)">{{ vm.serverTabText }}</button>
+            <button :id="`${id}-app-tab`" type="button" role="tab" class="fdn-tp-tab" :aria-selected="vm.showsApp" :aria-controls="`${id}-app`"
+              :tabindex="vm.showsApp ? 0 : -1" dir="auto" @click="vm.selectTab('app')">{{ vm.appTabText }}</button>
+            <button :id="`${id}-computer-tab`" type="button" role="tab" class="fdn-tp-tab" :aria-selected="vm.showsLocal" :aria-controls="`${id}-computer`"
+              :tabindex="vm.showsLocal ? 0 : -1" dir="auto" @click="vm.selectTab('computer')">{{ vm.localTabText }}</button>
+            <button v-if="vm.showsServerTab" :id="`${id}-server-tab`" type="button" role="tab" class="fdn-tp-tab" :aria-selected="vm.showsServer" :aria-controls="`${id}-server`"
+              :tabindex="vm.showsServer ? 0 : -1" dir="auto" @click="vm.selectTab('server')">{{ vm.serverTabText }}</button>
           </div>
           <span v-if="vm.showsLocalChip" class="fdn-badge fdn-tp-policy" :class="{ 'fdn-tp-policy-warning': vm.policyIsWarning }" :title="vm.policyTip" dir="auto">
             <Icon :name="vm.policyIsWarning ? 'warning' : 'check'" :size="12" />{{ vm.policyText }}
@@ -85,7 +89,23 @@ function tabKeys(e: KeyboardEvent): void {
             @input="vm.filter = ($event.target as HTMLInputElement).value">
         </div>
 
-        <div v-if="vm.showsLocal" :id="`${id}-local`" class="fdn-tp-section" role="tabpanel" :aria-labelledby="`${id}-local-tab`">
+        <div v-if="vm.showsApp" :id="`${id}-app`" class="fdn-tp-section" role="tabpanel" :aria-labelledby="`${id}-app-tab`">
+          <p v-if="vm.showsAppEmpty" class="fdn-muted" role="status" dir="auto">{{ vm.appEmptyText }}</p>
+          <p v-if="vm.showsAppNoMatch" class="fdn-muted" role="status" dir="auto">{{ vm.appNoMatchText }}</p>
+          <section v-if="vm.appTools.length > 0" class="fdn-card">
+            <ul class="fdn-tp-cloud-list">
+              <li v-for="t in vm.appTools" :key="t.name" class="fdn-tp-cloud-tool">
+                <div>
+                  <div class="fdn-tp-name" dir="auto">{{ t.name }}</div>
+                  <div v-if="t.hasDescription" class="fdn-muted" dir="auto">{{ t.description }}</div>
+                </div>
+                <span class="fdn-badge" dir="auto">{{ t.classLabel }}</span>
+              </li>
+            </ul>
+          </section>
+        </div>
+
+        <div v-else-if="vm.showsLocal" :id="`${id}-computer`" class="fdn-tp-section" role="tabpanel" :aria-labelledby="`${id}-computer-tab`">
           <h3 dir="auto">{{ s.toolsSectionServers }}</h3>
           <p class="fdn-muted" dir="auto">{{ s.toolsSectionServersHelp }}</p>
           <p v-if="vm.hasListNote" class="fdn-wizard-note" role="status" dir="auto">{{ vm.listNote }}</p>
