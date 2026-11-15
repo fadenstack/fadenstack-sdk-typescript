@@ -94,14 +94,14 @@ lists what the export and the deletion leave.
 
 `deleteMyData()` deletes the signed-in user's databases (sessions, "Allow always", the preferences such as the level of
 thinking they picked, their skills, their MCP servers and the standalone provenance records;
-[Data on the device](data-on-device.md#a-persons-databases) lists all eight) **and their key**, so that a copy of the profile restored later can never be read.
+[Data on the device](data-on-device.md#a-persons-databases) lists all nine) **and their key**, so that a copy of the profile restored later can never be read.
 Afterwards the stores start empty, with a new key. It does not sign out (sign-in tokens stay; that is the host's call)
 and it does not touch the server: what the server keeps is for its operator to erase. From a gateway that names no user it
 clears the shared databases of an older SDK. The result:
 
 | Field | What it is |
 |---|---|
-| `storesCleared` | How many of the SDK's IndexedDB databases existed and were removed (at most eight), plus the person's `localStorage` keys removed. Stores in memory are simply dropped. The .NET SDK reports folders (`FoldersRemoved`). |
+| `storesCleared` | How many of the SDK's IndexedDB databases existed and were removed (at most nine), plus the person's `localStorage` keys removed. Stores in memory are simply dropped. The .NET SDK reports folders (`FoldersRemoved`). |
 | `hostSessionStoreLeft`, `hostApprovalStoreLeft` | A store you passed with `useSessionStore` / `useApprovalStore` is **not** deleted: it may hold other people's data. The flag says it was left. |
 | `hostStoresLeft` | Either of them: the person's data may still be in a store the host keeps. Delete their part there. |
 

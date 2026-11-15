@@ -27,6 +27,39 @@ import {
 
 import { FakeGrants, type FakeGrantsOptions } from "./fakeGrants.js";
 
+/**
+ * The agent SDKs' own tools as core 0.7.1 knows them (`tool_classes.SDK_TOOLS`, core b8d54846): `find_tool`, `load_skill` and
+ * `read_skill_resource` read; `web_search` read and open-world (it asks below Auto); `run_skill_script` no class. An admin's rule or
+ * the contract still decides the class, after which `web_search` keeps its open-world mark.
+ */
+const SDK_TOOLS: Readonly<Record<string, { toolClass: ToolClass; openWorld?: boolean }>> = Object.freeze({
+  find_tool: { toolClass: "read" },
+  load_skill: { toolClass: "read" },
+  read_skill_resource: { toolClass: "read" },
+  web_search: { toolClass: "read", openWorld: true },
+  run_skill_script: { toolClass: "unknown" },
+});
+
+/**
+ * Whether the profile lets the agent use one of the SDKs' own tools (core's `sdk_tools_allowed`): `find_tool` always; the skill
+ * tools where the agent allows local skills (or its developer mode); `web_search` where it allows local MCP servers, until core has
+ * a switch of its own; `run_skill_script` never. The fake reads the agent's settings only: a user's own developer mode, which the
+ * real gateway also counts for local MCP, is not seen here.
+ */
+function sdkToolAllowed(agent: FakeAgent, name: string): boolean {
+  switch (name) {
+    case "find_tool":
+      return true;
+    case "load_skill":
+    case "read_skill_resource":
+      return agent.localSkills?.mode === "allow" || agent.localSkills?.developerMode === true;
+    case "web_search":
+      return agent.localMcpMode === "allow";
+    default:
+      return false;
+  }
+}
+
 /** A user the fake server knows. */
 export interface FakeUser {
   email: string;
@@ -919,10 +952,13 @@ export class FakeGateway {
       if (fn["parameters"]) def.parameters = fn["parameters"] as ToolDefinition["parameters"];
       return def;
     });
-    // As the gateway does: tools outside the contract are held back -- the model never sees them -- and named; the SDKs'
-    // tool search (find_tool) never is.
+    // As the gateway does: tools outside the contract are held back -- the model never sees them -- and named. The SDKs' own
+    // tools follow the profile instead (core b8d54846): one its feature allows is never held back by the contract, one it forbids
+    // is held back with or without a contract.
     const contract = agent.contract ?? [];
-    const held = contract.length ? tools.filter((t) => t.name !== "find_tool" && !contract.some((c) => c.name === t.name)) : [];
+    const held = tools.filter((t) => SDK_TOOLS[t.name]
+      ? !sdkToolAllowed(agent, t.name)
+      : contract.length > 0 && !contract.some((c) => c.name === t.name));
     if (held.length) this.heldTools.push(...held.map((t) => t.name));
     const events = request.headers.get("x-faden-events") !== null;
     // A tool a rule refuses is not offered, nor one a rule asks about to a client that cannot be told.
@@ -997,7 +1033,8 @@ export class FakeGateway {
   /**
    * What the gateway says about the client's own calls as it hands them over: a call a rule refuses or the mode
    * hides is `faden.tool_denied`; one a rule or the mode asks about is `faden.approval_required` without an
-   * approvalId, with the class the gateway holds (the contract's risk; find_tool read; else unknown) and whether a rule asks.
+   * approvalId, with the class the gateway holds (the contract's risk; else an SDK tool's own class; else unknown), whether a rule
+   * asks, and web_search's open-world mark.
    */
   #screen(agent: FakeAgent, modeHeader: string | null, calls: WireCall[]): Record<string, unknown>[] {
     const mode = parseToolMode(modeHeader) ?? "ask";
@@ -1006,18 +1043,21 @@ export class FakeGateway {
       const name = call.function.name;
       const rule = this.#rule(name);
       const risk = (agent.contract ?? []).find((c) => c.name === name)?.risk;
-      const toolClass: ToolClass = name === "find_tool" && !risk ? "read" : parseToolClass(risk);
-      const decision = decideTool(mode, toolClass);
+      const toolClass: ToolClass = risk ? parseToolClass(risk) : SDK_TOOLS[name]?.toolClass ?? "unknown";
+      const openWorld = SDK_TOOLS[name]?.openWorld === true;
+      const decision = decideTool(mode, toolClass, undefined, openWorld);
       if (rule?.action === "deny" || decision === "hidden") {
         events.push(toolDenied(call.id, name, rule?.action === "deny" ? rule.message : `The tool mode is ${mode}.`, this.#decision()));
       } else if (rule?.action === "approval_required") {
         events.push({ type: "CUSTOM", name: "faden.approval_required", value: {
           toolCallId: call.id, toolCallName: name, message: rule.message, decisionId: this.#decision(), toolClass, rule: true,
+          ...(openWorld ? { openWorld: true } : {}),
         } });
       } else if (decision === "ask") {
         events.push({ type: "CUSTOM", name: "faden.approval_required", value: {
-          toolCallId: call.id, toolCallName: name, message: `'${name}' is ${toolClass}; the tool mode is ${mode}.`,
-          decisionId: null, toolClass, rule: false,
+          toolCallId: call.id, toolCallName: name,
+          message: openWorld ? `What '${name}' is given leaves the organisation; the tool mode is ${mode}.` : `'${name}' is ${toolClass}; the tool mode is ${mode}.`,
+          decisionId: null, toolClass, rule: false, ...(openWorld ? { openWorld: true } : {}),
         } });
       }
     }
