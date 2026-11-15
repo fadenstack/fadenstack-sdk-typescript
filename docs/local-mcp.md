@@ -156,6 +156,6 @@ The texts are in English, German, French, Spanish and Simplified Chinese. The co
 
 ## What the server learns
 
-In governed mode the server learns the switch's changes as above. This module does not report an attached server (the .NET SDK's sends `local_mcp.attached` with its label, its program or URL and its tools' names). A header value is never reported or logged; the log has labels, kinds and counts only.
+In governed mode the server learns the switch's changes as above, and each attached server once per connection as `local_mcp.attached`: its label, its address without a user, password, query or fragment, and its tools' names, as the .NET SDK sends it. Standalone, nothing goes anywhere. A header value is never reported or logged; the log has labels, kinds and counts only.
 
 OWASP ASVS 5.0: V12 (secure communication), V13 (configuration and secrets), V15 (secure coding).

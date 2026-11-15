@@ -105,8 +105,9 @@ The conversation stays on the device. The server keeps usage and governance data
   apply ([Personal data](../../concepts/personal-data.md)), and are counted for usage.
 - **The agent's events,** with the session's id: `tool.executed` (the tool, its source, its duration and outcome),
   `approval.decided` (the tool, the decision, how long the person took, what let it through), `session.stats`
-  (counts, and the retention in force) and `local_mcp.plain_http` (an MCP server's origin, and whether its local-network
-  switch is on, where the profile's features list `client_events.local_mcp_plain_http`).
+  (counts, and the retention in force), `local_mcp.attached` (an MCP server's label, its address without a user,
+  password, query or fragment, and its tools' names) and `local_mcp.plain_http` (an MCP server's origin, and whether its
+  local-network switch is on, where the profile's features list `client_events.local_mcp_plain_http`).
 - **The app manifest:** the app's name and version, the SDK's version, the host tools with their classes, and the
   context and greeting the app describes ([The app manifest](tools.md#the-app-manifest)).
 - **The person's settings,** such as their language, and the device's sign-in with its label, until it is revoked.
