@@ -154,7 +154,8 @@ async function compose(before, after, out) {
   const browser = await chromium.launch();
   let n = 0;
   try {
-    const page = await browser.newPage({ viewport: { width: 900, height: 600 }, deviceScaleFactor: 1 });
+    // At 2x, so each 380 px picture shows at its own 760 pixels, as the WPF and Avalonia comparisons do.
+    const page = await browser.newPage({ viewport: { width: 900, height: 600 }, deviceScaleFactor: 2 });
     for (const rel of walk(after)) {
       if (!existsSync(join(before, rel))) continue;
       const [skin, palette, file] = rel.split(/[\\/]/);

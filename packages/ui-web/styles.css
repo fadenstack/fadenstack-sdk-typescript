@@ -1976,6 +1976,12 @@
   content: none;
 }
 
+/* A check box or switch that cannot be changed now looks it, as a disabled button does (the browser's own look is gone). */
+.fdn-wizard input[type="checkbox"]:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
 .fdn-wizard-field input[readonly] {
   background: var(--fdn-surface);
   color: var(--fdn-text-muted);
