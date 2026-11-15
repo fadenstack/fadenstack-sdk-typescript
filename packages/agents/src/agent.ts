@@ -736,13 +736,16 @@ export class FadenstackAgent {
   /**
    * The signed-in user's data on this device as one JSON document (an access request, GDPR Art. 15 and 20): every session of
    * every agent the SDK's stores hold, decrypted, and the "Allow always" approvals. Without a user from the gateway these
-   * are the shared databases of an older SDK. Sign-in tokens are never included, nor is what the server keeps. A store the
+   * are the shared databases of an older SDK. Beside them, by an allowlist, everything else `deleteMyData` removes: the preferences,
+   * the person's own skills and switches, the provenance records and placement log, the MCP servers (without header values and with
+   * a clean address) and their audit log, and the person's `localStorage` keys (`databases`, `localStorage`). Sign-in tokens and
+   * keys are never included, nor is what the server keeps. A store the
    * host passed is read for this agent only. .NET: `ExportMyDataAsync` (a ZIP there; a document here, which the host saves
    * or offers as a download as it likes).
    */
   async exportMyData(signal?: AbortSignal): Promise<MyDataExport> {
     await this.start(signal);
-    return buildExport(this.sessionStore, this.approvalStore, this.slug, () => this.#problems);
+    return buildExport(this.sessionStore, this.approvalStore, this.slug, () => this.#problems, { principal: this.profile.principal });
   }
 
   /**
