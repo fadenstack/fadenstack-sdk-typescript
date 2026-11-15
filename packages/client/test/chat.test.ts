@@ -114,6 +114,31 @@ describe("FadenstackChatClient.stream", () => {
     expect(gateway.modelCalls[0]!.tools.map((t) => t.name)).toEqual(["read_page"]);
     expect(gateway.heldTools).toEqual(["delete_page"]);
   });
+
+  // The SDKs' own tools follow the profile, not the contract (core b8d54846): one test per tool, both ways.
+  const SDK_TOOLS = ["find_tool", "load_skill", "read_skill_resource", "web_search", "run_skill_script"];
+
+  it("never holds back an SDK tool the profile allows, contract or not; run_skill_script never goes", async () => {
+    const gateway = new FakeGateway({
+      agents: [{ slug: "test-agent", contract: [{ name: "read_page", risk: "read" }], localSkills: { mode: "allow" }, localMcpMode: "allow" }],
+      model: () => ({ text: "ok" }),
+    });
+    const client = await signedIn(gateway);
+    await collect(client.chat.stream([{ role: "user", content: "x" }], { tools: [...SDK_TOOLS, "read_page", "delete_page"].map((name) => ({ name })) }));
+    expect(gateway.modelCalls[0]!.tools.map((t) => t.name)).toEqual(["find_tool", "load_skill", "read_skill_resource", "web_search", "read_page"]);
+    expect(gateway.heldTools).toEqual(["run_skill_script", "delete_page"]);
+  });
+
+  it("holds back an SDK tool the profile forbids, even where the contract lists it", async () => {
+    const gateway = new FakeGateway({
+      agents: [{ slug: "test-agent", contract: [{ name: "load_skill", risk: "read" }, { name: "web_search", risk: "read" }] }],
+      model: () => ({ text: "ok" }),
+    });
+    const client = await signedIn(gateway);
+    await collect(client.chat.stream([{ role: "user", content: "x" }], { tools: SDK_TOOLS.map((name) => ({ name })) }));
+    expect(gateway.modelCalls[0]!.tools.map((t) => t.name)).toEqual(["find_tool"]);
+    expect(gateway.heldTools).toEqual(["load_skill", "read_skill_resource", "web_search", "run_skill_script"]);
+  });
 });
 
 describe("FadenstackChatClient.complete", () => {

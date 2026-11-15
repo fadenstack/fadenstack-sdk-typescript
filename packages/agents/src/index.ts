@@ -4,6 +4,20 @@ export { AgentDefinition } from "./definition.js";
 export { type LocalLanguageStore, type LocalProfileOptions } from "./localBackend.js";
 export { AgentBuilder, type AgentSettings, type AppDescription } from "./builder.js";
 export { MachinePolicy, MachinePolicyError, PolicyAccess, PolicyRule, TimestampingMode, TimestampingPolicy, type MachinePolicyInit } from "./machinePolicy.js";
+export {
+  IndexedDbWebSearchStore,
+  MemoryWebSearchStore,
+  WEB_SEARCH_SOURCE,
+  WEB_SEARCH_TOOL,
+  WebSearchModule,
+  cleanSearchText,
+  isAllowedSearxngUrl,
+  webSearchModule,
+  type WebSearchOptions,
+  type WebSearchProvider,
+  type WebSearchSettings,
+  type WebSearchStore,
+} from "./webSearch.js";
 export { ChatSession, BYPASS_ENDED_NOTE, resultText, type PickedSkill, type SendOptions, type HostCommandOptions, type HostCommandResult } from "./session.js";
 export {
   ApprovalDecision,

@@ -118,7 +118,8 @@ describe("the agent's log", () => {
       [2012, "ModelRequest", "debug"], [2013, "ToolsRefreshed", "information"], [2014, "ToolsRefreshFailed", "warning"],
       [2016, "ToolNameReserved", "warning"], [2017, "ToolNameTaken", "warning"],
       [2020, "ToolCall", "information"], [2021, "Approval", "information"], [2030, "Notice", "information"],
-      [2053, "ApprovalAnswerRetried", "warning"], [2054, "NoProvenanceModule", "warning"]]);
+      [2053, "ApprovalAnswerRetried", "warning"], [2054, "NoProvenanceModule", "warning"],
+      [2080, "WebSearchRan", "information"], [2081, "WebSearchFailed", "warning"], [2082, "WebSearchOff", "debug"]]);
   });
 });
 

@@ -44,4 +44,8 @@ export const AgentLog = Object.freeze({
   /** sdk/51 F10 (owner, 14 Nov): `build()` says once that a standalone agent goes without the provenance module. */
   noProvenanceModule: defineLog(AGENT_LOG_CATEGORY, 2054, "NoProvenanceModule", "warning",
     "Agent {Agent} runs on its own model endpoint without the provenance module: what it places in documents carries no mark. Add @fadenstack/provenance (builder.use(provenanceModule()))"),
+  // web_search (sdk/51 F06): the provider, a count, a duration and the kind of failure; never the query, a result or the key.
+  webSearchRan: defineLog(AGENT_LOG_CATEGORY, 2080, "WebSearchRan", "information", "A web search with {Provider} found {Count} results in {DurationMs} ms"),
+  webSearchFailed: defineLog(AGENT_LOG_CATEGORY, 2081, "WebSearchFailed", "warning", "A web search with {Provider} failed ({Kind})"),
+  webSearchOff: defineLog(AGENT_LOG_CATEGORY, 2082, "WebSearchOff", "debug", "Web search is not offered ({Reason})"),
 });

@@ -98,7 +98,7 @@ export async function buildExport(sessions: SessionStore, approvals: ApprovalSto
  * The names of the databases a user has on this device: sessions, "Allow always", their key, their preferences and their provenance key and log (the
  * thinking level picked per agent, `reasoningStoreName`).
  */
-export function userDatabaseNames(principal: StorePrincipal | undefined): { sessions: string; approvals: string; keys: string; preferences: string; provenance: string; skills: string; skillSwitches: string; mcp: string } {
+export function userDatabaseNames(principal: StorePrincipal | undefined): { sessions: string; approvals: string; keys: string; preferences: string; provenance: string; skills: string; skillSwitches: string; mcp: string; webSearch: string } {
   return {
     sessions: userStoreName("fadenstack-sessions", principal),
     approvals: userStoreName("fadenstack-approvals", principal),
@@ -111,6 +111,8 @@ export function userDatabaseNames(principal: StorePrincipal | undefined): { sess
     skillSwitches: userStoreName("fadenstack-skill-switches", principal),
     // The person's own MCP servers (@fadenstack/mcp, sdk/51 F05): their header values are sealed under the person's key, and go with it.
     mcp: userStoreName("fadenstack-mcp", principal),
+    // The person's web search provider and their sealed Brave key (sdk/51 F06).
+    webSearch: userStoreName("fadenstack-web-search", principal),
   };
 }
 
@@ -122,7 +124,7 @@ export async function deleteUserDatabases(principal: StorePrincipal | undefined,
   if (!factory) return 0;
   const names = userDatabaseNames(principal);
   let removed = 0;
-  for (const name of [names.sessions, names.approvals, names.keys, names.preferences, names.provenance, names.skills, names.skillSwitches, names.mcp]) if (await deleteDatabase(factory, name)) removed++;
+  for (const name of [names.sessions, names.approvals, names.keys, names.preferences, names.provenance, names.skills, names.skillSwitches, names.mcp, names.webSearch]) if (await deleteDatabase(factory, name)) removed++;
   return removed;
 }
 
