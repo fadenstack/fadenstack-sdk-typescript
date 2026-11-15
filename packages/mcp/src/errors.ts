@@ -27,10 +27,13 @@ const REASONS: Record<McpConnectFailure, string> = {
 };
 
 /**
- * Which plain-http rule an entry breaks (sdk/51 F05), so a host can say it in its own words. .NET: `McpProblem.PlainHttpWithHeaders`,
- * `McpProblem.PlainHttpNotLocal`.
+ * Which rule an entry breaks, so a host can say it in its own words (sdk/51 F05): the plain-http rules and the form of the label,
+ * the address and the headers. A rule with no code here is a limit the host need not word. .NET: `McpProblem`.
  */
-export type McpConfigProblem = "plainHttpWithHeaders" | "plainHttpNotLocal";
+export type McpConfigProblem =
+  | "labelMissing" | "labelInvalid" | "addressMissing" | "addressInvalid" | "nameInvalid" | "valueInvalid" | "tooManyHeaders"
+  | "plainHttpWithHeaders" | "plainHttpNotLocal"
+  | "importEmpty" | "importTooLarge" | "importNotJson" | "importNoList";
 
 /** A server's address, label or headers break a rule (`checkServer`), or a pasted configuration is not usable. */
 export class McpConfigError extends McpError {

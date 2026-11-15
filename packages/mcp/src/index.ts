@@ -1,4 +1,4 @@
-export { MCP_MODULE, McpModule, McpServerState, mcpModule, type McpImportOutcome, type McpOptions, type McpServerStatus, type McpToolInfo } from "./module.js";
+export { MCP_MODULE, McpModule, McpServerState, mcpModule, type McpImportOutcome, type McpOptions, type McpServerStatus, type McpTestResult, type McpToolInfo } from "./module.js";
 export { McpConfigError, McpConnectError, McpError, McpPolicyError, McpStoreError, type McpConfigProblem, type McpConnectFailure } from "./errors.js";
 export { toolClassFor, type McpToolHints } from "./hints.js";
 export { coreLocalMcpPolicy, mcpSourceNames, type LocalMcpDecision, type LocalMcpPolicy } from "./policy.js";
@@ -36,3 +36,10 @@ export {
   type McpPlainHttpRefusal,
 } from "./plainHttp.js";
 export { MAX_RESULT_CHARS, cleanResult, fence as fenceMcpResult, oneLine as mcpOneLine } from "./text.js";
+export {
+  McpToolsCatalog,
+  agentToolsView,
+  type AgentToolsView,
+  type FadenstackAgentToolsView,
+  type McpToolsCatalogOptions,
+} from "./toolsCatalog.js";

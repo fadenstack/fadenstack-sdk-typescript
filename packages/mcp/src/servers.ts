@@ -75,19 +75,19 @@ export function isLoopbackUrl(url: URL): boolean {
  */
 export function checkServer(server: { label: string; url: string; headers?: Record<string, string> | undefined }): URL {
   const label = server.label;
-  if (typeof label !== "string" || label.trim() === "") throw new McpConfigError("A server needs a label.");
+  if (typeof label !== "string" || label.trim() === "") throw new McpConfigError("A server needs a label.", "labelMissing");
   if (label !== label.trim() || [...label].length > LABEL_MAX || !/^[\p{L}\p{N}][\p{L}\p{N} ._-]*$/u.test(label)) {
-    throw new McpConfigError(`A label is letters, digits, space, dot, dash and underscore, at most ${LABEL_MAX} characters: '${label.slice(0, 60)}'.`);
+    throw new McpConfigError(`A label is letters, digits, space, dot, dash and underscore, at most ${LABEL_MAX} characters: '${label.slice(0, 60)}'.`, "labelInvalid");
   }
-  if (typeof server.url !== "string" || server.url.length > URL_MAX) throw new McpConfigError(`The address of '${label}' is missing or too long.`);
+  if (typeof server.url !== "string" || server.url.length > URL_MAX) throw new McpConfigError(`The address of '${label}' is missing or too long.`, "addressInvalid");
   let url: URL;
   try {
     url = new URL(server.url);
   } catch {
-    throw new McpConfigError(`The address of '${label}' is not a web address.`);
+    throw new McpConfigError(`The address of '${label}' is not a web address.`, "addressInvalid");
   }
-  if (url.protocol !== "https:" && url.protocol !== "http:") throw new McpConfigError(`The address of '${label}' must be http or https.`);
-  if (url.username !== "" || url.password !== "") throw new McpConfigError(`The address of '${label}' carries a user name or password: put it in a header.`);
+  if (url.protocol !== "https:" && url.protocol !== "http:") throw new McpConfigError(`The address of '${label}' must be http or https.`, "addressInvalid");
+  if (url.username !== "" || url.password !== "") throw new McpConfigError(`The address of '${label}' carries a user name or password: put it in a header.`, "addressInvalid");
   const headers = server.headers ?? {};
   if (url.protocol === "http:" && !isLoopbackUrl(url)) {
     if (Object.keys(headers).length > 0) {
@@ -98,13 +98,13 @@ export function checkServer(server: { label: string; url: string; headers?: Reco
     }
   }
   const names = Object.keys(headers);
-  if (names.length > HEADERS_MAX) throw new McpConfigError(`'${label}' has more than ${HEADERS_MAX} headers.`);
+  if (names.length > HEADERS_MAX) throw new McpConfigError(`'${label}' has more than ${HEADERS_MAX} headers.`, "tooManyHeaders");
   for (const name of names) {
     const value = headers[name];
-    if (!TOKEN.test(name)) throw new McpConfigError(`A header name of '${label}' is not valid.`);
-    if (TRANSPORT_HEADERS.has(name.toLowerCase())) throw new McpConfigError(`The header '${name}' of '${label}' is set by the transport and cannot be given.`);
+    if (!TOKEN.test(name)) throw new McpConfigError(`A header name of '${label}' is not valid.`, "nameInvalid");
+    if (TRANSPORT_HEADERS.has(name.toLowerCase())) throw new McpConfigError(`The header '${name}' of '${label}' is set by the transport and cannot be given.`, "nameInvalid");
     // the value is never put in the message: it is a secret
-    if (typeof value !== "string" || /[\r\n\u0000]/.test(value) || value.length > 4096) throw new McpConfigError(`The value of header '${name}' of '${label}' is not valid.`);
+    if (typeof value !== "string" || /[\r\n\u0000]/.test(value) || value.length > 4096) throw new McpConfigError(`The value of header '${name}' of '${label}' is not valid.`, "valueInvalid");
   }
   return url;
 }

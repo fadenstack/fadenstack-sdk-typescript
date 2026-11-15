@@ -114,6 +114,18 @@ export interface McpOptions {
   logger?: FadenstackLogger;
 }
 
+/** What a test of a server found (`McpModule.testServer`). .NET: `McpTestResult`. */
+export interface McpTestResult {
+  /** `notAllowed`: the policy does not allow it and nothing was sent; `started`: it answered and listed its tools; `failed`: it did not. */
+  outcome: "notAllowed" | "started" | "failed";
+  /** The names the server knows its tools by. */
+  tools: string[];
+  /** A short cleaned line with `failed`; never an address or a header. */
+  error?: string;
+  /** Why plain http to it was refused (nothing was sent). */
+  plainHttp?: McpPlainHttpRefusal;
+}
+
 /** What `McpModule.importConfig` did with a pasted configuration. */
 export interface McpImportOutcome extends McpImportResult {
   /** The labels kept in the person's list (all off, not reviewed). */
@@ -160,6 +172,8 @@ export class McpModule implements FadenstackModule, ChangingToolSource {
   /** The context of the last attach: where a change of the plain-http switch is reported. */
   #context: AgentContext | undefined;
   readonly #plainHttpChanges: LocalMcpPlainHttpEvent[] = [];
+  /** Servers whose connection is dropped and made again at the next attach (`restart`). */
+  readonly #restarts = new Set<string>();
   #chain: Promise<unknown> = Promise.resolve();
   #disposed = false;
 
@@ -225,6 +239,17 @@ export class McpModule implements FadenstackModule, ChangingToolSource {
   /** Switches a server on or off. Switching on is the person's review: the server is no longer "not reviewed". */
   async setEnabled(label: string, enabled: boolean): Promise<void> {
     await this.#update(label, (s) => ({ ...s, enabled, ...(enabled ? { reviewed: true } : {}) }));
+  }
+
+  /**
+   * Stops a server's connection and makes it again at the start of the agent's next turn (the Tools view's Restart). A server that
+   * is off, or not in the person's list, stays as it is. .NET: `McpHost.RestartAsync`.
+   */
+  async restart(label: string): Promise<void> {
+    const found = await this.#need().get(label);
+    if (!found?.enabled) return;
+    this.#restarts.add(label);
+    this.refresh();
   }
 
   /** The person's word that the server's hints are true (H4): its `readOnlyHint` then counts. Standalone only. */
@@ -315,6 +340,34 @@ export class McpModule implements FadenstackModule, ChangingToolSource {
       } catch {
         // a report that fails never fails the switch: the device's own audit log has it
       }
+    }
+  }
+
+  /**
+   * Connects to a server for a moment, lists its tools and closes, without keeping it: the Tools view's Test. The same rules as an
+   * attach: the policy first, then the plain-http rule (`context` is the running agent's; none: nothing is allowed), and the module's
+   * own `fetch` and timeout. Nothing is logged but the label and a count. .NET: `McpHost.TestAsync`.
+   */
+  async testServer(server: McpServerRecord, context: Pick<AgentContext, "profile" | "machinePolicy"> | undefined, signal?: AbortSignal): Promise<McpTestResult> {
+    const policy = this.#options.policy ?? coreLocalMcpPolicy;
+    if (!context || !policy.decide({ label: server.label, url: server.url }, context.profile, context.machinePolicy).allowed) {
+      return { outcome: "notAllowed", tools: [] };
+    }
+    let connection: McpConnection | undefined;
+    try {
+      const url = checkServer(server);
+      checkMcpPlainHttp(url, server, plainHttpPermitted(context));
+      connection = await McpConnection.open({ label: server.label, url, headers: server.headers, fetch: this.#options.fetch, signal,
+        timeoutMs: this.#options.connectTimeoutMs ?? DEFAULT_CONNECT_TIMEOUT_MS, version: CLIENT_VERSION });
+      const listed = await connection.listTools(signal);
+      return { outcome: "started", tools: listed.map((t) => t.name) };
+    } catch (error) {
+      if (error instanceof McpPlainHttpRefusedError) return { outcome: "failed", tools: [], plainHttp: error.reason };
+      // the message of these errors never carries an address or a header
+      const message = error instanceof McpConnectError || error instanceof McpConfigError ? error.message : new McpConnectError(server.label, "unreachable").message;
+      return { outcome: "failed", tools: [], error: oneLine(message, 200) };
+    } finally {
+      await connection?.close();
     }
   }
 
@@ -414,6 +467,7 @@ export class McpModule implements FadenstackModule, ChangingToolSource {
       await this.#detach(entry);
       return;
     }
+    if (this.#restarts.delete(record.label)) await this.#detach(entry);
     const key = JSON.stringify([record.url, Object.entries(record.headers).sort(([a], [b]) => (a < b ? -1 : 1)), record.callTimeoutS ?? null,
       record.plainHttpInLan === true]);
     try {

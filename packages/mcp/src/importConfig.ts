@@ -1,4 +1,4 @@
-import { McpConfigError } from "./errors.js";
+import { McpConfigError, type McpConfigProblem } from "./errors.js";
 import { LABEL_MAX, checkServer, isLoopbackUrl, recordOf, type McpServerRecord } from "./servers.js";
 
 /** A server of a pasted configuration that did not come in, and why. */
@@ -10,6 +10,8 @@ export interface McpImportSkipped {
    * (the person adds it by hand and turns its switch on: an import never does, sdk/51 F05), or `invalid`.
    */
   kind: "stdio" | "sse" | "plainHttp" | "invalid";
+  /** For `invalid`: which rule it breaks, or `noAddress` (no `url`), so a host can word it; undefined when it is none of these. */
+  why?: McpConfigProblem | "noAddress";
 }
 
 /** What a pasted configuration holds. */
@@ -22,6 +24,8 @@ export interface McpImportResult {
   skipped: McpImportSkipped[];
   /** Things the person should know that are not errors (a header left out because its value is a placeholder). */
   notes: string[];
+  /** The names of the headers left out of a server that came in, by its label (a host words this itself; the notes are English). */
+  leftOut: Record<string, string[]>;
 }
 
 /** The longest configuration read, and the most servers taken from it. */
@@ -65,13 +69,13 @@ function isObject(value: unknown): value is Record<string, unknown> {
  * is put in a message. .NET: the desktop's `McpImport`, which also reads the other apps' files from disk (a browser has no disk to look in).
  */
 export function parseMcpConfig(text: string): McpImportResult {
-  if (typeof text !== "string" || text.trim() === "") throw new McpConfigError("There is nothing to import.");
-  if (text.length > MAX_IMPORT_CHARS) throw new McpConfigError("The configuration is too long to import.");
+  if (typeof text !== "string" || text.trim() === "") throw new McpConfigError("There is nothing to import.", "importEmpty");
+  if (text.length > MAX_IMPORT_CHARS) throw new McpConfigError("The configuration is too long to import.", "importTooLarge");
   let root: unknown;
   try {
     root = JSON.parse(stripJsonc(text.replace(/^\uFEFF/, "")));
   } catch {
-    throw new McpConfigError("The text is not JSON.");
+    throw new McpConfigError("The text is not JSON.", "importNotJson");
   }
   let shape: McpImportResult["shape"] = "mcpServers";
   let table: unknown;
@@ -81,15 +85,17 @@ export function parseMcpConfig(text: string): McpImportResult {
     table = (root["mcp"] as Record<string, unknown>)["servers"];
     shape = "mcp.servers";
   }
-  if (!isObject(table)) throw new McpConfigError("There is no 'mcpServers' or 'servers' entry in the text.");
+  if (!isObject(table)) throw new McpConfigError("There is no 'mcpServers' or 'servers' entry in the text.", "importNoList");
 
   const servers: McpServerRecord[] = [];
   const skipped: McpImportSkipped[] = [];
   const notes: string[] = [];
+  const leftOut: Record<string, string[]> = {};
   const seen = new Set<string>();
   for (const [name, definition] of Object.entries(table).slice(0, MAX_IMPORT_SERVERS)) {
     const label = name.trim().slice(0, 200);
-    const skip = (kind: McpImportSkipped["kind"], reason: string) => skipped.push({ label: label.slice(0, LABEL_MAX), reason, kind });
+    const skip = (kind: McpImportSkipped["kind"], reason: string, why?: McpImportSkipped["why"]) =>
+      skipped.push({ label: label.slice(0, LABEL_MAX), reason, kind, ...(why !== undefined ? { why } : {}) });
     if (!isObject(definition)) { skip("invalid", "The entry is not an object."); continue; }
     const type = typeof definition["type"] === "string" ? definition["type"].toLowerCase() : undefined;
     if (type === "stdio" || (type === undefined && typeof definition["command"] === "string")) {
@@ -102,14 +108,19 @@ export function parseMcpConfig(text: string): McpImportResult {
       continue;
     }
     const url = typeof definition["url"] === "string" ? definition["url"] : typeof definition["serverUrl"] === "string" ? definition["serverUrl"] : undefined;
-    if (url === undefined) { skip("invalid", "It has no address ('url')."); continue; }
+    if (url === undefined) { skip("invalid", "It has no address ('url').", "noAddress"); continue; }
     const headers: Record<string, string> = {};
     const rawHeaders = definition["headers"];
     if (rawHeaders !== undefined && !isObject(rawHeaders)) { skip("invalid", "Its headers are not an object."); continue; }
     for (const [header, value] of Object.entries(rawHeaders ?? {})) {
-      if (typeof value !== "string") { notes.push(`${label.slice(0, LABEL_MAX)}: the header '${header.slice(0, 40)}' was left out (its value is not text).`); continue; }
+      if (typeof value !== "string") {
+        notes.push(`${label.slice(0, LABEL_MAX)}: the header '${header.slice(0, 40)}' was left out (its value is not text).`);
+        (leftOut[label] ??= []).push(header.slice(0, 40));
+        continue;
+      }
       if (/\$\{[^}]*\}|\$\([^)]*\)/.test(value)) {
         notes.push(`${label.slice(0, LABEL_MAX)}: the header '${header.slice(0, 40)}' was left out (its value is a placeholder this app cannot fill; add it by hand).`);
+        (leftOut[label] ??= []).push(header.slice(0, 40));
         continue;
       }
       headers[header] = value;
@@ -119,7 +130,7 @@ export function parseMcpConfig(text: string): McpImportResult {
     try {
       address = checkServer({ label, url, headers });
     } catch (error) {
-      skip("invalid", error instanceof McpConfigError ? error.message : "It is not usable.");
+      skip("invalid", error instanceof McpConfigError ? error.message : "It is not usable.", error instanceof McpConfigError ? error.problem : undefined);
       continue;
     }
     if (address.protocol === "http:" && !isLoopbackUrl(address)) {
@@ -130,5 +141,5 @@ export function parseMcpConfig(text: string): McpImportResult {
     servers.push(recordOf({ label, url, headers, enabled: false, trusted: false, reviewed: false, importedFrom: shape === "mcp.servers" ? "servers" : shape }));
   }
   if (Object.keys(table).length > MAX_IMPORT_SERVERS) notes.push(`Only the first ${MAX_IMPORT_SERVERS} servers were read.`);
-  return { shape, servers, skipped, notes };
+  return { shape, servers, skipped, notes, leftOut };
 }
