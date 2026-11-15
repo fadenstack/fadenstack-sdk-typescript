@@ -55,7 +55,7 @@ describe("a turn", () => {
     const result = await session.send("Delete page 8");
     expect(s.pages.deleted).toEqual([]);
     expect(result.outcome).toBe("tool_denied");
-    expect(lastToolResults(s.gateway.modelCalls[1]!).values().next().value).toBe("The user declined to run 'delete_page' (not today).");
+    expect(lastToolResults(s.gateway.modelCalls[1]!).values().next().value).toBe("The user declined to run 'delete_page'. Their reason: not today");
   });
 
   it("stops asking for a tool approved for the chat, until the chat is opened again", async () => {

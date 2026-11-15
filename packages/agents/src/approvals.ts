@@ -78,6 +78,27 @@ export const ApprovalDecision = {
   deny: (reason?: string): ApprovalDecision => (reason === undefined ? { approved: false } : { approved: false, reason }),
 };
 
+/** The longest reason for declining that reaches the model and the transcript, in characters (sdk/51 F08 §3). .NET: `ApprovalDecision.MaxReasonChars`. */
+export const MAX_REASON_CHARS = 500;
+
+// Control characters (line breaks kept) and the invisible or direction marks a text can hide something in.
+const NOT_IN_A_REASON = /[\u0000-\u0009\u000B-\u001F\u007F-\u009F\u200B\u2060\uFEFF\u200E\u200F\u202A-\u202E\u2066-\u2069]/gu;
+
+/**
+ * The person's reason for declining as the model and the transcript get it: control characters and invisible or direction marks out
+ * (line breaks kept), trimmed, cut to `MAX_REASON_CHARS`; undefined when nothing is left. .NET: `ApprovalDecision.CleanReason`.
+ */
+export function cleanReason(reason: string | undefined): string | undefined {
+  if (reason === undefined) return undefined;
+  const text = reason.replace(NOT_IN_A_REASON, "").trim();
+  if (text.length === 0) return undefined;
+  if (text.length <= MAX_REASON_CHARS) return text;
+  let keep = MAX_REASON_CHARS;
+  const last = text.charCodeAt(keep - 1);
+  if (last >= 0xd800 && last <= 0xdbff) keep--;
+  return text.slice(0, keep);
+}
+
 /** What let a call that needed approval through: the user for this call, this chat, always, or a grant the server holds (Bypass too). */
 export type ApprovalScope = "once" | "chat" | "always" | "bypass" | "grant";
 

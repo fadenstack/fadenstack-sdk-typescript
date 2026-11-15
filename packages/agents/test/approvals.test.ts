@@ -293,7 +293,7 @@ describe("the order", () => {
     answer = ApprovalDecision.approveForSession();
     await session.send("write"); // asked: allowed for this chat
     await session.send("write"); // this chat, not asked
-    await approvals.add("docs", { tool: "write_page", toolClass: "write", approvedAt: new Date().toISOString() });
+    await approvals.add("docs", { tool: "write_page", toolClass: "write", approvedAt: new Date().toISOString(), source: "host" });
     await session.send("write"); // always, over this chat
     expect(s.asked).toHaveLength(2);
     expect(decisions(session).map((d) => [d["scope"], d["asked"]])).toEqual([

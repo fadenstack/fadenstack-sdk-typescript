@@ -12,6 +12,20 @@ export interface StoredApproval {
   toolClass: ToolClass;
   /** ISO 8601. */
   approvedAt: string;
+  /**
+   * Where the tool comes from (`host`, `mcp`, `skills`, `web`, ...): an approval holds only for a tool of the same name from the same
+   * source and server (sdk/51 F08 §4), so a new MCP server bringing a tool of that name inherits no "always allow". Undefined in an
+   * approval kept before 0.3.0, which answers nothing: the person is asked again. .NET: `StoredApproval.Source`.
+   */
+  source?: string;
+  /** The MCP server's label, for an MCP tool. */
+  server?: string;
+}
+
+/** Whether `approval` answers a call of `tool` with this class, source and server. .NET: `StoredApproval.Covers`. */
+export function approvalCovers(approval: StoredApproval, tool: string, toolClass: ToolClass, source: string, server: string | undefined): boolean {
+  return approval.tool === tool && approval.toolClass === toolClass && approval.source !== undefined && approval.source === source
+    && (approval.server ?? undefined) === (server ?? undefined);
 }
 
 /**
@@ -57,11 +71,15 @@ interface StoredRow {
   data?: Uint8Array;
   toolClass?: ToolClass;
   approvedAt?: string;
+  source?: string;
+  server?: string;
 }
 
 interface Sealed {
   toolClass: ToolClass;
   approvedAt: string;
+  source?: string;
+  server?: string;
 }
 
 export interface IndexedDbApprovalStoreOptions {
@@ -88,6 +106,8 @@ export class IndexedDbApprovalStore implements ApprovalStore, ListsAgents {
   readonly #protector: SecretProtector | undefined;
   readonly #onProblem: StoreProblemHandler | undefined;
   #db: Promise<IDBDatabase> | undefined;
+  /** The one move to sealed records has happened (or there was nothing to move): a plain record is refused from now on. */
+  #migrated = false;
 
   constructor(options: IndexedDbApprovalStoreOptions = {}) {
     this.#name = options.name ?? "fadenstack-approvals";
@@ -143,21 +163,32 @@ export class IndexedDbApprovalStore implements ApprovalStore, ListsAgents {
   }
 
   async #row(agent: string, approval: StoredApproval): Promise<StoredRow> {
-    if (!this.#protector) return { agent, tool: approval.tool, toolClass: approval.toolClass, approvedAt: approval.approvedAt };
-    const sealed: Sealed = { toolClass: approval.toolClass, approvedAt: approval.approvedAt };
+    const place = { ...(approval.source !== undefined ? { source: approval.source } : {}), ...(approval.server !== undefined ? { server: approval.server } : {}) };
+    if (!this.#protector) return { agent, tool: approval.tool, toolClass: approval.toolClass, approvedAt: approval.approvedAt, ...place };
+    const sealed: Sealed = { toolClass: approval.toolClass, approvedAt: approval.approvedAt, ...place };
     return { agent, tool: approval.tool, data: await sealJson(this.#protector, sealed, recordContext(this.#name, APPROVALS, agent, approval.tool)) };
   }
 
   /** The approval of a row, or undefined (reported) when it does not decrypt: a record like that is treated as absent. */
   async #approvalOf(row: StoredRow): Promise<StoredApproval | undefined> {
-    if (row.data === undefined) return { tool: row.tool, toolClass: row.toolClass!, approvedAt: row.approvedAt! };
+    if (row.data === undefined) {
+      // A plain record: kept so only where nothing seals (no key here), or from an earlier SDK while the one move to sealed records has
+      // not happened yet. Once it has, a plain record was planted, and answers nothing (sdk/51 F08 §1).
+      if (this.#protector && this.#migrated) {
+        this.#onProblem?.({ store: "approvals", kind: "unreadable", agent: row.agent });
+        return undefined;
+      }
+      return { tool: row.tool, toolClass: row.toolClass!, approvedAt: row.approvedAt!,
+        ...(row.source !== undefined ? { source: row.source } : {}), ...(row.server !== undefined ? { server: row.server } : {}) };
+    }
     if (!this.#protector || !(row.data instanceof Uint8Array)) {
       this.#onProblem?.({ store: "approvals", kind: "unreadable", agent: row.agent });
       return undefined;
     }
     try {
       const sealed = await openJson<Sealed>(this.#protector, row.data, recordContext(this.#name, APPROVALS, row.agent, row.tool));
-      return { tool: row.tool, toolClass: sealed.toolClass, approvedAt: sealed.approvedAt };
+      return { tool: row.tool, toolClass: sealed.toolClass, approvedAt: sealed.approvedAt,
+        ...(sealed.source !== undefined ? { source: sealed.source } : {}), ...(sealed.server !== undefined ? { server: sealed.server } : {}) };
     } catch {
       this.#onProblem?.({ store: "approvals", kind: "undecryptable", agent: row.agent });
       return undefined;
@@ -174,7 +205,10 @@ export class IndexedDbApprovalStore implements ApprovalStore, ListsAgents {
         done = (await request<unknown>(tx.objectStore(META_STORE).get(ENCRYPTED_FLAG))) === true;
         if (!done) rows = await request<StoredRow[]>(tx.objectStore(APPROVALS).getAll());
       });
-      if (done) return;
+      if (done) {
+        this.#migrated = true;
+        return;
+      }
       const sealed = await Promise.all(rows.filter((r) => r.data === undefined)
         .map((r) => this.#row(r.agent, { tool: r.tool, toolClass: r.toolClass!, approvedAt: r.approvedAt! })));
       await transact(db, [META_STORE, APPROVALS], "readwrite", (tx) => {
@@ -182,6 +216,7 @@ export class IndexedDbApprovalStore implements ApprovalStore, ListsAgents {
         tx.objectStore(META_STORE).put(true, ENCRYPTED_FLAG);
         return Promise.resolve();
       });
+      this.#migrated = true;
     } catch {
       this.#onProblem?.({ store: "approvals", kind: "migration" }); // the plain records stay, readable as they were
     }

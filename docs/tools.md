@@ -248,7 +248,7 @@ It returns an `ApprovalDecision`:
 | `ApprovalDecision.approve()` | The tool runs, this once. |
 | `ApprovalDecision.approveForSession()` | The tool runs, and later calls of the same tool run without asking while this session object lives. A session opened again asks again. |
 | `ApprovalDecision.approveAlways()` | The tool runs, and later calls of it run without asking in every session on this device, until the approvals are reset. |
-| `ApprovalDecision.deny(reason?)` | The tool does not run. The model is told the user declined, with your reason, and the turn's outcome is `tool_denied`. |
+| `ApprovalDecision.deny(reason?)` | The tool does not run. The model is told the user declined, with the reason if there is one: the person's own words, not fenced as untrusted data, but cleaned of control characters and invisible marks and cut to 500 characters (`MAX_REASON_CHARS`, `cleanReason`). The transcript's `approval.decision` keeps the same text as `reason`, as the .NET SDK does. The turn's outcome is `tool_denied`. |
 
 A decision is a plain object, `{ approved, forSession?, always?, reason? }`, so you can also return one directly.
 `forSession` and `always` count only where the request offers them; elsewhere they approve the one call.
@@ -300,10 +300,19 @@ for LLM Applications 2025, LLM02 and LLM06). So:
 
 ### Allow always
 
-What the user allows always is kept per signed-in user and agent on this device, by tool name and class, in an
-`ApprovalStore`: the user's own IndexedDB database in a browser and memory elsewhere unless you pass your own to
-`useApprovalStore`, so two people in one browser profile never see each other's. It is checked at every call: a tool
-that became `destructive` or `unknown`, or that an administrator's rule now covers, asks again.
+What the user allows always is kept per signed-in user and agent on this device, by tool name and class and where the
+tool comes from (its `source` and, for an MCP tool, its `server`), in an `ApprovalStore`: the user's own IndexedDB database
+in a browser and memory elsewhere unless you pass your own to `useApprovalStore`, so two people in one browser profile
+never see each other's. It is checked at every call: a tool that became `destructive` or `unknown`, or that an
+administrator's rule now covers, asks again. A tool of the same name from another source or server is asked about on
+its own, so a new MCP server bringing a tool of that name inherits no "always"; Allow for this chat works the same way.
+An approval kept before 0.3.0 has no source and answers nothing: the person is asked once more (sdk/51 F08).
+
+In IndexedDB each approval is sealed with the person's WebCrypto key, bound to the database, the agent and the tool, so a
+record copied to another agent or person cannot be read. Plain records from an earlier SDK are sealed once, at the first
+open; after that a plain record, which only someone writing into the database could have put there, answers nothing.
+Pending approvals live in memory and take the first answer only: when the page closes, the turn ends and no card comes
+back.
 
 `agent.listApprovals()` lists them, for a settings page. `agent.resetApprovals()` forgets every tool's,
 `agent.resetApprovals("write_page")` one tool's.

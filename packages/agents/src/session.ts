@@ -31,7 +31,8 @@ import {
 } from "@fadenstack/client";
 
 import type { FadenstackAgent } from "./agent.js";
-import { ApprovalDecision, type ApprovalHandler, type ApprovalRequest, type ApprovalScope } from "./approvals.js";
+import { ApprovalDecision, cleanReason, type ApprovalHandler, type ApprovalRequest, type ApprovalScope } from "./approvals.js";
+import { approvalCovers } from "./approvalStore.js";
 import { BypassSignInError } from "./stepUp.js";
 import { attachmentData, type MessageAttachment } from "./attachments.js";
 import { ContextBuilder, instructionsTokens, isBlank } from "./contextBuilder.js";
@@ -247,13 +248,13 @@ export class ChatSession {
 
   /** Tools the user approved for the rest of this session ("Allow for this chat"), while this object lives. */
   get approvedForSession(): ReadonlySet<string> {
-    return this.#approvedForSession;
+    return new Set([...this.#approvedForSession].map(toolOfChatKey));
   }
 
   /** Forgets what the user allowed for this chat: every tool, or `tool` only. */
   resetApprovals(tool?: string): void {
     if (tool === undefined) this.#approvedForSession.clear();
-    else this.#approvedForSession.delete(tool);
+    else for (const key of [...this.#approvedForSession]) if (toolOfChatKey(key) === tool) this.#approvedForSession.delete(key);
   }
 
   get isRunning(): boolean {
@@ -576,6 +577,15 @@ interface Settled {
   waitedMs: number | undefined;
   /** The user's reason for declining. */
   reason: string | undefined;
+}
+
+/** What the person allowed for this chat is kept by the tool's name, source and server (sdk/51 F08 §4). */
+function chatKey(tool: string, source: string, server: string | undefined): string {
+  return JSON.stringify([source, server ?? null, tool]);
+}
+
+function toolOfChatKey(key: string): string {
+  return (JSON.parse(key) as [string, string | null, string])[2];
 }
 
 interface PreparedHostPolicy {
@@ -1186,8 +1196,9 @@ class Turn {
         toolName: tool.name, toolClass, arguments: args, requiredByRule: rule }) };
       if (!settled.approved) {
         this.#toolDenied = true;
-        const reason = settled.reason ? ` (${settled.reason})` : "";
-        return { result: `The user declined to run '${tool.name}'${reason}.`, outcome: "denied", waited };
+        // The reason is the person's own text (sdk/51 F08 §3): not fenced as untrusted data, but cut and cleaned.
+        const reason = cleanReason(settled.reason);
+        return { result: `The user declined to run '${tool.name}'.${reason ? ` Their reason: ${reason}` : ""}`, outcome: "denied", waited };
       }
     }
     try {
@@ -1384,8 +1395,8 @@ class Turn {
     const leadsOutside = verdict.leadsOutside;
     // No standing approval in bypass mode: the app's Bypass is the server's (a second sign-in), never a local yes.
     const standing: ApprovalScope | undefined = rule || individual || !open ? undefined
-      : alwaysAllowed && (await this.#approvedAlways(name, toolClass)) ? "always"
-      : chatAllowed && this.#access.approved.has(name) ? "chat"
+      : alwaysAllowed && (await this.#approvedAlways(name, toolClass, base.source, base.server)) ? "always"
+      : chatAllowed && this.#access.approved.has(chatKey(name, base.source, base.server)) ? "chat"
       : undefined;
     if (standing) {
       await this.#record(base, { approved: true, scope: standing, asked: false, rule, timedOut: false, waitedMs: undefined });
@@ -1431,9 +1442,11 @@ class Turn {
         await this.#notice({ outcome: "grant_failed", stage: "tool", message: "A time grant could not be confirmed. This call alone was allowed; inspect active grants before requesting another." });
       }
     }
-    if (scope === "always" && !(await this.#keepAlways(name, toolClass))) scope = "once";
-    if (scope === "chat") this.#access.approved.add(name);
+    if (scope === "always" && !(await this.#keepAlways(name, toolClass, base.source, base.server))) scope = "once";
+    if (scope === "chat") this.#access.approved.add(chatKey(name, base.source, base.server));
+    const declined = scope === undefined ? cleanReason(decision?.reason) : undefined;
     await this.#record(base, { approved: scope !== undefined, scope, asked: true, rule, timedOut: decision === undefined, waitedMs,
+      ...(declined !== undefined ? { reason: declined } : {}),
       ...(leadsOutside !== undefined ? { outsideGrant: true } : {}),
       ...(grantId ? { grantId } : {}),
       ...(scope === "grant" ? { grantMinutes: Math.round(decision!.forTime! / 60_000) } : {}),
@@ -1456,7 +1469,7 @@ class Turn {
   /** The approval's transcript entry, and the server's record of it (names only). */
   async #record(request: ApprovalRequest, how: {
     approved: boolean; scope: ApprovalScope | undefined; asked: boolean; rule: boolean; timedOut: boolean; waitedMs: number | undefined;
-    grantId?: string; grantMinutes?: number; confirmedMinutes?: number; outsideGrant?: boolean;
+    grantId?: string; grantMinutes?: number; confirmedMinutes?: number; outsideGrant?: boolean; reason?: string;
   }): Promise<void> {
     await this.#access.append(EntryTypes.approvalDecision, this.#id, {
       call_id: request.callId,
@@ -1473,6 +1486,8 @@ class Turn {
       outside_grant: how.outsideGrant === true,
       timed_out: how.timedOut,
       wait_ms: Math.round(how.waitedMs ?? 0),
+      // The person's reason for declining, cut (sdk/51 F08 §3; the same key as .NET); on the device only.
+      ...(how.reason !== undefined ? { reason: how.reason } : {}),
       // The same keys as every SDK's (sdk/43 §6): the time the person picked, and what the server confirmed.
       ...(how.grantId ? { grant_id: how.grantId } : {}),
       ...(how.grantMinutes !== undefined ? { grant_minutes: how.grantMinutes } : {}),
@@ -1491,18 +1506,19 @@ class Turn {
     });
   }
 
-  async #approvedAlways(name: string, toolClass: ToolClass): Promise<boolean> {
+  async #approvedAlways(name: string, toolClass: ToolClass, source: string, server: string | undefined): Promise<boolean> {
     try {
       const kept = await this.#agent.approvalStore.list(this.#agent.slug);
-      return kept.some((a) => a.tool === name && a.toolClass === toolClass);
+      return kept.some((a) => approvalCovers(a, name, toolClass, source, server));
     } catch {
       return false; // a store that cannot be read approves nothing
     }
   }
 
-  async #keepAlways(name: string, toolClass: ToolClass): Promise<boolean> {
+  async #keepAlways(name: string, toolClass: ToolClass, source: string, server: string | undefined): Promise<boolean> {
     try {
-      await this.#agent.approvalStore.add(this.#agent.slug, { tool: name, toolClass, approvedAt: new Date().toISOString() });
+      await this.#agent.approvalStore.add(this.#agent.slug, { tool: name, toolClass, approvedAt: new Date().toISOString(), source,
+        ...(server !== undefined ? { server } : {}) });
       return true;
     } catch {
       return false; // not kept: this call runs, the next one asks
