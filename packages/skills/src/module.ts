@@ -19,6 +19,7 @@ import { FadenYamlError } from "./fadenYaml.js";
 import { MAX_MATCHED, MAX_NAMED, MAX_PRELOADED, SkillCandidate, select, type SkillSelection } from "./skillResolver.js";
 import { checkSkill, type SkillDefinition } from "./skillRules.js";
 import { SkillSet, loadedFrom, xmlEscape, type LoadedSkill } from "./skillSet.js";
+import { PersonGuardedSkillStore, PersonGuardedSkillSwitches } from "./personGuard.js";
 import { openSkillStore, type SkillStore, type StorePrincipal } from "./store.js";
 import { openSkillSwitches, type SkillSwitches } from "./skillSwitches.js";
 import { StoreSkillWorkshop, type SkillWorkshopOptions } from "./skillWorkshop.js";
@@ -85,9 +86,6 @@ const MAX_PRELOADED_CHARS = 20000;
 const END_MARKER = "=== END SKILL ===";
 const TOOL_NAME = /^[A-Za-z0-9_.:/-]+$/;
 
-/** The standalone principal's tenant and user (`LocalBackend`'s): the database of a person's skills before the agent has started. */
-const STANDALONE: StorePrincipal = Object.freeze({ tenantId: "standalone", userId: "standalone" });
-
 /** The skills of one read of the sources, as the pre-selection reads them, and the way to load one. */
 interface Catalog {
   readonly candidates: readonly SkillCandidate[];
@@ -118,16 +116,22 @@ export class SkillsModule implements FadenstackModule, ChangingToolSource {
   readonly #listeners = new Set<() => void>();
   readonly #unsubscribe: (() => void) | undefined;
   #catalog: Catalog | undefined;
-  #principal: StorePrincipal | undefined = STANDALONE;
+  /** Whose skills these are: what the profile's principal says. Not known (`#known`) until the agent asked for tools. */
+  #principal: StorePrincipal | undefined;
+  #known = false;
   #disposed = false;
   #bundledKept = 0;
 
   constructor(options: SkillsOptions) {
     this.#options = options;
+    // The person's own skills are the profile's person's, and no one else's: before the agent has read its profile (so the module
+    // knows no person) the default stores list nothing and refuse a change, as .NET's `SkillsModule` does (sdk/51 F04, 15 Nov). A store
+    // or switches the app passes are the app's own, whoever the person is.
+    const known = (): boolean => this.#known;
     this.store = options.store === false ? undefined
-      : options.store ?? openSkillStore({ principal: () => this.#principal, ...(options.indexedDB ? { indexedDB: options.indexedDB } : {}) });
+      : options.store ?? new PersonGuardedSkillStore(openSkillStore({ principal: () => this.#principal, ...(options.indexedDB ? { indexedDB: options.indexedDB } : {}) }), known);
     this.switches = options.switches === false ? undefined
-      : options.switches ?? openSkillSwitches({ principal: () => this.#principal, ...(options.indexedDB ? { indexedDB: options.indexedDB } : {}) });
+      : options.switches ?? new PersonGuardedSkillSwitches(openSkillSwitches({ principal: () => this.#principal, ...(options.indexedDB ? { indexedDB: options.indexedDB } : {}) }), known);
     this.#unsubscribe = this.store?.onChanged(() => this.refresh());
   }
 
@@ -182,13 +186,16 @@ export class SkillsModule implements FadenstackModule, ChangingToolSource {
 
   async getTools(context: AgentContext): Promise<readonly AgentTool[]> {
     const logger = this.#options.logger;
+    // The person is the profile's, whatever the policy says: an editor then works on the right person's skills even where the agent
+    // offers none to the model (local skills off). Standalone, the profile's principal is the standalone principal's.
+    this.#principal = context.profile.principal;
+    this.#known = true;
     const decision = (this.#options.policy ?? coreLocalSkillsPolicy).decide(context.profile);
     if (!decision.allowed) {
       this.#catalog = undefined;
       writeLog(logger, SkillsLog.off, { Reason: decision.reason });
       return [];
     }
-    this.#principal = context.profile.principal;
     const rule = context.machinePolicy.skills;
     // In a browser a list names no folder: a machine policy that lists sources keeps only the bundled skills.
     const own = rule.access === PolicyAccess.Listed ? undefined : this.store;

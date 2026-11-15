@@ -22,12 +22,46 @@ afterEach(() => {
 });
 
 describe("browserPreferences", () => {
-  it("keeps a choice in localStorage, for every panel of the site", () => {
+  it("keeps a choice in localStorage under the standalone principal's key, for every panel of the site", () => {
     browserPreferences().set("language", "de");
-    expect(localStorage.getItem("fadenstack.language")).toBe("de");
+    expect(localStorage.getItem("fadenstack.language:standalone:standalone")).toBe("de");
     expect(browserPreferences().get("language")).toBe("de");
     browserPreferences().set("language", undefined);
-    expect(localStorage.getItem("fadenstack.language")).toBeNull();
+    expect(localStorage.getItem("fadenstack.language:standalone:standalone")).toBeNull();
+  });
+
+  it("keeps two people's choices apart, follows the person the chat names, and knows no one before", () => {
+    let who: { principal: { tenantId: string; userId: string } | undefined } | undefined;
+    const store = browserPreferences();
+    store.followPerson(() => who);
+    store.set("language", "lost"); // no one is known yet: nothing is written
+    expect(store.get("language")).toBeUndefined();
+    expect(localStorage.length).toBe(0);
+    who = { principal: { tenantId: "t", userId: "anna" } };
+    store.set("language", "de");
+    who = { principal: { tenantId: "t", userId: "ben" } };
+    expect(store.get("language")).toBeUndefined();
+    store.set("language", "fr");
+    expect(localStorage.getItem("fadenstack.language:t:anna")).toBe("de");
+    expect(localStorage.getItem("fadenstack.language:t:ben")).toBe("fr");
+    who = { principal: { tenantId: "t", userId: "anna" } };
+    expect(store.get("language")).toBe("de");
+    who = { principal: undefined }; // a server that names no user: the shared key, as before
+    store.set("language", "it");
+    expect(localStorage.getItem("fadenstack.language")).toBe("it");
+  });
+
+  it("lets only the standalone principal adopt the old shared key, until it has its own", () => {
+    localStorage.setItem("fadenstack.language", "es");
+    const store = browserPreferences();
+    expect(store.get("language")).toBe("es");
+    store.set("language", "pt");
+    expect(store.get("language")).toBe("pt");
+    expect(localStorage.getItem("fadenstack.language")).toBe("es"); // left alone
+    store.set("language", undefined); // forgotten stays forgotten, the old key does not come back
+    expect(store.get("language")).toBe("");
+    const governed = browserPreferences({ principal: { tenantId: "t", userId: "anna" } });
+    expect(governed.get("language")).toBeUndefined();
   });
 
   it("keeps a choice in memory when the browser refuses to store it", () => {
@@ -44,13 +78,34 @@ describe("browserPreferences", () => {
 });
 
 describe("browserPromptStore", () => {
-  it("keeps the list in localStorage under fadenstack.prompts, shared by every store on the page", async () => {
+  it("keeps the list in localStorage under the person's own key, shared by every store on the page", async () => {
     const a = browserPromptStore({ now: () => new Date("2026-11-13T10:00:00Z") });
     const saved = await a.save("Kept");
-    expect(JSON.parse(localStorage.getItem("fadenstack.prompts")!)).toEqual([saved]);
+    expect(JSON.parse(localStorage.getItem("fadenstack.prompts:standalone:standalone")!)).toEqual([saved]);
     expect((await browserPromptStore().list()).map((p) => p.text)).toEqual(["Kept"]);
     await a.remove(saved.id);
     expect(await browserPromptStore().list()).toEqual([]);
+  });
+
+  it("keeps two people's prompts apart and adopts the old shared list for the standalone principal only", async () => {
+    localStorage.setItem("fadenstack.prompts", JSON.stringify([{ id: "o", title: "Old", text: "Old", savedAt: "" }]));
+    expect((await browserPromptStore().list()).map((p) => p.text)).toEqual(["Old"]);
+    expect(await browserPromptStore({ principal: { tenantId: "t", userId: "anna" } }).list()).toEqual([]);
+    const anna = browserPromptStore({ principal: { tenantId: "t", userId: "anna" } });
+    await anna.save("Annas");
+    expect((await browserPromptStore({ principal: { tenantId: "t", userId: "ben" } }).list())).toEqual([]);
+    const standalone = browserPromptStore();
+    await standalone.save("New");
+    expect((await standalone.list()).map((p) => p.text)).toEqual(["New", "Old"]); // the old list was read, then written under the person's key
+    expect(localStorage.getItem("fadenstack.prompts:t:anna")).toContain("Annas");
+  });
+
+  it("refuses a save while whose prompts these are is not known", async () => {
+    const store = browserPromptStore();
+    store.followPerson(() => undefined);
+    expect(await store.list()).toEqual([]);
+    await expect(store.save("x")).rejects.toThrow();
+    expect(localStorage.length).toBe(0);
   });
 
   it("is a memory store where there is no localStorage", async () => {
@@ -120,7 +175,7 @@ describe("browserChatServices", () => {
     expect(services.openLink).toBe(browserOpenLink);
     expect(services.saveFile).toBe(browserSaveFile);
     services.preferences.set("language", "fr");
-    expect(localStorage.getItem("fadenstack.language")).toBe("fr");
+    expect(localStorage.getItem("fadenstack.language:standalone:standalone")).toBe("fr");
     expect(browserChatServices().preferences.get("language")).toBe("fr");
   });
 });

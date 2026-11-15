@@ -7,7 +7,10 @@ import {
   type FileToSave,
   type PreferenceStore,
   type PromptStore,
+  type FollowsPerson,
+  type PersonSource,
 } from "@fadenstack/ui";
+import { STANDALONE_PRINCIPAL, userLocalKey, type StorePrincipal } from "@fadenstack/agents";
 
 // The browser's ways for what the panel needs from its host (`ChatHostServices` in @fadenstack/ui, which has no browser
 // default of its own: sdk/52 P4). A web page passes `browserChatServices()`; a host with its own ways passes those.
@@ -51,41 +54,100 @@ export function browserSaveFile(file: FileToSave): void {
   setTimeout(() => URL.revokeObjectURL(url), 40_000);
 }
 
+/** Whose choices these are: asked at every use. The chat tells it (`followPerson`); until then, the standalone principal. */
+class Person implements FollowsPerson {
+  #source: PersonSource | undefined;
+  readonly #fixed: { principal: StorePrincipal | undefined } | undefined;
+
+  constructor(fixed?: { principal: StorePrincipal | undefined }) {
+    this.#fixed = fixed;
+  }
+
+  followPerson(source: PersonSource): void {
+    this.#source = source;
+  }
+
+  /** The person now; undefined while the chat has not yet learned whose they are. */
+  now(): { principal: StorePrincipal | undefined } | undefined {
+    return this.#fixed ?? (this.#source ? this.#source() : { principal: STANDALONE_PRINCIPAL });
+  }
+}
+
+const isStandalone = (p: StorePrincipal | undefined): boolean => p?.tenantId === STANDALONE_PRINCIPAL.tenantId && p.userId === STANDALONE_PRINCIPAL.userId;
+
 /**
- * The browser's localStorage, as `fadenstack.<name>`: one choice for every panel of this site or extension. Where
- * there is none (Node, a sandboxed frame, storage switched off), memory.
+ * What a person of the browser profile keeps as `fadenstack.<name>:<tenant>:<user>` in `localStorage` (`userLocalKey`): the
+ * choices of two people who use one profile are apart, and `deleteMyData` removes the signed-in person's. The chat gives the
+ * store the agent's principal (`followPerson`); used on its own it keeps the standalone principal's. A server that names no user
+ * keeps the one shared key as before. The standalone principal reads the key every person shared before (`fadenstack.<name>`)
+ * while it has none of its own: those choices were made on this browser by whoever used the app, which in the standalone case is
+ * its one person. The old key is left alone (a person's own may then differ), and `deleteMyData` removes it with the rest.
+ * Where there is no `localStorage` (Node, a sandboxed frame, storage switched off), memory.
  */
-export function browserPreferences(): PreferenceStore {
+export function browserPreferences(options: { principal?: StorePrincipal | undefined } = {}): PreferenceStore & FollowsPerson {
+  const person = new Person("principal" in options ? { principal: options.principal } : undefined);
   const storage = localStorageOrUndefined();
-  if (!storage) return new MemoryPreferenceStore();
-  const memory = new MemoryPreferenceStore(); // when the browser refuses a write (quota, private mode)
+  const memory = new MemoryPreferenceStore(); // when the browser refuses a write (quota, private mode), or no one is known
+  const memoryName = (name: string, now: { principal: StorePrincipal | undefined }): string => userLocalKey(name, now.principal);
   return {
+    followPerson: (source) => person.followPerson(source),
     get: (name) => {
+      const now = person.now();
+      if (!now) return undefined; // whose they are is not known yet
+      if (!storage) return memory.get(memoryName(name, now));
       try {
-        return storage.getItem(`fadenstack.${name}`) ?? undefined;
+        const own = storage.getItem(userLocalKey(name, now.principal));
+        if (own !== null) return own;
+        return (isStandalone(now.principal) ? storage.getItem(`fadenstack.${name}`) : null) ?? memory.get(memoryName(name, now));
       } catch {
-        return memory.get(name);
+        return memory.get(memoryName(name, now));
       }
     },
     set: (name, value) => {
+      const now = person.now();
+      if (!now) return;
+      const key = userLocalKey(name, now.principal);
+      if (!storage) return memory.set(memoryName(name, now), value);
       try {
-        if (value === undefined) storage.removeItem(`fadenstack.${name}`);
-        else storage.setItem(`fadenstack.${name}`, value);
+        if (value === undefined) {
+          // A choice forgotten must not come back from the shared key the standalone principal adopts: its own key then holds "".
+          if (isStandalone(now.principal) && storage.getItem(`fadenstack.${name}`) !== null) storage.setItem(key, "");
+          else storage.removeItem(key);
+          memory.set(key, undefined);
+        } else storage.setItem(key, value);
       } catch {
-        memory.set(name, value);
+        memory.set(key, value);
       }
     },
   };
 }
 
 /**
- * The user's prompts in the browser's localStorage under `fadenstack.prompts` (one list for every panel of this site or
- * extension): `storedPromptStore` over localStorage. Where there is none (Node, a sandboxed frame, storage switched off),
- * memory; when the browser refuses a write (quota, private mode), memory from then on.
+ * The person's prompts in the browser's localStorage under `fadenstack.prompts:<tenant>:<user>` (`userLocalKey`), apart from
+ * another person's of the browser profile: `storedPromptStore` over localStorage, following the agent's principal like
+ * `browserPreferences()` (and with the same adoption of the old shared key for the standalone principal). Where there is no
+ * localStorage (Node, a sandboxed frame, storage switched off), memory; when the browser refuses a write (quota, private
+ * mode), memory from then on.
  */
-export function browserPromptStore(options: { now?: () => Date } = {}): PromptStore {
+export function browserPromptStore(options: { now?: () => Date; principal?: StorePrincipal | undefined } = {}): PromptStore & FollowsPerson {
+  const person = new Person("principal" in options ? { principal: options.principal } : undefined);
   const storage = localStorageOrUndefined();
-  return storage ? storedPromptStore(storage, options) : new MemoryPromptStore(options);
+  const inner: PromptStore = storage
+    ? storedPromptStore(storage, {
+      ...(options.now ? { now: options.now } : {}),
+      keys: () => {
+        const now = person.now();
+        if (!now) return undefined;
+        return { key: userLocalKey("prompts", now.principal), ...(isStandalone(now.principal) ? { legacyKey: "fadenstack.prompts" } : {}) };
+      },
+    })
+    : new MemoryPromptStore(options);
+  return {
+    followPerson: (source) => person.followPerson(source),
+    list: () => inner.list(),
+    save: (text) => inner.save(text),
+    remove: (id) => inner.remove(id),
+  };
 }
 
 /**

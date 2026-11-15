@@ -17,7 +17,7 @@ The packages are ES modules and use standard web APIs only: `fetch`, Web Streams
 |---|---|---|---|
 | Sessions and "Allow always" | IndexedDB, encrypted with a non-extractable key per signed-in user | The same, in the extension's pages and service worker | Memory only: nothing is written, no key is made |
 | The sign-in | Memory by default; pass a `TokenStore` to keep it | Memory by default; a store over `chrome.storage` keeps it (see [In a browser extension](agent.md#in-a-browser-extension)) | Memory by default; a store over a file only the user can read keeps it |
-| Preferences (language, the unmarked notice) | Yours to pass; `browserPreferences()` keeps them in `localStorage`, as `fadenstack.<name>` | Yours to pass: `chrome.storage`, or `browserPreferences()` (`localStorage` where there is one, else memory) | Yours to pass; `MemoryPreferenceStore` keeps them in memory |
+| Preferences (language, the unmarked notice) | Yours to pass; `browserPreferences()` keeps them in `localStorage`, as `fadenstack.<name>:<tenant>:<user>` per person | Yours to pass: `chrome.storage`, or `browserPreferences()` (`localStorage` where there is one, else memory) | Yours to pass; `MemoryPreferenceStore` keeps them in memory |
 | Opening the second sign-in or the pairing page | `openInBrowser`: a new tab, never an iframe | Give your own handler (a tab of the extension) | Give your own handler |
 | The chat panel | `@fadenstack/ui-react` or `ui-vue` | The same, in a page of the extension | Not applicable: the skins draw DOM |
 | Logging | Your logger, or `consoleLogger` | The same | The same |

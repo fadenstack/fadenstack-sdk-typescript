@@ -21,7 +21,7 @@ import {
 
 import type { PermissionMode } from "./approvals.js";
 import { type ApprovalStore, type StoredApproval } from "./approvalStore.js";
-import { DefaultStores, buildExport, deleteUserDatabases, type DataDeletion, type MyDataExport } from "./dataRights.js";
+import { DefaultStores, buildExport, deleteUserDatabases, deleteUserLocalStorage, type DataDeletion, type MyDataExport } from "./dataRights.js";
 import { DEFAULT_RETENTION, withinServerRetention, type SessionStore } from "./sessionStore.js";
 import type { StoreProblem } from "./storeSupport.js";
 import { StepUpProofs, isStepUpHandler, type StepUpHandler } from "./stepUp.js";
@@ -736,13 +736,16 @@ export class FadenstackAgent {
   /**
    * The signed-in user's data on this device as one JSON document (an access request, GDPR Art. 15 and 20): every session of
    * every agent the SDK's stores hold, decrypted, and the "Allow always" approvals. Without a user from the gateway these
-   * are the shared databases of an older SDK. Sign-in tokens are never included, nor is what the server keeps. A store the
+   * are the shared databases of an older SDK. Beside them, by an allowlist, everything else `deleteMyData` removes: the preferences,
+   * the person's own skills and switches, the provenance records and placement log, the MCP servers (without header values and with
+   * a clean address) and their audit log, and the person's `localStorage` keys (`databases`, `localStorage`). Sign-in tokens and
+   * keys are never included, nor is what the server keeps. A store the
    * host passed is read for this agent only. .NET: `ExportMyDataAsync` (a ZIP there; a document here, which the host saves
    * or offers as a download as it likes).
    */
   async exportMyData(signal?: AbortSignal): Promise<MyDataExport> {
     await this.start(signal);
-    return buildExport(this.sessionStore, this.approvalStore, this.slug, () => this.#problems);
+    return buildExport(this.sessionStore, this.approvalStore, this.slug, () => this.#problems, { principal: this.profile.principal });
   }
 
   /**
@@ -762,6 +765,7 @@ export class FadenstackAgent {
     let storesCleared = 0;
     try {
       storesCleared = await deleteUserDatabases(principal);
+      storesCleared += deleteUserLocalStorage(principal); // the panel's language and notice, the saved prompts
     } finally {
       this.#storesFor = undefined; // new, empty stores (and a new key) at the next use
       this.#settleStores(principal);

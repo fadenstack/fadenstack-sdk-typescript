@@ -240,7 +240,7 @@ compile, so a host never loses the user's choices without noticing.
 | `clipboard` | Copies a message, a code block or a table (`Clipboard`). | `browserClipboard` |
 | `openLink` | Opens the panel's links (About, the Fadenstack link). | `browserOpenLink`: a new tab, `noopener,noreferrer` |
 | `saveFile` | Saves a file the panel makes: a table as CSV, a chat as Markdown (`SaveFile`). | `browserSaveFile`: the browser's download |
-| `preferences` | Keeps the user's choices: the language they picked, the unmarked-answer notice (`PreferenceStore`). | `browserPreferences()`: `localStorage`, as `fadenstack.<name>`; memory where there is none |
+| `preferences` | Keeps the user's choices: the language they picked, the unmarked-answer notice (`PreferenceStore`). | `browserPreferences()`: `localStorage`, as `fadenstack.<name>:<tenant>:<user>` per person; memory where there is none |
 
 `browserChatServices()` returns all four. A host that does one of them its own way passes that one over the
 browser's:
@@ -384,7 +384,7 @@ is not shipped, and gets English unless you add it.
 | `automaticLanguage` | What *Automatic* means: a locale, or several, best first. |
 | `languages` | The languages to pick from, by tag: `builtInStrings` by default. |
 | `lockedLanguage` | A language your organisation fixed, from its policy: the panel uses it, and the settings show it with *Set by your organisation* and no choice. |
-| `preferences` | Where the choice is kept (`PreferenceStore`), one of [the host's services](#the-hosts-services). `browserPreferences()` (`@fadenstack/ui-web`) keeps it in the browser's `localStorage`, so every panel of the site or extension shares it; memory where there is none. Pass your own for an extension's storage or your application's settings. |
+| `preferences` | Where the choice is kept (`PreferenceStore`), one of [the host's services](#the-hosts-services). `browserPreferences()` (`@fadenstack/ui-web`) keeps it in the browser's `localStorage` for the person the agent's profile names (the chat tells it, and it is read once the agent has started), so every panel of the site or extension shares one person's choice and two people never share one; memory where there is none. Pass your own for an extension's storage or your application's settings. |
 | `strings` | Texts you fix instead: the panel then offers no choice. |
 
 `chat.setLanguage("fr")` and `chat.setLanguage("auto")` do from code what the settings do, and `chat.language`,

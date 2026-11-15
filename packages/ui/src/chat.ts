@@ -19,6 +19,7 @@ import { builtInStrings, stringsFor } from "./languages/index.js";
 import type { PreferenceStore } from "./preferences.js";
 import { GrantsViewModel } from "./grants.js";
 import { period } from "./period.js";
+import { followsPerson } from "./person.js";
 import { MAX_PROMPTS, MAX_PROMPT_LENGTH, PromptStoreError, type PromptStore, type SavedPrompt } from "./prompts.js";
 import { SkillPickerViewModel, skillToken } from "./skills.js";
 import { withStrings, type UiStrings } from "./strings.js";
@@ -287,6 +288,8 @@ export class AgentChatViewModel extends Observable implements TurnHost {
   readonly #preferences: PreferenceStore;
   #language = AUTOMATIC_LANGUAGE;
   #languageLoaded = false;
+  /** The preferences are kept per person: they are read once the agent has started and the person is known. */
+  readonly #waitsForPerson: boolean;
   #languagePicked = false;
   #unmarkedPicked = false;
   #settingsOpen = false;
@@ -319,6 +322,12 @@ export class AgentChatViewModel extends Observable implements TurnHost {
     this.#fixed = options.strings ? withStrings(options.strings) : undefined;
     this.#locked = options.lockedLanguage === undefined ? undefined : this.#keyOf(stringsFor(options.lockedLanguage, this.#languages));
     this.#preferences = options.preferences;
+    // Stores that keep their data per person (`browserPreferences()`, `browserPromptStore()`) are told whose it is: the principal of
+    // the agent's profile once it has started, and nobody's until then.
+    const person = () => (agent.isStarted ? { principal: agent.profile.principal } : undefined);
+    this.#waitsForPerson = followsPerson(options.preferences);
+    if (followsPerson(options.preferences)) options.preferences.followPerson(person);
+    if (followsPerson(options.prompts)) options.prompts.followPerson(person);
     this.#batcher = new RenderBatcher(options.scheduler ?? timeoutScheduler, options.renderIntervalMs ?? 33);
     this.#renderers = [...(options.renderers ?? []), citationsRenderer, piiRenderer, unmarkedRenderer, fallbackRenderer];
     this.#initialTurns = options.initialTurns ?? 30;
@@ -365,14 +374,15 @@ export class AgentChatViewModel extends Observable implements TurnHost {
     }, options.grantTickMs);
     this.grants.onBypassEnded(() => void this.#onBypassEnded());
     this.grants.onTicked(() => this.#showBypassTimes());
-    // A store that answers at once (localStorage) gives the user's language from the first paint.
-    try {
+    // A store that answers at once (localStorage) gives the user's language from the first paint (not one kept per person: whose
+    // it is is known when the agent has started).
+    if (!this.#waitsForPerson) try {
       const saved = this.#preferences.get(LANGUAGE_PREFERENCE);
       if (!(saved instanceof Promise)) this.#adopt(saved);
     } catch {
       // the store failed: the automatic language
     }
-    try {
+    if (!this.#waitsForPerson) try {
       const unmarked = this.#preferences.get(UNMARKED_PREFERENCE);
       if (!(unmarked instanceof Promise)) this.#context.showUnmarked = unmarked === "1";
     } catch {
@@ -780,8 +790,9 @@ export class AgentChatViewModel extends Observable implements TurnHost {
 
   // -- actions --------------------------------------------------------------------------------------
 
-  /** Starts the agent (profile, tools) and reads the session list; first, the language the user picked before. */
-  async initialize(): Promise<void> {
+  /** The language and the notice the user picked before, from the preferences; a store kept per person is read once the agent has started. */
+  async #readPreferences(): Promise<void> {
+    if (this.#waitsForPerson && !this.#agent.isStarted) return;
     if (!this.#languageLoaded) {
       try {
         this.#adopt(await this.#preferences.get(LANGUAGE_PREFERENCE));
@@ -796,11 +807,17 @@ export class AgentChatViewModel extends Observable implements TurnHost {
         // the store failed: the notice stays off
       }
     }
+  }
+
+  /** Starts the agent (profile, tools) and reads the session list; first, the language the user picked before. */
+  async initialize(): Promise<void> {
+    await this.#readPreferences();
     this.#error = undefined;
     this.#signInRequired = false;
     this.notify();
     try {
       await this.#agent.start();
+      await this.#readPreferences(); // a store kept per person knows whose it is now
       const profile = this.#agent.profile;
       this.#adoptUserLanguage(profile.user?.language ?? null);
       this.#title = profile.name;

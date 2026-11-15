@@ -52,6 +52,9 @@ resolved skill, but a local model's context is short. `load_skill` still loads a
 The skills come from three places:
 - bundled with the app, read-only;
 - the person's own, in IndexedDB per principal (deleted with `deleteMyData`), labelled "not reviewed";
+  the module learns whose they are from the agent's profile (standalone: the standalone principal), whatever the policy says, so
+  before the agent has started its list holds the bundled skills only and a change is refused
+  (`SkillsPersonUnknownError`), as in the .NET SDK;
 - the organisation's, with a server, read-only.
 
 Which of them the agent may use:

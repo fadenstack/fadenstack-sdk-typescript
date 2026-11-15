@@ -4,7 +4,8 @@ import { browserSecretProtector, type IndexedDbKeyStore, type SecretProtector } 
 import { MemorySessionStore, type SessionRetention, type SessionStore } from "./sessionStore.js";
 import { deleteDatabase, listsAgents, type StoreProblemHandler } from "./storeSupport.js";
 import type { TranscriptEntry } from "./transcript.js";
-import { userStoreName, type StorePrincipal } from "./userData.js";
+import { readPersonalDatabases } from "./personalData.js";
+import { deletePersonalLocalEntries, pageLocalStorage, personalLocalEntries, userStoreName, type StorePrincipal } from "./userData.js";
 
 /**
  * What `FadenstackAgent.deleteMyData` did: how many of the SDK's own stores it removed, and whether a store the host passed was
@@ -12,7 +13,11 @@ import { userStoreName, type StorePrincipal } from "./userData.js";
  * .NET: `DataDeletion` (`FoldersRemoved` is `storesCleared` here: IndexedDB databases, not folders).
  */
 export interface DataDeletion {
-  /** The IndexedDB databases removed: the user's sessions, their "Allow always", and their key. */
+  /**
+   * How many of the person's things the SDK removed: their IndexedDB databases that existed (up to eight: sessions, "Allow always",
+   * their key, preferences, provenance, skills, skill switches, MCP servers) and their `localStorage` keys (the panel's language
+   * and notice, the saved prompts; one count per key).
+   */
   storesCleared: number;
   hostSessionStoreLeft: boolean;
   hostApprovalStoreLeft: boolean;
@@ -39,13 +44,23 @@ export interface MyDataExport {
   exportedAt: string;
   sessions: ExportedSession[];
   approvals: { agent: string; approvals: StoredApproval[] }[];
-  counts: { agents: number; sessions: number; approvals: number; unreadable: number };
+  counts: { agents: number; sessions: number; approvals: number; unreadable: number; databases?: number; records?: number; localStorage?: number };
+  /**
+   * The person's other databases, by an allowlist per database and object store (new in this version; absent from an older
+   * export): `preferences`, `skills`, `skill-switches`, `provenance` (records and placement log, never the key), `mcp` (the
+   * servers without header values, with a clean address, and the audit log). A database that does not exist is absent. Rows of an
+   * object store without a key path come as `{ key, value }`. The `keys` database is never read.
+   */
+  databases?: Record<string, Record<string, unknown[]>>;
+  /** The person's `localStorage` entries (the panel's language and notice, the saved prompts), by name, as text. Absent where there is none. */
+  localStorage?: { name: string; value: string }[];
   /** What is not in it, and why (as .NET's README says). */
   notIncluded: string[];
 }
 
 const NOT_INCLUDED = [
   "Sign-in tokens and other secrets: they give access to your account and are never exported.",
+  "The keys that protect your data on this device (the encryption key of your chats and the device's signing key for provenance records), and the values of your MCP servers' headers, which can hold tokens.",
   "Anything the server keeps (accounts, requests it served, audit and usage records): ask the operator of your Fadenstack server for it.",
 ];
 
@@ -53,7 +68,7 @@ const NOT_INCLUDED = [
  * Reads everything the stores hold -- through the stores, so decrypted the way they decrypt -- into one document. A store that
  * cannot name its agents (the host's own) is read for `slug` only. `unreadable` counts what could not be read.
  */
-export async function buildExport(sessions: SessionStore, approvals: ApprovalStore, slug: string, unreadable: () => number): Promise<MyDataExport> {
+export async function buildExport(sessions: SessionStore, approvals: ApprovalStore, slug: string, unreadable: () => number, personal?: { principal: StorePrincipal | undefined }): Promise<MyDataExport> {
   const before = unreadable();
   let failed = 0;
   const sessionAgents = listsAgents(sessions) ? await sessions.agents() : [slug];
@@ -78,6 +93,9 @@ export async function buildExport(sessions: SessionStore, approvals: ApprovalSto
       approvalCount += list.length;
     }
   }
+  // The person's other databases and their localStorage keys: everything `deleteMyData` removes, without secrets.
+  const others = personal ? await readPersonalDatabases(personal.principal) : undefined;
+  const local = personal ? personalLocalEntries(pageLocalStorage(), personal.principal).map((e) => ({ name: e.name, value: e.value })) : undefined;
   return {
     format: "fadenstack-my-data",
     version: 1,
@@ -88,8 +106,12 @@ export async function buildExport(sessions: SessionStore, approvals: ApprovalSto
       agents: new Set([...sessionAgents, ...approvalAgents]).size,
       sessions: exportedSessions.length,
       approvals: approvalCount,
-      unreadable: failed + (unreadable() - before),
+      unreadable: failed + (unreadable() - before) + (others?.unreadable ?? 0),
+      ...(others ? { databases: others.found, records: others.records } : {}),
+      ...(local ? { localStorage: local.length } : {}),
     },
+    ...(others ? { databases: others.databases } : {}),
+    ...(local && local.length > 0 ? { localStorage: local } : {}),
     notIncluded: [...NOT_INCLUDED],
   };
 }
@@ -178,4 +200,9 @@ export class DefaultStores {
     await (this.approvals as { closeAsync?: () => Promise<void> } | undefined)?.closeAsync?.();
     await this.#keys?.closeAsync();
   }
+}
+
+/** Removes the person's `localStorage` keys (see `personalLocalEntries`); how many. Where there is none: 0. */
+export function deleteUserLocalStorage(principal: StorePrincipal | undefined, storage: Storage | undefined = pageLocalStorage()): number {
+  return deletePersonalLocalEntries(storage, principal);
 }

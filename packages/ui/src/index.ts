@@ -46,6 +46,7 @@ export {
   matchPrompts,
   promptTitle,
   storedPromptStore,
+  type PromptKeys,
   type KeyedTextStorage,
   type PromptStore,
   type PromptStoreErrorCode,
@@ -119,6 +120,7 @@ export {
 } from "./services.js";
 export { PLAIN_HTTP_WARNING_VERSION, englishStrings, minutesAndSeconds, withStrings, type UiStrings } from "./strings.js";
 export { MemoryPreferenceStore, type PreferenceStore } from "./preferences.js";
+export { followsPerson, type FollowsPerson, type PersonSource } from "./person.js";
 export {
   builtInStrings,
   chineseSimplifiedStrings,
