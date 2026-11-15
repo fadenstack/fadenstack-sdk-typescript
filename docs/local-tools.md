@@ -1,10 +1,10 @@
 # Local tools
 
-This page covers tools on request: how an agent keeps a long list of host tools out of the model's way until it asks for them, and why this is the TypeScript SDK's answer to the .NET SDK's [local MCP servers](../dotnet/local-mcp.md).
+This page covers tools on request: how an agent keeps a long list of host tools out of the model's way until it asks for them.
 
-## No local MCP process in a browser
+## MCP servers in a browser
 
-The .NET SDK can start MCP servers on the device and attach their tools to the agent. A browser page or an extension cannot start a process, so the TypeScript SDK has no local MCP module. A tool in the TypeScript SDK is a host tool: a function of your application, defined with `defineTool` and added to the builder. See [Tools and approvals](tools.md).
+A browser page or an extension cannot start a process, so the TypeScript SDK reaches MCP servers over HTTP only, with `@fadenstack/mcp`: see [Local MCP servers](local-mcp.md). Its servers' tools come on request in the same way. A tool of your own application is a host tool, defined with `defineTool` and added to the builder; see [Tools and approvals](tools.md).
 
 What the .NET module also does, and what a long list of tools needs, is keep the tools out of the model's request until the model asks for them. `OnRequestTools` does that over the host's own tools. It is the same seam as the .NET module's `find_tool`: one search tool, and the matching tools switched on for the conversation.
 
