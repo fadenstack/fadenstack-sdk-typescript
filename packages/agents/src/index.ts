@@ -21,7 +21,9 @@ export {
 export { ChatSession, BYPASS_ENDED_NOTE, resultText, type PickedSkill, type SendOptions, type HostCommandOptions, type HostCommandResult } from "./session.js";
 export {
   ApprovalDecision,
+  MAX_REASON_CHARS,
   approvalsFrom,
+  cleanReason,
   denyAllApprovals,
   type ApprovalHandler,
   type ApprovalRequest,
@@ -31,6 +33,7 @@ export {
 export {
   IndexedDbApprovalStore,
   MemoryApprovalStore,
+  approvalCovers,
   type ApprovalStore,
   type IndexedDbApprovalStoreOptions,
   type StoredApproval,
