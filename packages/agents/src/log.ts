@@ -44,4 +44,6 @@ export const AgentLog = Object.freeze({
   /** sdk/51 F10 (owner, 14 Nov): `build()` says once that a standalone agent goes without the provenance module. */
   noProvenanceModule: defineLog(AGENT_LOG_CATEGORY, 2054, "NoProvenanceModule", "warning",
     "Agent {Agent} runs on its own model endpoint without the provenance module: what it places in documents carries no mark. Add @fadenstack/provenance (builder.use(provenanceModule()))"),
+  /** sdk/51 F07: an app's hook threw; it counts as "go on". The hook's name and the error's type, never the message. */
+  hookFailed: defineLog(AGENT_LOG_CATEGORY, 2060, "HookFailed", "warning", "A hook ({HookType}) threw {ErrorType}; the call goes on as the policy decided"),
 });

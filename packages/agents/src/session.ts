@@ -42,6 +42,7 @@ import { FIND_TOOL_NAME, checkArguments, type AgentTool, type ToolServiceKey, ty
 import { EntryTypes, TurnStatus, newId, type TranscriptEntry } from "./transcript.js";
 import { commandJson, commandSchemaHash } from "./commands.js";
 import { AgentLog } from "./log.js";
+import { frozenCopy, type HookOutcome, type ToolHookAnswer, type ToolPolicyDecision, GO_ON } from "./hooks.js";
 import { reasoningLevelOf, reasoningRecord, type ReasoningLevel } from "./reasoning.js";
 import { AgentGrants, cutReason, type GrantCall, type GrantPlace, type GrantVerdict } from "./grants.js";
 
@@ -122,6 +123,14 @@ function aimOf(value: unknown): Aim {
 }
 
 /** A call of a round ready to run: under an id of its own, with what the gateway said of it. */
+/** What the hooks saw of one tool call, so the after-hooks match the before-hooks. */
+interface HookState {
+  called: boolean;
+  decision: ToolPolicyDecision;
+  toolClass: ToolClass;
+  notes: (readonly [string, string])[];
+}
+
 interface PlannedCall {
   call: ToolCall;
   denied: boolean;
@@ -749,41 +758,61 @@ class Turn {
       history.splice(Math.max(0, newest), 0, { role: "system", content: BYPASS_ENDED_NOTE });
     }
     this.#grantsSince = this.#agent.grants.generation;
-    for await (const update of this.#agent.settings.chat.stream(history, options)) {
-      switch (update.type) {
-        case "text":
-          text += update.text;
-          this.#emit({ type: "text", turnId: this.#id, text: update.text });
-          break;
-        case "reasoning":
-          this.#emit({ type: "reasoning", turnId: this.#id, text: update.text });
-          break;
-        case "tool_calls":
-          calls.push(...update.calls);
-          break;
-        case "usage":
-          this.#addUsage(update.usage);
-          break;
-        case "refused":
-          this.#blocked = update.notice;
-          break;
-        case "event":
-          await this.#onGatewayEvent(update.event, signal);
-          break;
-        case "receipt":
-          receipts.push(update.receipt);
-          break;
-        case "endpoint_marking":
-          marking = update.marking; // a person's own endpoint says what it did about its watermark (F10)
-          break;
-        case "finish":
-          finish = update.reason;
-          if (update.reason === "content_filter" && !this.#blocked) {
-            this.#blocked = { outcome: "response_blocked", stage: "output", message: "The answer was stopped." };
-          }
-          break;
+    const hooks = this.#agent.hooks;
+    const modelName = this.#agent.profile.model ?? undefined;
+    const modelStarted = performance.now();
+    let callTokens: { input: number; output: number } | undefined;
+    await hooks.beforeModel({
+      agentName: this.#agent.slug, sessionId: this.#session.id, turnId: this.#id, round: round + 1, model: modelName,
+      messageCount: history.length, toolCount: tools.length, messages: hooks.content ? Object.freeze([...history]) : undefined,
+    }, signal);
+    const modelResult = (outcome: HookOutcome, answer: string | undefined) => ({
+      agentName: this.#agent.slug, sessionId: this.#session.id, turnId: this.#id, round: round + 1, model: modelName, outcome,
+      durationMs: Math.round(performance.now() - modelStarted), inputTokens: callTokens?.input, outputTokens: callTokens?.output,
+      toolCallCount: calls.length, text: answer,
+    });
+    try {
+      for await (const update of this.#agent.settings.chat.stream(history, options)) {
+        switch (update.type) {
+          case "text":
+            text += update.text;
+            this.#emit({ type: "text", turnId: this.#id, text: update.text });
+            break;
+          case "reasoning":
+            this.#emit({ type: "reasoning", turnId: this.#id, text: update.text });
+            break;
+          case "tool_calls":
+            calls.push(...update.calls);
+            break;
+          case "usage":
+            this.#addUsage(update.usage);
+            callTokens = { input: (callTokens?.input ?? 0) + update.usage.promptTokens, output: (callTokens?.output ?? 0) + update.usage.completionTokens };
+            break;
+          case "refused":
+            this.#blocked = update.notice;
+            break;
+          case "event":
+            await this.#onGatewayEvent(update.event, signal);
+            break;
+          case "receipt":
+            receipts.push(update.receipt);
+            break;
+          case "endpoint_marking":
+            marking = update.marking; // a person's own endpoint says what it did about its watermark (F10)
+            break;
+          case "finish":
+            finish = update.reason;
+            if (update.reason === "content_filter" && !this.#blocked) {
+              this.#blocked = { outcome: "response_blocked", stage: "output", message: "The answer was stopped." };
+            }
+            break;
+        }
       }
+    } catch (error) {
+      await hooks.afterModel(modelResult(signal.aborted ? "cancelled" : "error", undefined), signal);
+      throw error;
     }
+    await hooks.afterModel(modelResult(this.#blocked ? "denied" : "ok", hooks.content ? text : undefined), signal);
     if (this.#blocked) calls.length = 0; // a refused answer's tool calls never run
     const planned = this.#plan(calls, round);
     writeLog(this.#agent.settings.logger, AgentLog.modelRequest, { TurnId: this.#id, Round: round, ToolCalls: planned.length,
@@ -1019,12 +1048,15 @@ class Turn {
     let result: string;
     let outcome: ToolOutcome;
     let waited = 0;
+    const hookState: HookState = { called: false, decision: "runs", toolClass, notes: [] };
     // Asked once, and only for a call that would run: a tool the scope has not switched on answers instead of running.
     const answered = tool && !planned.denied && call.argumentsError === undefined && !this.#commandOrigin
       ? tool.scope?.beforeCall(tool, this.#session) : undefined;
     if (!tool) {
       [result, outcome] = [this.#agent.isGone(call.name) ? `${call.name} is no longer available.` : `Tool '${call.name}' does not exist here.`, "error"];
     } else if (planned.denied) {
+      // The gateway refused the call: the hooks are told, and cannot change it.
+      await this.#beforeToolHooks(hookState, tool, toolClass, call, args, "refused", signal);
       if (planned.hidden) {
         this.#toolDenied = true;
         await this.#notice({ outcome: "tool_denied", stage: "tool", category: "mode",
@@ -1036,12 +1068,20 @@ class Turn {
     } else if (answered !== undefined) {
       [result, outcome] = [answered, "ok"]; // a tool outside the conversation's scope, now switched on
     } else {
-      ({ result, outcome, waited } = await this.#decideAndRun(tool, toolClass, mark, call, args, signal));
+      try {
+        ({ result, outcome, waited } = await this.#decideAndRun(tool, toolClass, mark, call, args, hookState, signal));
+      } catch (error) {
+        if (signal.aborted) await this.#afterToolHooks(hookState, tool, call, "cancelled", performance.now() - started, undefined, signal);
+        throw error;
+      }
     }
     // The tool's own time: the user's time on the approval card is reported apart (approval.decided).
     const ran = Math.max(0, performance.now() - started - waited);
+    if (tool) await this.#afterToolHooks(hookState, tool, call, outcome === "ok" ? "ok" : outcome === "denied" ? "denied" : "error", ran, result, signal);
     await this.#access.append(EntryTypes.toolComplete, this.#id, {
       call_id: call.id, name: call.name, source, result, outcome, duration_ms: Math.round(ran), origin: "client",
+      // A hook's notes (short, bounded), kept here in the device's own transcript and never sent to the server.
+      ...(hookState.notes.length ? { notes: Object.fromEntries(hookState.notes) } : {}),
     });
     this.#emit({ type: "tool_completed", turnId: this.#id, callId: call.id, name: call.name, source, outcome, result, durationMs: ran });
     // A name the model made up is its words, not ours: only the agent's own tools are named in logs.
@@ -1061,7 +1101,7 @@ class Turn {
    * `toolClass` is the stricter of the tool's own and the gateway's.
    */
   async #decideAndRun(tool: AgentTool, toolClass: ToolClass, mark: GatewayMark | undefined, call: ToolCall,
-    args: Record<string, unknown>, signal: AbortSignal): Promise<{ result: string; outcome: ToolOutcome; waited: number }> {
+    args: Record<string, unknown>, hookState: HookState, signal: AbortSignal): Promise<{ result: string; outcome: ToolOutcome; waited: number }> {
     let policy: PreparedHostPolicy | undefined;
     // find_tool is the SDK's own search (no app's tool has the name): it runs nothing outside, so no server check per call.
     if (!this.#commandOrigin && tool.source === "host" && tool.name !== FIND_TOOL_NAME && this.#agent.hostToolPolicyChecks) {
@@ -1075,6 +1115,7 @@ class Turn {
           throw new Error("The host call's authenticated identity changed.");
         if (decision.decision === "deny") {
           this.#toolDenied = true;
+          await this.#beforeToolHooks(hookState, tool, toolClass, call, args, "refused", signal);
           await this.#notice({ outcome: "tool_denied", stage: "tool", message: decision.message });
           return { result: decision.message, outcome: "denied", waited: 0 };
         }
@@ -1092,6 +1133,7 @@ class Turn {
     const decision = decideTool(this.#mode, toolClass, contractApproval, openWorld);
     if (decision === "hidden") {
       this.#toolDenied = true;
+      await this.#beforeToolHooks(hookState, tool, toolClass, call, args, "refused", signal);
       const why = `the tool mode is ${this.#mode}`;
       await this.#notice({ outcome: "tool_denied", stage: "tool", category: "mode", message: `'${tool.name}' is not allowed: ${why}.` });
       return { result: `Tool '${tool.name}' is not allowed here: ${why}.`, outcome: "denied", waited: 0 };
@@ -1099,19 +1141,35 @@ class Turn {
     const invalid = checkArguments(tool.parameters, args);
     if (invalid) return { result: `Error: ${invalid}`, outcome: "error", waited: 0 };
     let waited = 0;
-    const rule = mark?.rule === true || contractApproval === "always" || policy?.decision.requiredByRule === true;
+    let rule = mark?.rule === true || contractApproval === "always" || policy?.decision.requiredByRule === true;
     let coverage: { id: string; call: GrantCall } | undefined;
     // In Bypass the device reports what ran without the person's answer, as the gateway records it (L-61): what the mode ran,
     // and what the turn's own Bypass grant settled. A call the person answered is recorded as an answer (L-60); one a time or
     // work grant settled belongs to that grant.
     let unanswered = true;
+    // The hooks speak last, after the policy: a hook can make the call stricter (ask, deny) and nothing else. Its answer is never read
+    // as an approval: `rule` only ever goes from false to true here, and a deny returns before the call can run (ASVS 5.0 V8).
+    let hookAsks: { reason: string | undefined } | undefined;
+    const policySays: ToolPolicyDecision = rule || decision === "ask" || policy?.decision.decision === "ask" ? "asks" : "runs";
+    if (!this.#commandOrigin) {
+      const hooked = await this.#beforeToolHooks(hookState, tool, toolClass, call, args, policySays, signal);
+      if (hooked.deny) {
+        this.#toolDenied = true;
+        return { result: `'${tool.name}' was declined by the app (${hooked.reason ?? "declined by the app"}).`, outcome: "denied", waited: 0 };
+      }
+      if (hooked.ask && policySays === "runs") {
+        rule = true;
+        hookAsks = { reason: hooked.reason };
+      }
+    }
     if (!this.#commandOrigin && (rule || decision === "ask" || policy?.decision.decision === "ask")) {
       const settled = await this.#approve({
         callId: call.id,
         toolName: tool.name,
         toolClass,
         source: tool.source,
-        reason: rule ? mark?.message ?? "This tool requires individual approval."
+        reason: hookAsks ? hookAsks.reason ?? `The app asks before it uses '${tool.name}'.`
+          : rule ? mark?.message ?? "This tool requires individual approval."
           : toolClass === "unknown" ? "Nobody has said what this tool does."
           : openWorld && decideTool(this.#mode, toolClass) === "run"
             ? `What '${tool.name}' is given leaves the organisation; the tool mode is ${this.#mode}.`
@@ -1148,6 +1206,35 @@ class Turn {
       if (error instanceof CommandDenied) return { result: error.message, outcome: "denied", waited };
       return { result: `Error: ${error instanceof Error ? error.message : String(error)}`, outcome: "error", waited };
     }
+  }
+
+  /**
+   * Tells the before-tool hooks about a call, after the policy decided. For a call the policy refused the hooks only watch: their
+   * answers are dropped (`HookRunner.beforeTool`). A person's own command is not hooked.
+   */
+  async #beforeToolHooks(state: HookState, tool: AgentTool, toolClass: ToolClass, call: ToolCall, args: Record<string, unknown>,
+    decision: ToolPolicyDecision, signal: AbortSignal): Promise<ToolHookAnswer> {
+    const hooks = this.#agent.hooks;
+    if (!hooks.any || this.#commandOrigin) return GO_ON;
+    state.called = true;
+    state.decision = decision;
+    state.toolClass = toolClass;
+    const answer = await hooks.beforeTool(Object.freeze({
+      agentName: this.#agent.slug, sessionId: this.#session.id, turnId: this.#id, toolName: tool.name, source: tool.source, server: tool.server,
+      toolClass, callId: call.id, arguments: frozenCopy(args), decision,
+    }), decision !== "refused", signal);
+    state.notes.push(...answer.notes);
+    return answer;
+  }
+
+  async #afterToolHooks(state: HookState, tool: AgentTool, call: ToolCall, outcome: HookOutcome, durationMs: number, result: string | undefined,
+    signal: AbortSignal): Promise<void> {
+    if (!state.called) return;
+    await this.#agent.hooks.afterTool(Object.freeze({
+      agentName: this.#agent.slug, sessionId: this.#session.id, turnId: this.#id, toolName: tool.name, source: tool.source, server: tool.server,
+      toolClass: state.toolClass, callId: call.id, decision: state.decision, outcome, durationMs: Math.round(durationMs),
+      resultText: tool.source === "host" ? result : undefined,
+    }), signal);
   }
 
   /** The services modules give this call, each made on first use. */
