@@ -26,6 +26,8 @@
      an approval card, a notice or a code block is muted, which keeps 4.5:1 on their hover and soft colours too. */
   --fdn-text-faint: #6b6d6b;
   --fdn-border: #c7c7c7;
+  /* The boundary of a text box, a list or a check box: 4.6:1 on white, 4.2:1 on the surface (WCAG 1.4.11 asks 3:1). */
+  --fdn-control-border: #757575;
   --fdn-hairline: #e3e3e3;
   --fdn-accent: #0b57d0;
   --fdn-on-accent: #ffffff;
@@ -61,6 +63,7 @@
   --fdn-text-muted: #c4c7c5;
   --fdn-text-faint: #8e918f;
   --fdn-border: #5c5f5e;
+  --fdn-control-border: #8e918f;
   --fdn-hairline: #444746;
   --fdn-accent: #a8c7fa;
   --fdn-on-accent: #062e6f;
@@ -93,6 +96,7 @@
     --fdn-text-muted: #c4c7c5;
     --fdn-text-faint: #8e918f;
     --fdn-border: #5c5f5e;
+    --fdn-control-border: #8e918f;
     --fdn-hairline: #444746;
     --fdn-accent: #a8c7fa;
     --fdn-on-accent: #062e6f;
@@ -126,6 +130,7 @@
     --fdn-text-muted: CanvasText;
     --fdn-text-faint: GrayText;
     --fdn-border: CanvasText;
+    --fdn-control-border: CanvasText;
     --fdn-hairline: CanvasText;
     --fdn-accent: Highlight;
     --fdn-on-accent: HighlightText;
@@ -167,6 +172,36 @@
 .fdn-chat :focus-visible {
   outline: 2px solid var(--fdn-focus);
   outline-offset: 2px;
+}
+
+/* Native controls take the palette, never the browser's own: the text, the tick of a check box or a radio button,
+   the quiet text in an empty box, and the entries of a drop-down list. (`color-scheme` above gives the browser's own
+   parts -- scroll bars, the drop-down arrow, the unticked box -- the palette's light or dark.) */
+.fdn-chat input,
+.fdn-chat select,
+.fdn-chat textarea {
+  color: var(--fdn-text);
+}
+
+.fdn-chat input[type="checkbox"],
+.fdn-chat input[type="radio"] {
+  accent-color: var(--fdn-accent);
+}
+
+.fdn-chat input::placeholder,
+.fdn-chat textarea::placeholder {
+  color: var(--fdn-text-faint);
+}
+
+.fdn-chat option {
+  background-color: var(--fdn-bg);
+  color: var(--fdn-text);
+}
+
+.fdn-chat select:disabled,
+.fdn-chat input:disabled,
+.fdn-chat textarea:disabled {
+  color: var(--fdn-text-muted);
 }
 
 .fdn-icon {
@@ -1039,7 +1074,7 @@
   box-sizing: border-box;
   margin-top: 4px;
   padding: 6px 8px;
-  border: 1px solid var(--fdn-border);
+  border: 1px solid var(--fdn-control-border); /* an input's boundary: 3:1 (WCAG 1.4.11) */
   border-radius: 6px; /* concentric with the card's 12 */
   background: var(--fdn-bg);
   color: inherit;
@@ -1838,7 +1873,7 @@
 .fdn-wizard-field select {
   width: 100%;
   padding: 6px 8px;
-  border: 1px solid var(--fdn-border);
+  border: 1px solid var(--fdn-control-border);
   border-radius: var(--fdn-radius);
   background: var(--fdn-bg);
   color: inherit;
@@ -2054,7 +2089,7 @@
 .fdn-skills-editor input[type="number"] {
   width: 100%;
   padding: 6px 8px;
-  border: 1px solid var(--fdn-border);
+  border: 1px solid var(--fdn-control-border);
   border-radius: var(--fdn-radius);
   background: var(--fdn-bg);
   color: inherit;
