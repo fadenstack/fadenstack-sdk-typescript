@@ -126,10 +126,49 @@ describe("ChatPanel (Vue)", () => {
     await wrapper.find("textarea").setValue("Send it");
     await button(wrapper, "Send").trigger("click");
     await waitUntil(() => wrapper.find(".fdn-approval").exists());
-    const labels = wrapper.findAll(".fdn-approval-actions button").map((b) => b.text());
+    const labels = wrapper.findAll(".fdn-approval-pair button").map((b) => b.text());
     expect(labels).toEqual(["Allow", "Deny"]);
     await button(wrapper, "Deny").trigger("click");
     await settle(chat);
+  });
+
+  it("lets the user say why they decline: the link opens a box, Esc closes it without deciding, Deny sends the reason", async () => {
+    const results: string[] = [];
+    const { wrapper, chat } = await panel((r) => {
+      const last = [...lastToolResults(r).values()];
+      if (last.length) {
+        results.push(...last);
+        return { text: "Left it." };
+      }
+      return { toolCalls: [{ name: "fill_field", arguments: { value: "Jane" } }] };
+    });
+    await wrapper.find("textarea").setValue("Fill my name");
+    await button(wrapper, "Send").trigger("click");
+    await waitUntil(() => wrapper.find(".fdn-approval").exists());
+    const why = wrapper.find(".fdn-approval-why");
+    expect([why.text(), why.attributes("aria-expanded")]).toEqual(["Say why", "false"]);
+    expect(wrapper.find(".fdn-approval-why-box").exists()).toBe(false);
+
+    await why.trigger("click");
+    const box = wrapper.find<HTMLTextAreaElement>(".fdn-approval-why-box");
+    expect(box.attributes("aria-label")).toBe("Your reason for declining");
+    expect([box.attributes("placeholder"), box.attributes("maxlength"), box.attributes("rows"), box.attributes("dir")])
+      .toEqual(["Why not? The assistant sees your reason.", "500", "3", "auto"]);
+    expect(why.attributes("aria-expanded")).toBe("true");
+    await waitUntil(() => document.activeElement === box.element);
+
+    await box.trigger("keydown", { key: "Escape" });
+    expect(wrapper.find(".fdn-approval-why-box").exists()).toBe(false);
+    expect(button(wrapper, "Allow").exists()).toBe(true); // not decided
+    await wrapper.find(".fdn-approval-why").trigger("click");
+    await wrapper.find(".fdn-approval-why-box").setValue("Wrong <b>field</b>.");
+    await button(wrapper, "Deny").trigger("click");
+    await settle(chat);
+    const line = wrapper.find(".fdn-approval-declined");
+    expect([line.text(), line.attributes("dir")]).toEqual(["Your reason: Wrong <b>field</b>.", "auto"]); // plain text, never markup
+    expect(line.find("b").exists()).toBe(false);
+    expect(wrapper.find(".fdn-approval-why-box").exists()).toBe(false);
+    expect(results.join("\n")).toContain("Their reason: Wrong <b>field</b>.");
   });
 
   it("lets the user pick a tool mode, closes the menu on a click outside, and resets approvals", async () => {

@@ -93,6 +93,7 @@ export function buildTurn(entries: readonly TranscriptEntry[], context: PartCont
         // What the server confirmed, else the time the person picked (an entry the .NET SDK wrote).
         const minutes = typeof d["grant_confirmed_minutes"] === "number" ? d["grant_confirmed_minutes"] : d["grant_minutes"];
         if (d["scope"] === "grant" && typeof minutes === "number") card.confirmTime(minutes);
+        if (decided === "denied") card.restoreReason(str(d, "reason"));
         turn.addApprovalPart(card);
         break;
       }

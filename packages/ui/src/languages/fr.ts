@@ -51,6 +51,10 @@ export const frenchStrings: UiStrings = {
   allowedAlways: "Toujours autorisé",
   resetApprovals: "Réinitialiser les approbations",
   denied: "Refusé",
+  sayWhy: "Expliquer",
+  denyReasonPlaceholder: "Pourquoi pas ? L'assistant voit votre raison.",
+  denyReasonName: "Votre raison du refus",
+  yourReason: (reason) => `Votre raison : ${reason}`,
   noAnswer: "Pas de réponse à temps",
   noticeTitles: {
     prompt_blocked: "Votre message n'a pas été envoyé",

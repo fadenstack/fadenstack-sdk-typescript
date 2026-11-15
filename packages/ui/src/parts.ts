@@ -1,4 +1,4 @@
-import { ApprovalDecision, type ApprovalRequest } from "@fadenstack/agents";
+import { ApprovalDecision, cleanReason, type ApprovalRequest } from "@fadenstack/agents";
 import type { GovernanceNotice, ToolClass } from "@fadenstack/client";
 
 import type { BypassPart, GrantPart } from "./grantCards.js";
@@ -280,6 +280,9 @@ export class ApprovalPart extends ResponsePart {
   #state: ApprovalState;
   #confirmedMinutes: number | undefined;
   #stopped = false;
+  #denyReason = "";
+  #isReasonOpen = false;
+  #declinedReason: string | undefined;
 
   constructor(context: PartContext, request: ApprovalRequest, state: ApprovalState, pending?: PendingApproval) {
     super();
@@ -444,8 +447,38 @@ export class ApprovalPart extends ResponsePart {
   /** @internal Preserve the legacy state while distinguishing Stop from an approval timeout. */
   stop(): void { this.#stopped = true; this.setState("expired"); }
 
+  /** What the person typed into the reason field; sent with Deny, trimmed. */
+  get denyReason(): string { return this.#denyReason; }
+
+  setDenyReason(text: string): void {
+    if (!this.isPending || text === this.#denyReason) return;
+    this.#denyReason = text;
+    this.notify();
+  }
+
+  /** Whether the reason field is open: only while the card waits. */
+  get isReasonOpen(): boolean { return this.#isReasonOpen && this.isPending; }
+
+  /** "Say why" opens the field; Esc in it closes it again without deciding. */
+  toggleReason(): void {
+    if (!this.isPending) return;
+    this.#isReasonOpen = !this.#isReasonOpen;
+    this.notify();
+  }
+
+  /** "Your reason: ..." on a declined card (plain text), or "" when it has none. */
+  get declinedReasonText(): string {
+    return this.#state === "denied" && this.#declinedReason ? this.#context.strings.yourReason(this.#declinedReason) : "";
+  }
+
+  /** @internal A card rebuilt from the transcript keeps the reason its entry carries. */
+  restoreReason(reason: string | undefined): void {
+    this.#declinedReason = cleanReason(reason);
+  }
+
   deny(): void {
-    this.#decide(ApprovalDecision.deny(), "denied");
+    const reason = this.#denyReason.trim();
+    this.#decide(ApprovalDecision.deny(reason === "" ? undefined : reason), "denied");
   }
 
   /** @internal */
@@ -457,6 +490,7 @@ export class ApprovalPart extends ResponsePart {
 
   #decide(decision: ApprovalDecision, state: ApprovalState): void {
     if (!this.#pending?.resolve(decision)) return;
+    if (state === "denied") this.#declinedReason = cleanReason(decision.reason);
     this.setState(state);
   }
 }

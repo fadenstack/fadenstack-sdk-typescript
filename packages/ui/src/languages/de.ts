@@ -51,6 +51,10 @@ export const germanStrings: UiStrings = {
   allowedAlways: "Immer zugelassen",
   resetApprovals: "Freigaben zurücksetzen",
   denied: "Abgelehnt",
+  sayWhy: "Begründen",
+  denyReasonPlaceholder: "Warum nicht? Der Assistent sieht Ihre Begründung.",
+  denyReasonName: "Ihre Begründung für die Ablehnung",
+  yourReason: (reason) => `Ihre Begründung: ${reason}`,
   noAnswer: "Nicht rechtzeitig beantwortet",
   noticeTitles: {
     prompt_blocked: "Ihre Nachricht wurde nicht gesendet",
