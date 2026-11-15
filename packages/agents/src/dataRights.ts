@@ -13,7 +13,11 @@ import { deletePersonalLocalEntries, pageLocalStorage, personalLocalEntries, use
  * .NET: `DataDeletion` (`FoldersRemoved` is `storesCleared` here: IndexedDB databases, not folders).
  */
 export interface DataDeletion {
-  /** The IndexedDB databases removed: the user's sessions, their "Allow always", and their key. */
+  /**
+   * How many of the person's things the SDK removed: their IndexedDB databases that existed (up to eight: sessions, "Allow always",
+   * their key, preferences, provenance, skills, skill switches, MCP servers) and their `localStorage` keys (the panel's language
+   * and notice, the saved prompts; one count per key).
+   */
   storesCleared: number;
   hostSessionStoreLeft: boolean;
   hostApprovalStoreLeft: boolean;
