@@ -148,7 +148,20 @@ export function runChecks(root: HTMLElement, palette: Palette): { failures: Fail
       if (r < 3) fail("boundary-contrast", el, `${b.how} ${r.toFixed(2)}:1 needs 3:1`);
     }
   } else {
-    // -- forced colours: no ratios, but every control keeps a visible boundary --
+    // -- forced colours: no ratios, but no text may vanish into its fill (a ratio under 2:1 is a text that is not there), and every
+    //    control keeps a visible boundary --
+    const probe = document.createElement("div");
+    probe.style.backgroundColor = "Canvas";
+    root.appendChild(probe);
+    const canvasColour = rgba(getComputedStyle(probe).backgroundColor);
+    probe.remove();
+    for (const el of all) {
+      if ((el as HTMLButtonElement).disabled) continue;
+      if (![...el.childNodes].some((n) => n.nodeType === 3 && (n.textContent ?? "").trim() !== "")) continue;
+      const bg = backdrop(el, canvasColour, true);
+      const r = ratio(over(rgba(getComputedStyle(el).color), bg), bg);
+      if (r < 2) fail("forced-text", el, `text on its fill ${r.toFixed(2)}:1`);
+    }
     for (const el of all) {
       if (!isControl(el) || (el instanceof HTMLInputElement && el.type === "file")) continue;
       const s = getComputedStyle(el);
