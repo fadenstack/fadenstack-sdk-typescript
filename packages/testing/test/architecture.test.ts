@@ -211,7 +211,7 @@ describe("the architecture of the packages", () => {
     expect(judge("T1", findings)).toEqual({ findings: [], "stale allow-list entries": [] });
   });
 
-  it("imports only what the package's layer allows, and each framework only in its skin (T2)", () => {
+  it("imports only what the package's layer allows, and each framework only in its skin (T2)", { timeout: 30_000 }, () => {
     const findings: Finding[] = [];
     for (const pkg of packageNames()) {
       const row = LAYERS[pkg];

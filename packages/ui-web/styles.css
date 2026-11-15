@@ -5,7 +5,9 @@
  * accent: `.fdn-chat { --fdn-accent: #4C6A92; }`.
  *
  * Shapes: one 12 px radius for rectangular surfaces (cards, bubbles, the composer, menus, buttons); pills for
- * chips; circles for icon buttons. Nested surfaces stay concentric (inner = outer - inset).
+ * chips; circles for icon buttons. Nested surfaces stay concentric (inner = outer - inset). The connection wizard and
+ * the skill views (`.fdn-wizard`) have their own, smaller system: 12 px for a container, 6 px for a control (a
+ * button, a field, a check box) and 8 px for a chip (a provider, a badge); the chat panel keeps what it had.
  *
  * Every web skin (@fadenstack/ui-react, @fadenstack/ui-vue) draws the same markup with these classes. Directions
  * are logical (start and end, not left and right), so the panel mirrors for a right-to-left language.
@@ -13,6 +15,8 @@
 
 .fdn-chat {
   --fdn-radius: 12px;
+  --fdn-radius-control: 6px;
+  --fdn-radius-chip: 8px;
   --fdn-font: system-ui, "Segoe UI Variable Text", "Segoe UI", -apple-system, BlinkMacSystemFont, Roboto, "Helvetica Neue", Arial, sans-serif;
   --fdn-mono: ui-monospace, "Cascadia Mono", "Cascadia Code", Consolas, "SF Mono", Menlo, monospace;
 
@@ -26,6 +30,8 @@
      an approval card, a notice or a code block is muted, which keeps 4.5:1 on their hover and soft colours too. */
   --fdn-text-faint: #6b6d6b;
   --fdn-border: #c7c7c7;
+  /* The boundary of a text box, a list or a check box: 4.6:1 on white, 4.2:1 on the surface (WCAG 1.4.11 asks 3:1). */
+  --fdn-control-border: #757575;
   --fdn-hairline: #e3e3e3;
   --fdn-accent: #0b57d0;
   --fdn-on-accent: #ffffff;
@@ -61,6 +67,7 @@
   --fdn-text-muted: #c4c7c5;
   --fdn-text-faint: #8e918f;
   --fdn-border: #5c5f5e;
+  --fdn-control-border: #8e918f;
   --fdn-hairline: #444746;
   --fdn-accent: #a8c7fa;
   --fdn-on-accent: #062e6f;
@@ -93,6 +100,7 @@
     --fdn-text-muted: #c4c7c5;
     --fdn-text-faint: #8e918f;
     --fdn-border: #5c5f5e;
+    --fdn-control-border: #8e918f;
     --fdn-hairline: #444746;
     --fdn-accent: #a8c7fa;
     --fdn-on-accent: #062e6f;
@@ -126,6 +134,7 @@
     --fdn-text-muted: CanvasText;
     --fdn-text-faint: GrayText;
     --fdn-border: CanvasText;
+    --fdn-control-border: CanvasText;
     --fdn-hairline: CanvasText;
     --fdn-accent: Highlight;
     --fdn-on-accent: HighlightText;
@@ -167,6 +176,36 @@
 .fdn-chat :focus-visible {
   outline: 2px solid var(--fdn-focus);
   outline-offset: 2px;
+}
+
+/* Native controls take the palette, never the browser's own: the text, the tick of a check box or a radio button,
+   the quiet text in an empty box, and the entries of a drop-down list. (`color-scheme` above gives the browser's own
+   parts -- scroll bars, the drop-down arrow, the unticked box -- the palette's light or dark.) */
+.fdn-chat input,
+.fdn-chat select,
+.fdn-chat textarea {
+  color: var(--fdn-text);
+}
+
+.fdn-chat input[type="checkbox"],
+.fdn-chat input[type="radio"] {
+  accent-color: var(--fdn-accent);
+}
+
+.fdn-chat input::placeholder,
+.fdn-chat textarea::placeholder {
+  color: var(--fdn-text-faint);
+}
+
+.fdn-chat option {
+  background-color: var(--fdn-bg);
+  color: var(--fdn-text);
+}
+
+.fdn-chat select:disabled,
+.fdn-chat input:disabled,
+.fdn-chat textarea:disabled {
+  color: var(--fdn-text-muted);
 }
 
 .fdn-icon {
@@ -1039,7 +1078,7 @@
   box-sizing: border-box;
   margin-top: 4px;
   padding: 6px 8px;
-  border: 1px solid var(--fdn-border);
+  border: 1px solid var(--fdn-control-border); /* an input's boundary: 3:1 (WCAG 1.4.11) */
   border-radius: 6px; /* concentric with the card's 12 */
   background: var(--fdn-bg);
   color: inherit;
@@ -1779,11 +1818,11 @@
 .fdn-wizard-column {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 10px;
   width: 100%;
   max-width: 420px;
   margin-block: auto;
-  padding: 20px 16px;
+  padding: 14px 16px;
 }
 
 .fdn-wizard-column:focus {
@@ -1822,7 +1861,7 @@
 .fdn-wizard-form {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 10px;
 }
 
 .fdn-wizard-field {
@@ -1837,12 +1876,110 @@
 .fdn-wizard-field input[type="password"],
 .fdn-wizard-field select {
   width: 100%;
-  padding: 6px 8px;
-  border: 1px solid var(--fdn-border);
-  border-radius: var(--fdn-radius);
+  padding: 5px 8px;
+  border: 1px solid var(--fdn-control-border);
+  border-radius: var(--fdn-radius-control);
   background: var(--fdn-bg);
   color: inherit;
   font: inherit;
+}
+
+/* A drop-down draws its own arrow (two halves of a triangle in the text colour), not the browser's grey one. */
+.fdn-wizard select {
+  appearance: none;
+  padding-inline-end: 28px;
+  background-image: linear-gradient(45deg, transparent 50%, currentColor 50%), linear-gradient(135deg, currentColor 50%, transparent 50%);
+  background-position: calc(100% - 15px) 50%, calc(100% - 10px) 50%;
+  background-size: 5px 5px;
+  background-repeat: no-repeat;
+}
+
+.fdn-wizard[dir="rtl"] select {
+  background-position: 10px 50%, 15px 50%;
+}
+
+/* The buttons of the wizard and the skill views: a 6 px radius and a boundary that shows (3:1), the primary one filled. */
+.fdn-wizard .fdn-button {
+  border-color: var(--fdn-control-border);
+  border-radius: var(--fdn-radius-control);
+}
+
+/* A choice with a name and a line under it (the "Connect to my organisation" cards): a container, so 12 px. */
+.fdn-wizard .fdn-suggestion {
+  border-color: var(--fdn-control-border);
+}
+
+.fdn-wizard .fdn-card {
+  background: var(--fdn-surface);
+}
+
+/* A chip (a badge) is 8 px, like the provider chips. */
+.fdn-wizard .fdn-badge {
+  border-radius: var(--fdn-radius-chip);
+}
+
+/* A check box and a switch are drawn here, not by the browser: an outlined box that fills with the accent when ticked. */
+.fdn-wizard input[type="checkbox"] {
+  appearance: none;
+  display: inline-grid;
+  flex: none;
+  place-content: center;
+  width: 18px;
+  height: 18px;
+  margin: 0;
+  border: 1px solid var(--fdn-control-border);
+  border-radius: var(--fdn-radius-control);
+  background: var(--fdn-bg);
+  cursor: pointer;
+}
+
+.fdn-wizard input[type="checkbox"]:checked {
+  border-color: var(--fdn-accent);
+  background: var(--fdn-accent);
+}
+
+.fdn-wizard input[type="checkbox"]:checked::after {
+  content: "";
+  width: 5px;
+  height: 9px;
+  margin-block-start: -2px;
+  border: solid var(--fdn-on-accent);
+  border-width: 0 2px 2px 0;
+  transform: rotate(45deg);
+}
+
+.fdn-wizard input[type="checkbox"][role="switch"] {
+  position: relative;
+  display: block;
+  width: 32px;
+  height: 18px;
+  border-radius: 999px;
+}
+
+.fdn-wizard input[type="checkbox"][role="switch"]::before {
+  content: "";
+  position: absolute;
+  inset-block-start: 3px;
+  inset-inline-start: 3px;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--fdn-control-border);
+}
+
+.fdn-wizard input[type="checkbox"][role="switch"]:checked::before {
+  inset-inline-start: 17px;
+  background: var(--fdn-on-accent);
+}
+
+.fdn-wizard input[type="checkbox"][role="switch"]:checked::after {
+  content: none;
+}
+
+/* A check box or switch that cannot be changed now looks it, as a disabled button does (the browser's own look is gone). */
+.fdn-wizard input[type="checkbox"]:disabled {
+  opacity: 0.45;
+  cursor: default;
 }
 
 .fdn-wizard-field input[readonly] {
@@ -1858,21 +1995,21 @@
 
 .fdn-wizard-check input {
   flex: none;
-  margin-block-start: 3px;
+  margin-block-start: 1px;
   accent-color: var(--fdn-accent);
 }
 
 .fdn-wizard-actions {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 6px;
 }
 
 .fdn-wizard-actions .fdn-button {
   width: 100%;
   height: auto;
-  min-height: 32px;
-  padding-block: 6px;
+  min-height: 30px;
+  padding-block: 4px;
 }
 
 .fdn-wizard-choice {
@@ -1898,7 +2035,7 @@
   flex-direction: column;
   align-items: center;
   gap: 4px;
-  padding: 12px;
+  padding: 10px;
   border: 1px solid var(--fdn-hairline);
   border-radius: var(--fdn-radius);
   background: var(--fdn-surface);
@@ -1939,9 +2076,13 @@
   gap: 6px;
 }
 
+/* The providers are chips: 8 px, a little lower than a button. */
 .fdn-wizard-presets .fdn-button {
   height: auto;
-  min-height: 28px;
+  min-height: 26px;
+  padding-block: 2px;
+  padding-inline: 10px;
+  border-radius: var(--fdn-radius-chip);
 }
 
 .fdn-wizard-error {
@@ -1949,7 +2090,7 @@
 }
 
 .fdn-wizard-note {
-  padding: 8px 12px;
+  padding: 6px 12px;
   border-radius: var(--fdn-radius);
   background: var(--fdn-warning-soft);
   color: var(--fdn-warning);
@@ -1977,7 +2118,7 @@
 .fdn-skills-editor {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 10px;
 }
 
 .fdn-skills-editor h3 {
@@ -1989,7 +2130,7 @@
 .fdn-skills-list {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 6px;
   margin: 0;
   padding: 0;
   list-style: none;
@@ -1998,7 +2139,7 @@
 .fdn-skills-row {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 6px;
 }
 
 .fdn-skills-row-head {
@@ -2032,7 +2173,7 @@
 }
 
 .fdn-skills-message {
-  padding: 8px 12px;
+  padding: 6px 12px;
   border-radius: var(--fdn-radius);
   background: var(--fdn-accent-soft);
   color: var(--fdn-on-accent-soft);
@@ -2041,7 +2182,7 @@
 .fdn-skills-ask {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 6px;
 }
 
 .fdn-skills-ask > p {
@@ -2053,9 +2194,9 @@
 .fdn-skills-column input[type="number"],
 .fdn-skills-editor input[type="number"] {
   width: 100%;
-  padding: 6px 8px;
-  border: 1px solid var(--fdn-border);
-  border-radius: var(--fdn-radius);
+  padding: 5px 8px;
+  border: 1px solid var(--fdn-control-border);
+  border-radius: var(--fdn-radius-control);
   background: var(--fdn-bg);
   color: inherit;
   font: inherit;
@@ -2125,7 +2266,7 @@
 .fdn-skills-files {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 6px;
   margin: 0;
   padding: 0;
   list-style: none;
@@ -2134,10 +2275,45 @@
 .fdn-skills-try {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 6px;
 }
 
 .fdn-skills-try ul {
   margin: 0;
   padding-inline-start: 18px;
+}
+
+/* High contrast: a drawn check box or switch keeps the system's colours (the browser would otherwise flatten its fill and its tick). */
+@media (forced-colors: active) {
+  /* The browser gives a button the system's button face and its text colour, so a primary button's light label vanished on it: it
+     keeps the highlight colours instead. */
+  .fdn-wizard .fdn-button.fdn-primary {
+    forced-color-adjust: none;
+    border-color: Highlight;
+    background: Highlight;
+    color: HighlightText;
+  }
+
+  .fdn-wizard input[type="checkbox"] {
+    forced-color-adjust: none;
+    border-color: ButtonText;
+    background: Canvas;
+  }
+
+  .fdn-wizard input[type="checkbox"]:checked {
+    border-color: Highlight;
+    background: Highlight;
+  }
+
+  .fdn-wizard input[type="checkbox"]:checked::after {
+    border-color: HighlightText;
+  }
+
+  .fdn-wizard input[type="checkbox"][role="switch"]::before {
+    background: ButtonText;
+  }
+
+  .fdn-wizard input[type="checkbox"][role="switch"]:checked::before {
+    background: HighlightText;
+  }
 }
