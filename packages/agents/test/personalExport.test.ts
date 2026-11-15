@@ -137,6 +137,23 @@ describe("exportMyData beyond sessions and approvals", () => {
     await agent.dispose();
   });
 
+  it("hands over the web search settings and never the sealed Brave key, and deleting removes them", async () => {
+    await seed(`fadenstack-web-search${ANNA}`, {
+      settings: { rows: [[{ provider: "searxng", searxngUrl: "https://searx.example.org/" }, "settings"]] },
+      key: { rows: [[new Uint8Array([1, 2, 3, 4]), "brave"]] },
+    });
+    const agent = await agentFor(gateway(), "anna@example.com");
+
+    const data = await agent.exportMyData();
+
+    expect(data.databases!["web-search"]).toEqual({
+      settings: [{ key: "settings", value: { provider: "searxng", searxngUrl: "https://searx.example.org/" } }],
+    });
+    await agent.deleteMyData();
+    expect((await indexedDB.databases()).some((x) => x.name === `fadenstack-web-search${ANNA}`)).toBe(false);
+    await agent.dispose();
+  });
+
   it("counts a row that is not plain data instead of throwing, and never hands it over", async () => {
     const blob = new Blob(["BLOBTEXT"]);
     await seed(`fadenstack-skills${ANNA}`, { skills: { rows: [[{ name: "ok" }, "ok"], [{ name: "bad", file: new Uint8Array([1]) }, "bad"], [{ name: "blob", file: blob }, "blob"]] } });
