@@ -475,6 +475,7 @@ export class McpModule implements FadenstackModule, ChangingToolSource {
       checkMcpPlainHttp(new URL(record.url), record, plainHttpPermitted(context));
       if (entry.connection && entry.key !== key) await this.#detach(entry);
       let listed: ListedTool[] | undefined;
+      let opened = false;
       if (entry.connection) {
         try {
           listed = await entry.connection.listTools(signal);
@@ -488,6 +489,7 @@ export class McpModule implements FadenstackModule, ChangingToolSource {
           timeoutMs: this.#options.connectTimeoutMs ?? DEFAULT_CONNECT_TIMEOUT_MS, version: CLIENT_VERSION });
         entry.key = key;
         listed = await entry.connection.listTools(signal);
+        opened = true;
       }
       entry.listed = listed ?? [];
       const connection = entry.connection;
@@ -500,6 +502,7 @@ export class McpModule implements FadenstackModule, ChangingToolSource {
       delete entry.status.detail;
       delete entry.status.plainHttp;
       writeLog(logger, McpLog.attached, { Label: record.label, Transport: "http", ToolCount: entry.listed.length, Protocol: connection?.protocolVersion ?? "" });
+      if (opened) await this.#reportAttached(context, record.label, record.url, entry.listed);
     } catch (error) {
       await this.#detach(entry);
       if (error instanceof McpPlainHttpRefusedError) {
@@ -511,6 +514,20 @@ export class McpModule implements FadenstackModule, ChangingToolSource {
       const typed = error instanceof McpConnectError || error instanceof McpConfigError ? error : new McpConnectError(record.label, "unreachable", { cause: error });
       entry.status = { ...entry.status, state: McpServerState.Failed, detail: typed.message };
       writeLog(logger, McpLog.attachFailed, { Label: record.label, Transport: "http", ErrorType: typed.name + (typed instanceof McpConnectError ? `:${typed.reason}` : "") });
+    }
+  }
+
+  /**
+   * Tells a governed server that a server of the person's was attached: its label, its address without a user, password, query or
+   * fragment (where tokens are often put), and its tools' names; never a header. Once per connection. .NET:
+   * `LocalMcpModule.ReportAttachedAsync`.
+   */
+  async #reportAttached(context: AgentContext, label: string, url: string, listed: readonly ListedTool[]): Promise<void> {
+    if (context.connection !== "governed") return;
+    try {
+      await context.report({ type: "local_mcp.attached", label, url: reportedAddress(url), tools: listed.map((t) => t.name) });
+    } catch {
+      // a report that fails never fails a server
     }
   }
 
@@ -637,6 +654,16 @@ export class McpModule implements FadenstackModule, ChangingToolSource {
     this.#entries.clear();
     this.#cache.clear();
     this.#statusListeners.clear();
+  }
+}
+
+/** An address as a server is told it: scheme, host, port and path; no user, password, query or fragment. Unparsable: nothing. */
+function reportedAddress(url: string): string {
+  try {
+    const parsed = new URL(url);
+    return parsed.origin + parsed.pathname;
+  } catch {
+    return "";
   }
 }
 
