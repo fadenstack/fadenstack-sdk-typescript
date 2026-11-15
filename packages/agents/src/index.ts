@@ -36,6 +36,7 @@ export {
   type StoredApproval,
 } from "./approvalStore.js";
 export type { AgentEvent, AgentResult, ToolOutcome } from "./events.js";
+export { agUiEvents, agUiJson, type AgUiEvent, type AgUiOptions } from "./agui.js";
 export {
   CORE_TOOL_SOURCE,
   NO_TOOL_SERVICES,

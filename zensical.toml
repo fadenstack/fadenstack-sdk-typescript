@@ -23,6 +23,7 @@ nav = [
   { "Plain chat completions" = "plain-api.md" },
   { "Hosting" = "hosting.md" },
   { "Extending" = "extending.md" },
+  { "Interop" = "interop.md" },
   { "Libraries" = "libraries.md" },
   { "Samples" = "samples.md" },
   { "Parity with the .NET SDK" = "parity.md" },

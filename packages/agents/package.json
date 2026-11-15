@@ -38,6 +38,7 @@
     "access": "public"
   },
   "dependencies": {
+    "@ag-ui/core": "1.0.4",
     "@fadenstack/client": "0.3.0-rc.2"
   }
 }
