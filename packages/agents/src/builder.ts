@@ -15,6 +15,7 @@ import { FadenstackAgent } from "./agent.js";
 import { ServerBackend, type AgentBackend } from "./backend.js";
 import type { AgentDefinition } from "./definition.js";
 import { AgentLog } from "./log.js";
+import type { AgentHooks } from "./hooks.js";
 import { LocalBackend, type LocalProfileOptions } from "./localBackend.js";
 import { MachinePolicy, MachinePolicyError, PolicyAccess } from "./machinePolicy.js";
 import {
@@ -53,6 +54,10 @@ export interface AgentSettings {
   readonly tools: readonly AgentTool[];
   readonly sources: readonly ToolSource[];
   readonly toolStages: readonly ToolStage[];
+  /** The app's hooks (`addHooks`), in the order they run before a call. */
+  readonly hooks?: readonly AgentHooks[];
+  /** Whether the model-call hooks see message and answer text (`useHookContent`). */
+  readonly hookContent?: boolean;
   /** What modules give tools per call, by key. */
   readonly toolServices: ReadonlyMap<ToolServiceKey<unknown>, ToolServiceFactory<unknown>>;
   readonly modules: readonly string[];
@@ -114,6 +119,8 @@ export class AgentBuilder {
   readonly #sources: ToolSource[] = [];
   readonly #chatStages: { order: number; wrap: ChatStage }[] = [];
   readonly #toolStages: { order: number; stage: ToolStage }[] = [];
+  readonly #hooks: { order: number; hooks: AgentHooks }[] = [];
+  #hookContent = false;
   readonly #toolServices = new Map<ToolServiceKey<unknown>, ToolServiceFactory<unknown>>();
   readonly #modules: string[] = [];
   #client: FadenstackClient | undefined;
@@ -380,6 +387,26 @@ export class AgentBuilder {
   }
 
   /**
+   * Hooks (`AgentHooks`): the app's code that sees each model call and tool call, and may make a tool call stricter. Before-hooks
+   * run in ascending `order`, then in the order added; after-hooks in the reverse order. A hook can never approve a call the policy
+   * asks about or refuses (`toolHook` has no such answer), and one that throws is logged and ignored. See docs/interop.md.
+   */
+  addHooks(hooks: AgentHooks, order = 0): this {
+    if (!hooks || typeof hooks !== "object") throw new TypeError("Hooks are an object with optional beforeModelCall, afterModelCall, beforeToolCall and afterToolCall.");
+    this.#hooks.push({ order, hooks });
+    return this;
+  }
+
+  /**
+   * Whether the model-call hooks see the messages and the answer text. Off by default: hooks see names, ids, counts, outcomes
+   * and times only.
+   */
+  useHookContent(enabled = true): this {
+    this.#hookContent = enabled;
+    return this;
+  }
+
+  /**
    * A service tools get per call (`context.services.get(key)`), made by `factory` on the call's first use. One
    * factory per key: a second throws.
    */
@@ -475,6 +502,8 @@ export class AgentBuilder {
       tools: [...this.#tools],
       sources: [...this.#sources],
       toolStages: [...this.#toolStages].sort((a, b) => a.order - b.order).map((s) => s.stage),
+      hooks: this.#hooks.map((h, index) => ({ ...h, index })).sort((a, b) => a.order - b.order || a.index - b.index).map((h) => h.hooks),
+      hookContent: this.#hookContent,
       toolServices: new Map(this.#toolServices),
       modules: [...this.#modules],
       approvals: this.#approvals,

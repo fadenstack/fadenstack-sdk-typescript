@@ -92,6 +92,21 @@ export {
   type ReasoningStore,
 } from "./reasoning.js";
 export { AGENT_LOG_CATEGORY, AgentLog } from "./log.js";
+export {
+  MAX_HOOK_NOTES,
+  MAX_HOOK_NOTE_KEY,
+  MAX_HOOK_NOTE_VALUE,
+  MAX_HOOK_REASON,
+  toolHook,
+  type AgentHooks,
+  type HookOutcome,
+  type ModelCallHookContext,
+  type ModelCallHookResult,
+  type ToolCallHookContext,
+  type ToolCallHookResult,
+  type ToolHookVerdict,
+  type ToolPolicyDecision,
+} from "./hooks.js";
 export { attachmentData, isPicture, type MessageAttachment } from "./attachments.js";
 export { ContextBuilder, MAX_HISTORY_PICTURES, NO_TOOL_RESULT, toMessage, withAttachments } from "./contextBuilder.js";
 export {

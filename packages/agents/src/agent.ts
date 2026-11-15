@@ -33,6 +33,7 @@ import {
 import { MachinePolicy, PolicyAccess } from "./machinePolicy.js";
 import { AgentBuilder, UNDESCRIBED_APP_NAME, type AgentSettings, type AppDescription } from "./builder.js";
 import type { AgentBackend, AgentConnection } from "./backend.js";
+import { HookRunner } from "./hooks.js";
 import { LocalBackend } from "./localBackend.js";
 import { EventReporter } from "./reporter.js";
 import { ChatSession } from "./session.js";
@@ -90,7 +91,11 @@ export class FadenstackAgent {
     this.reporter = new EventReporter(settings.backend, settings.report);
     this.grants = new AgentGrants(this, settings.grantPlaceResolver);
     this.stepUps = new StepUpProofs(this);
+    this.hooks = new HookRunner(settings.hooks ?? [], settings.hookContent === true, settings.logger);
   }
+
+  /** @internal The app's hooks (`AgentBuilder.addHooks`), in order. */
+  readonly hooks: HookRunner;
 
   /** @internal The builder's way in: `FadenstackAgent.createBuilder()...build()`. */
   static create(settings: AgentSettings): FadenstackAgent {
