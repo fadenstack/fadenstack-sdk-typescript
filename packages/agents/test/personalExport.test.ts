@@ -148,4 +148,21 @@ describe("exportMyData beyond sessions and approvals", () => {
     expect(data.counts.unreadable).toBe(2);
     await agent.dispose();
   });
+
+  it("deleteMyData removes the person's localStorage keys and counts them, and leaves another person's", async () => {
+    const anna = { tenantId: "tenant-1", userId: "user-1" };
+    localStorage.setItem(userLocalKey("prompts", anna), "[]");
+    localStorage.setItem(userLocalKey("language", anna), "de");
+    localStorage.setItem(userLocalKey("language", { tenantId: "tenant-1", userId: "user-2" }), "fr");
+    localStorage.setItem("fadenstack.prompts", "[]"); // the old shared key is not a governed person's
+    const agent = await agentFor(gateway(), "anna@example.com");
+
+    const result = await agent.deleteMyData();
+
+    expect(result.storesCleared).toBe(2);
+    expect(localStorage.getItem(userLocalKey("language", anna))).toBeNull();
+    expect(localStorage.getItem(userLocalKey("language", { tenantId: "tenant-1", userId: "user-2" }))).toBe("fr");
+    expect(localStorage.getItem("fadenstack.prompts")).toBe("[]");
+    await agent.dispose();
+  });
 });

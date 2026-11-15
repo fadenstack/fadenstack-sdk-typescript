@@ -148,25 +148,50 @@ export interface KeyedTextStorage {
 }
 
 /**
- * The user's prompts in `storage` under `PROMPTS_STORAGE_KEY`, as JSON: one list for everything that shares the storage.
+ * The keys a person's prompt list is kept under: `key` is theirs; `legacyKey`, when given, is the older key shared by everyone in
+ * the browser profile, which is read while `key` holds nothing (it is never written).
+ */
+export interface PromptKeys {
+  key: string;
+  legacyKey?: string;
+}
+
+/**
+ * The user's prompts in `storage` under `PROMPTS_STORAGE_KEY` (or, per person, under `options.keys()`: undefined while whose
+ * they are is not known, when nothing is read and a save is refused), as JSON: one list for everything that shares the storage.
  * A damaged list reads as empty, and entries that are not prompts are dropped. When the storage refuses a write (quota,
  * private mode), the list is kept in memory from then on. `browserPromptStore()` (`@fadenstack/ui-web`) is this over
  * localStorage.
  */
-export function storedPromptStore(storage: KeyedTextStorage, options: { now?: () => Date } = {}): PromptStore {
+export function storedPromptStore(storage: KeyedTextStorage, options: { now?: () => Date; keys?: () => PromptKeys | undefined } = {}): PromptStore {
   let memory: SavedPrompt[] | undefined; // when the storage refused a write: this list is the truth from then on
+  let memoryKey: string | undefined; // whose the in-memory list is
+  const keysNow = (): PromptKeys | undefined => {
+    const keys = options.keys ? options.keys() : { key: PROMPTS_STORAGE_KEY };
+    if (keys && keys.key !== memoryKey) {
+      memoryKey = keys.key;
+      memory = undefined; // another person: never the last one's list
+    }
+    return keys;
+  };
   const read = (): SavedPrompt[] => {
+    const keys = keysNow();
+    if (!keys) return []; // whose prompts these are is not known yet
     if (memory) return memory;
     try {
-      const raw = storage.getItem(PROMPTS_STORAGE_KEY);
+      // The person's own key; where there is none yet, the key every person of the browser profile shared before (`legacyKey`,
+      // given for the standalone principal only), read until the person's first save writes their own.
+      const raw = storage.getItem(keys.key) ?? (keys.legacyKey !== undefined ? storage.getItem(keys.legacyKey) : undefined);
       return raw ? sanitize(JSON.parse(raw) as unknown) : [];
     } catch {
       return [];
     }
   };
   const write = (list: SavedPrompt[]): void => {
+    const keys = keysNow();
+    if (!keys) throw new Error("Whose prompts these are is not known yet."); // the chat reports "not saved"
     try {
-      storage.setItem(PROMPTS_STORAGE_KEY, JSON.stringify(list));
+      storage.setItem(keys.key, JSON.stringify(list));
       memory = undefined;
     } catch {
       memory = list;

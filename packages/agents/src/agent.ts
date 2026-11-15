@@ -21,7 +21,7 @@ import {
 
 import type { PermissionMode } from "./approvals.js";
 import { type ApprovalStore, type StoredApproval } from "./approvalStore.js";
-import { DefaultStores, buildExport, deleteUserDatabases, type DataDeletion, type MyDataExport } from "./dataRights.js";
+import { DefaultStores, buildExport, deleteUserDatabases, deleteUserLocalStorage, type DataDeletion, type MyDataExport } from "./dataRights.js";
 import { DEFAULT_RETENTION, withinServerRetention, type SessionStore } from "./sessionStore.js";
 import type { StoreProblem } from "./storeSupport.js";
 import { StepUpProofs, isStepUpHandler, type StepUpHandler } from "./stepUp.js";
@@ -765,6 +765,7 @@ export class FadenstackAgent {
     let storesCleared = 0;
     try {
       storesCleared = await deleteUserDatabases(principal);
+      storesCleared += deleteUserLocalStorage(principal); // the panel's language and notice, the saved prompts
     } finally {
       this.#storesFor = undefined; // new, empty stores (and a new key) at the next use
       this.#settleStores(principal);
