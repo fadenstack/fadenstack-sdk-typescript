@@ -28,9 +28,37 @@ export interface McpServerStore {
   remove(label: string): Promise<boolean>;
   /** Calls `listener` after a change; returns the unsubscribe. */
   onChanged(listener: () => void): () => void;
+  /**
+   * Adds a line to the device's audit log of the person's switches (sdk/51 F05), kept with the servers (deleted with the person's
+   * data); beyond `MCP_AUDIT_MAX` lines the oldest go. Nothing in it leaves the device. .NET: `McpAuditLog`.
+   */
+  appendAudit(entry: McpAuditEntry): Promise<void>;
+  /** The audit log, oldest first. */
+  audit(): Promise<McpAuditEntry[]>;
   /** Releases what the store holds open (an IndexedDB connection). */
   close(): void;
 }
+
+/**
+ * One change the person made that the device keeps for audit: when, what, the server's source (its origin, never a path, query
+ * or token), on or off, the version of the warning confirmed before turning it on, and who. .NET: `McpAuditEntry`.
+ */
+export interface McpAuditEntry {
+  /** `local_mcp.plain_http`: the switch "Allow plain http on the local network". */
+  event: "local_mcp.plain_http";
+  /** ISO 8601, UTC. */
+  at: string;
+  /** The server's origin, `http://host[:port]`. */
+  source: string;
+  state: "on" | "off";
+  /** The warning's version, when turning it on; null when turning it off. */
+  warning_version: string | null;
+  /** `<tenant>/<user>`, or `standalone`. */
+  person: string;
+}
+
+/** How many lines the audit log keeps (it rotates by count, where .NET's file rotates by size, as the placement log does). */
+export const MCP_AUDIT_MAX = 500;
 
 /** A record as the store hands it back. */
 export type StoredMcpServer = McpServerRecord & { headersUnreadable?: boolean };
@@ -67,6 +95,16 @@ function byLabel(a: { label: string }, b: { label: string }): number {
 /** The servers in memory: for a host without IndexedDB, and for tests. Nothing is written anywhere, so nothing is sealed. */
 export class MemoryMcpServerStore extends ObservableStore implements McpServerStore {
   readonly #servers = new Map<string, McpServerRecord>();
+  readonly #audit: McpAuditEntry[] = [];
+
+  async appendAudit(entry: McpAuditEntry): Promise<void> {
+    this.#audit.push(structuredClone(entry));
+    if (this.#audit.length > MCP_AUDIT_MAX) this.#audit.splice(0, this.#audit.length - MCP_AUDIT_MAX);
+  }
+
+  async audit(): Promise<McpAuditEntry[]> {
+    return this.#audit.map((e) => structuredClone(e));
+  }
 
   async list(): Promise<StoredMcpServer[]> {
     return [...this.#servers.values()].sort(byLabel).map((s) => structuredClone(s));
@@ -98,8 +136,10 @@ export class MemoryMcpServerStore extends ObservableStore implements McpServerSt
   }
 }
 
-const VERSION = 1;
+// Version 2 added the `audit` store (sdk/51 F05); an upgrade makes only the stores that are missing, so the servers stay.
+const VERSION = 2;
 const SERVERS = "servers";
+const AUDIT = "audit";
 
 /** What IndexedDB holds for one server: everything but the headers' values in the clear, the values sealed. */
 interface Stored {
@@ -111,6 +151,7 @@ interface Stored {
   callTimeoutS?: number;
   importedFrom?: string;
   reviewed: boolean;
+  plainHttpInLan?: boolean;
   /** The header names, readable so a list can show them. */
   headerNames: string[];
   /** The headers as JSON, sealed (`SecretProtector`); absent for a server without headers. */
@@ -223,6 +264,7 @@ export class IndexedDbMcpServerStore extends ObservableStore implements McpServe
       ...(kept.callTimeoutS !== undefined ? { callTimeoutS: kept.callTimeoutS } : {}),
       ...(kept.importedFrom !== undefined ? { importedFrom: kept.importedFrom } : {}),
       reviewed: kept.reviewed,
+      ...(kept.plainHttpInLan === true ? { plainHttpInLan: true } : {}),
       headerNames,
     };
     if (headerNames.length > 0) {
@@ -248,6 +290,24 @@ export class IndexedDbMcpServerStore extends ObservableStore implements McpServe
     await done;
     if (had) this.changed();
     return had;
+  }
+
+  async appendAudit(entry: McpAuditEntry): Promise<void> {
+    const db = await this.#db();
+    const tx = db.transaction([AUDIT], "readwrite");
+    const done = finished(tx);
+    const store = tx.objectStore(AUDIT);
+    store.add(structuredClone(entry));
+    const count = await request<number>(store.count());
+    if (count > MCP_AUDIT_MAX) {
+      for (const key of await request<IDBValidKey[]>(store.getAllKeys(undefined, count - MCP_AUDIT_MAX))) store.delete(key);
+    }
+    await done;
+  }
+
+  async audit(): Promise<McpAuditEntry[]> {
+    const db = await this.#db();
+    return request<McpAuditEntry[]>(db.transaction([AUDIT], "readonly").objectStore(AUDIT).getAll());
   }
 
   close(): void {
@@ -282,6 +342,7 @@ export class IndexedDbMcpServerStore extends ObservableStore implements McpServe
         const opening = this.#factory.open(name, VERSION);
         opening.onupgradeneeded = () => {
           if (!opening.result.objectStoreNames.contains(SERVERS)) opening.result.createObjectStore(SERVERS);
+          if (!opening.result.objectStoreNames.contains(AUDIT)) opening.result.createObjectStore(AUDIT, { autoIncrement: true });
         };
         opening.onsuccess = () => {
           const connection = opening.result;

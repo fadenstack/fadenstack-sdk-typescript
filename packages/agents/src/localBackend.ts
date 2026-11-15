@@ -142,7 +142,8 @@ export class LocalBackend implements AgentBackend {
       hostToolContract: definition.hostToolContract.map((entry) => ({ ...entry })),
       serverTools: null,
       knowledge: [],
-      localMcp: { mode: options?.localMcp ? "allow" : "disable", developerMode: false },
+      // Standalone: the person decides per server; this computer's policy can still forbid it (the agent narrows the profile).
+      localMcp: { mode: options?.localMcp ? "allow" : "disable", developerMode: false, plainHttp: "allow" },
       localSkills: { mode: options?.localSkills === false ? "disable" : "allow", developerMode: false },
       // Ask to start, Auto at most: no local Bypass (D4 later).
       toolModes: { default: "ask", ceiling: "auto", max: "auto", openWorldEnforced: false },

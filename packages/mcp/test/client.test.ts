@@ -216,11 +216,13 @@ describe("the MCP client over HTTP", () => {
 
   it("refuses an address that breaks a rule, before anything is sent", async () => {
     const entries = new Entries();
-    expect(() => mcpModule({ store: false, logger: entries, servers: [{ label: "x", url: "http://mcp.example.com/mcp" }] })).toThrow(/plain http to another computer/);
+    expect(() => mcpModule({ store: false, logger: entries, servers: [{ label: "x", url: "http://mcp.example.com/mcp" }] })).toThrow(/outside the local network/);
     expect(() => mcpModule({ store: false, servers: [{ label: "x", url: "https://user:pw@mcp.example.com/" }] })).toThrow(/user name or password/);
     expect(() => mcpModule({ store: false, servers: [{ label: "x", url: "https://a.example.com/", headers: { "Mcp-Session-Id": "1" } }] })).toThrow(/set by the transport/);
     expect(() => mcpModule({ store: false, servers: [{ label: "x", url: "https://a.example.com/", headers: { Authorization: "a\r\nX: y" } }] })).toThrow(/value of header 'Authorization'/);
-    expect(() => mcpModule({ store: false, servers: [{ label: "x", url: "http://192.168.1.5/mcp" }], allowPlainHttp: true })).not.toThrow();
+    // a host on the local network is kept: it waits for the person's switch when it connects (sdk/51 F05)
+    expect(() => mcpModule({ store: false, servers: [{ label: "x", url: "http://192.168.1.5/mcp" }] })).not.toThrow();
+    expect(() => mcpModule({ store: false, servers: [{ label: "x", url: "http://192.168.1.5/mcp", headers: { "X-Key": "k" } }] })).toThrow(/sends a header over plain http/);
     expect(() => mcpModule({ store: false, servers: [{ label: "x", url: "http://localhost:3000/mcp" }] })).not.toThrow();
   });
 });

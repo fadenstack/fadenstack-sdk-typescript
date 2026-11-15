@@ -26,8 +26,22 @@ const REASONS: Record<McpConnectFailure, string> = {
   stopped: "the attach was stopped",
 };
 
+/**
+ * Which plain-http rule an entry breaks (sdk/51 F05), so a host can say it in its own words. .NET: `McpProblem.PlainHttpWithHeaders`,
+ * `McpProblem.PlainHttpNotLocal`.
+ */
+export type McpConfigProblem = "plainHttpWithHeaders" | "plainHttpNotLocal";
+
 /** A server's address, label or headers break a rule (`checkServer`), or a pasted configuration is not usable. */
-export class McpConfigError extends McpError {}
+export class McpConfigError extends McpError {
+  /** The plain-http rule it breaks, when it is one of those. */
+  readonly problem: McpConfigProblem | undefined;
+
+  constructor(message: string, problem?: McpConfigProblem) {
+    super(message);
+    this.problem = problem;
+  }
+}
 
 /** The agent's policy or the machine policy does not allow a server. `reason` is the policy's own words. */
 export class McpPolicyError extends McpError {

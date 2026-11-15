@@ -16,6 +16,8 @@ export const McpLog = Object.freeze({
     "MCP server {Label} brought a tool under a name the SDK keeps for its own tools; it was left out"),
   toolNameTaken: defineLog(MCP_LOG_CATEGORY, 3008, "ToolNameTaken", "warning",
     "MCP server {Label} brought a tool whose name MCP server {Winner} already brings; the first server's is kept"),
+  plainHttpRefused: defineLog(MCP_LOG_CATEGORY, 3009, "PlainHttpRefused", "information",
+    "MCP server {Label} was not reached over plain http ({Reason})"),
   toolNameInvalid: defineLog(MCP_LOG_CATEGORY, 3010, "ToolNameInvalid", "warning",
     "MCP server {Label} brought a tool whose name cannot be used as it is; it was renamed"),
   storeUnreadable: defineLog(MCP_LOG_CATEGORY, 3011, "StoreUnreadable", "warning", "The person's own MCP servers could not be read ({ErrorType})"),

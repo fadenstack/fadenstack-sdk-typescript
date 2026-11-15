@@ -30,7 +30,7 @@ import {
   type ReasoningLevel, type ReasoningStore,
 } from "./reasoning.js";
 
-import { MachinePolicy } from "./machinePolicy.js";
+import { MachinePolicy, PolicyAccess } from "./machinePolicy.js";
 import { AgentBuilder, UNDESCRIBED_APP_NAME, type AgentSettings, type AppDescription } from "./builder.js";
 import type { AgentBackend, AgentConnection } from "./backend.js";
 import { LocalBackend } from "./localBackend.js";
@@ -152,9 +152,11 @@ export class FadenstackAgent {
   #narrowed(profile: AgentProfile): AgentProfile {
     const policy = this.machinePolicy;
     const off = { mode: "disable", developerMode: false };
+    const localMcp = policy.mcp.allowsAny ? profile.localMcp : { ...off, plainHttp: "deny" as const };
     return {
       ...profile,
-      localMcp: policy.mcp.allowsAny ? profile.localMcp : off,
+      // plainHttp: this computer's policy forbids plain http, so the local network is off whatever the profile says (sdk/51 F05)
+      localMcp: policy.plainHttp === PolicyAccess.Allowed ? localMcp : { ...localMcp, plainHttp: "deny" },
       ...(policy.skills.allowsAny ? {} : { localSkills: off }),
     };
   }

@@ -216,11 +216,11 @@ describe("the rules a server must keep", () => {
     }
   });
 
-  it("allows plain http for this computer, and https anywhere", () => {
-    for (const url of ["http://localhost:3000/mcp", "http://127.0.0.1/mcp", "http://[::1]:8080/mcp", "https://a.example.com/mcp"]) {
+  it("allows plain http for this computer, https anywhere, and keeps a local-network host to wait for the switch", () => {
+    for (const url of ["http://localhost:3000/mcp", "http://127.0.0.1/mcp", "http://[::1]:8080/mcp", "https://a.example.com/mcp", "http://10.0.0.5/mcp"]) {
       expect(() => checkServer({ label: "x", url })).not.toThrow();
     }
     expect(() => checkServer({ label: "x", url: "http://localhost.evil.com/mcp" })).toThrow(/plain http/);
-    expect(() => checkServer({ label: "x", url: "http://10.0.0.5/mcp" })).toThrow(/plain http/);
+    expect(() => checkServer({ label: "x", url: "http://10.0.0.5/mcp", headers: { "X-Key": "k" } })).toThrow(/plain http/);
   });
 });

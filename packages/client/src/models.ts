@@ -38,7 +38,12 @@ export interface AgentProfile {
   /** The gateway's own tools the model may be offered; null: what a chat gets. */
   serverTools: string[] | null;
   knowledge: string[];
-  localMcp: { mode: string; developerMode: boolean };
+  /**
+   * Local MCP servers (`local_mcp`). `plainHttp` (sdk/51 F05, core 0.7.1rc19): plain http to MCP servers on the local network is
+   * `allow`ed or `deny` (the default); absent or anything else reads as `deny`, and developer mode does not override it.
+   * .NET: `LocalMcpSettings.PlainHttp`.
+   */
+  localMcp: { mode: string; developerMode: boolean; plainHttp: "allow" | "deny" };
   /**
    * Whether the agent may load skills kept on this device (`local_skills`, core 0.7.1): `disable` unless the administrator
    * allowed them. Absent from a server that does not say (read as `disable`). .NET: `AgentProfile.LocalSkills`.
@@ -198,7 +203,8 @@ export function toAgentProfile(json: unknown): AgentProfile {
       : [],
     serverTools: Array.isArray(p["server_tools"]) ? strings(p["server_tools"]) : null,
     knowledge: strings(p["knowledge"]),
-    localMcp: { mode: str(localMcp["mode"]) ?? "disable", developerMode: localMcp["developer_mode"] === true },
+    localMcp: { mode: str(localMcp["mode"]) ?? "disable", developerMode: localMcp["developer_mode"] === true,
+      plainHttp: localMcp["plain_http"] === "allow" ? "allow" : "deny" },
     ...(p["local_skills"] !== undefined ? { localSkills: { mode: str(obj(p["local_skills"])["mode"]) ?? "disable",
       developerMode: obj(p["local_skills"])["developer_mode"] === true } } : {}),
     toolModes: {
@@ -271,6 +277,7 @@ export type AgentClientEvent =
   | ToolExecutedEvent
   | ApprovalDecidedEvent
   | LocalMcpAttachedEvent
+  | LocalMcpPlainHttpEvent
   | SessionStatsEvent;
 
 interface ClientEventBase {
@@ -311,6 +318,18 @@ export interface LocalMcpAttachedEvent extends ClientEventBase {
   tools: string[];
 }
 
+/**
+ * The person switched plain http on the local network on or off for one of their MCP servers (sdk/51 F05; core 0.7.1rc19):
+ * content-free, which server (its origin only) and on or off. Core refuses a whole batch with a type it does not know, so the SDK
+ * sends it only where the profile's `features` list `client_events.local_mcp_plain_http`. .NET: `LocalMcpPlainHttpEvent`.
+ */
+export interface LocalMcpPlainHttpEvent extends ClientEventBase {
+  type: "local_mcp.plain_http";
+  /** The server's origin: `http://host[:port]`, no user, path, query or fragment. */
+  source: string;
+  state: "on" | "off";
+}
+
 /** Counts of one local session. */
 export interface SessionStatsEvent extends ClientEventBase {
   type: "session.stats";
@@ -348,6 +367,10 @@ export function toWireEvent(event: AgentClientEvent): Record<string, unknown> {
       put("command", event.command);
       put("url", event.url);
       put("tools", event.tools);
+      break;
+    case "local_mcp.plain_http":
+      put("source", event.source);
+      put("state", event.state);
       break;
     case "session.stats":
       put("turns", event.turns);

@@ -52,6 +52,8 @@ export interface FakeAgent {
   contract?: { name: string; risk?: "read" | "write" | "destructive"; approval?: string; target_type?: string; target_argument?: string }[];
   ui?: Record<string, unknown>;
   localMcpMode?: "disable" | "allow";
+  /** The profile's `local_mcp.plain_http` (core 0.7.1rc19, sdk/51 F05); not sent at all unless set, as an older server. */
+  localMcpPlainHttp?: "allow" | "deny";
   /** The profile's `local_skills`, as the wire carries it (core 0.7.1); `mode` is left out when undefined. Not sent at all unless set, as an older server. */
   localSkills?: { mode?: string; developerMode?: boolean };
   /** A tool-mode ceiling, as an administrator's rules set it. */
@@ -281,6 +283,7 @@ const EVENT_FIELDS: Record<string, readonly string[]> = {
   "tool.executed": ["tool", "source", "server", "duration_ms", "outcome"],
   "approval.decided": ["tool", "decision", "wait_ms", "scope", "grant_id"],
   "local_mcp.attached": ["label", "command", "url", "tools"],
+  "local_mcp.plain_http": ["source", "state"],
   "session.stats": ["turns", "compactions", "retention_sessions", "retention_days"],
 };
 const EVENT_COMMON = ["type", "occurred_at", "conversation_id"];
@@ -857,7 +860,8 @@ export class FakeGateway {
       model: agent.model ?? "fake-model", ...(agent.vision !== undefined ? { vision: agent.vision } : {}), images: false,
       skills: agent.skills !== undefined, instructions_sha256: "0".repeat(64),
       host_tool_contract: agent.contract ?? [], server_tools: null, knowledge: [],
-      local_mcp: { mode: agent.localMcpMode ?? "disable", developer_mode: user.developerMode ?? false },
+      local_mcp: { mode: agent.localMcpMode ?? "disable", developer_mode: user.developerMode ?? false,
+        ...(agent.localMcpPlainHttp !== undefined ? { plain_http: agent.localMcpPlainHttp } : {}) },
       ...(agent.localSkills ? { local_skills: { ...(agent.localSkills.mode !== undefined ? { mode: agent.localSkills.mode } : {}), developer_mode: agent.localSkills.developerMode ?? false } } : {}),
       tool_modes: { default: agent.defaultLevel ?? "ask", ceiling: agent.ceiling ?? null,
         ...(agent.maxLevel !== undefined ? { max: agent.maxLevel } : {}), open_world_enforced: false },

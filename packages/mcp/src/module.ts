@@ -1,4 +1,4 @@
-import { effectiveToolClass, parseToolClass, writeLog, type FadenstackLogger, type ToolClass } from "@fadenstack/client";
+import { effectiveToolClass, parseToolClass, writeLog, type FadenstackLogger, type LocalMcpPlainHttpEvent, type ToolClass } from "@fadenstack/client";
 import {
   CORE_TOOL_SOURCE,
   FIND_TOOL_NAME,
@@ -16,6 +16,7 @@ import { McpConnection, type ListedTool } from "./connection.js";
 import { McpConfigError, McpConnectError, McpPolicyError, McpStoreError } from "./errors.js";
 import { toolClassFor, type McpToolHints } from "./hints.js";
 import { parseMcpConfig, type McpImportResult } from "./importConfig.js";
+import { PLAIN_HTTP_EVENT_FEATURE, McpPlainHttpRefusedError, checkMcpPlainHttp, mcpOrigin, plainHttpPermitted, type McpPlainHttpRefusal } from "./plainHttp.js";
 import { McpLog } from "./log.js";
 import { coreLocalMcpPolicy, type LocalMcpPolicy } from "./policy.js";
 import { DEFAULT_CALL_TIMEOUT_S, callTimeoutMs, checkServer, recordOf, type McpAppServer, type McpServerRecord, type RaisedClass } from "./servers.js";
@@ -75,6 +76,10 @@ export interface McpServerStatus {
   source: "app" | "person";
   /** Whether the server's hints count (the person's or the administrator's word). */
   trusted: boolean;
+  /** The person's switch "Allow plain http on the local network" (sdk/51 F05). */
+  plainHttpInLan: boolean;
+  /** Why plain http to it was refused, with `notAllowed` (the app shows its own words, such as "Plain http is not allowed here"). */
+  plainHttp?: McpPlainHttpRefusal;
 }
 
 /** What the MCP module offers: the person's servers, and the app's own. Which of them an agent may use is decided by its policy. */
@@ -99,8 +104,6 @@ export interface McpOptions {
   trustedServers?: readonly string[];
   /** Tool names as `label_tool`, for servers whose tool names clash. Off by default. */
   prefixToolNames?: boolean;
-  /** Lets a server on another computer use plain http (default: https there; http only for this computer). */
-  allowPlainHttp?: boolean;
   /** How long a server gets to answer the first request (default 30 s). */
   connectTimeoutMs?: number;
   /** The longest a call may take when the server's record does not say (default 120 s, at most 600). */
@@ -154,12 +157,15 @@ export class McpModule implements FadenstackModule, ChangingToolSource {
   readonly #entries = new Map<string, Entry>();
   readonly #cache = new Map<string, { fingerprint: string; tool: AgentTool }>();
   #principal: StorePrincipal | undefined = STANDALONE;
+  /** The context of the last attach: where a change of the plain-http switch is reported. */
+  #context: AgentContext | undefined;
+  readonly #plainHttpChanges: LocalMcpPlainHttpEvent[] = [];
   #chain: Promise<unknown> = Promise.resolve();
   #disposed = false;
 
   constructor(options: McpOptions) {
     this.#options = options;
-    for (const server of options.servers ?? []) checkServer(server, options.allowPlainHttp === undefined ? {} : { allowPlainHttp: options.allowPlainHttp });
+    for (const server of options.servers ?? []) checkServer(server);
     this.store = options.store === false ? undefined
       : options.store ?? openMcpServerStore({
         principal: () => this.#principal,
@@ -207,7 +213,7 @@ export class McpModule implements FadenstackModule, ChangingToolSource {
 
   /** Adds a server to the person's list, or replaces the one of that label. It starts off unless `enabled` says otherwise. */
   async add(server: Partial<McpServerRecord> & { label: string; url: string }): Promise<void> {
-    checkServer(server, this.#plain);
+    checkServer(server);
     const existing = await this.#need().get(server.label);
     await this.#need().save(recordOf({ ...existing, ...server }));
   }
@@ -242,7 +248,7 @@ export class McpModule implements FadenstackModule, ChangingToolSource {
    */
   async importConfig(text: string): Promise<McpImportOutcome> {
     const store = this.#need();
-    const parsed = parseMcpConfig(text, this.#plain);
+    const parsed = parseMcpConfig(text);
     const taken = new Set((await store.list()).map((s) => s.label.toLowerCase()));
     const added: string[] = [];
     const existing: string[] = [];
@@ -258,8 +264,58 @@ export class McpModule implements FadenstackModule, ChangingToolSource {
     return { ...parsed, added, existing };
   }
 
-  get #plain(): { allowPlainHttp?: boolean } {
-    return this.#options.allowPlainHttp === undefined ? {} : { allowPlainHttp: this.#options.allowPlainHttp };
+  /**
+   * The person's switch "Allow plain http on the local network" for a server over plain http (sdk/51 F05). Turning it on needs the
+   * version of the warning the person confirmed just before (`warningVersion`): the app shows the warning, the SDK records which
+   * one. Whether the server then connects is the profile's and this computer's policy's to say (its status tells). Every change
+   * goes into the device's audit log (`McpServerStore.audit`) and, in governed mode where the profile lists the feature, to the
+   * server as `local_mcp.plain_http`. A server that is sent a header value cannot have it. .NET: `McpHost.SetPlainHttpInLanAsync`.
+   */
+  async setPlainHttpInLan(label: string, on: boolean, warningVersion?: string): Promise<void> {
+    if (on && (typeof warningVersion !== "string" || warningVersion.trim() === "")) {
+      throw new McpConfigError("Turning plain http on needs the version of the warning the person confirmed.");
+    }
+    const store = this.#need();
+    const found = await store.get(label);
+    if (!found) throw new McpStoreError(`There is no server '${label}' in the list.`);
+    const url = new URL(found.url);
+    if (url.protocol !== "http:") throw new McpConfigError(`'${label}' does not use plain http.`);
+    if (on && Object.keys(found.headers).length > 0) {
+      throw new McpConfigError(`'${label}' sends a header over plain http to another computer: use https.`, "plainHttpWithHeaders");
+    }
+    if ((found.plainHttpInLan === true) === on) return;
+    await this.#update(label, (s) => {
+      const { plainHttpInLan: _old, ...rest } = s;
+      return recordOf(on ? { ...rest, plainHttpInLan: true } : rest);
+    });
+    const source = mcpOrigin(url);
+    const state = on ? "on" : "off";
+    const principal = this.#principal ?? STANDALONE;
+    await store.appendAudit({
+      event: "local_mcp.plain_http",
+      at: new Date().toISOString(),
+      source,
+      state,
+      warning_version: on ? warningVersion!.trim() : null,
+      person: principal === STANDALONE || principal.userId === STANDALONE.userId ? "standalone" : `${principal.tenantId}/${principal.userId}`,
+    });
+    this.#plainHttpChanges.push({ type: "local_mcp.plain_http", source, state });
+    if (this.#context) await this.#sendPlainHttpChanges(this.#context);
+    this.refresh();
+  }
+
+  /** Sends the switch's changes, in governed mode and only where the profile lists the feature (an older core refuses the batch). */
+  async #sendPlainHttpChanges(context: AgentContext): Promise<void> {
+    if (this.#plainHttpChanges.length === 0) return;
+    const changes = this.#plainHttpChanges.splice(0);
+    if (context.connection !== "governed" || !context.profile.features.includes(PLAIN_HTTP_EVENT_FEATURE)) return;
+    for (const change of changes) {
+      try {
+        await context.report(change);
+      } catch {
+        // a report that fails never fails the switch: the device's own audit log has it
+      }
+    }
   }
 
   #need(): McpServerStore {
@@ -291,6 +347,8 @@ export class McpModule implements FadenstackModule, ChangingToolSource {
     if (this.#disposed) return [];
     const logger = this.#options.logger;
     this.#principal = context.profile.principal ?? STANDALONE;
+    this.#context = context;
+    await this.#sendPlainHttpChanges(context);
     const governed = context.connection === "governed";
     const policy = this.#options.policy ?? coreLocalMcpPolicy;
 
@@ -356,8 +414,11 @@ export class McpModule implements FadenstackModule, ChangingToolSource {
       await this.#detach(entry);
       return;
     }
-    const key = JSON.stringify([record.url, Object.entries(record.headers).sort(([a], [b]) => (a < b ? -1 : 1)), record.callTimeoutS ?? null]);
+    const key = JSON.stringify([record.url, Object.entries(record.headers).sort(([a], [b]) => (a < b ? -1 : 1)), record.callTimeoutS ?? null,
+      record.plainHttpInLan === true]);
     try {
+      // Plain http (sdk/51 F05), every turn: a connection the rule no longer allows (the switch, the profile, the policy) stops here.
+      checkMcpPlainHttp(new URL(record.url), record, plainHttpPermitted(context));
       if (entry.connection && entry.key !== key) await this.#detach(entry);
       let listed: ListedTool[] | undefined;
       if (entry.connection) {
@@ -368,7 +429,7 @@ export class McpModule implements FadenstackModule, ChangingToolSource {
         }
       }
       if (!entry.connection) {
-        const url = checkServer(record, this.#plain);
+        const url = checkServer(record);
         entry.connection = await McpConnection.open({ label: record.label, url, headers: record.headers, fetch: this.#options.fetch, signal,
           timeoutMs: this.#options.connectTimeoutMs ?? DEFAULT_CONNECT_TIMEOUT_MS, version: CLIENT_VERSION });
         entry.key = key;
@@ -383,9 +444,16 @@ export class McpModule implements FadenstackModule, ChangingToolSource {
         ...(connection?.instructions !== undefined ? { instructions: connection.instructions } : {}),
       };
       delete entry.status.detail;
+      delete entry.status.plainHttp;
       writeLog(logger, McpLog.attached, { Label: record.label, Transport: "http", ToolCount: entry.listed.length, Protocol: connection?.protocolVersion ?? "" });
     } catch (error) {
       await this.#detach(entry);
+      if (error instanceof McpPlainHttpRefusedError) {
+        // refused before anything was sent: a rule, not a failure
+        entry.status = { ...entry.status, state: McpServerState.NotAllowed, detail: error.message, plainHttp: error.reason };
+        writeLog(logger, McpLog.plainHttpRefused, { Label: record.label, Reason: error.reason });
+        return;
+      }
       const typed = error instanceof McpConnectError || error instanceof McpConfigError ? error : new McpConnectError(record.label, "unreachable", { cause: error });
       entry.status = { ...entry.status, state: McpServerState.Failed, detail: typed.message };
       writeLog(logger, McpLog.attachFailed, { Label: record.label, Transport: "http", ErrorType: typed.name + (typed instanceof McpConnectError ? `:${typed.reason}` : "") });
@@ -519,7 +587,7 @@ export class McpModule implements FadenstackModule, ChangingToolSource {
 }
 
 function statusOf(record: StoredMcpServer, source: "app" | "person", trusted: boolean): McpServerStatus {
-  return { label: record.label, state: McpServerState.Off, tools: [], source, trusted };
+  return { label: record.label, state: McpServerState.Off, tools: [], source, trusted, plainHttpInLan: record.plainHttpInLan === true };
 }
 
 /**

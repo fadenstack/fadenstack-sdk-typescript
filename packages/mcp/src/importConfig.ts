@@ -1,12 +1,15 @@
 import { McpConfigError } from "./errors.js";
-import { LABEL_MAX, checkServer, recordOf, type McpServerRecord } from "./servers.js";
+import { LABEL_MAX, checkServer, isLoopbackUrl, recordOf, type McpServerRecord } from "./servers.js";
 
 /** A server of a pasted configuration that did not come in, and why. */
 export interface McpImportSkipped {
   label: string;
   reason: string;
-  /** `stdio` for a server that starts a program (not possible in a browser), `sse`, or `invalid`. */
-  kind: "stdio" | "sse" | "invalid";
+  /**
+   * `stdio` for a server that starts a program (not possible in a browser), `sse`, `plainHttp` for plain http beyond this computer
+   * (the person adds it by hand and turns its switch on: an import never does, sdk/51 F05), or `invalid`.
+   */
+  kind: "stdio" | "sse" | "plainHttp" | "invalid";
 }
 
 /** What a pasted configuration holds. */
@@ -61,7 +64,7 @@ function isObject(value: unknown): value is Record<string, unknown> {
  * because it was pasted. Throws `McpConfigError` for text that is not a configuration. Nothing is sent anywhere and no header value
  * is put in a message. .NET: the desktop's `McpImport`, which also reads the other apps' files from disk (a browser has no disk to look in).
  */
-export function parseMcpConfig(text: string, options: { allowPlainHttp?: boolean } = {}): McpImportResult {
+export function parseMcpConfig(text: string): McpImportResult {
   if (typeof text !== "string" || text.trim() === "") throw new McpConfigError("There is nothing to import.");
   if (text.length > MAX_IMPORT_CHARS) throw new McpConfigError("The configuration is too long to import.");
   let root: unknown;
@@ -112,10 +115,15 @@ export function parseMcpConfig(text: string, options: { allowPlainHttp?: boolean
       headers[header] = value;
     }
     if (seen.has(label.toLowerCase())) { skip("invalid", "Another entry has the same label."); continue; }
+    let address: URL;
     try {
-      checkServer({ label, url, headers }, options);
+      address = checkServer({ label, url, headers });
     } catch (error) {
       skip("invalid", error instanceof McpConfigError ? error.message : "It is not usable.");
+      continue;
+    }
+    if (address.protocol === "http:" && !isLoopbackUrl(address)) {
+      skip("plainHttp", "It uses plain http to another computer: add it by hand and turn on \"Allow plain http on the local network\".");
       continue;
     }
     seen.add(label.toLowerCase());

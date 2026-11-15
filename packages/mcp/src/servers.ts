@@ -1,3 +1,5 @@
+import { hostScope } from "@fadenstack/client";
+
 import { McpConfigError } from "./errors.js";
 
 /** What the person may raise a tool to: never below what a destructive hint sets (`toolClassFor`). */
@@ -10,7 +12,7 @@ export type RaisedClass = "read" | "write";
 export interface McpServerRecord {
   /** What the person and the model see it as; unique in the list without regard to case. */
   label: string;
-  /** The endpoint (https; http only for this computer). */
+  /** The endpoint: https anywhere; plain http to this computer, or to the local network with `plainHttpInLan` (sdk/51 F05). */
   url: string;
   /** Sent with every request. */
   headers: Record<string, string>;
@@ -29,6 +31,12 @@ export interface McpServerRecord {
   importedFrom?: string;
   /** False for a server that was imported and that the person has not switched on yet ("not reviewed"). */
   reviewed: boolean;
+  /**
+   * The person's switch under Advanced, "Allow plain http on the local network" (sdk/51 F05): then plain http may go to a host on
+   * the local network, never with a header value, and only where the agent and this computer's policy allow it (`checkMcpPlainHttp`).
+   * Off by default; an import never sets it. Set through `McpModule.setPlainHttpInLan`, which asks for the warning's version.
+   */
+  plainHttpInLan?: boolean;
 }
 
 /** A server an app brings itself (a fixed entry of `McpOptions.servers`): always listed, never stored, on. */
@@ -59,11 +67,13 @@ export function isLoopbackUrl(url: URL): boolean {
 }
 
 /**
- * Checks a server's label, address and headers; throws `McpConfigError` for the first rule it breaks. The address is https, or
- * http for this computer (a header with a token must not cross a network in the clear: `allowPlainHttp` lifts that for an app
- * that wants a LAN server), has no user name or password in it, and is at most 2,048 characters.
+ * Checks a server's label, address and headers; throws `McpConfigError` for the first rule it breaks. The address is https
+ * anywhere, or plain http: to this computer, or to a host on the local network that is kept and waits for the person's switch
+ * (whether it may connect is decided when it does, `checkMcpPlainHttp`). Plain http beyond this computer never carries a header
+ * value and never goes to a host outside the local network, which no switch could change. No user name or password in it, at
+ * most 2,048 characters. .NET: `McpServerValidator`.
  */
-export function checkServer(server: { label: string; url: string; headers?: Record<string, string> | undefined }, options: { allowPlainHttp?: boolean } = {}): URL {
+export function checkServer(server: { label: string; url: string; headers?: Record<string, string> | undefined }): URL {
   const label = server.label;
   if (typeof label !== "string" || label.trim() === "") throw new McpConfigError("A server needs a label.");
   if (label !== label.trim() || [...label].length > LABEL_MAX || !/^[\p{L}\p{N}][\p{L}\p{N} ._-]*$/u.test(label)) {
@@ -78,10 +88,15 @@ export function checkServer(server: { label: string; url: string; headers?: Reco
   }
   if (url.protocol !== "https:" && url.protocol !== "http:") throw new McpConfigError(`The address of '${label}' must be http or https.`);
   if (url.username !== "" || url.password !== "") throw new McpConfigError(`The address of '${label}' carries a user name or password: put it in a header.`);
-  if (url.protocol === "http:" && !isLoopbackUrl(url) && options.allowPlainHttp !== true) {
-    throw new McpConfigError(`'${label}' uses plain http to another computer: use https (http is for this computer only).`);
-  }
   const headers = server.headers ?? {};
+  if (url.protocol === "http:" && !isLoopbackUrl(url)) {
+    if (Object.keys(headers).length > 0) {
+      throw new McpConfigError(`'${label}' sends a header over plain http to another computer: use https.`, "plainHttpWithHeaders");
+    }
+    if (hostScope(url.hostname) !== "private") {
+      throw new McpConfigError(`'${label}' uses plain http to an address outside the local network: use https.`, "plainHttpNotLocal");
+    }
+  }
   const names = Object.keys(headers);
   if (names.length > HEADERS_MAX) throw new McpConfigError(`'${label}' has more than ${HEADERS_MAX} headers.`);
   for (const name of names) {
@@ -112,5 +127,6 @@ export function recordOf(server: Partial<McpServerRecord> & { label: string; url
     ...(server.callTimeoutS !== undefined ? { callTimeoutS: server.callTimeoutS } : {}),
     ...(server.importedFrom !== undefined ? { importedFrom: server.importedFrom } : {}),
     reviewed: server.reviewed ?? true,
+    ...(server.plainHttpInLan === true ? { plainHttpInLan: true } : {}),
   };
 }
