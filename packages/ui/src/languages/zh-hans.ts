@@ -51,6 +51,10 @@ export const chineseSimplifiedStrings: UiStrings = {
   allowedAlways: "已始终允许",
   resetApprovals: "重置审批",
   denied: "已拒绝",
+  sayWhy: "说明原因",
+  denyReasonPlaceholder: "为什么不行？助手会看到您的理由。",
+  denyReasonName: "您拒绝的理由",
+  yourReason: (reason) => `您的理由：${reason}`,
   noAnswer: "未及时答复",
   noticeTitles: {
     prompt_blocked: "您的消息未发送",

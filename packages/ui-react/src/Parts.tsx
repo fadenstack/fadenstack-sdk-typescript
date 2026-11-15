@@ -1,4 +1,4 @@
-import { useCallback, type ReactElement } from "react";
+import { useCallback, useRef, type ReactElement } from "react";
 
 import {
   ApprovalPart,
@@ -16,6 +16,7 @@ import {
   type ResponsePart,
   type UiStrings,
 } from "@fadenstack/ui";
+import { MAX_REASON_CHARS } from "@fadenstack/agents";
 import { approvalIcon, diffMarker, noticeIcon, noticeRole, toolBadges, toolClassName, toolStatusIcon } from "@fadenstack/ui-web";
 
 import { BypassCardView, GrantCardView } from "./Grants.js";
@@ -91,6 +92,7 @@ export function ToolCallView({ part, strings }: { part: ToolCallPart; strings: U
 
 export function ApprovalView({ part, strings }: { part: ApprovalPart; strings: UiStrings }): ReactElement {
   useViewModel(part);
+  const why = useRef<HTMLButtonElement>(null);
   return (
     <div className={`fdn-approval${part.isDangerous ? " fdn-approval-danger" : ""}`} role="group" aria-label={part.title}>
       <div className="fdn-approval-head">
@@ -108,6 +110,27 @@ export function ApprovalView({ part, strings }: { part: ApprovalPart; strings: U
       {part.argumentsText && <pre className="fdn-approval-args" dir="auto">{part.argumentsText}</pre>}
       {part.isPending ? (
         <div className="fdn-approval-actions">
+          {part.isReasonOpen && (
+            <textarea
+              className="fdn-approval-why-box"
+              id={`${part.request.callId}-why`}
+              rows={3}
+              maxLength={MAX_REASON_CHARS}
+              dir="auto"
+              autoFocus
+              value={part.denyReason}
+              placeholder={strings.denyReasonPlaceholder}
+              aria-label={strings.denyReasonName}
+              onChange={(e) => part.setDenyReason(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key !== "Escape") return;
+                e.preventDefault();
+                e.stopPropagation();
+                part.toggleReason(); // closes the box without deciding
+                queueMicrotask(() => why.current?.focus());
+              }}
+            />
+          )}
           {part.timeGrantChoices.length > 0 && <>
             <p className="fdn-approval-reason">{part.timeGrantHint}</p>
             <div className="fdn-approval-pair">
@@ -127,9 +150,14 @@ export function ApprovalView({ part, strings }: { part: ApprovalPart; strings: U
             )}
             <button type="button" className="fdn-button fdn-quiet" onClick={() => part.deny()}>{strings.deny}</button>
           </div>
+          <button ref={why} type="button" className="fdn-link fdn-approval-why" aria-expanded={part.isReasonOpen}
+            aria-controls={`${part.request.callId}-why`} onClick={() => part.toggleReason()}>{strings.sayWhy}</button>
         </div>
       ) : (
-        <div className={`fdn-approval-state fdn-approval-${part.state}`}>{part.stateText}</div>
+        <>
+          <div className={`fdn-approval-state fdn-approval-${part.state}`}>{part.stateText}</div>
+          {part.declinedReasonText && <p className="fdn-approval-declined" dir="auto" title={part.declinedReasonText}>{part.declinedReasonText}</p>}
+        </>
       )}
     </div>
   );

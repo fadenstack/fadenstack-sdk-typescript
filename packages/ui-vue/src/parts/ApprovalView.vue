@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import { nextTick, ref, watch } from "vue";
+import { MAX_REASON_CHARS } from "@fadenstack/agents";
 import type { ApprovalPart, UiStrings } from "@fadenstack/ui";
 import { approvalIcon } from "@fadenstack/ui-web";
 
@@ -8,6 +10,19 @@ import Icon from "../Icon.vue";
 /** "Run delete_page?" with Allow, Allow for this chat, Allow always and Deny -- answered in place. */
 const props = defineProps<{ part: ApprovalPart; strings: UiStrings }>();
 const part = useViewModel(() => props.part);
+const why = ref<HTMLButtonElement | null>(null);
+const box = ref<HTMLTextAreaElement | null>(null);
+
+// "Say why" moves the focus into the box it opened.
+watch(() => part.value.isReasonOpen, (open) => {
+  if (open) void nextTick(() => box.value?.focus());
+});
+
+/** Esc in the box closes it without deciding, and puts the focus back on "Say why". */
+function closeReason(): void {
+  props.part.toggleReason();
+  queueMicrotask(() => why.value?.focus());
+}
 </script>
 
 <template>
@@ -24,6 +39,20 @@ const part = useViewModel(() => props.part);
     <p v-if="part.target" class="fdn-approval-target" dir="auto">{{ part.target }}</p>
     <pre v-if="part.argumentsText" class="fdn-approval-args" dir="auto">{{ part.argumentsText }}</pre>
     <div v-if="part.isPending" class="fdn-approval-actions">
+      <textarea
+        v-if="part.isReasonOpen"
+        :id="`${part.request.callId}-why`"
+        ref="box"
+        class="fdn-approval-why-box"
+        :rows="3"
+        :maxlength="MAX_REASON_CHARS"
+        dir="auto"
+        :value="part.denyReason"
+        :placeholder="strings.denyReasonPlaceholder"
+        :aria-label="strings.denyReasonName"
+        @input="part.setDenyReason(($event.target as HTMLTextAreaElement).value)"
+        @keydown.esc.stop.prevent="closeReason()"
+      />
       <template v-if="part.timeGrantChoices.length">
         <p class="fdn-approval-reason">{{ part.timeGrantHint }}</p>
         <div class="fdn-approval-pair">
@@ -38,7 +67,12 @@ const part = useViewModel(() => props.part);
         <button v-if="part.canAllowAlways" type="button" class="fdn-button" @click="part.allowAlways()">{{ strings.allowAlways }}</button>
         <button type="button" class="fdn-button fdn-quiet" @click="part.deny()">{{ strings.deny }}</button>
       </div>
+      <button ref="why" type="button" class="fdn-link fdn-approval-why" :aria-expanded="part.isReasonOpen"
+        :aria-controls="`${part.request.callId}-why`" @click="part.toggleReason()">{{ strings.sayWhy }}</button>
     </div>
-    <div v-else :class="`fdn-approval-state fdn-approval-${part.state}`">{{ part.stateText }}</div>
+    <template v-else>
+      <div :class="`fdn-approval-state fdn-approval-${part.state}`">{{ part.stateText }}</div>
+      <p v-if="part.declinedReasonText" class="fdn-approval-declined" dir="auto" :title="part.declinedReasonText">{{ part.declinedReasonText }}</p>
+    </template>
   </div>
 </template>

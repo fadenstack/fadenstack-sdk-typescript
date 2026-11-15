@@ -131,6 +131,53 @@ describe("ChatPanel", () => {
     expect(screen.getByText("Ran fill_field")).toBeTruthy();
   });
 
+  it("lets the user say why they decline: the link opens a box, Esc closes it without deciding, Deny sends the reason", async () => {
+    const results: string[] = [];
+    const { chat } = await panel((r) => {
+      const last = [...lastToolResults(r).values()];
+      if (last.length) {
+        results.push(...last);
+        return { text: "Left it." };
+      }
+      return { toolCalls: [{ name: "fill_field", arguments: { value: "Jane" } }] };
+    });
+    fireEvent.change(screen.getByRole("textbox"), { target: { value: "Fill my name" } });
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Send" }));
+    });
+    const why = await screen.findByRole("button", { name: "Say why" });
+    expect(why.getAttribute("aria-expanded")).toBe("false");
+    expect(screen.queryByRole("textbox", { name: "Your reason for declining" })).toBeNull();
+
+    await act(async () => {
+      fireEvent.click(why);
+    });
+    const box = screen.getByRole("textbox", { name: "Your reason for declining" }) as HTMLTextAreaElement;
+    expect([box.placeholder, box.maxLength, box.rows, box.getAttribute("dir")]).toEqual(["Why not? The assistant sees your reason.", 500, 3, "auto"]);
+    expect(why.getAttribute("aria-expanded")).toBe("true");
+    expect(document.activeElement).toBe(box);
+
+    await act(async () => {
+      fireEvent.keyDown(box, { key: "Escape" });
+    });
+    expect(screen.queryByRole("textbox", { name: "Your reason for declining" })).toBeNull();
+    expect(screen.getByRole("button", { name: "Allow" })).toBeTruthy(); // not decided
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Say why" }));
+    });
+    await act(async () => {
+      fireEvent.change(screen.getByRole("textbox", { name: "Your reason for declining" }), { target: { value: "Wrong <b>field</b>." } });
+    });
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Deny" }));
+    });
+    await waitFor(() => expect(chat.isBusy).toBe(false));
+    expect(screen.getByText("Your reason: Wrong <b>field</b>.").getAttribute("dir")).toBe("auto"); // plain text, never markup
+    expect(document.querySelector(".fdn-approval-declined b")).toBeNull();
+    expect(screen.queryByRole("textbox", { name: "Your reason for declining" })).toBeNull();
+    expect(results.join("\n")).toContain("Their reason: Wrong <b>field</b>.");
+  });
+
   it("lets the user pick a tool mode", async () => {
     const { chat } = await panel(() => ({ text: "ok" }));
     fireEvent.click(screen.getByRole("button", { name: /Tool mode/ }));

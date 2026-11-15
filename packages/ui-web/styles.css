@@ -1016,6 +1016,48 @@
   font-size: 12px;
 }
 
+/* "Say why": a text link under the answers; it opens a box above them (the reason goes to the assistant with Deny). */
+.fdn-approval-why {
+  flex-basis: 100%;
+  margin-block-start: 2px;
+  padding-block: 4px;
+  font: inherit;
+  font-size: 12px;
+  text-align: start;
+  text-decoration: underline;
+}
+
+.fdn-approval-why-box {
+  display: block;
+  flex-basis: 100%;
+  box-sizing: border-box;
+  min-inline-size: 0;
+  padding: 8px 12px;
+  border: 1px solid var(--fdn-control-border);
+  border-radius: var(--fdn-radius);
+  background: var(--fdn-bg);
+  color: var(--fdn-text);
+  font: inherit;
+  line-height: 1.5;
+  resize: none;
+}
+
+.fdn-approval-why-box:focus-visible {
+  outline: 2px solid var(--fdn-focus);
+  outline-offset: 1px;
+}
+
+/* A declined card's reason: one short line, plain text, cut with an ellipsis (the whole text is its tooltip). */
+.fdn-approval-declined {
+  margin-block: 4px 0;
+  margin-inline: 0;
+  overflow: hidden;
+  color: var(--fdn-text-muted);
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .fdn-approval-approved,
 .fdn-approval-approved_for_session {
   color: var(--fdn-success);

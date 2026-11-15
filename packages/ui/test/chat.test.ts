@@ -12,6 +12,8 @@ import {
   NoticePart,
   RenderBatcher,
   ToolCallPart,
+  builtInStrings,
+  englishStrings,
   germanStrings,
   immediateScheduler,
   type AgentChatOptions,
@@ -372,5 +374,74 @@ describe("AgentChatViewModel's beforeSend and afterSend", () => {
     await vm.send("Hi");
     expect(vm.turns).toHaveLength(1);
     expect(after).toEqual(["Hi"]);
+  });
+
+  it("sends a declined card's reason with Deny, as the model's refusal, and shows it live and on the reopened chat", async () => {
+    const results: string[] = [];
+    const { vm, agent } = await chat({
+      model: (r) => {
+        const last = [...lastToolResults(r).values()];
+        if (last.length) {
+          results.push(...last);
+          return { text: "Left it." };
+        }
+        return { toolCalls: [{ name: "fill_field", arguments: { text: "Jane" } }] };
+      },
+    });
+    const sending = vm.send("Fill in my name");
+    const card = await waitFor(() => vm.turns[0]!.parts.find((p): p is ApprovalPart => p instanceof ApprovalPart && p.isPending));
+    expect([card.isReasonOpen, card.denyReason, card.declinedReasonText]).toEqual([false, "", ""]);
+    card.toggleReason();
+    expect(card.isReasonOpen).toBe(true);
+    card.toggleReason(); // Esc in the box
+    expect([card.isReasonOpen, card.state]).toEqual([false, "pending"]);
+    card.toggleReason();
+    const seen: string[] = [];
+    card.subscribe(() => seen.push(card.denyReason));
+    card.setDenyReason("  Wrong field.  ");
+    expect(seen).toEqual(["  Wrong field.  "]);
+    card.deny();
+    await sending;
+    expect(card.state).toBe("denied");
+    expect(card.isReasonOpen).toBe(false); // closed once decided
+    card.setDenyReason("Too late.");
+    card.toggleReason();
+    expect([card.denyReason, card.isReasonOpen]).toEqual(["  Wrong field.  ", false]);
+    expect(card.declinedReasonText).toBe("Your reason: Wrong field.");
+    expect(results.join("\n")).toContain("Their reason: Wrong field.");
+    card.allow(); // a second answer changes nothing
+    expect([card.state, card.declinedReasonText]).toEqual(["denied", "Your reason: Wrong field."]);
+
+    const reopened = new AgentChatViewModel(agent, new ApprovalBroker(), { ...testServices(), scheduler: immediateScheduler });
+    await reopened.initialize();
+    await reopened.openSession(vm.currentSessionId!);
+    const [again] = reopened.turns.flatMap((t) => t.parts.filter((p): p is ApprovalPart => p instanceof ApprovalPart));
+    expect([again!.state, again!.declinedReasonText]).toEqual(["denied", "Your reason: Wrong field."]);
+  });
+
+  it("denies with no reason when the box is empty or only spaces, and a declined card then shows none", async () => {
+    const { vm, agent } = await chat({
+      model: (r) => (lastToolResults(r).size ? { text: "Left it." } : { toolCalls: [{ name: "fill_field", arguments: { text: "Jane" } }] }),
+    });
+    const sending = vm.send("Fill in my name");
+    const card = await waitFor(() => vm.turns[0]!.parts.find((p): p is ApprovalPart => p instanceof ApprovalPart && p.isPending));
+    card.toggleReason();
+    card.setDenyReason("   ");
+    card.deny();
+    await sending;
+    expect([card.state, card.declinedReasonText]).toEqual(["denied", ""]);
+    const reopened = new AgentChatViewModel(agent, new ApprovalBroker(), { ...testServices(), scheduler: immediateScheduler });
+    await reopened.initialize();
+    await reopened.openSession(vm.currentSessionId!);
+    const [again] = reopened.turns.flatMap((t) => t.parts.filter((p): p is ApprovalPart => p instanceof ApprovalPart));
+    expect([again!.state, again!.declinedReasonText]).toEqual(["denied", ""]);
+  });
+
+  it("has the reason texts in all five languages, the line carrying the person's words", () => {
+    for (const [tag, s] of Object.entries(builtInStrings)) {
+      for (const text of [s.sayWhy, s.denyReasonPlaceholder, s.denyReasonName]) expect(text.length, tag).toBeGreaterThan(2);
+      expect(s.yourReason("§x§"), tag).toContain("§x§");
+    }
+    expect(builtInStrings["de"]!.sayWhy).not.toBe(englishStrings.sayWhy);
   });
 });

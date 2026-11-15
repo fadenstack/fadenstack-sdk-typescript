@@ -68,6 +68,14 @@ export interface UiStrings {
   /** The tool-mode menu's item that forgets what was allowed for this chat and always. */
   resetApprovals: string;
   denied: string;
+  /** The link on a card that opens the field for a reason for declining: "Say why". */
+  sayWhy: string;
+  /** The reason field's hint: "Why not? The assistant sees your reason." */
+  denyReasonPlaceholder: string;
+  /** The reason field's accessible name: "Your reason for declining". */
+  denyReasonName: string;
+  /** A declined card's line: "Your reason: ...". */
+  yourReason(reason: string): string;
   noAnswer: string;
   // notices
   noticeTitles: Record<string, string>;
@@ -847,6 +855,10 @@ export const englishStrings: UiStrings = {
   allowedAlways: "Allowed always",
   resetApprovals: "Reset approvals",
   denied: "Denied",
+  sayWhy: "Say why",
+  denyReasonPlaceholder: "Why not? The assistant sees your reason.",
+  denyReasonName: "Your reason for declining",
+  yourReason: (reason) => `Your reason: ${reason}`,
   noAnswer: "No answer in time",
   noticeTitles: {
     prompt_blocked: "Your message was not sent",

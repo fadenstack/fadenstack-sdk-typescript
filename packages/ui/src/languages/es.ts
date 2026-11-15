@@ -51,6 +51,10 @@ export const spanishStrings: UiStrings = {
   allowedAlways: "Permitido siempre",
   resetApprovals: "Restablecer aprobaciones",
   denied: "Denegado",
+  sayWhy: "Explicar",
+  denyReasonPlaceholder: "¿Por qué no? El asistente verá su motivo.",
+  denyReasonName: "Su motivo del rechazo",
+  yourReason: (reason) => `Su motivo: ${reason}`,
   noAnswer: "Sin respuesta a tiempo",
   noticeTitles: {
     prompt_blocked: "Su mensaje no se envió",
