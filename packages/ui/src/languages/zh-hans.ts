@@ -577,6 +577,8 @@ export const chineseSimplifiedStrings: UiStrings = {
   toolsPolicyNotAllowed: "此助手不被允许",
   toolsTabLocal: (count) => `在这台电脑上 · ${count}`,
   toolsTabServer: (count) => `在您的服务器上 · ${count}`,
+  toolsTabApp: (count) => `在此应用中 · ${count}`,
+  toolsAppNone: "此应用没有为助手提供自带的工具。",
   toolsFilterPlaceholder: "筛选工具",
   toolsAddServer: "添加服务器",
   toolsSectionServers: "MCP 服务器",

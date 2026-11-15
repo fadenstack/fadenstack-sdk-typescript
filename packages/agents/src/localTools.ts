@@ -1,4 +1,4 @@
-import type { AgentToolInfo } from "@fadenstack/client";
+import type { AgentToolInfo, ToolClass } from "@fadenstack/client";
 
 // What the Tools view and the MCP module share (sdk/51 F05). The layers keep `@fadenstack/ui` from importing a module and a module from
 // importing `@fadenstack/ui` (the architecture test), so the contract sits here, in the core, as .NET puts it in Fadenstack.Agents
@@ -263,6 +263,14 @@ export interface CloudToolInfo {
   readonly enabled: boolean;
 }
 
+/** A tool the app itself gives the agent (its `host` tools), as "In this app" lists it: not an MCP, gateway or SDK built-in tool. */
+export interface AppToolInfo {
+  readonly name: string;
+  readonly description: string;
+  /** What the tool does to things: the class the agent runs it under. */
+  readonly toolClass: ToolClass;
+}
+
 export interface CloudToolsResult {
   readonly status: CloudToolsStatus;
   readonly tools: readonly CloudToolInfo[];
@@ -283,6 +291,10 @@ export interface LocalToolsCatalog {
   /** The agent is running for a signed-in person: the lists are real. */
   readonly signedIn: boolean;
   readonly policy: ToolsPolicy;
+  /** The agent is connected to an organisation's server; false while that is not known yet and in standalone mode ("On your server" is then not shown). */
+  readonly governed: boolean;
+  /** The tools the app itself gives the agent (source `host`); empty while the agent has not started. */
+  readonly appTools: readonly AppToolInfo[];
   /** The list of servers is written to the browser's database (header values sealed); false: it is kept in memory until the page closes. */
   readonly serversKeptOnDisk: boolean;
   /** The saved list could not be read; it starts empty. */

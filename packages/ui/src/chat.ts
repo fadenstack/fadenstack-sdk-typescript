@@ -89,6 +89,11 @@ export interface AgentChatOptions extends ChatHostServices {
    */
   prompts?: PromptStore;
   /**
+   * Shows the host's own Tools page (the one page with "In this app", "On this computer" and, when governed, "On your server").
+   * With it the settings' "Tools" item closes the settings and calls it; without it the item opens the chat's read-only Tools panel.
+   */
+  openTools?: () => void;
+  /**
    * Texts fixed by the host instead of a language the user picks: the panel then offers no choice. What a partial
    * set leaves out is English. Most hosts leave it out and pass `automaticLanguage`.
    */
@@ -262,6 +267,7 @@ export class AgentChatViewModel extends Observable implements TurnHost {
   readonly #footerLink: PanelLink | undefined;
   readonly #saveFile: SaveFile;
   readonly #promptStore: PromptStore | undefined;
+  readonly #openTools: (() => void) | undefined;
   readonly #openLink: (url: string) => void;
   // Approvals arrive twice: as an event, in order with the turn's other events, and as the broker's request,
   // which carries the answer. Whichever comes second adds the card, so it sits where the event put it.
@@ -328,6 +334,7 @@ export class AgentChatViewModel extends Observable implements TurnHost {
     };
     this.#saveFile = options.saveFile;
     this.#promptStore = options.prompts;
+    this.#openTools = options.openTools;
     this.#beforeSend = options.beforeSend;
     this.#turnGate = options.turnGate;
     this.#afterSend = options.afterSend;
@@ -1054,6 +1061,20 @@ export class AgentChatViewModel extends Observable implements TurnHost {
       this.#closeTools();
     }
     this.notify();
+  }
+
+  /**
+   * The settings' "Tools" item: the host's Tools page when it gave `openTools` (the settings close first), else the read-only
+   * panel below the gear.
+   */
+  pickTools(): void {
+    const open = this.#openTools;
+    if (!open) {
+      this.setToolsOpen(true);
+      return;
+    }
+    this.setSettingsOpen(false);
+    open();
   }
 
   /** Opens or closes Tools; opening closes the settings it is picked from (and About) and reads the server's list. */

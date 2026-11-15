@@ -227,6 +227,7 @@ pass (see [The host's services](#the-hosts-services)), and these, which all have
 | `renderers` | Renderers for server events, tried before the built-in ones. |
 | `scheduler` | When batched work runs. `setTimeout` by default; `immediateScheduler` runs it at once, for tests. |
 | `now` | The clock, for tests. |
+| `openTools` | Shows your Tools page (`ToolsPage`): the settings' "Tools" item then closes the settings and calls it. Without it the item opens the chat's read-only Tools panel. |
 | `prompts` | The user's saved prompts (`PromptStore`): `browserPromptStore()` from `@fadenstack/ui-web`, `MemoryPromptStore`, or your own. Without one the panel has no saved prompts. |
 
 ### The host's services

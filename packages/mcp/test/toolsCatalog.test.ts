@@ -349,3 +349,29 @@ describe("the cloud tools", () => {
     expect((await rig.store.get("files"))).toMatchObject({ trusted: false, toolClasses: {} });
   });
 });
+
+describe("the app's tools and the connection", () => {
+  const view = (more: Partial<AgentToolsView>): AgentToolsView => ({ isRunning: true, connection: "governed", context: undefined, listCloudTools: async () => [], onChanged: () => () => undefined, ...more });
+  const entry = (name: string, source: string) => ({ name, description: `${name} d`, toolClass: "read" as const, source });
+
+  it("lists only the host tools of a started agent", async () => {
+    const rig = standalone(new FakeMcpServer());
+    const tools = [entry("read_page", "host"), entry("search", "mcp"), entry("load_skill", "skills"), entry("gw", "gateway")];
+    expect(new McpToolsCatalog(rig.module, view({ tools })).appTools).toEqual([{ name: "read_page", description: "read_page d", toolClass: "read" }]);
+    expect(new McpToolsCatalog(rig.module, view({ tools, isRunning: false })).appTools).toEqual([]);
+    expect(new McpToolsCatalog(rig.module).appTools).toEqual([]);
+  });
+
+  it("is governed only when the agent's connection is", async () => {
+    const rig = standalone(new FakeMcpServer());
+    expect(new McpToolsCatalog(rig.module, view({ connection: "governed" })).governed).toBe(true);
+    expect(new McpToolsCatalog(rig.module, view({ connection: "standalone" })).governed).toBe(false);
+    expect(new McpToolsCatalog(rig.module).governed).toBe(false);
+  });
+
+  it("reads the host tools of a real agent", async () => {
+    const { catalog } = await started();
+    expect(catalog.governed).toBe(false); // the rig is standalone
+    expect(catalog.appTools.every((t) => t.name.length > 0)).toBe(true);
+  });
+});

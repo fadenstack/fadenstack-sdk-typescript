@@ -75,7 +75,7 @@ describe("the page", () => {
     expect(vm.localTabText).toBe("On this computer · 3");
     expect(vm.serverTabText).toBe("On your server · 2");
     expect(vm.showsAddButton).toBe(true);
-    vm.selectTab(false);
+    vm.selectTab("server");
     expect(vm).toMatchObject({ showsServer: true, showsAddButton: false, showsLocalChip: false });
   });
 
@@ -668,5 +668,81 @@ describe("the texts", () => {
     vm.retext();
     expect(vm.servers[0]!.statusText).toBe(`${germanStrings.toolsStateRunning} · ${germanStrings.toolsCountOne}`);
     expect(vm.policyText).toBe("Erlaubt");
+  });
+});
+
+describe("the tab In this app and the server tab only when governed", () => {
+  const appTool = (name: string, toolClass: "read" | "write" | "destructive", description = `${name} does it`) => ({ name, description, toolClass });
+
+  it("lists the app's own tools with a class label and a plain, cut description, and the filter narrows them by name", () => {
+    const catalog = new FakeCatalog();
+    catalog.appTools = [appTool("read_page", "read", "Reads <b>the</b>\n page"), appTool("fill_field", "write", "x".repeat(400)), appTool("drop_row", "destructive")];
+    const vm = page(catalog);
+    expect(vm.tab).toBe("computer"); // the default stays
+    expect(vm.appTabText).toBe("In this app · 3");
+    expect(vm.appTools.map((t) => [t.name, t.classLabel])).toEqual([
+      ["read_page", englishStrings.approvalClass.read], ["fill_field", englishStrings.approvalClass.write], ["drop_row", englishStrings.approvalClass.destructive],
+    ]);
+    expect(vm.appTools[0]!.description).toBe("Reads <b>the</b> page"); // text, never markup: the skins print it as text
+    expect(Array.from(vm.appTools[1]!.description)).toHaveLength(300);
+    vm.filter = "FILL";
+    expect(vm.appTools.map((t) => t.name)).toEqual(["fill_field"]);
+    vm.filter = "zzz";
+    expect(vm).toMatchObject({ showsAppNoMatch: true, showsAppEmpty: false });
+    expect(vm.appNoMatchText).toBe(englishStrings.toolsNoToolsMatch);
+  });
+
+  it("says one short line when the app gives no tools", () => {
+    const vm = page(new FakeCatalog());
+    expect(vm).toMatchObject({ showsAppEmpty: true, appTabText: "In this app · 0", appEmptyText: "This app gives the assistant no tools of its own." });
+    vm.selectTab("app");
+    expect(vm).toMatchObject({ showsApp: true, showsAddButton: false, showsLocalChip: false });
+  });
+
+  it("has no server tab in standalone, never loads the cloud tools, and refuses to select it", async () => {
+    const catalog = new FakeCatalog([serverInfo("files")]);
+    catalog.governed = false;
+    const vm = page(catalog);
+    await vm.open();
+    await vm.loadCloud();
+    expect(vm.showsServerTab).toBe(false);
+    expect(vm.tabs).toEqual(["app", "computer"]);
+    expect(catalog.cloudCalls).toBe(0);
+    vm.selectTab("server");
+    expect(vm.tab).toBe("computer");
+  });
+
+  it("has the server tab when governed, in the order app, computer, server, and loads the cloud tools", async () => {
+    const catalog = new FakeCatalog([serverInfo("files")]);
+    const vm = page(catalog);
+    await vm.open();
+    expect(vm.showsServerTab).toBe(true);
+    expect(vm.tabs).toEqual(["app", "computer", "server"]);
+    expect(catalog.cloudCalls).toBeGreaterThan(0);
+  });
+
+  it("selects the computer's tab when the server tab was selected and the connection is no longer governed", async () => {
+    const catalog = new FakeCatalog([serverInfo("files")]);
+    const vm = page(catalog);
+    await vm.open();
+    vm.selectTab("server");
+    expect(vm.showsServer).toBe(true);
+    catalog.governed = false;
+    catalog.changed();
+    expect(vm).toMatchObject({ tab: "computer", showsLocal: true, showsServerTab: false });
+  });
+
+  it("says the new texts again in the new language on retext", () => {
+    let current: UiStrings = englishStrings;
+    const catalog = new FakeCatalog();
+    catalog.appTools = [appTool("read_page", "read")];
+    const vm = page(catalog, () => current);
+    expect(vm.appTabText).toBe("In this app · 1");
+    current = germanStrings;
+    vm.retext();
+    expect(vm.appTabText).toBe(germanStrings.toolsTabApp(1));
+    expect(vm.appTools[0]!.classLabel).toBe(germanStrings.approvalClass.read);
+    expect(vm.appEmptyText).toBe(germanStrings.toolsAppNone);
+    expect(germanStrings.toolsAppNone).not.toBe(englishStrings.toolsAppNone);
   });
 });

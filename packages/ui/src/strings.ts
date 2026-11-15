@@ -625,6 +625,10 @@ export interface UiStrings {
   toolsPolicyNotAllowed: string;
   toolsTabLocal(count: number): string;
   toolsTabServer(count: number): string;
+  /** The tab of the tools the app itself gives the assistant. */
+  toolsTabApp(count: number): string;
+  /** Said on that tab when the app gives the assistant no tools. */
+  toolsAppNone: string;
   toolsFilterPlaceholder: string;
   toolsAddServer: string;
   toolsSectionServers: string;
@@ -1366,6 +1370,8 @@ export const englishStrings: UiStrings = {
   toolsPolicyNotAllowed: "Not allowed for this assistant",
   toolsTabLocal: (count) => `On this computer · ${count}`,
   toolsTabServer: (count) => `On your server · ${count}`,
+  toolsTabApp: (count) => `In this app · ${count}`,
+  toolsAppNone: "This app gives the assistant no tools of its own.",
   toolsFilterPlaceholder: "Filter tools",
   toolsAddServer: "Add server",
   toolsSectionServers: "MCP servers",

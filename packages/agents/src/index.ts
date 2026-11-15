@@ -196,6 +196,7 @@ export {
   clearServerSecrets,
   cloudToolOf,
   newServerDraft,
+  type AppToolInfo,
   type CloudToolInfo,
   type CloudToolsResult,
   type ImportCandidateInfo,

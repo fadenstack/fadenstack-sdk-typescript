@@ -581,6 +581,8 @@ export const spanishStrings: UiStrings = {
   toolsPolicyNotAllowed: "No permitido para este asistente",
   toolsTabLocal: (count) => `En este equipo · ${count}`,
   toolsTabServer: (count) => `En su servidor · ${count}`,
+  toolsTabApp: (count) => `En esta aplicación · ${count}`,
+  toolsAppNone: "Esta aplicación no ofrece al asistente ninguna herramienta propia.",
   toolsFilterPlaceholder: "Filtrar herramientas",
   toolsAddServer: "Añadir servidor",
   toolsSectionServers: "Servidores MCP",

@@ -139,6 +139,13 @@ const tools = new ToolsPageViewModel({ catalog: new McpToolsCatalog(mcp, agentTo
 // React: <ToolsPage tools={tools} />   Vue: <ToolsPage :tools="tools" />
 ```
 
+**One page, up to three tabs**, in this order:
+- "In this app": the tools the app itself gives the assistant (its own `host` tools, not MCP, server or SDK built-in tools), read only: name, class and a short description;
+- "On this computer" (the default): the person's servers; Add, the paste import and the policy chip are on this tab only;
+- "On your server": the organisation's tools, read only. It is shown in governed mode only (`LocalToolsCatalog.governed`): standalone, or while the connection is not known, there is no such tab and the cloud tools are not loaded.
+
+The chat's settings item "Tools" opens this page when you pass `openTools` to the chat's options (the settings close, then your function shows the page); without it the item opens the chat's read-only Tools panel.
+
 **What it shows:**
 - the policy;
 - the person's servers as cards, with status, on/off and "not reviewed";
@@ -148,7 +155,7 @@ const tools = new ToolsPageViewModel({ catalog: new McpToolsCatalog(mcp, agentTo
   - under *Advanced*, the plain-http switch;
 - the add and edit sheet, with header values in password fields: a saved value is never shown back, only dots and *Replace*;
 - the paste import;
-- in governed mode, "On your server": the organisation's tools, read only.
+- "In this app", and in governed mode "On your server": read only lists.
 
 **The switch** shows only where it applies and is allowed. Turning it on opens the warning (version `2026-11-15`) and changes nothing until the person presses *Allow*. Each refusal has its own words.
 
