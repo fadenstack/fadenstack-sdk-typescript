@@ -43,4 +43,5 @@ const agent = FadenstackAgent.createBuilder()
 - **Locked values:** `policy.locked` names the keys the policy set; the app locks them in its UI and never writes them into
   the person's settings.
 - **Enrolment keeps data apart:** an agent on the person's own endpoint keeps its chats under the standalone principal's
-  own databases, never uploaded, and its "Allow always" decisions do not carry over to the organisation's agent.
+  own databases, never uploaded, and its "Allow always" decisions do not carry over to the organisation's agent
+  ([Data on the device](data-on-device.md#a-persons-databases)).

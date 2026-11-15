@@ -22,6 +22,7 @@ transcript entry by entry, and a small list entry per session so the history ope
 An agent that keeps its sessions itself uses a database of the signed-in user (`fadenstack-sessions:<tenant>:<user>`),
 so two people in one browser profile never see each other's; against a gateway that names no user it uses the plain
 name, as an older SDK did, and it never moves what is kept there to a user. A store you pass yourself is used as it is.
+[Data on the device](data-on-device.md) lists every database the SDK keeps.
 
 What this protects, and what it does not:
 
@@ -86,17 +87,19 @@ person as a download):
 | `counts` | `agents`, `sessions`, `approvals`, and `unreadable`: records that did not decrypt, which cannot be handed over. |
 | `notIncluded` | What is not in it: sign-in tokens and secrets (never exported) and what the server keeps (ask its operator). |
 
-A store you passed yourself is read for this agent only (it cannot name its agents).
+A store you passed yourself is read for this agent only (it cannot name its agents). [Data on the device](data-on-device.md#export-and-delete)
+lists what the export and the deletion leave.
 
-`deleteMyData()` deletes the signed-in user's databases (sessions, "Allow always" and the preferences, such as the
-level of thinking they picked) **and their key**, so that a copy of the profile restored later can never be read.
+`deleteMyData()` deletes the signed-in user's databases (sessions, "Allow always", the preferences such as the level of
+thinking they picked, their skills and the standalone provenance records; [Data on the device](data-on-device.md#a-persons-databases)
+lists all seven) **and their key**, so that a copy of the profile restored later can never be read.
 Afterwards the stores start empty, with a new key. It does not sign out (sign-in tokens stay; that is the host's call)
 and it does not touch the server: what the server keeps is for its operator to erase. From a gateway that names no user it
 clears the shared databases of an older SDK. The result:
 
 | Field | What it is |
 |---|---|
-| `storesCleared` | How many of the SDK's IndexedDB databases existed and were removed (at most four: sessions, approvals, preferences, key). Stores in memory are simply dropped. The .NET SDK reports folders (`FoldersRemoved`). |
+| `storesCleared` | How many of the SDK's IndexedDB databases existed and were removed (at most seven). Stores in memory are simply dropped. The .NET SDK reports folders (`FoldersRemoved`). |
 | `hostSessionStoreLeft`, `hostApprovalStoreLeft` | A store you passed with `useSessionStore` / `useApprovalStore` is **not** deleted: it may hold other people's data. The flag says it was left. |
 | `hostStoresLeft` | Either of them: the person's data may still be in a store the host keeps. Delete their part there. |
 
