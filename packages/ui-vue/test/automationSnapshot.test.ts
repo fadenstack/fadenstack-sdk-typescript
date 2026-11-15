@@ -5,10 +5,11 @@ import { mount, type VueWrapper } from "@vue/test-utils";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { englishStrings } from "@fadenstack/ui";
-import { ConnectionWizard, SkillDraft, SkillEditor, SkillLibrary } from "@fadenstack/ui-vue";
+import { ConnectionWizard, SkillDraft, SkillEditor, SkillLibrary, ToolsPage } from "@fadenstack/ui-vue";
 
 import { ALL_STEPS, reach } from "../../ui-react/test/wizardHarness.js";
 import { DRAFT_STATES, EDITOR_STATES, LIBRARY_STATES, reachDraft, reachEditor, reachLibrary } from "../../ui-react/test/skillHarness.js";
+import { TOOLS_STATES, reachTools } from "../../ui-react/test/toolsHarness.js";
 import { collectAutomation, diffLines, finishSnapshot } from "../../ui-react/test/automationCollect.js";
 
 // The automation snapshot of the wizard and skill views (Vue): see the React file. Record: FADEN_AUTOMATION_WRITE=1 npx vitest run <this file>.
@@ -54,6 +55,12 @@ describe("automation snapshot (Vue)", () => {
     const { h, draft } = await reachDraft(state, englishStrings);
     harnesses.push(h);
     take(`draft:${state}`, SkillDraft as never, { draft });
+  });
+  it.each(TOOLS_STATES)("ToolsPage: %s", async (state) => {
+    vi.spyOn(console, "error").mockImplementation(() => undefined);
+    const { h, tools } = await reachTools(state, englishStrings);
+    harnesses.push(h);
+    take(`tools:${state}`, ToolsPage as never, { tools });
   });
 });
 

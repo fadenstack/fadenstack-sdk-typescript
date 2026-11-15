@@ -99,6 +99,7 @@ export {
   type LocalRetention,
   type ApprovalDecidedEvent,
   type LocalMcpAttachedEvent,
+  type LocalMcpPlainHttpEvent,
   type ServerFeatures,
   type SessionStatsEvent,
   type SkillList,

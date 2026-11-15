@@ -2317,3 +2317,418 @@
     background: HighlightText;
   }
 }
+
+/* -- the Tools view -------------------------------------------------------------------------------- */
+
+/* The Tools view is the skill views' column (`.fdn-wizard.fdn-skills.fdn-toolspage`) with a bar, cards, details and sheets of its own; the
+   radius system is the same: 12 px for a container (a card), 8 px for a chip and the icon tile, 6 px for a control. */
+/* A button with an icon in front of its text keeps them on one line, centred. */
+.fdn-wizard.fdn-toolspage .fdn-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+}
+
+.fdn-wizard .fdn-tp-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px 10px;
+}
+
+.fdn-wizard .fdn-tp-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px 14px;
+}
+
+.fdn-wizard .fdn-tp-tab {
+  padding: 4px 0;
+  border: 0;
+  border-block-end: 2px solid transparent;
+  background: none;
+  color: var(--fdn-text-muted);
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.fdn-wizard .fdn-tp-tab[aria-selected="true"] {
+  border-block-end-color: var(--fdn-accent);
+  color: var(--fdn-text);
+}
+
+.fdn-wizard .fdn-tp-policy {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  border: 1px solid var(--fdn-hairline);
+  color: var(--fdn-success);
+}
+
+.fdn-wizard .fdn-tp-policy-warning {
+  color: var(--fdn-warning);
+}
+
+.fdn-wizard .fdn-tp-section {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.fdn-wizard .fdn-tp-section h3 {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.fdn-wizard .fdn-tp-empty {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  border-style: dashed;
+  border-color: var(--fdn-control-border);
+}
+
+.fdn-wizard .fdn-tp-card {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  border-color: var(--fdn-border);
+}
+
+.fdn-wizard .fdn-tp-card[data-selected] {
+  border-color: var(--fdn-accent);
+}
+
+.fdn-wizard .fdn-tp-card-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.fdn-wizard .fdn-tp-tile {
+  display: grid;
+  flex: none;
+  place-content: center;
+  width: 28px;
+  height: 28px;
+  border: 1px solid var(--fdn-hairline);
+  border-radius: var(--fdn-radius-chip);
+  background: var(--fdn-bg);
+  color: var(--fdn-text-muted);
+}
+
+/* The name and where it came from open the details: one button, so the switch beside it is no control inside a control. */
+.fdn-wizard .fdn-tp-open {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  text-align: start;
+  cursor: pointer;
+}
+
+.fdn-wizard .fdn-tp-where {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--fdn-text-muted);
+}
+
+.fdn-wizard .fdn-tp-status {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--fdn-text-muted);
+}
+
+.fdn-wizard .fdn-tp-status[data-kind="good"] {
+  color: var(--fdn-success);
+}
+
+.fdn-wizard .fdn-tp-status[data-kind="warning"] {
+  color: var(--fdn-warning);
+}
+
+.fdn-wizard .fdn-tp-status[data-kind="problem"] {
+  color: var(--fdn-danger);
+}
+
+.fdn-wizard .fdn-tp-dot {
+  flex: none;
+  width: 8px;
+  height: 8px;
+  border-radius: var(--fdn-radius-control);
+  background: currentColor;
+}
+
+.fdn-wizard .fdn-tp-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.fdn-wizard .fdn-tp-chip {
+  padding: 1px 7px;
+  border: 1px solid var(--fdn-hairline);
+  border-radius: var(--fdn-radius-chip);
+  background: var(--fdn-bg);
+  font: 11px/16px var(--fdn-mono);
+}
+
+.fdn-wizard .fdn-tp-chip-warn {
+  border-color: var(--fdn-warning);
+  background: var(--fdn-warning-soft);
+  color: var(--fdn-warning);
+}
+
+.fdn-wizard .fdn-tp-chip-more {
+  border-color: transparent;
+  background: none;
+  color: var(--fdn-text-muted);
+}
+
+.fdn-wizard .fdn-tp-group-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.fdn-wizard .fdn-tp-group-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 0;
+  border: 0;
+  background: none;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.fdn-wizard .fdn-tp-group-toggle .fdn-icon {
+  transition: transform 0.12s;
+}
+
+.fdn-wizard .fdn-tp-group-toggle[aria-expanded="false"] .fdn-icon {
+  transform: rotate(-90deg);
+}
+
+.fdn-wizard[dir="rtl"] .fdn-tp-group-toggle[aria-expanded="false"] .fdn-icon {
+  transform: rotate(90deg);
+}
+
+.fdn-wizard .fdn-tp-cloud-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 6px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.fdn-wizard .fdn-tp-cloud-tool {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.fdn-wizard .fdn-tp-cloud-tool[data-muted] .fdn-tp-name {
+  color: var(--fdn-text-muted);
+}
+
+.fdn-wizard .fdn-tp-cloud-tool[data-off] .fdn-tp-name {
+  text-decoration: line-through;
+}
+
+.fdn-wizard .fdn-tp-name {
+  font-family: var(--fdn-mono);
+  overflow-wrap: anywhere;
+}
+
+.fdn-wizard .fdn-tp-facts {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 4px 12px;
+  margin: 0;
+}
+
+.fdn-wizard .fdn-tp-facts > div {
+  display: contents;
+}
+
+.fdn-wizard .fdn-tp-facts dt {
+  color: var(--fdn-text-muted);
+}
+
+.fdn-wizard .fdn-tp-facts dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.fdn-wizard .fdn-tp-facts .fdn-tp-mono {
+  font-family: var(--fdn-mono);
+}
+
+.fdn-wizard .fdn-tp-facts .fdn-tp-muted {
+  color: var(--fdn-text-muted);
+}
+
+.fdn-wizard .fdn-tp-toollist {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.fdn-wizard .fdn-tp-tool {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.fdn-wizard .fdn-tp-tool-picker {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.fdn-wizard .fdn-tp-tool-picker select {
+  flex: 1;
+  min-width: 0;
+  padding: 3px 8px;
+  border: 1px solid var(--fdn-control-border);
+  border-radius: var(--fdn-radius-control);
+  background-color: var(--fdn-bg);
+  font: inherit;
+}
+
+.fdn-wizard .fdn-tp-warning {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  border-color: var(--fdn-warning);
+  background: var(--fdn-warning-soft);
+}
+
+.fdn-wizard .fdn-tp-warning h3 {
+  margin: 0;
+  font-size: 13px;
+  color: var(--fdn-warning);
+}
+
+.fdn-wizard .fdn-tp-sheet {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.fdn-wizard .fdn-tp-sheet fieldset {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.fdn-wizard .fdn-tp-sheet legend {
+  padding: 0;
+  font-weight: 500;
+}
+
+.fdn-wizard .fdn-tp-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.fdn-wizard .fdn-tp-row > * {
+  flex: 1;
+  min-width: 0;
+}
+
+.fdn-wizard .fdn-tp-row > .fdn-button {
+  flex: none;
+  width: auto;
+}
+
+.fdn-wizard .fdn-tp-row input[type="text"],
+.fdn-wizard .fdn-tp-row input[type="password"] {
+  width: 100%;
+  padding: 5px 8px;
+  border: 1px solid var(--fdn-control-border);
+  border-radius: var(--fdn-radius-control);
+  background: var(--fdn-bg);
+  font: inherit;
+}
+
+.fdn-wizard .fdn-tp-dots {
+  padding: 5px 8px;
+  border: 1px solid var(--fdn-hairline);
+  border-radius: var(--fdn-radius-control);
+  background: var(--fdn-surface);
+  color: var(--fdn-text-muted);
+  letter-spacing: 0.1em;
+}
+
+.fdn-wizard .fdn-tp-filter input[type="text"] {
+  width: 100%;
+  padding: 5px 8px;
+  border: 1px solid var(--fdn-control-border);
+  border-radius: var(--fdn-radius-control);
+  background: var(--fdn-bg);
+  font: inherit;
+}
+
+.fdn-wizard .fdn-tp-sheet input[type="text"],
+.fdn-wizard .fdn-tp-sheet input[type="url"],
+.fdn-wizard .fdn-tp-sheet input[type="number"] {
+  width: 100%;
+}
+
+.fdn-wizard .fdn-tp-result {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+}
+
+.fdn-wizard .fdn-tp-help {
+  color: var(--fdn-text-muted);
+  font-size: 12px;
+}
+
+@media (forced-colors: active) {
+  /* A control with no line of its own in the palette gets one in the system's colours, so it can be told from the text around it. */
+  .fdn-wizard .fdn-tp-tab,
+  .fdn-wizard .fdn-tp-open,
+  .fdn-wizard .fdn-tp-group-toggle {
+    padding: 2px 6px;
+    border: 1px solid ButtonText;
+    border-radius: var(--fdn-radius-control);
+  }
+
+  .fdn-wizard .fdn-tp-tab[aria-selected="true"] {
+    border-color: Highlight;
+  }
+
+  .fdn-wizard .fdn-tp-chip-warn,
+  .fdn-wizard .fdn-tp-warning {
+    border-color: Mark;
+  }
+
+  .fdn-wizard .fdn-tp-tab[aria-selected="true"] {
+    border-block-end-color: Highlight;
+  }
+}

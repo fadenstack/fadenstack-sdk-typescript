@@ -243,7 +243,7 @@ describe("enforced in the SDK", () => {
     await free.agent.start();
     await off.agent.start();
 
-    expect(mine.agent.profile.localMcp).toEqual({ mode: "disable", developerMode: false });
+    expect(mine.agent.profile.localMcp).toEqual({ mode: "disable", developerMode: false, plainHttp: "deny" });
     expect(free.agent.profile.localMcp.mode).toBe("allow");
     expect(off.agent.profile.localMcp.mode).toBe("disable"); // the policy never turns on what the server left off
     await mine.agent.refreshPolicy();

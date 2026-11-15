@@ -20,6 +20,7 @@ export default defineConfig({
       "@fadenstack/testing": src("testing"),
       "@fadenstack/provenance": src("provenance"),
       "@fadenstack/skills": src("skills"),
+      "@fadenstack/mcp": src("mcp"),
     },
   },
   test: {

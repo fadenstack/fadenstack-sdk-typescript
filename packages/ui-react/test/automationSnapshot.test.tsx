@@ -5,13 +5,14 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanup, render } from "@testing-library/react";
 
 import { englishStrings } from "@fadenstack/ui";
-import { ConnectionWizard, SkillDraft, SkillEditor, SkillLibrary } from "@fadenstack/ui-react";
+import { ConnectionWizard, SkillDraft, SkillEditor, SkillLibrary, ToolsPage } from "@fadenstack/ui-react";
 
 import { ALL_STEPS, reach } from "./wizardHarness.js";
 import { DRAFT_STATES, EDITOR_STATES, LIBRARY_STATES, reachDraft, reachEditor, reachLibrary } from "./skillHarness.js";
+import { TOOLS_STATES, reachTools } from "./toolsHarness.js";
 import { collectAutomation, diffLines, finishSnapshot } from "./automationCollect.js";
 
-// The automation snapshot of the wizard and skill views (React): for every view in every state, the controls and named elements a UI
+// The automation snapshot of the wizard, skill and Tools views (React): for every view in every state, the controls and named elements a UI
 // automation tool finds. The styling pass must not change a line. Record: FADEN_AUTOMATION_WRITE=1 npx vitest run <this file>.
 
 const FILE = join(dirname(fileURLToPath(import.meta.url)), "automation-before.json");
@@ -51,6 +52,12 @@ describe("automation snapshot (React)", () => {
     const { h, draft } = await reachDraft(state, englishStrings);
     harnesses.push(h);
     take(`draft:${state}`, render(<SkillDraft draft={draft} />).container);
+  });
+  it.each(TOOLS_STATES)("ToolsPage: %s", async (state) => {
+    vi.spyOn(console, "error").mockImplementation(() => undefined);
+    const { h, tools } = await reachTools(state, englishStrings);
+    harnesses.push(h);
+    take(`tools:${state}`, render(<ToolsPage tools={tools} />).container);
   });
 });
 

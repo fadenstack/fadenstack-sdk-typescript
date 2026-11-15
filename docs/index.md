@@ -188,7 +188,8 @@ approval handler the SDK declines it. See [Tools and approvals](tools.md).
 - [Plain chat completions](plain-api.md): the gateway's chat without an agent.
 - [Hosting](hosting.md): where the SDK runs, a web page, a browser extension or Node, and what differs.
 - [Extending](extending.md): modules, stages, tool sources, tool services and renderers.
-- [Local tools](local-tools.md): tools on request, and `find_tool`, where a browser has no local MCP process.
+- [Local MCP servers](local-mcp.md): the person's own MCP servers over HTTP, plain http on the local network behind a switch, the class of their tools, the Tools view.
+- [Local tools](local-tools.md): tools on request, and `find_tool`.
 - [Libraries](libraries.md): what each package is for.
 - [Samples](samples.md): the live check against a server.
 - [Parity with the .NET SDK](parity.md): each feature, by its name in both SDKs.

@@ -13,14 +13,15 @@
     "packages/ui-vue",
     "packages/testing",
     "packages/provenance",
-    "packages/skills"
+    "packages/skills",
+    "packages/mcp"
   ],
   "engines": {
     "node": ">=24"
   },
   "scripts": {
-    "build": "tsc -b packages/client packages/agents packages/ui packages/ui-web packages/ui-react packages/testing packages/provenance packages/skills && npm run build --workspace @fadenstack/ui-vue",
-    "clean": "tsc -b --clean packages/client packages/agents packages/ui packages/ui-web packages/ui-react packages/testing packages/provenance packages/skills",
+    "build": "tsc -b packages/client packages/agents packages/ui packages/ui-web packages/ui-react packages/testing packages/provenance packages/skills packages/mcp && npm run build --workspace @fadenstack/ui-vue",
+    "clean": "tsc -b --clean packages/client packages/agents packages/ui packages/ui-web packages/ui-react packages/testing packages/provenance packages/skills packages/mcp",
     "typecheck": "tsc -p tsconfig.json --noEmit && vue-tsc -p packages/ui-vue/tsconfig.json",
     "test": "vitest run",
     "test:watch": "vitest",

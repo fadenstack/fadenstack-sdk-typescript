@@ -3,11 +3,12 @@ import { createRoot, type Root } from "react-dom/client";
 import { createApp, type App } from "vue";
 
 import { englishStrings } from "@fadenstack/ui";
-import { ConnectionWizard as ReactWizard, SkillDraft as ReactDraft, SkillEditor as ReactEditor, SkillLibrary as ReactLibrary } from "@fadenstack/ui-react";
-import { ConnectionWizard as VueWizard, SkillDraft as VueDraft, SkillEditor as VueEditor, SkillLibrary as VueLibrary } from "@fadenstack/ui-vue";
+import { ConnectionWizard as ReactWizard, SkillDraft as ReactDraft, SkillEditor as ReactEditor, SkillLibrary as ReactLibrary, ToolsPage as ReactTools } from "@fadenstack/ui-react";
+import { ConnectionWizard as VueWizard, SkillDraft as VueDraft, SkillEditor as VueEditor, SkillLibrary as VueLibrary, ToolsPage as VueTools } from "@fadenstack/ui-vue";
 
 import { ALL_STEPS, reach } from "../../packages/ui-react/test/wizardHarness.js";
 import { DRAFT_STATES, EDITOR_STATES, LIBRARY_STATES, reachDraft, reachEditor, reachLibrary } from "../../packages/ui-react/test/skillHarness.js";
+import { TOOLS_STATES, reachTools } from "../../packages/ui-react/test/toolsHarness.js";
 import "../../packages/ui-web/styles.css";
 import { runChecks, measureFocus, tabbableCount } from "./checks.js";
 
@@ -23,6 +24,7 @@ const STATES: Record<string, readonly string[]> = {
   library: LIBRARY_STATES,
   editor: EDITOR_STATES,
   draft: DRAFT_STATES,
+  tools: TOOLS_STATES,
 };
 
 let reactRoot: Root | undefined;
@@ -66,6 +68,11 @@ async function show(skin: Skin, view: string, state: string, palette: Palette): 
     harness = h;
     if (skin === "react") mountReact(<ReactEditor editor={editor} theme={theme} />);
     else mountVue(VueEditor, { editor });
+  } else if (view === "tools") {
+    const { h, tools } = await reachTools(state as never, englishStrings);
+    harness = h;
+    if (skin === "react") mountReact(<ReactTools tools={tools} theme={theme} />);
+    else mountVue(VueTools, { tools });
   } else {
     const { h, draft } = await reachDraft(state as never, englishStrings);
     harness = h;
@@ -74,7 +81,9 @@ async function show(skin: Skin, view: string, state: string, palette: Palette): 
   }
   await document.fonts.ready;
   await frames();
-  return Math.ceil(host.getBoundingClientRect().height);
+  // A view taller than the window scrolls inside its own frame: the picture takes all of it (the frame's scroll height), not what shows.
+  const frame = host.firstElementChild as HTMLElement | null;
+  return Math.ceil(Math.max(host.getBoundingClientRect().height, frame?.scrollHeight ?? 0));
 }
 
 (window as unknown as Record<string, unknown>)["styleRenders"] = {

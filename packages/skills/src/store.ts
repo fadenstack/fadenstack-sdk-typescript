@@ -212,7 +212,10 @@ export class IndexedDbSkillStore extends ObservableStore implements SkillStore {
         };
         opening.onsuccess = () => {
           const connection = opening.result;
-          connection.onversionchange = () => connection.close(); // a deletion of the person's data must not be held up by this connection
+          connection.onversionchange = () => {
+            connection.close(); // a deletion of the person's data must not be held up by this connection
+            if (this.#open?.db === db) this.#open = undefined; // and the next use opens it again, instead of a closed one
+          };
           resolve(connection);
         };
         opening.onerror = () => reject(opening.error ?? new Error("The skills database could not be opened."));

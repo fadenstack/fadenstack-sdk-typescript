@@ -613,7 +613,186 @@ export interface UiStrings {
   skillDuplicateNamed(name: string): string;
   /** What a check found, in words, by its code: `{0}` the field or file, `{1}` the limit, `{2}` the size, `{3}` the detail (`skillIssueText` fills it). */
   skillIssue: Record<SkillIssueCode, string>;
+  // the Tools view (sdk/51 F05)
+  toolsTitle: string;
+  toolsIntro: string;
+  toolsBannerNotAllowed: string;
+  toolsSignInNeeded: string;
+  toolsPolicyAllowed: string;
+  toolsPolicyAllowedTip: string;
+  toolsPolicyDeveloper: string;
+  toolsPolicyDeveloperTip: string;
+  toolsPolicyNotAllowed: string;
+  toolsTabLocal(count: number): string;
+  toolsTabServer(count: number): string;
+  toolsFilterPlaceholder: string;
+  toolsAddServer: string;
+  toolsSectionServers: string;
+  toolsSectionServersHelp: string;
+  toolsKeptInMemory: string;
+  toolsListUnreadable: string;
+  toolsCloudIntro: string;
+  toolsCloudNotListed: string;
+  toolsCloudUnavailable: string;
+  toolsCloudNone: string;
+  toolsCloudForThis: string;
+  toolsCloudNotFor: string;
+  toolsCloudOffByAdmin: string;
+  toolsForThisAssistant(count: number): string;
+  toolsSwitchedOffCount(count: number): string;
+  toolsCollapse(server: string): string;
+  toolsExpand(server: string): string;
+  toolsTryAgain: string;
+  toolsEmptyTitle: string;
+  toolsEmptyText: string;
+  toolsStateRunning: string;
+  toolsStateOff: string;
+  toolsStateStarting: string;
+  toolsStateFailed(reason: string): string;
+  toolsStateNotAllowed: string;
+  toolsStateChangedTools: string;
+  toolsStateMissingValue(name: string): string;
+  toolsStateNotAllowedBecause(reason: string): string;
+  toolsReasonPolicy: string;
+  toolsReasonUnknown: string;
+  toolsCountOne: string;
+  toolsCountMany(count: number): string;
+  toolsMoreTools(count: number): string;
+  toolsFixAddValue: string;
+  toolsOriginTyped: string;
+  toolsOriginScan: string;
+  toolsOriginImported(origin: string): string;
+  toolsOriginLine(origin: string, where: string): string;
+  toolsSwitchName(label: string): string;
+  toolsOpenDetails(label: string): string;
+  toolsToolMayDelete(name: string): string;
+  toolsDrawerName(label: string): string;
+  toolsRunningSince(time: string): string;
+  toolsFactAdded: string;
+  toolsFactAddress: string;
+  toolsFactSecrets: string;
+  toolsFactLongestCall: string;
+  toolsAddedByYou: string;
+  toolsAddedFrom(origin: string): string;
+  toolsAddedByScan: string;
+  toolsNoneText: string;
+  toolsSecondsOne: string;
+  toolsSecondsMany(count: number): string;
+  toolsMinutesOne: string;
+  toolsMinutesMany(count: number): string;
+  toolsDrawerNote: string;
+  toolsListHeading(count: number): string;
+  toolsDrawerFilterPlaceholder: string;
+  toolsDrawerFilterName: string;
+  toolsNoTools: string;
+  toolsNoToolsMatch: string;
+  toolsSaysReadOnly: string;
+  toolsSaysDestructive: string;
+  toolsSaysIdempotent: string;
+  toolsSaysOpenWorld: string;
+  toolsTestTooltip: string;
+  toolsRestartTooltip: string;
+  toolsEditTooltip: string;
+  toolsRemoveTooltip: string;
+  toolsRestartedLine: string;
+  toolsRemoveConfirm(label: string): string;
+  toolsRemoveYes: string;
+  toolsRemoveKeep: string;
+  toolsRemoveName(label: string): string;
+  toolsCloseDetails: string;
+  toolsSheetAddTitle: string;
+  toolsSheetEditTitle(label: string): string;
+  toolsFieldLabel: string;
+  toolsFieldLabelHelp: string;
+  toolsFieldHeaders: string;
+  toolsAddRow: string;
+  toolsRowName: string;
+  toolsRowValue: string;
+  toolsValueSaved: string;
+  toolsReplaceValue: string;
+  toolsRemoveRow: string;
+  toolsFieldUrl: string;
+  toolsFieldTimeout: string;
+  toolsFieldEnabled: string;
+  toolsSecretsNote: string;
+  toolsSave: string;
+  toolsCancel: string;
+  toolsCloseSheet: string;
+  toolsAddButton: string;
+  toolsTestButton: string;
+  toolsValueSavedName: string;
+  toolsProblemLabelMissing: string;
+  toolsProblemLabelInvalid: string;
+  toolsProblemLabelTaken: string;
+  toolsProblemName: string;
+  toolsProblemValue: string;
+  toolsProblemAddressMissing: string;
+  toolsProblemAddressInvalid: string;
+  toolsProblemTimeout: string;
+  toolsTestRunning: string;
+  toolsTestOk(tools: string): string;
+  toolsTestOkNoTools: string;
+  toolsTestFailed(reason: string): string;
+  toolsTestNotAllowed: string;
+  toolsImportTitle: string;
+  toolsImportNothingToAdd: string;
+  toolsImportButton: string;
+  toolsImportTick(label: string): string;
+  toolsImportNoteIgnored(fields: string): string;
+  toolsSkippedTitle: string;
+  toolsSkipNothing: string;
+  toolsSkipNotUnderstood: string;
+  toolsSkipNotValid(detail: string): string;
+  toolsImported(count: number): string;
+  toolsSkipNetwork: string;
+  toolsFieldUrlHelp: string;
+  toolsProblemPlainHttpWithHeaders: string;
+  toolsProblemPlainHttpNotLocal: string;
+  toolsTrusted: string;
+  toolsTrustedHelp: string;
+  toolsTrustedByAdmin: string;
+  toolsTrustedName(label: string): string;
+  toolsClassUnknown: string;
+  toolsClassRead: string;
+  toolsClassWrite: string;
+  toolsClassDestructive: string;
+  toolsRaiseLabel: string;
+  toolsRaiseNone: string;
+  toolsRaiseRead: string;
+  toolsRaiseWrite: string;
+  toolsRaiseName(tool: string): string;
+  toolsDestructiveHelp: string;
+  toolsAdvanced: string;
+  mcpPlainHttpSwitch: string;
+  mcpPlainHttpSwitchHelp: string;
+  mcpPlainHttpWarningTitle: string;
+  mcpPlainHttpWarning: string;
+  mcpPlainHttpConfirm: string;
+  mcpPlainHttpCancel: string;
+  mcpPlainHttpNoOptIn: string;
+  mcpPlainHttpNotLocal: string;
+  mcpPlainHttpSecret: string;
+  mcpPlainHttpNotAllowed: string;
+  toolsProblemTooManyHeaders: string;
+  toolsPasteMore: string;
+  toolsPasteIntro: string;
+  toolsPasteField: string;
+  toolsPasteRead: string;
+  toolsPasteFound(count: number): string;
+  toolsPasteProblemEmpty: string;
+  toolsPasteProblemNotJson: string;
+  toolsPasteProblemNoList: string;
+  toolsPasteProblemTooLarge: string;
+  toolsSkipProgram: string;
+  toolsSkipSse: string;
 }
+
+/**
+ * The version of the warning `mcpPlainHttpWarning` ("Plain http is not encrypted..."): the date its words were last changed. The app passes
+ * it with the person's confirmation (`setPlainHttpInLan`), and the SDK records which warning they saw (the device's audit log). Change it
+ * whenever the warning's words change, in every language. .NET: `UiStrings.McpPlainHttpWarningVersion`.
+ */
+export const PLAIN_HTTP_WARNING_VERSION = "2026-11-15";
 
 export const englishStrings: UiStrings = {
   language: "en",
@@ -1175,6 +1354,178 @@ export const englishStrings: UiStrings = {
     ReadFailed: "{0} could not be read.",
     BinaryFile: "{0} is not a text file. A skill keeps text files only.",
   },
+  // the Tools view (sdk/51 F05)
+  toolsTitle: "Tools",
+  toolsIntro: "What your assistant can reach, and whether it is on.",
+  toolsBannerNotAllowed: "This assistant may not use MCP servers on this computer.",
+  toolsSignInNeeded: "Sign in to see the tools of this assistant.",
+  toolsPolicyAllowed: "Allowed",
+  toolsPolicyAllowedTip: "This assistant may use MCP servers on this computer.",
+  toolsPolicyDeveloper: "Developer mode",
+  toolsPolicyDeveloperTip: "Developer mode: any server, for you only.",
+  toolsPolicyNotAllowed: "Not allowed for this assistant",
+  toolsTabLocal: (count) => `On this computer · ${count}`,
+  toolsTabServer: (count) => `On your server · ${count}`,
+  toolsFilterPlaceholder: "Filter tools",
+  toolsAddServer: "Add server",
+  toolsSectionServers: "MCP servers",
+  toolsSectionServersHelp: "Servers on the web or your network that offer tools. The assistant looks them up when it needs them, and every call asks you first.",
+  toolsKeptInMemory: "This browser keeps no saved list for the page, so your servers are kept only until you close it.",
+  toolsListUnreadable: "The saved list of servers could not be read. It was set aside and the list starts empty.",
+  toolsCloudIntro: "Your organisation’s server runs these tools; your data goes through its checks. Your administrator decides which ones this assistant may use.",
+  toolsCloudNotListed: "This server does not list its tools yet.",
+  toolsCloudUnavailable: "The server’s tools could not be loaded right now.",
+  toolsCloudNone: "Your server offers no tools to this assistant.",
+  toolsCloudForThis: "For this assistant",
+  toolsCloudNotFor: "Not for this assistant",
+  toolsCloudOffByAdmin: "Switched off by your administrator",
+  toolsForThisAssistant: (count) => `${count} for this assistant`,
+  toolsSwitchedOffCount: (count) => `${count} switched off`,
+  toolsCollapse: (server) => `Collapse ${server}`,
+  toolsExpand: (server) => `Expand ${server}`,
+  toolsTryAgain: "Try again",
+  toolsEmptyTitle: "Give your assistant tools from this computer",
+  toolsEmptyText: "MCP servers offer tools: your notes, a database, a calendar. Add the address of one you use, or paste the configuration of another app.",
+  toolsStateRunning: "Running",
+  toolsStateOff: "Off",
+  toolsStateStarting: "Starting",
+  toolsStateFailed: (reason) => `Can’t start: ${reason}`,
+  toolsStateNotAllowed: "Not allowed",
+  toolsStateChangedTools: "Changed its tools",
+  toolsStateMissingValue: (name) => `Can’t start: ${name} has no value`,
+  toolsStateNotAllowedBecause: (reason) => `Not allowed: ${reason}`,
+  toolsReasonPolicy: "this assistant may not use MCP servers on this computer",
+  toolsReasonUnknown: "no reason given",
+  toolsCountOne: "1 tool",
+  toolsCountMany: (count) => `${count} tools`,
+  toolsMoreTools: (count) => `+${count}`,
+  toolsFixAddValue: "Add the value",
+  toolsOriginTyped: "Added by you",
+  toolsOriginScan: "Found by a scan",
+  toolsOriginImported: (origin) => `From ${origin}`,
+  toolsOriginLine: (origin, where) => `${origin} · ${where}`,
+  toolsSwitchName: (label) => `Switch ${label} on or off`,
+  toolsOpenDetails: (label) => `Show details of ${label}`,
+  toolsToolMayDelete: (name) => `${name}, may delete`,
+  toolsDrawerName: (label) => `${label}, MCP server`,
+  toolsRunningSince: (time) => `Running since ${time}`,
+  toolsFactAdded: "Added",
+  toolsFactAddress: "Address",
+  toolsFactSecrets: "Secrets",
+  toolsFactLongestCall: "Longest call",
+  toolsAddedByYou: "By you",
+  toolsAddedFrom: (origin) => `From ${origin}`,
+  toolsAddedByScan: "Found by a scan",
+  toolsNoneText: "None",
+  toolsSecondsOne: "1 second",
+  toolsSecondsMany: (count) => `${count} seconds`,
+  toolsMinutesOne: "1 minute",
+  toolsMinutesMany: (count) => `${count} minutes`,
+  toolsDrawerNote: "The server describes its own tools. Nobody has checked them, so every call asks you first.",
+  toolsListHeading: (count) => `Tools · ${count}`,
+  toolsDrawerFilterPlaceholder: "Filter",
+  toolsDrawerFilterName: "Filter the tools",
+  toolsNoTools: "No tools yet.",
+  toolsNoToolsMatch: "No tool matches.",
+  toolsSaysReadOnly: "Says: reads only",
+  toolsSaysDestructive: "Says: may delete",
+  toolsSaysIdempotent: "Says: safe to repeat",
+  toolsSaysOpenWorld: "Says: reaches outside this computer",
+  toolsTestTooltip: "Test the server",
+  toolsRestartTooltip: "Restart",
+  toolsEditTooltip: "Edit",
+  toolsRemoveTooltip: "Remove",
+  toolsRestartedLine: "Restarted.",
+  toolsRemoveConfirm: (label) => `Remove ${label}?`,
+  toolsRemoveYes: "Remove",
+  toolsRemoveKeep: "Keep",
+  toolsRemoveName: (label) => `Remove ${label}`,
+  toolsCloseDetails: "Close",
+  toolsSheetAddTitle: "Add a server",
+  toolsSheetEditTitle: (label) => `Edit ${label}`,
+  toolsFieldLabel: "Name",
+  toolsFieldLabelHelp: "Letters, digits, spaces, dots, hyphens and underscores, up to 40.",
+  toolsFieldHeaders: "Headers",
+  toolsAddRow: "Add",
+  toolsRowName: "Name",
+  toolsRowValue: "Value",
+  toolsValueSaved: "••••••••",
+  toolsReplaceValue: "Replace",
+  toolsRemoveRow: "Remove",
+  toolsFieldUrl: "Address",
+  toolsFieldTimeout: "Longest call (seconds)",
+  toolsFieldEnabled: "Switch on after saving",
+  toolsSecretsNote: "Values are kept encrypted on this computer, are never shown again and are never sent anywhere else.",
+  toolsSave: "Save",
+  toolsCancel: "Cancel",
+  toolsCloseSheet: "Close",
+  toolsAddButton: "Add",
+  toolsTestButton: "Test",
+  toolsValueSavedName: "Saved value (hidden)",
+  toolsProblemLabelMissing: "Give the server a name.",
+  toolsProblemLabelInvalid: "Use letters, digits, spaces, dots, hyphens and underscores, up to 40, starting with a letter or digit.",
+  toolsProblemLabelTaken: "You have a server with that name already.",
+  toolsProblemName: "A name may contain only letters, digits and underscores (headers: also hyphens).",
+  toolsProblemValue: "A value cannot contain line breaks.",
+  toolsProblemAddressMissing: "Enter the address.",
+  toolsProblemAddressInvalid: "That is not an address (for example http://localhost:8123/mcp).",
+  toolsProblemTimeout: "Enter a number of seconds from 5 to 600.",
+  toolsTestRunning: "Testing...",
+  toolsTestOk: (tools) => `Started. Tools: ${tools}`,
+  toolsTestOkNoTools: "Started, but it offers no tools.",
+  toolsTestFailed: (reason) => `Could not start: ${reason}`,
+  toolsTestNotAllowed: "Not started: this assistant may not use MCP servers on this computer.",
+  toolsImportTitle: "Import servers",
+  toolsImportNothingToAdd: "Nothing in that text can be imported.",
+  toolsImportButton: "Import",
+  toolsImportTick: (label) => `Import ${label}`,
+  toolsImportNoteIgnored: (fields) => `Left out: ${fields}`,
+  toolsSkippedTitle: "Skipped",
+  toolsSkipNothing: "It has no program or address.",
+  toolsSkipNotUnderstood: "It was not understood.",
+  toolsSkipNotValid: (detail) => `It breaks a rule: ${detail}`,
+  toolsImported: (count) => `Added: ${count}`,
+  toolsSkipNetwork: "A server on another computer is not imported. Add it yourself if you need it.",
+  toolsFieldUrlHelp: "Use https for a server anywhere. Plain http works on this computer, and on your local network when you allow it under Advanced.",
+  toolsProblemPlainHttpWithHeaders: "Headers hold secrets, so a plain http address beyond this computer cannot have any. Use https or remove the headers.",
+  toolsProblemPlainHttpNotLocal: "Plain http goes only to this computer or the local network. Use https for an address elsewhere.",
+  toolsTrusted: "Trusted",
+  toolsTrustedHelp: "Only a trusted server’s “reads only” hints count. A server’s own word is never enough.",
+  toolsTrustedByAdmin: "Marked by your administrator",
+  toolsTrustedName: (label) => `Trust ${label}`,
+  toolsClassUnknown: "Asks every time",
+  toolsClassRead: "Reads",
+  toolsClassWrite: "Changes things",
+  toolsClassDestructive: "Destructive",
+  toolsRaiseLabel: "Treat as",
+  toolsRaiseNone: "As it arrives",
+  toolsRaiseRead: "Reads only",
+  toolsRaiseWrite: "Changes things",
+  toolsRaiseName: (tool) => `Class of ${tool}`,
+  toolsDestructiveHelp: "The server says this tool may delete or overwrite. It always asks, and nothing can lower that.",
+  toolsAdvanced: "Advanced",
+  mcpPlainHttpSwitch: "Allow plain http on the local network",
+  mcpPlainHttpSwitchHelp: "For a server on your own network that has no https. Never with a header value.",
+  mcpPlainHttpWarningTitle: "Allow plain http?",
+  mcpPlainHttpWarning: "Plain http is not encrypted. Anyone on your network can read and change what goes to and from this server: the tool calls, their arguments and their results, which may hold document content. A changed answer can steer the agent. Use https where the server offers it.",
+  mcpPlainHttpConfirm: "Allow",
+  mcpPlainHttpCancel: "Keep it off",
+  mcpPlainHttpNoOptIn: "Plain http goes only to this computer. Turn on “Allow plain http on the local network” under Advanced.",
+  mcpPlainHttpNotLocal: "This address is not on the local network.",
+  mcpPlainHttpSecret: "A server with a header value needs https.",
+  mcpPlainHttpNotAllowed: "Plain http is not allowed here.",
+  toolsProblemTooManyHeaders: "Use at most 20 headers.",
+  toolsPasteMore: "Paste a configuration…",
+  toolsPasteIntro: "Paste the MCP configuration of another app (Claude Desktop, VS Code, Cursor or a .mcp.json file). Nothing is copied until you tick servers and press Import.",
+  toolsPasteField: "Configuration (JSON)",
+  toolsPasteRead: "Read",
+  toolsPasteFound: (count) => `Servers found: ${count}`,
+  toolsPasteProblemEmpty: "Paste the configuration first.",
+  toolsPasteProblemNotJson: "That text is not JSON.",
+  toolsPasteProblemNoList: "That text has no list of servers.",
+  toolsPasteProblemTooLarge: "That text is too large.",
+  toolsSkipProgram: "It starts a program, which a browser cannot do.",
+  toolsSkipSse: "It uses the old SSE transport, which is not supported.",
 };
 
 /** Minutes and seconds as "9:41" (like .NET's `MinutesAndSeconds`): rounded up to the whole second, never negative. */
