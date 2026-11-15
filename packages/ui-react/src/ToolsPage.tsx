@@ -121,7 +121,7 @@ function AppPanel({ vm, panelId, tabId }: { vm: ToolsPageViewModel; panelId: str
                   <div className="fdn-tp-name" dir="auto">{t.name}</div>
                   {t.hasDescription && <div className="fdn-muted" dir="auto">{t.description}</div>}
                 </div>
-                <span className="fdn-badge" dir="auto">{t.classLabel}</span>
+                <span className={`fdn-badge fdn-class-${t.toolClass}`} dir="auto">{t.classLabel}</span>
               </li>
             ))}
           </ul>

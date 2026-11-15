@@ -99,7 +99,7 @@ function tabKeys(e: KeyboardEvent): void {
                   <div class="fdn-tp-name" dir="auto">{{ t.name }}</div>
                   <div v-if="t.hasDescription" class="fdn-muted" dir="auto">{{ t.description }}</div>
                 </div>
-                <span class="fdn-badge" dir="auto">{{ t.classLabel }}</span>
+                <span :class="['fdn-badge', `fdn-class-${t.toolClass}`]" dir="auto">{{ t.classLabel }}</span>
               </li>
             </ul>
           </section>
