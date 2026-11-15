@@ -84,6 +84,7 @@ This table is for SDK 0.3.0, against Fadenstack server 0.7.1. TypeScript names a
 | Export my data | `ExportMyDataAsync(stream)`: a ZIP | `exportMyData()`: a `MyDataExport` object | A page hands the object to the person as a download. |
 | Delete my data | `DeleteMyDataAsync()`: `DataDeletion(FoldersRemoved, HostSessionStoreLeft, HostApprovalStoreLeft)` | `deleteMyData()`: `DataDeletion` with `storesCleared`, `hostSessionStoreLeft`, `hostApprovalStoreLeft`, `hostStoresLeft` | The SDK removes IndexedDB databases, not folders. |
 | The device agent registry, OS key store package | `Fadenstack.Agents.Registry`, `Fadenstack.Secrets` | — | These belong to the operating system. |
+| Everything kept on the device | [Data on the device](../dotnet/data-on-device.md): a folder per person, and shared folders for tokens, the key store, skills, the agent registry, leases and logs | [Data on the device](data-on-device.md): seven IndexedDB databases per person, and two `localStorage` helpers | A browser has no shared folders: the sign-in, the endpoint's key and logs are the app's. Skills are per person here, per OS user in .NET. |
 
 ## Thinking
 

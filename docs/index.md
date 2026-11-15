@@ -179,6 +179,8 @@ approval handler the SDK declines it. See [Tools and approvals](tools.md).
   around every host tool call.
 - [Outcomes and errors](outcomes.md): how a turn ends, and what is thrown.
 - [Sessions on the device](sessions.md): where conversations are kept, and for how long.
+- [Data on the device](data-on-device.md): every database the SDK writes, how long it keeps it, and what the server
+  keeps.
 - [The chat panel](chat-panel.md): a ready-made chat UI for React, and view models for other frameworks.
 - [Connecting an agent](connecting.md): the connection wizard, to a server or the person's own AI.
 - [Skills](skills.md): skills on the device, the rules that pick them, the editor and its security rules.
