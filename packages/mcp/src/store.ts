@@ -26,7 +26,10 @@ export interface McpServerStore {
   save(server: McpServerRecord, previousLabel?: string): Promise<void>;
   /** Removes the server; whether there was one. */
   remove(label: string): Promise<boolean>;
-  /** Calls `listener` after a change; returns the unsubscribe. */
+  /**
+   * Calls `listener` after a change; returns the unsubscribe. The IndexedDB store also calls it after a change another context
+   * made to the same database (a side panel and a service worker, two tabs): the module and a Tools view follow it.
+   */
   onChanged(listener: () => void): () => void;
   /**
    * Adds a line to the device's audit log of the person's switches (sdk/51 F05), kept with the servers (deleted with the person's
@@ -166,6 +169,11 @@ export interface IndexedDbMcpServerStoreOptions {
   /** The IndexedDB factory (default `globalThis.indexedDB`). */
   indexedDB?: IDBFactory;
   /**
+   * Tell the other contexts of this origin about a change, and hear theirs (a `BroadcastChannel`, where there is one); default
+   * true. The message carries the database's name only.
+   */
+  broadcast?: boolean;
+  /**
    * What seals the header values. By default the person's WebCrypto key (`fadenstack-keys`, the one the agent's sessions use, per
    * principal); where there is none, a server with headers is refused (`McpStoreError`) rather than kept in the clear.
    */
@@ -174,6 +182,9 @@ export interface IndexedDbMcpServerStoreOptions {
 
 /** The standalone principal's tenant and user, as the agent's local profile names them: its data lives in stores of its own. */
 const STANDALONE: StorePrincipal = Object.freeze({ tenantId: "standalone", userId: "standalone" });
+
+/** The channel on which the stores of one origin say that a database changed (its name, nothing else). */
+export const MCP_STORE_CHANNEL = "fadenstack-mcp-changes";
 
 function request<T>(req: IDBRequest): Promise<T> {
   return new Promise<T>((resolve, reject) => {
@@ -205,6 +216,7 @@ export class IndexedDbMcpServerStore extends ObservableStore implements McpServe
   readonly #factory: IDBFactory;
   readonly #protectors = new Map<string, SecretProtector | undefined>();
   #open: { name: string; db: Promise<IDBDatabase> } | undefined;
+  #channel: BroadcastChannel | undefined;
 
   constructor(options: IndexedDbMcpServerStoreOptions = {}) {
     super();
@@ -212,6 +224,12 @@ export class IndexedDbMcpServerStore extends ObservableStore implements McpServe
     const factory = options.indexedDB ?? globalThis.indexedDB;
     if (!factory) throw new Error("There is no IndexedDB here: use MemoryMcpServerStore.");
     this.#factory = factory;
+  }
+
+  override onChanged(listener: () => void): () => void {
+    const unsubscribe = super.onChanged(listener);
+    this.#listen();
+    return unsubscribe;
   }
 
   /** The database this store reads and writes now. */
@@ -250,10 +268,6 @@ export class IndexedDbMcpServerStore extends ObservableStore implements McpServe
     const kept = recordOf(server);
     const db = await this.#db();
     const name = this.databaseName;
-    const taken = (await request<string[]>(db.transaction([SERVERS], "readonly").objectStore(SERVERS).getAllKeys())).map(String);
-    for (const other of taken) {
-      if (other !== kept.label && other !== previousLabel && sameLabel(other, kept.label)) throw new McpStoreError(`The label '${kept.label}' is taken.`);
-    }
     const headerNames = Object.keys(kept.headers);
     const row: Stored = {
       label: kept.label,
@@ -272,12 +286,22 @@ export class IndexedDbMcpServerStore extends ObservableStore implements McpServe
       if (!protector) throw new McpStoreError("There is no key here to seal the headers with: they are not kept in the clear.");
       row.sealed = await protector.protect(encoder.encode(JSON.stringify(kept.headers)), recordContext(name, SERVERS, kept.label));
     }
+    // Sealed first (WebCrypto would end the transaction); then the label check and the write in one transaction, so another
+    // context cannot take the label between them.
     const tx = db.transaction([SERVERS], "readwrite");
     const done = finished(tx);
-    if (previousLabel !== undefined && previousLabel !== kept.label) tx.objectStore(SERVERS).delete(previousLabel);
-    tx.objectStore(SERVERS).put(row, kept.label);
+    const store = tx.objectStore(SERVERS);
+    const taken = (await request<IDBValidKey[]>(store.getAllKeys())).map(String);
+    if (taken.some((other) => other !== kept.label && other !== previousLabel && sameLabel(other, kept.label))) {
+      tx.abort();
+      await done.catch(() => undefined);
+      throw new McpStoreError(`The label '${kept.label}' is taken.`);
+    }
+    if (previousLabel !== undefined && previousLabel !== kept.label) store.delete(previousLabel);
+    store.put(row, kept.label);
     await done;
     this.changed();
+    this.#tellOthers(name);
   }
 
   async remove(label: string): Promise<boolean> {
@@ -288,7 +312,10 @@ export class IndexedDbMcpServerStore extends ObservableStore implements McpServe
     const had = (await request<number>(store.count(label))) > 0;
     if (had) store.delete(label);
     await done;
-    if (had) this.changed();
+    if (had) {
+      this.changed();
+      this.#tellOthers(db.name);
+    }
     return had;
   }
 
@@ -311,9 +338,38 @@ export class IndexedDbMcpServerStore extends ObservableStore implements McpServe
   }
 
   close(): void {
+    this.#closeDb();
+    this.#channel?.close();
+    this.#channel = undefined;
+  }
+
+  /** Lets the database connection go (another principal's is opened next); the channel stays for the listeners. */
+  #closeDb(): void {
     const open = this.#open;
     this.#open = undefined;
     void open?.db.then((db) => db.close(), () => undefined);
+  }
+
+  /** The channel to the other contexts, opened when someone listens or something changed; none where there is no BroadcastChannel. */
+  #listen(): BroadcastChannel | undefined {
+    if (this.#channel || this.#options.broadcast === false || typeof BroadcastChannel === "undefined") return this.#channel;
+    const channel = new BroadcastChannel(MCP_STORE_CHANNEL);
+    (channel as { unref?: () => void }).unref?.(); // Node: an open channel does not keep the process running
+    channel.onmessage = (event: MessageEvent<unknown>) => {
+      const said = event.data as { database?: unknown } | null;
+      // Another context changed a database of this origin; only this store's own counts, and listeners only read again.
+      if (said && typeof said === "object" && said.database === this.databaseName) this.changed();
+    };
+    this.#channel = channel;
+    return channel;
+  }
+
+  #tellOthers(database: string): void {
+    try {
+      this.#listen()?.postMessage({ database });
+    } catch {
+      // the channel was closed meanwhile: the others read the list at their next turn anyway
+    }
   }
 
   async #unseal(row: Stored): Promise<StoredMcpServer> {
@@ -337,7 +393,7 @@ export class IndexedDbMcpServerStore extends ObservableStore implements McpServe
   #db(): Promise<IDBDatabase> {
     const name = this.databaseName;
     if (this.#open?.name !== name) {
-      this.close();
+      this.#closeDb();
       const db = new Promise<IDBDatabase>((resolve, reject) => {
         const opening = this.#factory.open(name, VERSION);
         opening.onupgradeneeded = () => {

@@ -17,6 +17,7 @@ export {
 export {
   IndexedDbMcpServerStore,
   MCP_AUDIT_MAX,
+  MCP_STORE_CHANNEL,
   MemoryMcpServerStore,
   openMcpServerStore,
   type IndexedDbMcpServerStoreOptions,
