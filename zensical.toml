@@ -10,6 +10,7 @@ nav = [
   { "Server-held grants and Bypass" = "server-grants.md" },
   { "Host commands and central policy" = "host-commands.md" },
   { "Central policy for native hosts" = "host-policy.md" },
+  { "Local MCP servers" = "local-mcp.md" },
   { "Local tools" = "local-tools.md" },
   { "Skills" = "skills.md" },
   { "Outcomes and errors" = "outcomes.md" },
