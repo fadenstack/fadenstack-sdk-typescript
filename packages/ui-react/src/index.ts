@@ -24,5 +24,6 @@ export { SkillLibrary, type SkillLibraryProps } from "./SkillLibrary.js";
 export { SkillEditor, type SkillEditorProps } from "./SkillEditor.js";
 export { SkillDraft, type SkillDraftProps } from "./SkillDraft.js";
 export { ToolsPage, type ToolsPageProps } from "./ToolsPage.js";
+export { WebSearchSettings, type WebSearchSettingsProps } from "./WebSearchSettings.js";
 export { Icon, Spinner, type IconName } from "./icons.js";
 export { useDismiss, useStickToBottom, useViewModel } from "./hooks.js";

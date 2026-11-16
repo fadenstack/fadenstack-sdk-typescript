@@ -48,3 +48,31 @@ The agent asks for its tools again at its next turn after the person changes the
 - Without IndexedDB, `MemoryWebSearchStore` keeps the settings for the run.
 
 `WebSearchOptions` sets the timeout (`timeoutMs`), the number of results (`maxResults`, at most 10), the person's store (`store`), the `fetch`, and the `logger`. The .NET SDK has the same tool (`WebSearchModule`).
+
+## The settings sheet
+
+The person picks the provider in a sheet: **Off**, **Brave Search** with their own key, or a **SearXNG** address. The sheet is `WebSearchSettingsViewModel` in `@fadenstack/ui`, made from the person's `WebSearchStore`. It comes in React (`WebSearchSettings` in `@fadenstack/ui-react`) and in Vue (`WebSearchSettings` in `@fadenstack/ui-vue`), in the four skins' texts and the five languages. The .NET SDK has the same sheet (`WebSearchSettingsViewModel`, `WebSearchSettingsView`).
+
+**What the person sees.**
+- The Brave key goes in a password box (`autocomplete="off"`). It is never filled from the store: a kept key shows as "A key is saved" with **Replace key** and **Remove key**. Remove key takes effect when the sheet is saved; Cancel keeps the key.
+- A SearXNG address is checked with `isAllowedSearxngUrl` before it is saved. A refused address says why: https, or http on this computer only, without a user name or password.
+- Save writes the settings and then the key (`setBraveKey`). Choosing Off or SearXNG keeps a saved Brave key unless Remove key was pressed. Cancel writes nothing.
+- A line says the key is kept encrypted in the device's key store and never shown again, and that a search sends the words of the query outside the organisation and the assistant asks first, unless it is set to Auto.
+- The typed key is cleared from the view model after Save, after Cancel and on `dispose()`.
+
+**In the Tools page.** Give the page the person's store and "In this app" shows a "Web search" row with the state (Off, Brave, "SearXNG · host") and a **Set up** or **Change** button that opens the sheet in place of the list. Without a store there is no row.
+
+```ts
+const store = new IndexedDbWebSearchStore({ principal });          // or MemoryWebSearchStore
+const tools = new ToolsPageViewModel({ catalog, webSearch: store });
+```
+
+**On its own.** An app with a Tools page of its own (the desktop) shows the same sheet as a view:
+
+```tsx
+const settings = new WebSearchSettingsViewModel({ store, strings, onClose: () => back() });
+await settings.ready;
+<WebSearchSettings settings={settings} />        // Vue: <WebSearchSettings :settings="settings" />
+```
+
+`onClose` runs after Save and after Cancel; leave it out and the view says "Saved." and stays. Call `retext()` when the app's language changes and `dispose()` when the view goes.

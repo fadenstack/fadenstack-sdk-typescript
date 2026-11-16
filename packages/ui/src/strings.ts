@@ -758,6 +758,38 @@ export interface UiStrings {
   toolsSkipNotUnderstood: string;
   toolsSkipNotValid(detail: string): string;
   toolsImported(count: number): string;
+  webSearchRowName: string;
+  webSearchRowText: string;
+  webSearchStateOff: string;
+  webSearchStateBrave: string;
+  webSearchStateSearxng(host: string): string;
+  webSearchSetUp: string;
+  webSearchChange: string;
+  webSearchTitle: string;
+  webSearchIntro: string;
+  webSearchChoiceName: string;
+  webSearchChoiceOff: string;
+  webSearchChoiceBrave: string;
+  webSearchChoiceSearxng: string;
+  webSearchOffHelp: string;
+  webSearchKeyLabel: string;
+  webSearchKeyHelp: string;
+  webSearchKeyKept: string;
+  webSearchKeyReplace: string;
+  webSearchKeyRemove: string;
+  webSearchKeyRemoved: string;
+  webSearchKeyMissing: string;
+  webSearchUrlLabel: string;
+  webSearchUrlHelp: string;
+  webSearchUrlMissing: string;
+  webSearchUrlRefused: string;
+  webSearchKeptStore: string;
+  webSearchPrivacy: string;
+  webSearchSave: string;
+  webSearchCancel: string;
+  webSearchClose: string;
+  webSearchSaved: string;
+  webSearchSaveFailed: string;
   toolsSkipNetwork: string;
   toolsFieldUrlHelp: string;
   toolsProblemPlainHttpWithHeaders: string;
@@ -1508,6 +1540,38 @@ export const englishStrings: UiStrings = {
   toolsSkipNotUnderstood: "It was not understood.",
   toolsSkipNotValid: (detail) => `It breaks a rule: ${detail}`,
   toolsImported: (count) => `Added: ${count}`,
+  webSearchRowName: "Web search",
+  webSearchRowText: "Lets the assistant search the web. Off until you set it up.",
+  webSearchStateOff: "Off",
+  webSearchStateBrave: "Brave",
+  webSearchStateSearxng: (host) => `SearXNG · ${host}`,
+  webSearchSetUp: "Set up",
+  webSearchChange: "Change",
+  webSearchTitle: "Web search",
+  webSearchIntro: "Choose where the assistant’s web searches go.",
+  webSearchChoiceName: "Search provider",
+  webSearchChoiceOff: "Off",
+  webSearchChoiceBrave: "Brave Search",
+  webSearchChoiceSearxng: "SearXNG",
+  webSearchOffHelp: "The assistant has no web search tool.",
+  webSearchKeyLabel: "Brave API key",
+  webSearchKeyHelp: "Use your own key from your Brave Search API account.",
+  webSearchKeyKept: "A key is saved",
+  webSearchKeyReplace: "Replace key",
+  webSearchKeyRemove: "Remove key",
+  webSearchKeyRemoved: "The key will be removed when you save.",
+  webSearchKeyMissing: "Enter your Brave API key, or pick another choice.",
+  webSearchUrlLabel: "SearXNG address",
+  webSearchUrlHelp: "The address of your SearXNG instance, with its JSON format turned on.",
+  webSearchUrlMissing: "Enter the address of your SearXNG instance.",
+  webSearchUrlRefused: "Use an https address, or http on this computer only, without a user name or password.",
+  webSearchKeptStore: "The key is kept encrypted in this device’s key store and is never shown again.",
+  webSearchPrivacy: "A search sends the words of the query outside your organisation. The assistant asks first, unless it is set to Auto.",
+  webSearchSave: "Save",
+  webSearchCancel: "Cancel",
+  webSearchClose: "Close",
+  webSearchSaved: "Saved.",
+  webSearchSaveFailed: "The settings could not be saved on this device. Try again.",
   toolsSkipNetwork: "A server on another computer is not imported. Add it yourself if you need it.",
   toolsFieldUrlHelp: "Use https for a server anywhere. Plain http works on this computer, and on your local network when you allow it under Advanced.",
   toolsProblemPlainHttpWithHeaders: "Headers hold secrets, so a plain http address beyond this computer cannot have any. Use https or remove the headers.",
