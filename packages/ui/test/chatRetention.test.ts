@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 
+import type { ChatRetentionState } from "@fadenstack/agents";
 import { ChatRetentionSettingsViewModel, builtInStrings, englishStrings, germanStrings, type UiStrings } from "@fadenstack/ui";
 
 import { FakeSource, STATES } from "./chatRetentionFakes.js";
@@ -81,7 +82,10 @@ describe("the setting for old chats", () => {
     vm.autoDelete = false;
     vm.maxAgeDaysText = "5";
     expect([vm.autoDelete, vm.maxAgeDaysText, vm.canSave]).toEqual([true, "14", false]);
-    expect(model(STATES["organisation-none"]).vm.note).toBe("Your organisation sets no limit.");
+    // Without a server limit the card states the app's limits, which still apply; in German too.
+    expect(model(STATES["organisation-none"]).vm.note).toBe("This device keeps at most 50 chats for 90 days.");
+    expect(model(STATES["organisation-none"], germanStrings).vm.note).toBe("Dieses Gerät behält höchstens 50 Chats für 90 Tage.");
+    expect(model(STATES.organisation, germanStrings).vm.note).toBe("Ihre Organisation behält auf diesem Gerät höchstens 30 Chats für 14 Tage.");
   });
 
   it("the machine policy fixes it and the values are shown", () => {
@@ -110,12 +114,12 @@ describe("the setting for old chats", () => {
 describe("the texts of the setting", () => {
   const keys = ["chatRetentionTitle", "chatRetentionAutoDelete", "chatRetentionAutoDeleteHint", "chatRetentionMaxAge", "chatRetentionMaxSessions",
     "chatRetentionMaxAgeName", "chatRetentionMaxSessionsName", "chatRetentionSave", "chatRetentionCancel", "chatRetentionSaveName",
-    "chatRetentionCancelName", "chatRetentionSaved", "chatRetentionOrganisationNoLimit", "chatRetentionPolicyFixed"] as const;
+    "chatRetentionCancelName", "chatRetentionSaved", "chatRetentionPolicyFixed"] as const;
 
   it.each(LANGUAGES)("are all there in %s, filled in, with no placeholder left", (language) => {
     const s = builtInStrings[language]!;
     for (const key of keys) expect(s[key].length, `${language}: ${key}`).toBeGreaterThan(0);
-    for (const text of [s.chatRetentionOrganisationLimit(30, 14), s.chatRetentionDaysError(1, 3650), s.chatRetentionChatsError(1, 10000)]) {
+    for (const text of [s.chatRetentionOrganisationLimit(30, 14), s.chatRetentionDeviceLimit(50, 90), s.chatRetentionDaysError(1, 3650), s.chatRetentionChatsError(1, 10000)]) {
       expect(text).not.toMatch(/[{}]|undefined/);
     }
     expect(s.chatRetentionOrganisationLimit(30, 14)).toContain("30");

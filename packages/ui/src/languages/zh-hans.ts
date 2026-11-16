@@ -758,6 +758,6 @@ export const chineseSimplifiedStrings: UiStrings = {
   chatRetentionCancelName: "取消对旧聊天记录设置的更改",
   chatRetentionSaved: "已保存。",
   chatRetentionOrganisationLimit: (chats, days) => `您的组织在此设备上最多保留 ${chats} 个聊天，保留 ${days} 天。`,
-  chatRetentionOrganisationNoLimit: "您的组织未设置限制。",
+  chatRetentionDeviceLimit: (chats, days) => `此设备最多保留 ${chats} 个聊天，保留 ${days} 天。`,
   chatRetentionPolicyFixed: "由您的组织在此电脑上的策略设定。",
 };

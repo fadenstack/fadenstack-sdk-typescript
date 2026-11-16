@@ -119,7 +119,7 @@ on how the agent is connected:
 | Connection | Who decides | What the person sees |
 |---|---|---|
 | Standalone | The person, in the app's settings: automatic deletion on or off, and the limits. Defaults: on, 90 days, 50 chats (or the app's `useSessionRetention` limits). The machine policy may fix it (`chatRetention`, see [Machine policy](machine-policy.md)). | A switch and two limits; read only, with "Set by your organisation's policy on this computer", when the policy fixes it. |
-| Governed | The server: the stricter of the app's limits and the profile's `local_retention`. The person's stored choice is ignored. | No setting: "Your organisation keeps at most N chats for D days on this device", or "Your organisation sets no limit". |
+| Governed | The server: the stricter of the app's limits and the profile's `local_retention`. The person's stored choice is ignored. | No setting: "Your organisation keeps at most N chats for D days on this device", or, when the server sets none, "This device keeps at most N chats for D days" (the app's limits, which still apply). |
 
 **When it runs.** Pruning runs when the agent starts (after the profile is known, for this agent's chats, so an idle profile
 ages out too), when a new chat is created, and at once when the person turns automatic deletion on or lowers a limit. A chat

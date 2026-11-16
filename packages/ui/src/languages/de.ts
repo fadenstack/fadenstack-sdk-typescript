@@ -762,6 +762,6 @@ export const germanStrings: UiStrings = {
   chatRetentionCancelName: "Abbrechen: Änderungen an der Einstellung für alte Chats",
   chatRetentionSaved: "Gespeichert.",
   chatRetentionOrganisationLimit: (chats, days) => `Ihre Organisation behält auf diesem Gerät höchstens ${chats} Chats für ${days} Tage.`,
-  chatRetentionOrganisationNoLimit: "Ihre Organisation legt keine Grenze fest.",
+  chatRetentionDeviceLimit: (chats, days) => `Dieses Gerät behält höchstens ${chats} Chats für ${days} Tage.`,
   chatRetentionPolicyFixed: "Von der Richtlinie Ihrer Organisation auf diesem Computer festgelegt.",
 };

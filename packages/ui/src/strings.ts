@@ -813,7 +813,7 @@ export interface UiStrings {
   chatRetentionCancelName: string;
   chatRetentionSaved: string;
   chatRetentionOrganisationLimit(chats: number, days: number): string;
-  chatRetentionOrganisationNoLimit: string;
+  chatRetentionDeviceLimit(chats: number, days: number): string;
   chatRetentionPolicyFixed: string;
 }
 
@@ -1577,7 +1577,7 @@ export const englishStrings: UiStrings = {
   chatRetentionCancelName: "Cancel changes to the setting for old chats",
   chatRetentionSaved: "Saved.",
   chatRetentionOrganisationLimit: (chats, days) => `Your organisation keeps at most ${chats} chats for ${days} days on this device.`,
-  chatRetentionOrganisationNoLimit: "Your organisation sets no limit.",
+  chatRetentionDeviceLimit: (chats, days) => `This device keeps at most ${chats} chats for ${days} days.`,
   chatRetentionPolicyFixed: "Set by your organisation's policy on this computer.",
 };
 

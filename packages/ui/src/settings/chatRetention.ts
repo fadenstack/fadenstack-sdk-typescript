@@ -94,11 +94,11 @@ export class ChatRetentionSettingsViewModel extends Observable {
     return this.#state.control !== "person";
   }
 
-  /** "Your organisation keeps at most N chats for D days on this device.", "Your organisation sets no limit." or "Set by your organisation's policy on this computer." */
+  /** "Your organisation keeps at most N chats for D days on this device.", "This device keeps at most N chats for D days." (the server sets none: the app's limits) or "Set by your organisation's policy on this computer." */
   get note(): string {
     const s = this.strings;
     switch (this.#state.control) {
-      case "organisation": return this.#state.organisationSetsLimit ? s.chatRetentionOrganisationLimit(this.#state.maxSessions, this.#state.maxAgeDays) : s.chatRetentionOrganisationNoLimit;
+      case "organisation": return this.#state.organisationSetsLimit ? s.chatRetentionOrganisationLimit(this.#state.maxSessions, this.#state.maxAgeDays) : s.chatRetentionDeviceLimit(this.#state.maxSessions, this.#state.maxAgeDays);
       case "machinePolicy": return s.chatRetentionPolicyFixed;
       default: return "";
     }

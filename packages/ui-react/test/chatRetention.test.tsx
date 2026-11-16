@@ -42,7 +42,7 @@ describe("the setting for old chats (React)", () => {
         expect(screen.queryByRole("button", { name: strings.chatRetentionSaveName }) === null).toBe(policy);
       }
       expect(view.container.querySelector("[role=status].fdn-wizard-note") !== null).toBe(governed || policy);
-      if (governed || policy) expect(view.container.querySelector("[role=status].fdn-wizard-note")!.textContent).toBe(state === "organisation" ? strings.chatRetentionOrganisationLimit(30, 14) : governed ? strings.chatRetentionOrganisationNoLimit : strings.chatRetentionPolicyFixed);
+      if (governed || policy) expect(view.container.querySelector("[role=status].fdn-wizard-note")!.textContent).toBe(state === "organisation" ? strings.chatRetentionOrganisationLimit(30, 14) : governed ? strings.chatRetentionDeviceLimit(50, 90) : strings.chatRetentionPolicyFixed);
     });
   });
 
