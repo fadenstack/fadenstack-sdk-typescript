@@ -24,6 +24,8 @@ export interface ApprovalRequest {
   destructiveHint?: boolean;
   /** The call's arguments, for the prompt (empty for gateway tools: the gateway keeps them). */
   arguments: Readonly<Record<string, unknown>>;
+  /** @internal SHA-256 of the arguments' JSON text for the audit log and the server's events; absent where the SDK never had the text. */
+  argumentsSha256?: string;
   /**
    * Whether "Allow for this chat" may be offered. Never for a destructive or unclassified tool, nor for a call an
    * admin's "Ask first" rule covers: those ask every time.

@@ -1,4 +1,5 @@
 import { MemoryApprovalStore, IndexedDbApprovalStore, type ApprovalStore, type StoredApproval } from "./approvalStore.js";
+import { IndexedDbAuditLog, MemoryAuditLog, type AuditLog, type AuditVerification } from "./audit.js";
 import { IndexedDbSessionStore } from "./indexedDbSessionStore.js";
 import { browserSecretProtector, type IndexedDbKeyStore, type SecretProtector } from "./secretProtection.js";
 import { MemorySessionStore, type SessionRetention, type SessionStore } from "./sessionStore.js";
@@ -66,6 +67,13 @@ export interface MyDataExport {
   databases?: Record<string, Record<string, unknown[]>>;
   /** The person's `localStorage` entries (the panel's language and notice, the saved prompts), by name, as text. Absent where there is none. */
   localStorage?: { name: string; value: string }[];
+  /**
+   * The person's record of tool calls (sdk/51 8.10): `csv` is what `AuditLog.export("csv")` gives, with the verification result at the
+   * top; `verification` says the same as a value. Absent for an export of `thisApp` while other apps use the person's data: the record
+   * is shared data, like the provenance records, and goes with "Remove all" or when no other app uses the browser. No prompt, answer,
+   * argument or result text is in it, only a hash of each call's arguments. .NET: `audit/tool-calls.csv` in the ZIP.
+   */
+  auditLog?: { csv: string; verification: AuditVerification };
   /** What is not in it, and why (as .NET's README says). */
   notIncluded: string[];
   /** What the export covers (the default is this app's, since 0.3.0). Absent from an older export, which held everything. */
@@ -94,7 +102,7 @@ const NOT_INCLUDED = [
  * Reads everything the stores hold -- through the stores, so decrypted the way they decrypt -- into one document. A store that
  * cannot name its agents (the host's own) is read for `slug` only. `unreadable` counts what could not be read.
  */
-export async function buildExport(sessions: SessionStore, approvals: ApprovalStore, slug: string, unreadable: () => number, personal?: { principal: StorePrincipal | undefined }, scope?: ExportScope): Promise<MyDataExport> {
+export async function buildExport(sessions: SessionStore, approvals: ApprovalStore, slug: string, unreadable: () => number, personal?: { principal: StorePrincipal | undefined }, scope?: ExportScope, audit?: AuditLog): Promise<MyDataExport> {
   const before = unreadable();
   let failed = 0;
   // This app only, while other apps use the person's data: exactly what its removal takes (owner, 16 Nov).
@@ -126,6 +134,15 @@ export async function buildExport(sessions: SessionStore, approvals: ApprovalSto
   if (others && scope && only) others = ownDatabases(others, scope);
   // The person's localStorage keys are shared by every app of the browser: they stay with the other apps.
   const local = personal && !only ? personalLocalEntries(pageLocalStorage(), personal.principal).map((e) => ({ name: e.name, value: e.value })) : undefined;
+  // The record of tool calls is shared data: in this app's export only when no other app uses the browser (the rule of its removal).
+  let auditLog: MyDataExport["auditLog"];
+  if (audit && !only) {
+    try {
+      auditLog = { csv: await audit.export("csv"), verification: await audit.verify() };
+    } catch {
+      failed++; // it cannot be read, so it cannot be handed over
+    }
+  }
   return {
     format: "fadenstack-my-data",
     version: 1,
@@ -142,6 +159,7 @@ export async function buildExport(sessions: SessionStore, approvals: ApprovalSto
     },
     ...(others ? { databases: others.databases } : {}),
     ...(local && local.length > 0 ? { localStorage: local } : {}),
+    ...(auditLog ? { auditLog } : {}),
     notIncluded: [...NOT_INCLUDED, ...(scope && only ? stayed(scope.plan) : [])],
     scope: scope ? "thisApp" : "allApps",
     ...(scope ? { app: scope.app } : {}),
@@ -151,7 +169,7 @@ export async function buildExport(sessions: SessionStore, approvals: ApprovalSto
 
 function stayed(plan: MyDataPlan): string[] {
   const lines = [plan.otherApps.length > 0
-    ? `What other Fadenstack apps in this browser use (${plan.otherApps.map((a) => a.name).join(", ")}): your skills, your MCP servers, your provenance records and your other settings. Export all of your Fadenstack data to get them.`
+    ? `What other Fadenstack apps in this browser use (${plan.otherApps.map((a) => a.name).join(", ")}): your skills, your MCP servers, your provenance records, your record of tool calls and your other settings. Export all of your Fadenstack data to get them.`
     // A server that names no user: the data is this browser's, shared by every agent in it.
     : "The other agents' chats and the settings this browser shares between Fadenstack apps. Export all of your Fadenstack data to get them."];
   if (plan.keptAgents.length > 0) lines.push(`The chats of ${plan.keptAgents.join(", ")}, which another app uses too.`);
@@ -180,7 +198,7 @@ function ownDatabases(all: PersonalDatabases, scope: ExportScope): PersonalDatab
  * The names of the databases a user has on this device: sessions, "Allow always", their key, their preferences and their provenance key and log (the
  * thinking level picked per agent, `reasoningStoreName`).
  */
-export function userDatabaseNames(principal: StorePrincipal | undefined): { sessions: string; approvals: string; keys: string; preferences: string; provenance: string; skills: string; skillSwitches: string; mcp: string; webSearch: string; apps: string } {
+export function userDatabaseNames(principal: StorePrincipal | undefined): { sessions: string; approvals: string; keys: string; preferences: string; provenance: string; skills: string; skillSwitches: string; mcp: string; webSearch: string; apps: string; audit: string } {
   return {
     sessions: userStoreName("fadenstack-sessions", principal),
     approvals: userStoreName("fadenstack-approvals", principal),
@@ -197,6 +215,8 @@ export function userDatabaseNames(principal: StorePrincipal | undefined): { sess
     webSearch: userStoreName("fadenstack-web-search", principal),
     // Which apps use the person's data (names, agent slugs and times; no content): the per-app removal reads it (0.3.0).
     apps: userStoreName("fadenstack-apps", principal),
+    // The person's record of tool calls (sdk/51 8.10): shared by every app of the browser, so it goes with the person's whole data.
+    audit: userStoreName("fadenstack-audit", principal),
   };
 }
 
@@ -208,7 +228,7 @@ export async function deleteUserDatabases(principal: StorePrincipal | undefined,
   if (!factory) return 0;
   const names = userDatabaseNames(principal);
   let removed = 0;
-  for (const name of [names.sessions, names.approvals, names.keys, names.preferences, names.provenance, names.skills, names.skillSwitches, names.mcp, names.webSearch, names.apps]) if (await deleteDatabase(factory, name)) removed++;
+  for (const name of [names.sessions, names.approvals, names.keys, names.preferences, names.provenance, names.skills, names.skillSwitches, names.mcp, names.webSearch, names.apps, names.audit]) if (await deleteDatabase(factory, name)) removed++;
   return removed;
 }
 
@@ -221,6 +241,8 @@ export interface DefaultStoresOptions {
   /** Which stores the host did not pass. */
   sessions: boolean;
   approvals: boolean;
+  /** Whether the SDK keeps the record of tool calls itself (the host passed none, and not both of the stores above). */
+  audit?: boolean;
 }
 
 /**
@@ -230,13 +252,15 @@ export interface DefaultStoresOptions {
 export class DefaultStores {
   readonly sessions: SessionStore | undefined;
   readonly approvals: ApprovalStore | undefined;
+  /** The record of tool calls, where the SDK keeps it. */
+  readonly audit: AuditLog | undefined;
   readonly #keys: IndexedDbKeyStore | undefined;
 
   constructor(options: DefaultStoresOptions) {
     const indexed = !!globalThis.indexedDB;
     const names = userDatabaseNames(options.principal);
     let protector = options.protector;
-    if (!protector && indexed && (options.sessions || options.approvals)) {
+    if (!protector && indexed && (options.sessions || options.approvals || options.audit)) {
       const made = browserSecretProtector(names.keys);
       protector = made?.protector;
       this.#keys = made?.keys;
@@ -246,6 +270,8 @@ export class DefaultStores {
       : indexed ? new IndexedDbSessionStore({ name: names.sessions, retention: options.retention, ...common }) : new MemorySessionStore();
     this.approvals = !options.approvals ? undefined
       : indexed ? new IndexedDbApprovalStore({ name: names.approvals, ...common }) : new MemoryApprovalStore();
+    this.audit = !options.audit ? undefined
+      : indexed ? new IndexedDbAuditLog({ name: names.audit, ...(protector ? { protector } : {}) }) : new MemoryAuditLog();
   }
 
   /** The limits chats are pruned by; undefined: pruning is off. */
@@ -256,6 +282,7 @@ export class DefaultStores {
   close(): void {
     (this.sessions as { close?: () => void } | undefined)?.close?.();
     (this.approvals as { close?: () => void } | undefined)?.close?.();
+    (this.audit as { close?: () => void } | undefined)?.close?.();
     void this.#keys?.closeAsync();
   }
 
@@ -263,6 +290,7 @@ export class DefaultStores {
   async closeAsync(): Promise<void> {
     await (this.sessions as { closeAsync?: () => Promise<void> } | undefined)?.closeAsync?.();
     await (this.approvals as { closeAsync?: () => Promise<void> } | undefined)?.closeAsync?.();
+    await (this.audit as { closeAsync?: () => Promise<void> } | undefined)?.closeAsync?.();
     await this.#keys?.closeAsync();
   }
 }

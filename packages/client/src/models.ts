@@ -302,6 +302,11 @@ export interface ToolExecutedEvent extends ClientEventBase {
   server?: string;
   durationMs: number;
   outcome: "ok" | "error" | "denied" | "cancelled";
+  /**
+   * SHA-256 (lowercase hex) of the arguments' JSON text, as the audit log keeps it. Send it only where the profile's `features` list
+   * `client_events.arguments_sha256` (an older server refuses the whole batch, 400 `invalid_events`). .NET: `ArgumentsSha256`.
+   */
+  argumentsSha256?: string;
 }
 
 /** A call that needed approval was decided: by the user, or by an approval that stood (this chat, always, bypass mode). */
@@ -314,6 +319,8 @@ export interface ApprovalDecidedEvent extends ClientEventBase {
   /** What let an approved call through: the user once, this chat, always on this device, or bypass mode. */
   scope?: "once" | "chat" | "always" | "bypass" | "grant";
   grantId?: string;
+  /** SHA-256 (lowercase hex) of the call's arguments' JSON text; only where the profile lists `client_events.arguments_sha256`. .NET: `ArgumentsSha256`. */
+  argumentsSha256?: string;
 }
 
 /** A local MCP server was attached, and the tools it offers. */
@@ -361,6 +368,7 @@ export function toWireEvent(event: AgentClientEvent): Record<string, unknown> {
       put("server", event.server);
       put("duration_ms", Math.max(0, Math.round(event.durationMs)));
       put("outcome", event.outcome);
+      put("arguments_sha256", event.argumentsSha256);
       break;
     case "approval.decided":
       put("tool", event.tool);
@@ -368,6 +376,7 @@ export function toWireEvent(event: AgentClientEvent): Record<string, unknown> {
       put("wait_ms", event.waitMs === undefined ? undefined : Math.max(0, Math.round(event.waitMs)));
       put("scope", event.scope);
       put("grant_id", event.grantId);
+      put("arguments_sha256", event.argumentsSha256);
       break;
     case "local_mcp.attached":
       put("label", event.label);

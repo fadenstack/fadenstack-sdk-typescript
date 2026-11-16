@@ -58,7 +58,7 @@ export interface ServerTools {
 
 /** Answers a tool approval the gateway holds. */
 export interface GatewayApprovals {
-  answerApproval(approvalId: string, approved: boolean, scope: AnswerScope, signal?: AbortSignal): Promise<void>;
+  answerApproval(approvalId: string, approved: boolean, scope: AnswerScope, argumentsSha256?: string, signal?: AbortSignal): Promise<void>;
 }
 
 /** The central policy for a host tool call: prepare, then check again at dispatch. */
@@ -205,8 +205,8 @@ export class ServerBackend implements AgentBackend {
     return this.route(() => this.#agent.listTools(signal));
   }
 
-  answerApproval(approvalId: string, approved: boolean, scope: AnswerScope, signal?: AbortSignal): Promise<void> {
-    return this.route(() => this.#agent.answerApproval(approvalId, approved, scope, signal));
+  answerApproval(approvalId: string, approved: boolean, scope: AnswerScope, argumentsSha256?: string, signal?: AbortSignal): Promise<void> {
+    return this.route(() => this.#agent.answerApproval(approvalId, approved, scope, argumentsSha256, signal));
   }
 
   checkHostTool(check: HostToolCheck, signal?: AbortSignal): Promise<HostToolDecision> {

@@ -30,6 +30,7 @@ import {
   type PermissionMode,
 } from "./approvals.js";
 import type { ApprovalStore } from "./approvalStore.js";
+import type { AuditLog } from "./audit.js";
 import type { SecretProtector } from "./secretProtection.js";
 import type { StoreProblemHandler } from "./storeSupport.js";
 import type { SessionRetention, SessionStore } from "./sessionStore.js";
@@ -75,6 +76,8 @@ export interface AgentSettings {
   readonly sessions?: SessionStore;
   /** The host's own store for "Allow always"; undefined: the SDK keeps it in the signed-in user's own database. */
   readonly approvalStore?: ApprovalStore;
+  /** The record of tool calls the host passed (`useAuditLog`); undefined: the SDK's own, per person. */
+  readonly auditLog?: AuditLog;
   /** Who opens the second sign-in for Bypass; undefined: the approval handler when it is one (`FadenstackAgent.stepUpHandler`). */
   readonly stepUp?: StepUpHandler;
   /** Who draws the grant card; undefined: the approval handler when it does (`FadenstackAgent.grantHandler`). */
@@ -150,6 +153,7 @@ export class AgentBuilder {
   #approvals: ApprovalHandler = denyAllApprovals;
   #sessions: SessionStore | undefined;
   #approvalStore: ApprovalStore | undefined;
+  #auditLog: AuditLog | undefined;
   #stepUp: StepUpHandler | undefined;
   #grantHandler: GrantHandler | undefined;
   #permissionMode: PermissionMode = "ask";
@@ -267,6 +271,16 @@ export class AgentBuilder {
   /** Where "Allow always" is kept; by default the signed-in user's own IndexedDB database in a browser, memory elsewhere. */
   useApprovalStore(store: ApprovalStore): this {
     this.#approvalStore = store;
+    return this;
+  }
+
+  /**
+   * Where the record of tool calls is kept (sdk/51 8.10). On by default for every agent, governed or standalone: a hash-chained,
+   * sealed log in the person's own IndexedDB database that every app of the person in this browser writes to (`IndexedDbAuditLog`).
+   * Pass another log for tests (`MemoryAuditLog`) or to keep it in the app's own place. .NET: `AgentBuilder.UseAuditLog`.
+   */
+  useAuditLog(log: AuditLog): this {
+    this.#auditLog = log;
     return this;
   }
 
@@ -557,6 +571,7 @@ export class AgentBuilder {
       approvals: this.#approvals,
       ...(this.#sessions ? { sessions: this.#sessions } : {}),
       ...(this.#approvalStore ? { approvalStore: this.#approvalStore } : {}),
+      ...(this.#auditLog ? { auditLog: this.#auditLog } : {}),
       ...(this.#stepUp ? { stepUp: this.#stepUp } : {}),
       ...(this.#grantHandler ? { grantHandler: this.#grantHandler } : {}),
       permissionMode: this.#permissionMode,

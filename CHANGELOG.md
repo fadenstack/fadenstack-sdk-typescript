@@ -34,6 +34,18 @@ before 1.0, a minor version may break the API, and this file says where it does.
   logged without content (event ids 2083, 2084).
   - `ContentLoggingSettingsViewModel` with `ContentLoggingSettings` (React and Vue), and the band in the chat
     (`chat.contentLogging`, `ContentLoggingBand`, "Content logging is on until 14:30. ...", Stop); texts in five languages.
+- **The record of tool calls** ([The record of tool calls](docs/audit-log.md)). Every agent keeps a content-free, hash-chained, sealed
+  record of what its tools did in the browser: one entry per tool call decision and outcome (the tool, its class, who or what let
+  it run, the outcome, and `argumentsSha256`), in the person's own IndexedDB database (`fadenstack-audit`), written by every tab and app of
+  the origin into the same log without forking the chain. `agent.verifyAudit()` finds a changed, deleted, swapped or forged
+  entry; `agent.exportAudit("csv" | "html")` writes it readable; entries older than 180 days go (the machine policy's
+  `auditRetentionDays`, 30 to 3650), the last one removed stays in a sealed anchor. `useAuditLog` replaces the log (an app whose server keeps the record passes a `MemoryAuditLog`); the record is durable for every agent, and a
+  sealed head makes a cut-off end visible. The events `tool.executed` and `approval.decided` carry `arguments_sha256` only where the profile
+  lists `client_events.arguments_sha256`; for a call the gateway holds (core rc22) the entry takes the gateway's `argumentsSha256`, or the hash of its
+  `arguments` text, and the answer carries none; `FakeGateway` knows the fields and the feature. `MyDataSettingsViewModel`
+  shows "Record of tool calls: N entries since <date>, intact" and exports it as a web page (`MyDataSaveRequest.kind` is `"audit"`);
+  `exportMyData` holds it as `auditLog`; it is shared data, removed with "Remove all" or when no other app uses the person's data.
+  Five languages; React and Vue.
 - **Your data per app** ([Data on the device: Export and delete](docs/data-on-device.md#export-and-delete)). `deleteMyData` and
   `exportMyData` take `{ scope: "thisApp" | "allApps" }`: `thisApp` (the default) covers the calling app's chats, "Allow always" and
   thinking levels, and the person's shared data (skills, the MCP list, keys, provenance records, other settings, the data key) only

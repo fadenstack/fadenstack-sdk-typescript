@@ -46,7 +46,7 @@ describe("my data on this device", () => {
   }
 
   // The apps database (which apps use the person's data; names and times) is bookkeeping: myDataScope.test.ts looks at it.
-  const names = async () => (await indexedDB.databases()).map((d) => d.name).filter((n) => !n?.startsWith("fadenstack-apps")).sort();
+  const names = async () => (await indexedDB.databases()).map((d) => d.name).filter((n) => !n?.startsWith("fadenstack-apps") && !n?.startsWith("fadenstack-audit")).sort();
 
   async function chat(agent: FadenstackAgent, text = SECRET): Promise<void> {
     await (await agent.startSession("ask")).send(text);
@@ -228,7 +228,7 @@ describe("my data on this device", () => {
 
       const result = await anna.deleteMyData();
       expect(result).toEqual({
-        storesCleared: 4, hostSessionStoreLeft: false, hostApprovalStoreLeft: false, hostStoresLeft: false,
+        storesCleared: 5, hostSessionStoreLeft: false, hostApprovalStoreLeft: false, hostStoresLeft: false,
         scope: "thisApp", otherApps: [], sharedDataKept: false, agentsKept: [], // the only app: it takes the shared data too
       });
       expect(await names()).toEqual(["fadenstack-approvals:tenant-1:user-2", "fadenstack-keys:tenant-1:user-2", "fadenstack-sessions:tenant-1:user-2"]);
@@ -260,7 +260,7 @@ describe("my data on this device", () => {
 
       const result = await anna.deleteMyData();
 
-      expect(result.storesCleared).toBe(5);
+      expect(result.storesCleared).toBe(6);
       expect((await names()).filter((n) => n?.startsWith("fadenstack-skills:"))).toEqual([]);
       await anna.dispose();
     });
@@ -274,7 +274,7 @@ describe("my data on this device", () => {
       expect(await preferences()).toHaveLength(1);
 
       const result = await anna.deleteMyData();
-      expect(result.storesCleared).toBe(5);
+      expect(result.storesCleared).toBe(6);
       expect(await preferences()).toEqual([]);
       expect(anna.reasoning).not.toBe("low");
       await anna.dispose();
@@ -335,7 +335,7 @@ describe("my data on this device", () => {
       const agent = await agentFor(gatewayFor({ principal: false }), "anna@example.com");
       await chat(agent);
       expect(await names()).toEqual(["fadenstack-approvals", "fadenstack-keys", "fadenstack-sessions"]);
-      expect((await agent.deleteMyData({ scope: "allApps" })).storesCleared).toBe(3);
+      expect((await agent.deleteMyData({ scope: "allApps" })).storesCleared).toBe(4);
       expect(await names()).toEqual([]);
     });
   });

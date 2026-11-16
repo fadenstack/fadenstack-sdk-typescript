@@ -196,7 +196,7 @@ export {
   type SkillEditorOptions,
 } from "./skills/skillEditor.js";
 export {
-  MyDataSettingsViewModel, type MyDataPhase, type MyDataSaveRequest, type MyDataSettingsOptions, type MyDataSource,
+  MyDataSettingsViewModel, type MyDataPhase, type MyDataAuditSource, type MyDataSaveRequest, type MyDataSettingsOptions, type MyDataSource,
 } from "./settings/myData.js";
 export { StopEverythingViewModel, describeStopResult, type StopEverythingOptions } from "./settings/stopEverything.js";
 export {

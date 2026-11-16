@@ -1,5 +1,5 @@
-import { planMyData, type DataDeletion, type DataScope, type MyDataApp, type MyDataExport } from "@fadenstack/agents";
-import type { MyDataSource } from "@fadenstack/ui";
+import { planMyData, type AuditVerification, type DataDeletion, type DataScope, type MyDataApp, type MyDataExport } from "@fadenstack/agents";
+import type { MyDataAuditSource, MyDataSource } from "@fadenstack/ui";
 
 // The states of the "Your data" control and a source that keeps what was asked: for the view model's and the skins' tests.
 
@@ -28,6 +28,27 @@ export class FakeMyData implements MyDataSource {
   hostStoresLeft = false;
   /** While set, an export or a removal waits for it. */
   gate: Promise<void> | undefined;
+  /** The record of tool calls, once `withAudit()` gave the source one. */
+  audit: MyDataAuditSource | undefined;
+  /** What the check of the record finds: 12 entries since 1 August 2026, intact, unless a test says otherwise. */
+  verification: AuditVerification = { intact: true, entries: 12, firstSeq: 1, firstTime: "2026-08-01T10:00:00.000Z", lastTime: "2026-11-16T09:00:00.000Z" };
+  failAudit = false;
+  failAuditExport = false;
+
+  /** Gives the source a record of tool calls (the line and the button show). */
+  withAudit(): this {
+    this.audit = {
+      verify: () => {
+        this.calls.push("audit");
+        return this.failAudit ? Promise.reject(new Error("boom: secret detail of the check")) : Promise.resolve({ ...this.verification });
+      },
+      export: () => {
+        this.calls.push("audit-export");
+        return this.failAuditExport ? Promise.reject(new Error("boom: secret detail of the export")) : Promise.resolve("<!DOCTYPE html><title>Record</title>");
+      },
+    };
+    return this;
+  }
 
   constructor(scenario: ScenarioName) {
     this.apps_ = SCENARIOS[scenario].map((a) => ({ ...a, agents: [...a.agents] }));

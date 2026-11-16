@@ -33,7 +33,8 @@ describe("stores per signed-in user", () => {
   }
 
   // The apps database (which apps use the person's data; names and times) is bookkeeping: myDataScope.test.ts looks at it.
-  const names = async () => (await indexedDB.databases()).map((d) => d.name).filter((n) => !n?.startsWith("fadenstack-apps")).sort();
+  // The apps database (names and times) and the audit database (the record of tool calls) are bookkeeping: myDataScope.test.ts and auditWiring.test.ts look at them.
+  const names = async () => (await indexedDB.databases()).map((d) => d.name).filter((n) => !n?.startsWith("fadenstack-apps") && !n?.startsWith("fadenstack-audit")).sort();
 
   it("keeps sessions and what was allowed always in the user's own database", async () => {
     const gateway = new FakeGateway({ users, principal: true, model, agents: [{ slug: "docs", contract: [...PAGE_CONTRACT] }] });
@@ -96,7 +97,8 @@ describe("stores per signed-in user", () => {
 
     expect(agent.sessionStore).toBe(sessions);
     expect(agent.approvalStore).toBe(approvals);
-    expect(await names()).toEqual([]);
+    // The stores are the host's; the record of tool calls is the SDK's own and durable, so the person's key (for sealing it) exists now.
+    expect(await names()).toEqual(["fadenstack-keys:tenant-1:user-1"]);
     expect(await agent.listApprovals()).toHaveLength(1);
   });
 

@@ -1,11 +1,25 @@
-import { planMyData, type DataDeletion, type DataScope, type FadenstackAgent, type MyDataApp, type MyDataExport } from "@fadenstack/agents";
+import { planMyData, type AuditVerification, type DataDeletion, type DataScope, type FadenstackAgent, type MyDataApp, type MyDataExport } from "@fadenstack/agents";
 
+import { formatNumber } from "../format.js";
 import { Observable } from "../observable.js";
 import { englishStrings, type UiStrings } from "../strings.js";
 import type { StringsSource } from "../skills/contracts.js";
 
+/**
+ * What a source adds when it keeps the person's record of tool calls (sdk/51 8.10): the check of the record and its export as a web
+ * page. The agent's source does; a source without it leaves the line and its button out. .NET: `IMyDataAuditSource`.
+ */
+export interface MyDataAuditSource {
+  /** Checks the person's record of tool calls in this browser (`FadenstackAgent.verifyAudit`). */
+  verify(): Promise<AuditVerification>;
+  /** The record as one self-contained HTML page, as text. */
+  export(): Promise<string>;
+}
+
 /** Where the "Your data" control reads and writes: an agent (`new MyDataSettingsViewModel({ agent })`), or a test's. */
 export interface MyDataSource {
+  /** The record of tool calls, where the source keeps one. */
+  readonly audit?: MyDataAuditSource;
   /** This app's name for the person's data (what the host described, else the agent's slug). */
   readonly appName: string;
   /** Gets ready (an agent starts). */
@@ -32,10 +46,12 @@ export interface MyDataSettingsOptions {
  * file name and keeps nothing of the content.
  */
 export interface MyDataSaveRequest {
-  /** A suggested file name, such as `fadenstack-my-data-word-add-in-2026-11-16.json`. */
+  /** A suggested file name, such as `fadenstack-my-data-word-add-in-2026-11-16.json`, or `fadenstack-tool-calls-2026-11-16.html` for the record of tool calls. */
   fileName: string;
+  /** What it is: the person's data (a JSON document), or their record of tool calls (an HTML page). */
+  kind: "data" | "audit";
   scope: DataScope;
-  /** The document as JSON (`application/json`). */
+  /** The document as JSON (`application/json`), or the record as a web page (`text/html`). */
   content: Blob;
   /** The same document, as text. */
   text: string;
@@ -61,6 +77,8 @@ export class MyDataSettingsViewModel extends Observable {
   #statusKind: "none" | "exported" | "removedThisApp" | "removedAll" | "exportFailed" | "removeFailed" = "none";
   #file = "";
   #deletion: DataDeletion | undefined;
+  #audit: AuditVerification | undefined;
+  #auditUnreadable = false;
 
   constructor(options: MyDataSettingsOptions) {
     super();
@@ -79,6 +97,59 @@ export class MyDataSettingsViewModel extends Observable {
   async load(): Promise<void> {
     await this.#source.start();
     await this.#readApps();
+    await this.#readAudit();
+    this.notify();
+  }
+
+  /** Whether the source keeps the person's record of tool calls: the line and the button show. .NET: `HasAudit`. */
+  get hasAudit(): boolean {
+    return this.#source.audit !== undefined;
+  }
+
+  /**
+   * "Record of tool calls: N entries since <date>, intact", or "damaged at entry N", "no entries yet", "could not be checked"; empty until
+   * the first check is done, and where the source keeps no record. .NET: `AuditLine`.
+   */
+  get auditLine(): string {
+    const s = this.strings;
+    if (this.#auditUnreadable) return s.myDataAuditUnreadable;
+    const audit = this.#audit;
+    if (!audit) return "";
+    if (!audit.intact) return s.myDataAuditDamaged(formatNumber(audit.brokenAtSeq ?? audit.firstSeq ?? 0, s.language));
+    if (audit.entries === 0) return s.myDataAuditEmpty;
+    const since = audit.firstTime ? new Intl.DateTimeFormat(s.language, { dateStyle: "short" }).format(new Date(audit.firstTime)) : "";
+    return audit.entries === 1 ? s.myDataAuditIntactOne(since) : s.myDataAuditIntact(formatNumber(audit.entries, s.language), since);
+  }
+
+  get hasAuditLine(): boolean {
+    return this.auditLine.length > 0;
+  }
+
+  /** The record is damaged (or could not be checked): the line shows as a warning. */
+  get auditDamaged(): boolean {
+    return this.#auditUnreadable || this.#audit?.intact === false;
+  }
+
+  /** "Export the record of tool calls…": raises a save request with the record as one web page. Never the reason of a failure. .NET: `ExportAuditCommand`. */
+  async exportAudit(): Promise<void> {
+    const audit = this.#source.audit;
+    if (!audit || !this.canAct) return;
+    this.#phase = "busy";
+    this.#statusKind = "none";
+    this.notify();
+    try {
+      const text = await audit.export();
+      const day = new Date().toISOString().slice(0, 10);
+      const request: MyDataSaveRequest = { fileName: `fadenstack-tool-calls-${day}.html`, kind: "audit", scope: "allApps",
+        content: new Blob([text], { type: "text/html" }), text };
+      for (const handler of [...this.#handlers]) handler(request);
+      this.#file = request.fileName;
+      this.#statusKind = "exported";
+      this.#phase = "done";
+    } catch {
+      this.#statusKind = "exportFailed"; // never the exception's text
+      this.#phase = "error";
+    }
     this.notify();
   }
 
@@ -242,6 +313,7 @@ export class MyDataSettingsViewModel extends Observable {
       this.#phase = "error";
     }
     await this.#readApps();
+    await this.#readAudit(); // a removal may have taken the record
     this.notify();
   }
 
@@ -274,7 +346,7 @@ export class MyDataSettingsViewModel extends Observable {
     try {
       const document = await this.#source.export(scope);
       const text = JSON.stringify(document, null, 2);
-      const request: MyDataSaveRequest = { fileName: this.#fileName(scope), scope, content: new Blob([text], { type: "application/json" }), text };
+      const request: MyDataSaveRequest = { fileName: this.#fileName(scope), kind: "data", scope, content: new Blob([text], { type: "application/json" }), text };
       for (const handler of [...this.#handlers]) handler(request);
       this.#file = request.fileName;
       this.#statusKind = "exported";
@@ -284,6 +356,19 @@ export class MyDataSettingsViewModel extends Observable {
       this.#phase = "error";
     }
     this.notify();
+  }
+
+  /** Checks the record of tool calls (it changes as the agents work); a failed check is a sentence, never its reason. */
+  async #readAudit(): Promise<void> {
+    const audit = this.#source.audit;
+    if (!audit) return;
+    try {
+      this.#audit = await audit.verify();
+      this.#auditUnreadable = false;
+    } catch {
+      this.#audit = undefined;
+      this.#auditUnreadable = true;
+    }
   }
 
   async #readApps(): Promise<void> {
@@ -325,5 +410,6 @@ function agentSource(agent: FadenstackAgent): MyDataSource {
     apps: () => agent.myDataApps(),
     export: (scope) => agent.exportMyData({ scope }),
     remove: (scope) => agent.deleteMyData({ scope }),
+    audit: { verify: () => agent.verifyAudit(), export: () => agent.exportAudit("html") },
   };
 }

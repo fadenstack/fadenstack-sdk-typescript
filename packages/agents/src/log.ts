@@ -66,4 +66,9 @@ export const AgentLog = Object.freeze({
     "Agent {Agent} was turned off by the organisation: its turns stopped and its grants ended"),
   stoppedEverything: defineLog(AGENT_LOG_CATEGORY, 2091, "StoppedEverything", "information",
     "Agent {Agent} stopped everything: {Turns} turns stopped, {Grants} grants ended, {NotTold} the server was not told about"),
+  /** sdk/51 8.10: a tool call could not be written to the person's audit log; the call goes on and the next check reports the gap. */
+  auditNotWritten: defineLog(AGENT_LOG_CATEGORY, 2085, "AuditNotWritten", "warning",
+    "A tool call could not be written to the audit log ({Kind}); the call goes on and the next check of the log reports the gap"),
+  auditNotPruned: defineLog(AGENT_LOG_CATEGORY, 2086, "AuditNotPruned", "warning", "Old entries of the audit log could not be removed ({Kind})"),
+  auditInMemory: defineLog(AGENT_LOG_CATEGORY, 2087, "AuditInMemory", "warning", "Agent {Agent} has no IndexedDB here: its record of tool calls stays in memory for the run"),
 });

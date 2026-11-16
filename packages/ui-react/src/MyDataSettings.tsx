@@ -57,6 +57,17 @@ export function MyDataSettings(props: MyDataSettingsProps): ReactElement {
             <Button quiet disabled={!vm.canAct} onClick={() => { void vm.exportAll(); }} label={s.myDataExportAllName}>{s.myDataExportAll}</Button>
             <Button quiet disabled={!vm.canAct} onClick={() => { void vm.askRemoveAll(); }} label={s.myDataRemoveAllName}>{s.myDataRemoveAll}</Button>
           </Actions>
+          {vm.hasAudit ? (
+            <>
+              {/* The person's record of tool calls: how many entries since when, intact or damaged; and its export as a web page. */}
+              {vm.hasAuditLine ? (
+                <p className={vm.auditDamaged ? "fdn-skills-message fdn-skills-message-warning" : "fdn-skills-message"} data-audit-line dir="auto">{vm.auditLine}</p>
+              ) : null}
+              <Actions>
+                <Button disabled={!vm.canAct} onClick={() => { void vm.exportAudit(); }} label={s.myDataAuditExportName}>{s.myDataAuditExport}</Button>
+              </Actions>
+            </>
+          ) : null}
         </>
       )}
       <p className="fdn-skills-message" role={vm.isError ? "alert" : "status"} dir="auto">{vm.statusText}</p>

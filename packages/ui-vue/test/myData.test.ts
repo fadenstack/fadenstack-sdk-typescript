@@ -134,3 +134,50 @@ describe("the Your data control (Vue)", () => {
     expect(wrapper.find("[role=status]").text()).toBe(strings.myDataExported(saved[0]!.fileName));
   });
 });
+
+describe("the record of tool calls in the Your data control (Vue)", () => {
+  const showWithAudit = async (language: string = "en", configure: (s: FakeMyData) => void = () => undefined) => {
+    const source = new FakeMyData("others").withAudit();
+    configure(source);
+    const strings = builtInStrings[language]!;
+    const vm = new MyDataSettingsViewModel({ source, strings: () => strings });
+    const saved: MyDataSaveRequest[] = [];
+    vm.onSaveRequest((r) => saved.push(r));
+    await vm.load();
+    const wrapper = mount(MyDataSettings, { props: { settings: vm }, attachTo: document.body });
+    wrappers.push(wrapper);
+    await flushPromises();
+    return { source, vm, strings, wrapper, saved };
+  };
+
+  it.each(LANGUAGES)("shows its line and a named button in %s", async (language) => {
+    const { strings, vm, wrapper } = await showWithAudit(language);
+    expect(wrapper.find("[data-audit-line]").text()).toBe(vm.auditLine);
+    expect(vm.auditLine).not.toBe("");
+    const b = button(wrapper, strings.myDataAuditExportName);
+    expect(b.text()).toBe(strings.myDataAuditExport);
+    expect(b.element.disabled).toBe(false);
+    expect(strings.myDataAuditExportName.toLowerCase()).toContain(strings.myDataAuditExport.toLowerCase());
+  });
+
+  it("says a damaged record as a warning, and still in words", async () => {
+    const { wrapper } = await showWithAudit("en", (s) => { s.verification = { intact: false, entries: 3, firstSeq: 1, brokenAtSeq: 4, problem: "hash_mismatch" }; });
+    const line = wrapper.find("[data-audit-line]");
+    expect(line.text()).toBe("Record of tool calls: damaged at entry 4");
+    expect(line.classes()).toContain("fdn-skills-message-warning");
+  });
+
+  it("the button saves the record as a web page, and the result line says its name", async () => {
+    const { strings, saved, wrapper } = await showWithAudit();
+    await press(wrapper, strings.myDataAuditExportName);
+    expect(saved).toHaveLength(1);
+    expect(saved[0]).toMatchObject({ kind: "audit", scope: "allApps" });
+    expect(wrapper.find("[role=status]").text()).toBe(strings.myDataExported(saved[0]!.fileName));
+  });
+
+  it("a control without a record has neither the line nor the button", () => {
+    const { strings, wrapper } = show("others");
+    expect(wrapper.find("[data-audit-line]").exists()).toBe(false);
+    expect(button(wrapper, strings.myDataAuditExportName).exists()).toBe(false);
+  });
+});

@@ -205,6 +205,13 @@ export {
   type ChatRetentionChoice, type ChatRetentionControl, type ChatRetentionState, type ChatRetentionStore, type IndexedDbChatRetentionStoreOptions,
 } from "./chatRetention.js";
 export type { DataDeletion, ExportedSession, ExportScope, MyDataExport } from "./dataRights.js";
+// The person's record of tool calls (sdk/51 8.10): a hash-chained, sealed log; the chain's functions are public for the shared test vectors.
+export {
+  ARGUMENTS_SHA256_FEATURE, AUDIT_VERSION, AUDIT_ZEROS, AuditDecisions, AuditKinds, AuditOutcomes, AuditProblems, AuditRetention, AuditScopes,
+  IndexedDbAuditLog, MemoryAuditLog, argumentsSha256, auditAnchorSeal, auditCanonicalText, auditExportText, auditFromWire, auditHash, auditHeadSeal, auditIso, auditSeal, auditToWire,
+  csvCell, nextAuditEntry, verifyAuditChain,
+  type AuditAnchor, type AuditEntry, type AuditHead, type AuditExportFormat, type AuditLog, type AuditRecord, type AuditVerification, type IndexedDbAuditLogOptions,
+} from "./audit.js";
 export {
   IndexedDbAppRecords, MemoryAppRecords, appNameOf, listMyDataApps, planMyData,
   type AppRecord, type AppRecords, type DataScope, type MyDataApp, type MyDataOptions, type MyDataPlan,
