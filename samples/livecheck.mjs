@@ -77,6 +77,26 @@ await check("profile", async () => {
   return `${p.name} v${p.version}, model ${p.model}, tools ${agent.tools.map((t) => `${t.name}:${t.toolClass}`).join(" ")}`;
 });
 
+// Core 0.7.1 turns image generation off for every install (EU AI Act, Article 5, from 2 Dec 2026): the profile says no
+// images, the agent offers no picture tool, and the agent's picture route refuses with images_disabled. Run on 0.7.1 only:
+// on an older core this check asks the image model for a picture. .NET: the LiveCheck's images-off.
+await check("images-off", async () => {
+  if (agent.profile.images) throw new Error("the profile says images: true");
+  if (agent.imagesAvailable) throw new Error("imagesAvailable is true");
+  const route = new URL(`v1/agents/${encodeURIComponent(agentSlug)}/images/generations`, server.endsWith("/") ? server : `${server}/`);
+  const response = await fetch(route, {
+    method: "POST",
+    headers: { authorization: `Bearer ${await tokens.getAccessToken()}`, "content-type": "application/json" },
+    body: JSON.stringify({ prompt: "A plain green square.", size: "256x256" }),
+  });
+  const body = await response.json().catch(() => ({}));
+  const code = body?.error?.code ?? body?.code;
+  if (response.status !== 403 || code !== "images_disabled") {
+    throw new Error(`the picture route answered ${response.status} ${code ?? ""}: image generation is not off`);
+  }
+  return `profile images false, no picture tools; the picture route refused: ${response.status} ${code}`;
+});
+
 await check("chat", async () => {
   const session = await agent.startSession();
   let text = "";
