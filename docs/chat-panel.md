@@ -141,6 +141,8 @@ Call `chat.dispose()` when you remove the panel. It stops a running turn and sto
 - **The header** has the agent's name, the tool mode, the thinking pill (how long the agent thinks: see
   [Thinking](#thinking)), the history (open or delete a chat), a new chat, and your own buttons. The tool-mode menu ends with Reset approvals, which forgets what was allowed for this chat and always
   (`chat.resetApprovals()`).
+- **While content logging is on**, a band above the composer says "Content logging is on until 14:30. Prompts and answers are
+  written to the app's logs." with *Stop* (`chat.contentLogging`). See [Interop: Content logging](interop.md#content-logging).
 - **The settings** (the gear) have the language, the switch for the notice about answers without an AI mark, the
   approvals, your own items, and About last. See [Settings](#settings).
 - **The composer** has context chips, Enter to send, Shift+Enter for a new line, and Esc to stop. Under it are the AI
