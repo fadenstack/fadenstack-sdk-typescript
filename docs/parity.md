@@ -137,3 +137,10 @@ This table is for SDK 0.3.0, against Fadenstack server 0.7.1. TypeScript names a
 | A fake server | — | `@fadenstack/testing`: `FakeGateway` | |
 | The live check | `Fadenstack.Samples.LiveCheck` | `samples/livecheck.mjs` | See [Samples](samples.md). |
 | Console and panel samples | `Fadenstack.Samples.Console`, `Fadenstack.Samples.Wpf` | — | |
+
+## Stop everything and the off-switch
+
+| Feature | .NET | TypeScript | Where a browser differs |
+|---|---|---|---|
+| Stop everything | `agent.StopAllAsync()`, `FadenstackAgent.StopAllAsync(agents)` (a `StopAllResult`), `ChatSession.Stop()`, `StopEverythingViewModel`, `StopEverythingButton` in each skin | `agent.stopAll()`, `FadenstackAgent.stopAll(agents)` (a `StopAllResult`), `chat.stop()`, `StopEverythingViewModel`, `StopEverythingButton` in each skin | |
+| The off-switch | `ErrorCodes.AgentDisabled`, `IsAgentDisabled`, `AgentProfile.Enabled`, `agent.TurnedOff`, `TurnedOffChanged`, `CheckAgainAsync()`, `ChatOutcome.AgentDisabled` | `ErrorCodes.agentDisabled`, `isAgentDisabled`, `AgentProfile.enabled`, `agent.turnedOff`, `onTurnedOffChange`, `checkAgain()`, outcome `"agent_disabled"` | |

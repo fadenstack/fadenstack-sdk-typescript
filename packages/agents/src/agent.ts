@@ -1,6 +1,8 @@
 import {
+  FadenstackApiError,
   FadenstackError,
   HOST_TOOL_DISPATCH_FEATURE,
+  isAgentDisabled,
   writeLog,
   SDK_LANGUAGE,
   SDK_VERSION,
@@ -41,7 +43,7 @@ import {
 
 import { MachinePolicy, PolicyAccess } from "./machinePolicy.js";
 import { AgentBuilder, UNDESCRIBED_APP_NAME, type AgentSettings, type AppDescription } from "./builder.js";
-import type { AgentBackend, AgentConnection } from "./backend.js";
+import { ServerBackend, type AgentBackend, type AgentConnection, type AgentSwitch } from "./backend.js";
 import { HookRunner } from "./hooks.js";
 import { LocalBackend } from "./localBackend.js";
 import { EventReporter } from "./reporter.js";
@@ -51,6 +53,7 @@ import { AgentLog } from "./log.js";
 import { isCoreToolSource, isReservedToolName, settleHostTools, toDefinition, type AgentTool, type ToolOutput } from "./tools.js";
 import { newId, type SessionInfo } from "./transcript.js";
 import { AgentGrants, isGrantHandler, type GrantHandler } from "./grants.js";
+import { addStopResults, emptyStopResult, type StopAllResult, type StopPlan } from "./stopAll.js";
 
 /** How old the profile may be when a session starts or opens before it is read again (39 F8). */
 export const PROFILE_MAX_AGE_MS = 60_000;
@@ -59,7 +62,7 @@ export const PROFILE_MAX_AGE_MS = 60_000;
  * An agent served by a Fadenstack server and run on this device: its profile, its tools, and its sessions.
  * The loop runs here; every model call goes through the gateway. .NET: `Fadenstack.Agents.FadenstackAgent`.
  */
-export class FadenstackAgent {
+export class FadenstackAgent implements AgentSwitch {
   /** @internal */
   readonly settings: AgentSettings;
   /** @internal */
@@ -106,10 +109,180 @@ export class FadenstackAgent {
     this.grants = new AgentGrants(this, settings.grantPlaceResolver);
     this.stepUps = new StepUpProofs(this);
     this.hooks = new HookRunner(settings.hooks ?? [], settings.hookContent === true, settings.logger);
+    if (settings.backend instanceof ServerBackend) settings.backend.attach(this);
   }
 
   /** @internal The app's hooks (`AgentBuilder.addHooks`), in order. */
   readonly hooks: HookRunner;
+
+  #turnedOff = false;
+  readonly #offListeners = new Set<() => void>();
+
+  /**
+   * Whether the organisation has turned this agent off (core 0.7.1, the off-switch). True once the profile at start says
+   * `enabled: false`, or any agent route answers 403 `agent_disabled`. Then the running turns stop and the grants end, a new turn is
+   * refused without a request (outcome `"agent_disabled"`), and the agent makes no further request but its events and its manifest:
+   * nothing retries. `checkAgain()` reads the profile again; `enabled: true` clears this. .NET: `TurnedOff`.
+   */
+  get turnedOff(): boolean {
+    return this.#turnedOff;
+  }
+
+  /** Calls `listener` when `turnedOff` changes. Returns the way to stop listening. .NET: `TurnedOffChanged`. */
+  onTurnedOffChange(listener: () => void): () => void {
+    this.#offListeners.add(listener);
+    return () => this.#offListeners.delete(listener);
+  }
+
+  /**
+   * @internal The agent is off: stops the running turns and ends the grants on this device (the server ended its own, `revoked_by:
+   * agent_turned_off`; nothing here needs it), then says so. Once; asking the server again would only be refused.
+   */
+  markTurnedOff(): void {
+    this.#setOff(true);
+  }
+
+  #setOff(off: boolean): void {
+    if (this.#turnedOff === off) return;
+    this.#turnedOff = off;
+    if (off) {
+      writeLog(this.settings.logger, AgentLog.agentTurnedOff, { Agent: this.slug });
+      this.#stopLocal(true); // the local part of "Stop everything": the grants end here, whether or not the server is asked
+    }
+    for (const listener of [...this.#offListeners]) {
+      try {
+        listener();
+      } catch {
+        // a listener never breaks the agent
+      }
+    }
+  }
+
+  /**
+   * "Try again" on a turned-off agent: reads the profile (the one route the server answers for it). When it says `enabled: true` the
+   * agent is back on (`turnedOff` false, the listeners called); returns the new `turnedOff`. A server that cannot be reached leaves it as
+   * it was. .NET: `CheckAgainAsync`.
+   */
+  async checkAgain(signal?: AbortSignal): Promise<boolean> {
+    if (!this.#profile) {
+      await this.start(signal);
+      return this.#turnedOff;
+    }
+    await this.refreshProfile(signal, true);
+    return this.#turnedOff;
+  }
+
+  /**
+   * @internal A call of the agent's own to the server, for a module that asks it itself (the provenance routes): refused on the device,
+   * without a request, while the organisation has the agent off, and an `agent_disabled` answer turns it off. A standalone agent has no
+   * server, so the call goes as it is.
+   */
+  route<T>(call: () => Promise<T>): Promise<T> {
+    return this.settings.backend instanceof ServerBackend ? this.settings.backend.route(call) : call();
+  }
+
+  /** The chats this agent gave out and that still live. */
+  #openChats(): ChatSession[] {
+    const chats: ChatSession[] = [];
+    for (const ref of this.#handedOut) {
+      const session = ref.deref();
+      if (session) chats.push(session);
+      else this.#handedOut.delete(ref);
+    }
+    return chats;
+  }
+
+  /**
+   * The part of "stop everything" that needs no server and always happens: every running turn is stopped, each chat's "for this chat"
+   * approvals end, and every grant of this device's copy ends (it covers no call from now on). Returns what the server may still be told.
+   */
+  #stopLocal(forOff = false): StopPlan {
+    let turns = 0;
+    let chatApprovals = 0;
+    for (const chat of this.#openChats()) {
+      if (forOff ? chat.stopForOff() : chat.stop()) turns++;
+      chatApprovals += chat.endChatApprovals();
+    }
+    return { turns, chatApprovals, grants: this.grants.endAllHere() };
+  }
+
+  /** @internal How long a read of the server's grants may take when someone presses Stop, in milliseconds: the stop does not wait for a slow server; tests shorten it. */
+  stopServerWaitMs = 10_000;
+
+  /**
+   * Stops everything this agent does for the person, at once (the emergency stop; release plan 8.11). Every running turn in every open
+   * chat stops the way the chat's own Stop does (it ends as stopped, a tool call waiting for an answer is answered no); then every grant
+   * the agent holds for the person ends: the server's (for a time, for a stretch of work, plan, Bypass) and each chat's "for this chat"
+   * approvals. What the person allowed *always* stays: it is their preference, not running authority, and `resetApprovals` forgets it. The
+   * part on this device always happens, also offline: a grant the server could not be told about is counted (`grantsNotTold`), tried once
+   * more and never blocks the stop. With the agent turned off the server ended its grants itself and is not asked. .NET: `StopAllAsync`.
+   */
+  async stopAll(): Promise<StopAllResult> {
+    return await this.#tellServer(this.#stopLocal());
+  }
+
+  /**
+   * `stopAll` for each of `agents` (an app with more than one): the stops on this device all happen first, then the servers are told, at
+   * the same time. The result is the sum. .NET: `FadenstackAgent.StopAllAsync(agents)`.
+   */
+  static async stopAll(agents: Iterable<FadenstackAgent>): Promise<StopAllResult> {
+    const plans = [...new Set(agents)].filter((a) => a !== undefined && a !== null).map((agent) => ({ agent, plan: agent.#stopLocal() }));
+    const results = await Promise.all(plans.map(({ agent, plan }) => agent.#tellServer(plan)));
+    return results.reduce(addStopResults, emptyStopResult());
+  }
+
+  // The server part: reads the grants the copy did not know (best effort, never long), ends each on the server, once more when it fails.
+  async #tellServer(plan: StopPlan, signal?: AbortSignal): Promise<StopAllResult> {
+    const toTell = [...plan.grants];
+    const off = this.turnedOff;
+    if (!off && this.grants.available && this.connection === "governed") {
+      try {
+        await this.#withinWait(signal, (s) => this.grants.refresh(s));
+        toTell.push(...this.grants.endAllHere()); // the ones the copy had not known: ended here too
+      } catch {
+        // the copy is what there is
+      }
+    }
+    let ended = 0;
+    let notTold = 0;
+    for (const grant of toTell) {
+      ended++;
+      if (off || this.turnedOff) continue; // the server ended it with the switch (revoked_by agent_turned_off)
+      if (!(await this.#tryRevoke(grant.id, signal))) notTold++;
+    }
+    if (ended > 0) writeLog(this.settings.logger, AgentLog.stoppedEverything, { Agent: this.slug, Turns: plan.turns, Grants: ended, NotTold: notTold });
+    return { turnsStopped: plan.turns, grantsEnded: ended + plan.chatApprovals, chatApprovalsEnded: plan.chatApprovals, grantsNotTold: notTold };
+  }
+
+  // Tells the server a grant ended; once more if that failed. True: told (or the server already had it ended, or the agent is off).
+  async #tryRevoke(id: string, signal?: AbortSignal): Promise<boolean> {
+    for (let attempt = 0; attempt < 2; attempt++) {
+      try {
+        await this.#withinWait(signal, (s) => this.grants.revoke(id, s));
+        return true;
+      } catch (error) {
+        if (isAgentDisabled(error)) return true; // off: the server ended it; no retry for this answer
+        if (error instanceof FadenstackApiError && error.status === 404) return true; // it ended already
+        if (signal?.aborted) throw signal.reason ?? error;
+        // unreachable, refused, or too slow: once more
+      }
+    }
+    return false;
+  }
+
+  // One request of the stop, with a time of its own: a server that does not answer never holds the stop up beyond `stopServerWaitMs`.
+  async #withinWait<T>(signal: AbortSignal | undefined, run: (signal: AbortSignal) => Promise<T>): Promise<T> {
+    const waiting = new AbortController();
+    const timer = setTimeout(() => { waiting.abort(new DOMException("The server did not answer in time.", "TimeoutError")); }, this.stopServerWaitMs);
+    const stop = () => { waiting.abort(signal?.reason); };
+    signal?.addEventListener("abort", stop, { once: true });
+    try {
+      return await run(waiting.signal);
+    } finally {
+      clearTimeout(timer);
+      signal?.removeEventListener("abort", stop);
+    }
+  }
 
   /** @internal The builder's way in: `FadenstackAgent.createBuilder()...build()`. */
   static create(settings: AgentSettings): FadenstackAgent {
@@ -262,6 +435,7 @@ export class FadenstackAgent {
       endpointServer: this.settings.backend instanceof LocalBackend ? this.settings.backend.server : undefined,
       profile,
       report: (event) => this.reporter.reportNow([event]),
+      route: (call) => this.route(call),
     };
   }
 
@@ -272,9 +446,11 @@ export class FadenstackAgent {
    * profile held stays: every model call goes through the server anyway, and a session on this device still opens. The
    * agent itself -- who it is and who is signed in -- must be the same one; a change throws.
    */
-  async refreshProfile(signal?: AbortSignal): Promise<void> {
+  async refreshProfile(signal?: AbortSignal, force = false): Promise<void> {
+    // An agent that is off reads its profile again only when the person tries again (`checkAgain`): no background refresh.
+    if (this.turnedOff && !force) return;
     const before = this.#profile;
-    if (!before || this.clock() - this.#profileRead < PROFILE_MAX_AGE_MS) return;
+    if (!before || (!force && this.clock() - this.#profileRead < PROFILE_MAX_AGE_MS)) return;
     let fresh: AgentProfile;
     try {
       fresh = this.#narrowed(await this.backend.getProfile(signal));
@@ -285,6 +461,7 @@ export class FadenstackAgent {
       return; // the profile held stays
     }
     this.#assertHostPolicySupport(fresh); // not swallowed above: a server that dropped the checks is not trusted with the old ones
+    this.#setOff(!fresh.enabled);
     const who = (p: AgentProfile) => JSON.stringify({ id: p.id, slug: p.slug, principal: p.principal });
     if (who(before) !== who(fresh)) throw new FadenstackError("The agent or the signed-in user changed. Reconnect before starting a session.");
     const offered = this.#tools;
@@ -495,6 +672,7 @@ export class FadenstackAgent {
     this.#profile = profile;
     this.#profileRead = this.clock();
     this.#context = context;
+    if (!profile.enabled) this.markTurnedOff(); // the organisation has the agent off: it starts, and every turn says so
     this.#applyRetention(profile);
     await this.#pruneChats(); // an idle profile ages out too (F08), when pruning is on
     const dropped = this.settings.tools.filter((t) => !hosts.some((h) => h.name === t.name));

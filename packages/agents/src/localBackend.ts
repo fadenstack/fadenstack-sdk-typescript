@@ -137,6 +137,7 @@ export class LocalBackend implements AgentBackend {
       model: endpoint?.model ? endpoint.model : report?.model || null,
       vision: options?.vision ?? report?.vision ?? null,
       images: false, // pictures in standalone wait for D17 (owner, 14 Nov)
+      enabled: true,
       skills: false, // no server list; local skills come with F04
       instructionsSha256: await bytesSha256(new TextEncoder().encode(definition.instructions)),
       hostToolContract: definition.hostToolContract.map((entry) => ({ ...entry })),

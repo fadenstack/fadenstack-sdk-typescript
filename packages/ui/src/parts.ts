@@ -543,7 +543,7 @@ export class NoticePart extends ResponsePart {
   /** @internal */
   static from(notice: GovernanceNotice, context: PartContext): NoticePart {
     const severity: NoticeSeverity = notice.outcome === "prompt_blocked" || notice.outcome === "response_blocked" ? "blocked"
-      : notice.outcome === "tool_denied" || notice.outcome === "rate_limited" || notice.outcome === "empty_answer" || notice.outcome === "images_disabled" ? "warning"
+      : notice.outcome === "tool_denied" || notice.outcome === "rate_limited" || notice.outcome === "empty_answer" || notice.outcome === "images_disabled" || notice.outcome === "agent_disabled" ? "warning"
       : "info";
     return NoticePart.localized(context, severity, (strings) => ({
       title: strings.noticeTitles[notice.outcome] ?? strings.noticeFallback,
@@ -551,6 +551,8 @@ export class NoticePart extends ResponsePart {
       message: notice.outcome === "empty_answer" ? (notice.category === "length" ? strings.emptyAnswerLength : strings.emptyAnswer)
         // Image generation off: the owner's note, in the panel's language, not the server's message.
         : notice.outcome === "images_disabled" ? strings.imagesDisabled
+        // The organisation turned the agent off: the server console's words in the panel's language.
+        : notice.outcome === "agent_disabled" ? strings.agentTurnedOff
         : notice.retryAfterMs !== undefined ? `${notice.message} ${strings.tryAgainIn(Math.ceil(notice.retryAfterMs / 1000))}`
         : notice.message,
       detail: notice.decisionId ? strings.decision(notice.decisionId) : undefined,

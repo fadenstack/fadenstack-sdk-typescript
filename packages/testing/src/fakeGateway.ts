@@ -339,6 +339,9 @@ export class FakeGateway {
   readonly requests: CapturedRequest[] = [];
   /** Every model call. */
   readonly modelCalls: FakeModelRequest[] = [];
+  #off = false;
+  /** How many requests were recorded when the switch was turned (`turnOff`). */
+  offAt = 0;
   /** The events clients reported, as sent. */
   readonly reported: Record<string, unknown>[] = [];
   /** The manifests apps sent (`PUT /v1/agents/{agent}/manifest`), as sent. */
@@ -545,6 +548,9 @@ export class FakeGateway {
     const auth = this.#authorize(request, agent);
     if (auth instanceof Response) return auth;
     const route = match[2]!;
+    if (this.#off && this.refusesWhileOff(method, route)) {
+      return openAiError(403, "Your organisation turned this agent off.", "agent_disabled", "permission_error");
+    }
     if (method === "GET" && route === "profile") return json(200, this.#profile(agent, auth, request.headers.get("x-faden-client-supports")));
     if (method === "GET" && route === "skills") return json(200, this.#skills(agent, url));
     if (method === "GET" && route === "tools") return this.#serverTools(agent);
@@ -563,6 +569,42 @@ export class FakeGateway {
       return json(answer.status, answer.body, answer.headers);
     }
     return json(405, { detail: "Method Not Allowed" });
+  }
+
+  /**
+   * The off-switch (core 0.7.1): every agent route but the profile, the events, the manifest and `DELETE` of a grant answers 403
+   * `agent_disabled`, the profile says `enabled: false`, and the grants end with `revoked_by: agent_turned_off`. Someone the agent does not
+   * let in still hears the refusal of the sign-in first. .NET: the test gateway's `TurnOff()`.
+   */
+  turnOff(): this {
+    this.#off = true;
+    this.offAt = this.requests.length;
+    this.grants?.endAll("agent_turned_off");
+    return this;
+  }
+
+  /** The agent is turned on again: the routes answer, the profile says `enabled: true`. */
+  turnOn(): this {
+    this.#off = false;
+    return this;
+  }
+
+  /** Whether the agent is turned off. */
+  get isOff(): boolean {
+    return this.#off;
+  }
+
+  /** The requests to agent routes the off-switch refuses, recorded since `from` requests. */
+  refusedWhileOff(from = 0): CapturedRequest[] {
+    return this.requests.slice(from).filter((r) => {
+      const match = /^\/v1\/agents\/[^/]+\/(.*)$/.exec(r.path);
+      return match !== null && this.refusesWhileOff(r.method, match[1]!);
+    });
+  }
+
+  private refusesWhileOff(method: string, route: string): boolean {
+    if ((method === "GET" && route === "profile") || (method === "POST" && route === "events") || (method === "PUT" && route === "manifest")) return false;
+    return !(method === "DELETE" && route.startsWith("grants/"));
   }
 
   // -- pairing --------------------------------------------------------------------------------------
@@ -900,7 +942,7 @@ export class FakeGateway {
     return {
       object: "agent.profile", id: agent.id, slug: agent.slug, name: agent.name, version: agent.version, draft: false,
       model: agent.model ?? "fake-model", ...(agent.vision !== undefined ? { vision: agent.vision } : {}), images: agent.images === true,
-      skills: agent.skills !== undefined, instructions_sha256: "0".repeat(64),
+      enabled: !this.#off, skills: agent.skills !== undefined, instructions_sha256: "0".repeat(64),
       host_tool_contract: agent.contract ?? [], server_tools: null, knowledge: [],
       local_mcp: { mode: agent.localMcpMode ?? "disable", developer_mode: user.developerMode ?? false,
         ...(agent.localMcpPlainHttp !== undefined ? { plain_http: agent.localMcpPlainHttp } : {}) },

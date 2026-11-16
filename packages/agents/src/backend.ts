@@ -18,7 +18,7 @@ import type {
   StepUpPoll,
   StepUpStarted,
 } from "@fadenstack/client";
-import { BYPASS_SUPPORTS } from "@fadenstack/client";
+import { BYPASS_SUPPORTS, ErrorCodes, FadenstackApiError, isAgentDisabled } from "@fadenstack/client";
 
 /**
  * How an agent is connected (`FadenstackAgent.connection`): to an organisation's Fadenstack server, or to the person's own
@@ -110,12 +110,47 @@ export interface ServerTransportRules {
   readonly announcesBypass: boolean;
 }
 
+/**
+ * What the governed backend asks of its agent for the off-switch (core 0.7.1): whether the organisation turned the agent off, and
+ * the place to say a route just answered `agent_disabled`. .NET: `IAgentSwitch`.
+ */
+export interface AgentSwitch {
+  readonly turnedOff: boolean;
+  markTurnedOff(): void;
+}
+
+/** What the person reads for a turned-off agent, and what a route refused on the device says. .NET: `FadenstackAgent.TurnedOffText`. */
+export const TURNED_OFF_TEXT = "Your organisation turned this agent off.";
+
 /** The governed backend: every call goes to the agent's routes on the Fadenstack server, as it always did. .NET: `ServerAgentBackend`. */
 export class ServerBackend implements AgentBackend {
   readonly #client: FadenstackClient;
+  #switch: AgentSwitch | undefined;
 
   constructor(client: FadenstackClient) {
     this.#client = client;
+  }
+
+  /** @internal The agent this backend serves, for the off-switch: while it is off no agent route is asked (but the profile, events and manifest). */
+  attach(agent: AgentSwitch): void {
+    this.#switch = agent;
+  }
+
+  /**
+   * A route of the agent: refused here, without a request, while the organisation has the agent off; and an `agent_disabled` answer
+   * turns the agent off for everything else (no retry anywhere). `whileOff`: the profile, the events and the manifest, which the server
+   * still answers. @internal Also the way a module that asks the server itself (the provenance routes) joins the switch.
+   */
+  async route<T>(call: () => Promise<T>, whileOff = false): Promise<T> {
+    if (!whileOff && this.#switch?.turnedOff) {
+      throw new FadenstackApiError(403, TURNED_OFF_TEXT, { code: ErrorCodes.agentDisabled, type: "permission_error" });
+    }
+    try {
+      return await call();
+    } catch (error) {
+      if (!whileOff && isAgentDisabled(error)) this.#switch?.markTurnedOff();
+      throw error;
+    }
   }
 
   /**
@@ -147,67 +182,67 @@ export class ServerBackend implements AgentBackend {
   }
 
   getProfile(signal?: AbortSignal): Promise<AgentProfile> {
-    return this.#agent.getProfile(signal);
+    return this.route(() => this.#agent.getProfile(signal), true);
   }
 
   report(events: readonly AgentClientEvent[], signal?: AbortSignal): Promise<void> {
-    return this.#agent.report(events, signal);
+    return this.route(() => this.#agent.report(events, signal), true);
   }
 
   reportManifest(manifest: AppManifest, signal?: AbortSignal): Promise<{ sha256: string; isNew: boolean }> {
-    return this.#agent.reportManifest(manifest, signal);
+    return this.route(() => this.#agent.reportManifest(manifest, signal), true);
   }
 
   setUserLanguage(language: string | null, signal?: AbortSignal): Promise<string | null> {
-    return this.#agent.setUserLanguage(language, signal);
+    return this.route(() => this.#agent.setUserLanguage(language, signal));
   }
 
   listSkills(options: { query?: string; limit?: number; signal?: AbortSignal }): Promise<SkillList> {
-    return this.#agent.listSkills(options);
+    return this.route(() => this.#agent.listSkills(options));
   }
 
   listTools(signal?: AbortSignal): Promise<AgentToolInfo[] | null> {
-    return this.#agent.listTools(signal);
+    return this.route(() => this.#agent.listTools(signal));
   }
 
   answerApproval(approvalId: string, approved: boolean, scope: AnswerScope, signal?: AbortSignal): Promise<void> {
-    return this.#agent.answerApproval(approvalId, approved, scope, signal);
+    return this.route(() => this.#agent.answerApproval(approvalId, approved, scope, signal));
   }
 
   checkHostTool(check: HostToolCheck, signal?: AbortSignal): Promise<HostToolDecision> {
-    return this.#agent.checkHostTool(check, signal);
+    return this.route(() => this.#agent.checkHostTool(check, signal));
   }
 
   createGrant(request: GrantRequest, options: { conversationId?: string; stepUpProof?: string; signal?: AbortSignal } = {}): Promise<AgentGrant> {
-    return this.#agent.createGrant(request, options);
+    return this.route(() => this.#agent.createGrant(request, options));
   }
 
   reportGrant(id: string, calls: readonly string[], signal?: AbortSignal): Promise<GrantReport> {
-    return this.#agent.reportGrant(id, calls, signal);
+    return this.route(() => this.#agent.reportGrant(id, calls, signal));
   }
 
   getGrant(id: string, signal?: AbortSignal): Promise<AgentGrant> {
-    return this.#agent.getGrant(id, signal);
+    return this.route(() => this.#agent.getGrant(id, signal));
   }
 
   extendGrant(id: string, extension: GrantExtension, signal?: AbortSignal): Promise<AgentGrant> {
-    return this.#agent.extendGrant(id, extension, signal);
+    return this.route(() => this.#agent.extendGrant(id, extension, signal));
   }
 
   revokeGrant(id: string, signal?: AbortSignal): Promise<AgentGrant> {
-    return this.#agent.revokeGrant(id, signal);
+    return this.route(() => this.#agent.revokeGrant(id, signal));
   }
 
   pauseGrant(id: string, signal?: AbortSignal): Promise<AgentGrant> {
-    return this.#agent.pauseGrant(id, signal);
+    return this.route(() => this.#agent.pauseGrant(id, signal));
   }
 
   resumeGrant(id: string, signal?: AbortSignal): Promise<AgentGrant> {
-    return this.#agent.resumeGrant(id, signal);
+    return this.route(() => this.#agent.resumeGrant(id, signal));
   }
 
   listGrants(signal?: AbortSignal): Promise<GrantList> {
-    return this.#agent.listGrants(signal);
+    return this.route(() => this.#agent.listGrants(signal));
   }
 
   startStepUp(longestMinutes?: number, clientVersion?: string, signal?: AbortSignal): Promise<StepUpStarted> {

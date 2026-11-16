@@ -95,6 +95,25 @@ export interface UiStrings {
   emptyAnswerLength: string;
   /** The owner's note when image generation is off (`images_disabled`): shown instead of the server's message. */
   imagesDisabled: string;
+  /** When the organisation turned the agent off (`agent_disabled`): the server console's own words, in the panel's language. */
+  agentTurnedOff: string;
+  /** The button under that notice: reads the agent's profile again. */
+  agentTurnedOffCheckAgain: string;
+  /** The emergency stop's accessible name, its tooltip's text and its busy line. */
+  stopEverything: string;
+  stopEverythingTip: string;
+  stopEverythingBusy: string;
+  stopEverythingNothing: string;
+  /** "1 chat" / "3 chats": a part of the result line. */
+  stopEverythingChats(count: number): string;
+  /** "1 grant" / "3 grants": a part of the result line. */
+  stopEverythingGrants(count: number): string;
+  stopEverythingBoth(chats: string, grants: string): string;
+  stopEverythingChatsOnly(chats: string): string;
+  stopEverythingGrantsOnly(grants: string): string;
+  stopEverythingNotTold(grants: string): string;
+  /** The grants view while the organisation has the agent off. */
+  grantsEndedByOff: string;
   // reasoning and references
   thinking: string;
   thoughtFor(seconds: number): string;
@@ -304,7 +323,7 @@ export interface UiStrings {
   /** Bypass ended and the server did not say why. */
   bypassEndedUnknown: string;
   /** Why Bypass ended, by who or what ended it (the fallback is bypassEndedUnknown). */
-  bypassEnded: Record<"person" | "expired" | "admin" | "kill_switch" | "limit" | "spent", string>;
+  bypassEnded: Record<"person" | "expired" | "admin" | "kill_switch" | "limit" | "spent" | "agent_turned_off", string>;
   /** A running Bypass in Settings; left: the time left; recorded: what is recorded. */
   settingsGrantBypass(left: string, recorded: string): string;
   /** description: the mode's description; mode: the agent's highest mode. */
@@ -957,6 +976,7 @@ export const englishStrings: UiStrings = {
     provenance_refused: "Not written: it could not be marked as AI-generated",
     empty_answer: "No answer came back",
     images_disabled: "Image generation is off",
+    agent_disabled: "Agent turned off",
     grant_failed: "Allowed this time only: the server did not confirm the longer approval",
   },
   noticeFallback: "Notice",
@@ -971,6 +991,19 @@ export const englishStrings: UiStrings = {
   emptyAnswerLength: "The model reached its length limit before it wrote an answer, for example while thinking. You can try again.",
   imagesDisabled:
     "Image generation is turned off in this version. From 2 December 2026 the EU AI Act (Article 5) requires safeguards against generating harmful images, and this version does not have them yet. Image generation will return in a later version, with those safeguards.",
+  agentTurnedOff: "Your organisation turned this agent off.",
+  agentTurnedOffCheckAgain: "Check again",
+  stopEverything: "Stop everything",
+  stopEverythingTip: "Stop every running chat and ends every grant. What you allowed always stays.",
+  stopEverythingBusy: "Stopping...",
+  stopEverythingNothing: "Nothing was running.",
+  stopEverythingChats: (count) => (count === 1 ? "1 chat" : `${count} chats`),
+  stopEverythingGrants: (count) => (count === 1 ? "1 grant" : `${count} grants`),
+  stopEverythingBoth: (chats, grants) => `Stopped ${chats} and ended ${grants}.`,
+  stopEverythingChatsOnly: (chats) => `Stopped ${chats}.`,
+  stopEverythingGrantsOnly: (grants) => `Ended ${grants}.`,
+  stopEverythingNotTold: (grants) => `Stopped. The server could not be told about ${grants}; it ends at its time.`,
+  grantsEndedByOff: "Your organisation turned this agent off; its grants have ended.",
   thinking: "Thinking...",
   thoughtFor: (seconds) => `Thought for ${seconds} s`,
   usedReferences: (count) => (count === 1 ? "Used 1 reference" : `Used ${count} references`),
@@ -1126,6 +1159,7 @@ export const englishStrings: UiStrings = {
     kill_switch: "Bypass ended: your organisation turned Bypass off. Approvals ask again.",
     limit: "Bypass ended: your organisation narrowed who may use it. Approvals ask again.",
     spent: "Bypass ended: its calls were used up. Approvals ask again.",
+    agent_turned_off: "Bypass ended: your organisation turned this agent off. Approvals ask again.",
   },
   settingsGrantBypass: (left, recorded) => `Bypass in a chat, ${left} left · ${recorded}`,
   limitedByAgent: (description, mode) => `${description} This agent goes no higher than ${mode}.`,

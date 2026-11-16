@@ -143,7 +143,7 @@ export function GrantsBar({ grants, strings }: { grants: GrantsViewModel; string
   useViewModel(grants);
   const card = grants.bypassCard;
   const open = grants.cards;
-  if (open.length === 0 && !card && !grants.hasMarker && !grants.hasBypass && !grants.hasBypassEnded && !grants.message) return null;
+  if (open.length === 0 && !card && !grants.hasMarker && !grants.hasBypass && !grants.hasBypassEnded && !grants.message && !grants.isAgentOff) return null;
   return (
     <div className="fdn-grants">
       {open.map((part) => <GrantCardView key={part.key} part={part} />)}
@@ -175,6 +175,7 @@ export function GrantsBar({ grants, strings }: { grants: GrantsViewModel; string
           </button>
         </div>
       )}
+      {grants.isAgentOff && <div className="fdn-grant-marker fdn-grants-off" role="status"><span className="fdn-grant-marker-text">{grants.agentOffGrantsText}</span></div>}
       {grants.message && <div className="fdn-banner" role="alert">{grants.message}</div>}
     </div>
   );

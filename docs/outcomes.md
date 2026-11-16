@@ -28,6 +28,7 @@ message. See [Outcomes](../../concepts/outcomes.md) for why refusals are outcome
 | `response_blocked` | An output check stopped the answer. Tool calls in it never run. |
 | `tool_denied` | At least one tool call was refused: by the tool mode, by the user, or by the server. The answer may still be complete. |
 | `rate_limited` | A limit of the server stopped the turn (429). The notice carries the server's message. |
+| `agent_disabled` | The organisation turned the agent off (403 `agent_disabled`). The turn ended at once, or was refused without a request; the notice says "Your organisation turned this agent off." See [stop everything and the off-switch](stop-everything.md). |
 
 When a turn has both a refusal and a denied tool call, `prompt_blocked` or `response_blocked` wins over
 `tool_denied`.

@@ -9,6 +9,7 @@ nav = [
   { "Tools and approvals" = "tools.md" },
   { "Approvals" = "approvals.md" },
   { "Server-held grants and Bypass" = "server-grants.md" },
+  { "Stop everything and the off-switch" = "stop-everything.md" },
   { "Host commands and central policy" = "host-commands.md" },
   { "Central policy for native hosts" = "host-policy.md" },
   { "Local MCP servers" = "local-mcp.md" },

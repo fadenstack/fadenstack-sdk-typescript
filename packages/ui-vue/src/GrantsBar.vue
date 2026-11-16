@@ -16,7 +16,7 @@ const grants = useViewModel(() => props.grants);
 
 <template>
   <div
-    v-if="grants.cards.length || grants.bypassCard || grants.hasMarker || grants.hasBypass || grants.hasBypassEnded || grants.message"
+    v-if="grants.cards.length || grants.bypassCard || grants.hasMarker || grants.hasBypass || grants.hasBypassEnded || grants.message || grants.isAgentOff"
     class="fdn-grants"
   >
     <GrantCardView v-for="part in grants.cards" :key="part.key" :part="part" />
@@ -40,6 +40,7 @@ const grants = useViewModel(() => props.grants);
         <Icon name="close" :size="14" />
       </button>
     </div>
+    <div v-if="grants.isAgentOff" class="fdn-grant-marker fdn-grants-off" role="status"><span class="fdn-grant-marker-text">{{ grants.agentOffGrantsText }}</span></div>
     <div v-if="grants.message" class="fdn-banner" role="alert">{{ grants.message }}</div>
   </div>
 </template>

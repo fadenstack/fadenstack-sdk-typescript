@@ -163,6 +163,9 @@ export class AgentGrants {
   readonly #seen = new Map<string, AgentGrant>();
   readonly #used = new Map<string, string>();
   readonly #listeners = new Set<() => void>();
+  // The grants "Stop everything" or the off-switch ended on this device. Whatever the server says later, none of them covers a call
+  // again (a stop the server could not be told about must still hold). .NET: `AgentGrants._endedHere`.
+  readonly #endedHere = new Set<string>();
   #offsetMs = 0;
   // Each answer of the server this copy took in (#keep), counted: a list or a stream's snapshot asked for before an answer
   // came cannot know that grant yet, so replacing the copy with it keeps what came later (#replace).
@@ -221,13 +224,30 @@ export class AgentGrants {
   get live(): readonly AgentGrant[] {
     const now = this.#agent.clock() + this.#offsetMs;
     return [...this.#known.values()].filter(g => ["active", "paused"].includes(g.status) && Date.parse(g.expiresAt) > now
-      && (g.maxCalls === null || g.callsUsed < g.maxCalls)).sort((a, b) => Date.parse(a.expiresAt) - Date.parse(b.expiresAt)).map(g => structuredClone(g));
+      && (g.maxCalls === null || g.callsUsed < g.maxCalls) && !this.#endedHere.has(g.id)).sort((a, b) => Date.parse(a.expiresAt) - Date.parse(b.expiresAt)).map(g => structuredClone(g));
   }
 
   /** The copy's grant `id`, live or not; undefined when it does not know it. */
   find(id: string): AgentGrant | undefined {
     const grant = this.#known.get(id);
     return grant ? structuredClone(grant) : undefined;
+  }
+
+  /** Whether this device ended the grant itself ("Stop everything", the off-switch), whatever the server says. */
+  endedHere(id: string): boolean { return this.#endedHere.has(id); }
+
+  /**
+   * @internal Ends every grant of the copy on this device, without the server: from now on none of them covers a call, and `live` is
+   * empty of them. Returns those that were live. The server is told apart (`revoke`); offline, or with the agent turned off, this is all
+   * that can be done and it holds. .NET: `EndAllHere`.
+   */
+  endAllHere(): AgentGrant[] {
+    const ended = [...this.live];
+    if (ended.length) {
+      for (const grant of ended) this.#endedHere.add(grant.id);
+      this.#notify();
+    }
+    return ended;
   }
 
   /** Whether the copy knows `id` at all. */
@@ -404,6 +424,8 @@ export class AgentGrants {
   async whyEnded(grantId: string, signal?: AbortSignal): Promise<string | null> {
     const known = this.#ended(this.#seen.get(grantId));
     if (known) return known;
+    // Ended on this device: by the person ("Stop everything", at once) or with the off-switch, which needs no server to say so.
+    if (this.#endedHere.has(grantId)) return this.#agent.turnedOff ? "agent_turned_off" : "person";
     try {
       const found = await this.#agent.backend.getGrant(grantId, signal);
       this.#seen.set(found.id, structuredClone(found));
@@ -514,7 +536,7 @@ export class AgentGrants {
    */
   async check(id: string, call: GrantCall, signal: AbortSignal, dispatch = false): Promise<GrantVerdict> {
     const no: GrantVerdict = { covered: false };
-    if (!this.available || call.requiredByRule) return no;
+    if (!this.available || call.requiredByRule || this.#endedHere.has(id)) return no; // ended here: nothing the server says brings it back
     const entry = this.#agent.profile.hostToolContract.find(t => t.name === call.toolName);
     if (entry?.approval === "always") return no;
     const key = JSON.stringify([call.conversationId, call.turnId, call.callId]);

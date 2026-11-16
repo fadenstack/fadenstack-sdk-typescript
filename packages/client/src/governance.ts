@@ -11,7 +11,9 @@ export type ChatOutcome =
   /** At least one tool call was refused (the answer may still be complete). */
   | "tool_denied"
   /** A limit applied (429); the notice carries the server's message. */
-  | "rate_limited";
+  | "rate_limited"
+  /** The organisation turned the agent off (`agent_disabled`): the turn ended at once, or was refused without a request. .NET: `AgentDisabled`. */
+  | "agent_disabled";
 
 /** What the user is told about a refusal, and what an auditor finds it by. */
 export interface GovernanceNotice {

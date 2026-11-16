@@ -8,6 +8,15 @@ before 1.0, a minor version may break the API, and this file says where it does.
 
 ### Added
 
+- **Stop everything and the off-switch** ([Stop everything and the off-switch](docs/stop-everything.md)). `agent.stopAll()` (and
+  `FadenstackAgent.stopAll(agents)`) stops every running turn in every open chat, answers a waiting card no, and ends every grant of the
+  agent (the server's and the chats' "for this chat" approvals; "always" stays), also offline, and returns a `StopAllResult`. `chat.stop()`
+  stops one chat's turn. `StopEverythingViewModel` and a `StopEverythingButton` in the React and Vue skins are the control for a toolbar,
+  with no confirmation. A refresh the server refused ends a running turn at once; no tool call of it runs after. For core 0.7.1's
+  off-switch: `ErrorCodes.agentDisabled`, `isAgentDisabled`, `AgentProfile.enabled`, `agent.turnedOff` with `onTurnedOffChange` and
+  `checkAgain()`, and the outcome `"agent_disabled"`: an agent that is off stops its turns and ends its grants, refuses a new turn without
+  a request, and makes no request but its events and manifest. The chat panel shows "Your organisation turned this agent off." with "Check
+  again" and a disabled composer. `FakeGateway` has `turnOff()` and `turnOn()`.
 - **Your data per app** ([Data on the device: Export and delete](docs/data-on-device.md#export-and-delete)). `deleteMyData` and
   `exportMyData` take `{ scope: "thisApp" | "allApps" }`: `thisApp` (the default) covers the calling app's chats, "Allow always" and
   thinking levels, and the person's shared data (skills, the MCP list, keys, provenance records, other settings, the data key) only

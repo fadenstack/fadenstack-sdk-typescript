@@ -35,6 +35,15 @@ export class FadenstackApiError extends FadenstackError {
   get isImagesDisabled(): boolean {
     return this.status === 403 && this.code === ErrorCodes.imagesDisabled;
   }
+
+  /**
+   * The organisation turned this agent off (core 0.7.1, the off-switch): a 403 whose code is `ErrorCodes.agentDisabled`. It is not
+   * temporary and not worth a retry: the agent stays off until an administrator turns it on. Other 403s are not.
+   * .NET: `IsAgentDisabled`.
+   */
+  get isAgentDisabled(): boolean {
+    return this.status === 403 && this.code === ErrorCodes.agentDisabled;
+  }
 }
 
 /** Error codes the server sends that an app may act on (`FadenstackApiError.code`). */
@@ -44,6 +53,12 @@ export const ErrorCodes = Object.freeze({
    * turned off in this version, and `AgentProfile.images` is false. It is not temporary: do not retry.
    */
   imagesDisabled: "images_disabled",
+  /**
+   * 403, error type `permission_error`: the organisation turned this agent off (core 0.7.1). Every agent route but the profile, the
+   * events and the manifest answers it until the agent is turned on again; do not retry (`FadenstackApiError.isAgentDisabled`).
+   * .NET: `ErrorCodes.AgentDisabled`.
+   */
+  agentDisabled: "agent_disabled",
 } as const);
 
 /**
@@ -53,6 +68,17 @@ export const ErrorCodes = Object.freeze({
 export function isImagesDisabled(error: unknown): boolean {
   for (let e: unknown = error, depth = 0; e instanceof Error && depth < 8; e = e.cause, depth++) {
     if (e instanceof FadenstackApiError && e.isImagesDisabled) return true;
+  }
+  return false;
+}
+
+/**
+ * Whether `error` (or an error it was caused by) is the server's word that the organisation turned the agent off: a 403
+ * `agent_disabled`. .NET: `FadenstackApiException.IsAgentDisabled`.
+ */
+export function isAgentDisabled(error: unknown): boolean {
+  for (let e: unknown = error, depth = 0; e instanceof Error && depth < 8; e = e.cause, depth++) {
+    if (e instanceof FadenstackApiError && e.isAgentDisabled) return true;
   }
   return false;
 }

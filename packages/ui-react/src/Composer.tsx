@@ -83,6 +83,7 @@ export function Composer({ chat, accessory, placeholder }: {
         ref={box}
         rows={1}
         dir="auto"
+        disabled={chat.isAgentOff}
         value={chat.input}
         placeholder={placeholder ?? strings.composerPlaceholder}
         aria-label={placeholder ?? strings.composerPlaceholder}

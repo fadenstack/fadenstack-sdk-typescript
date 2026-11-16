@@ -1150,6 +1150,29 @@
   border-color: var(--fdn-danger);
 }
 
+/* The organisation turned the agent off: the notice with "Check again", and the grants view's line. */
+.fdn-agent-off,
+.fdn-grants-off {
+  border-color: var(--fdn-border);
+}
+
+/* "Stop everything": an icon button and the line that says what it did. */
+.fdn-stop-everything {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.fdn-stop-everything-button {
+  color: var(--fdn-danger);
+}
+
+.fdn-stop-everything-result {
+  font-size: 12.5px;
+  overflow-wrap: anywhere;
+  max-width: 320px;
+}
+
 .fdn-grant-summary {
   position: relative;
   padding: 8px 32px 8px 10px;

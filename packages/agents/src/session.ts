@@ -2,10 +2,12 @@ import {
   FadenstackApiError,
   FadenstackError,
   FadenstackRateLimitedError,
+  FadenstackSignInRequiredError,
   writeLog,
   conversationOnly,
   decideTool,
   eventKind,
+  isAgentDisabled,
   isImagesDisabled,
   isRefusal,
   narrowestMode,
@@ -32,6 +34,7 @@ import {
 } from "@fadenstack/client";
 
 import type { FadenstackAgent } from "./agent.js";
+import { TURNED_OFF_TEXT } from "./backend.js";
 import { ApprovalDecision, cleanReason, type ApprovalHandler, type ApprovalRequest, type ApprovalScope } from "./approvals.js";
 import { approvalCovers } from "./approvalStore.js";
 import { BypassSignInError } from "./stepUp.js";
@@ -198,6 +201,9 @@ export class ChatSession {
   readonly #approvedForSession = new Set<string>();
   readonly #context: ContextBuilder;
   #running = false;
+  // The running turn's stop (the controller of its stream), while one runs.
+  #stopper: AbortController | undefined;
+  #stopRequested = false;
 
   constructor(agent: FadenstackAgent, id: string, entries: TranscriptEntry[], toolMode: ToolMode) {
     this.agent = agent;
@@ -266,6 +272,47 @@ export class ChatSession {
 
   get isRunning(): boolean {
     return this.#running;
+  }
+
+  /**
+   * Stops the running turn the way the chat's own Stop button does: the turn ends as stopped (its stream throws an `AbortError`, the
+   * transcript says `cancelled`), a tool call waiting for the person's answer is answered no, and no further tool call of the turn runs.
+   * Returns whether a turn was running. .NET: `ChatSession.Stop()`.
+   */
+  stop(): boolean {
+    const stopper = this.#stopper;
+    if (!stopper || stopper.signal.aborted) return false;
+    this.#stopRequested = true;
+    stopper.abort(abortReason());
+    return true;
+  }
+
+  /** @internal Whether the running turn was stopped by `stop()` (not by the app's own signal): its pending approval is answered no. */
+  get stopRequested(): boolean {
+    return this.#stopRequested;
+  }
+
+  #stoppedForOff = false;
+
+  /** @internal Whether the running turn was stopped because the organisation turned the agent off: it ends with that sentence, not as stopped. */
+  get stoppedForOff(): boolean {
+    return this.#stoppedForOff;
+  }
+
+  /** @internal The off-switch stops the running turn: `stop()`, and the turn ends with outcome `agent_disabled`. .NET: `StopForOff`. */
+  stopForOff(): boolean {
+    this.#stoppedForOff = true;
+    return this.stop();
+  }
+
+  /**
+   * @internal How many tools the person allowed for this chat (what `resetApprovals` forgets), and forgets them: for "Stop everything".
+   * What the person allowed always stays. .NET: `EndChatApprovals`.
+   */
+  endChatApprovals(): number {
+    const count = this.#approvedForSession.size;
+    this.#approvedForSession.clear();
+    return count;
   }
 
   /**
@@ -463,6 +510,9 @@ export class ChatSession {
     if (label !== undefined && (typeof label !== "string" || !label.trim() || label.length > 200 || /[\x00-\x1f\x7f]/.test(label))) throw new TypeError("A command label must be a single line of at most 200 characters.");
     this.#running = true;
     const stop = new AbortController();
+    this.#stopper = stop;
+    this.#stopRequested = false;
+    this.#stoppedForOff = false;
     const onAbort = () => stop.abort(options.signal?.reason);
     if (options.signal?.aborted) onAbort();
     options.signal?.addEventListener("abort", onAbort, { once: true });
@@ -483,6 +533,7 @@ export class ChatSession {
       if (!finished) stop.abort(abortReason());
       await run;
       options.signal?.removeEventListener("abort", onAbort);
+      this.#stopper = undefined;
       this.#running = false;
     }
   }
@@ -495,6 +546,9 @@ export class ChatSession {
     if (this.#running) throw new Error("A turn is already running in this session.");
     this.#running = true;
     const stop = new AbortController();
+    this.#stopper = stop;
+    this.#stopRequested = false;
+    this.#stoppedForOff = false;
     const onAbort = () => stop.abort(options.signal?.reason);
     if (options.signal?.aborted) onAbort();
     options.signal?.addEventListener("abort", onAbort, { once: true });
@@ -519,6 +573,7 @@ export class ChatSession {
       if (!finished) stop.abort(abortReason());
       await run;
       options.signal?.removeEventListener("abort", onAbort);
+      this.#stopper = undefined;
       this.#running = false;
     }
   }
@@ -709,7 +764,9 @@ class Turn {
     writeLog(this.#agent.settings.logger, AgentLog.turnStarted, { ConversationId: this.#session.id, TurnId: this.#id, ToolMode: this.#mode,
       Attachments: attachments.length }, this.#scope);
     try {
+      this.#throwIfOff(); // an agent the organisation turned off: no request at all
       for (let round = 0; ; round++) {
+        this.#throwIfOff();
         if (round === this.#agent.settings.maxRounds) {
           await this.#notice({ outcome: "round_limit", stage: "tool", message: `Stopped after ${round} rounds of tool calls.` });
           break;
@@ -717,9 +774,20 @@ class Turn {
         signal.throwIfAborted();
         const calls = await this.#request(signal, round);
         if (this.#blocked || calls.length === 0) break;
-        for (const planned of calls) await this.#runTool(planned, signal);
+        for (const planned of calls) {
+          this.#throwIfOff(); // one call refused as off or signed out ends the turn: the calls after it never run
+          await this.#runTool(planned, signal);
+        }
       }
     } catch (error) {
+      if (isAgentOff(error) || (signal.aborted && this.#session.stoppedForOff)) {
+        // The organisation turned the agent off (agent_disabled, in force at the next request): the turn ends at once, with the fixed
+        // sentence and no more requests. A grant the person had is already ended (`markTurnedOff`).
+        this.#agent.markTurnedOff();
+        await this.#notice({ outcome: "agent_disabled", stage: "agent", message: TURNED_OFF_TEXT });
+        await this.#end(TurnStatus.error, "agent_disabled");
+        return;
+      }
       if (signal.aborted) {
         await this.#end(TurnStatus.cancelled, undefined);
         throw signal.reason ?? error;
@@ -740,6 +808,11 @@ class Turn {
       : status === TurnStatus.responseBlocked ? "response_blocked"
       : this.#toolDenied ? "tool_denied" : "completed";
     await this.#end(status, outcome);
+  }
+
+  /** The turn ends because the agent is off (`FadenstackAgent.turnedOff`): thrown before a request or a tool call. */
+  #throwIfOff(): void {
+    if (this.#agent.turnedOff) throw new AgentTurnedOffError();
   }
 
   /** One model call; returns the calls of the agent's own tools to run. */
@@ -988,12 +1061,32 @@ class Turn {
     const timeoutS = (value as Data)["timeoutS"];
     // A gateway that does not say whether a rule asks is taken as one: it asks every time.
     const rule = (value as Data)["rule"] !== false;
-    const settled = await this.#approve(request, rule, typeof timeoutS === "number" ? timeoutS * 1000 : 5 * 60_000, signal,
-      undefined, false, true);
+    let settled: Settled;
+    try {
+      settled = await this.#approve(request, rule, typeof timeoutS === "number" ? timeoutS * 1000 : 5 * 60_000, signal,
+        undefined, false, true);
+    } catch (error) {
+      if (signal.aborted && this.#session.stopRequested) await this.#declineStopped(approvalId);
+      throw error;
+    }
     if (settled.timedOut) return; // the gateway expires it on its own
     const scope = settled.scope === "chat" || settled.scope === "always" ? settled.scope : "once";
     await this.#answerGateway(approvalId, settled.approved, scope, signal);
     if (!settled.approved) this.#toolDenied = true;
+  }
+
+  /** A stop while the gateway holds a call for the person: it is told no, once, best effort (it expires the call on its own otherwise). */
+  async #declineStopped(approvalId: string): Promise<void> {
+    if (this.#agent.turnedOff) return; // the server ended it with the switch
+    const waiting = new AbortController();
+    const timer = setTimeout(() => { waiting.abort(new DOMException("No word came back in time.", "TimeoutError")); }, this.#agent.approvalAnswerTimeoutMs);
+    try {
+      await this.#agent.backend.answerApproval(approvalId, false, "once", waiting.signal);
+    } catch {
+      // the gateway expires it on its own
+    } finally {
+      clearTimeout(timer);
+    }
   }
 
   /**
@@ -1143,6 +1236,7 @@ class Turn {
         this.#mode = narrowestMode(narrowestMode(this.#mode, this.#session.effectiveToolMode), decision.effectiveToolMode);
       } catch (error) {
         if (signal.aborted) throw signal.reason ?? error;
+        if (endsTurn(error)) throw error; // the sign-in ended or the agent is off: not "an error result" the loop goes on after
         return { result: `Error: ${error instanceof Error ? error.message : String(error)}`, outcome: "error", waited: 0 };
       }
     }
@@ -1223,6 +1317,7 @@ class Turn {
       return { result: resultText(value), outcome: "ok", waited };
     } catch (error) {
       if (signal.aborted) throw signal.reason ?? error;
+      if (endsTurn(error)) throw error; // as at the check above
       if (error instanceof CommandDenied) return { result: error.message, outcome: "denied", waited };
       if (isImagesDisabled(error)) {
         // The server turned image generation off (core 0.7.1): the model is told in English and not to retry, the person gets the
@@ -1437,7 +1532,15 @@ class Turn {
       // Raced against the signal: a handler that ignores it cannot hold a stopped or timed-out turn.
       decision = await untilAborted((this.#session.approvals ?? this.#agent.settings.approvals).request(request, limit), limit);
     } catch (error) {
-      if (signal.aborted) throw signal.reason ?? error;
+      if (signal.aborted) {
+        if (this.#session.stopRequested) {
+          // "Stop" (the chat's, or Stop everything) while the person was asked: the answer is no, in the transcript and the record.
+          await this.#record(base, { approved: false, scope: undefined, asked: true, rule, timedOut: false, waitedMs: performance.now() - started,
+            reason: STOPPED_REASON });
+          this.#emit({ type: "approval_decided", turnId: this.#id, request, decision: ApprovalDecision.deny(STOPPED_REASON) });
+        }
+        throw signal.reason ?? error;
+      }
       if (!limit.aborted) throw error;
       decision = undefined; // the time ran out
     }
@@ -1457,6 +1560,7 @@ class Turn {
         confirmedMinutes = Math.ceil(grant.remainingS / 60);
       } catch (error) {
         if (signal.aborted) throw signal.reason ?? error;
+        if (endsTurn(error)) throw error;
         scope = "once";
         await this.#notice({ outcome: "grant_failed", stage: "tool", message: "A time grant could not be confirmed. This call alone was allowed; inspect active grants before requesting another." });
       }
@@ -1725,6 +1829,32 @@ function untilAborted<T>(promise: Promise<T>, signal: AbortSignal): Promise<T> {
       },
     );
   });
+}
+
+/** What the record and the transcript say of a card a stop answered. */
+const STOPPED_REASON = "Stopped.";
+
+/** The turn ends because the agent is off: thrown by the turn itself, before a request or a tool call. */
+class AgentTurnedOffError extends Error {
+  constructor() {
+    super(TURNED_OFF_TEXT);
+    this.name = "AgentTurnedOffError";
+  }
+}
+
+/** Whether `error`, or what it was caused by, is the server's `agent_disabled` (or ours, once the agent is off). */
+function isAgentOff(error: unknown): boolean {
+  for (let e: unknown = error, depth = 0; e instanceof Error && depth < 8; e = e.cause, depth++) if (e instanceof AgentTurnedOffError) return true;
+  return isAgentDisabled(error);
+}
+
+/**
+ * Whether `error` must end the turn instead of becoming a tool's error result: the agent is off, or the sign-in is gone (a refresh the
+ * server refused: signed out, device signed out, grant gone). Nothing of the turn runs after either (ASVS 5.0 V7, session ending).
+ */
+function endsTurn(error: unknown): boolean {
+  for (let e: unknown = error, depth = 0; e instanceof Error && depth < 8; e = e.cause, depth++) if (e instanceof FadenstackSignInRequiredError) return true;
+  return isAgentOff(error);
 }
 
 function abortReason(): Error {

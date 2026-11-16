@@ -366,7 +366,12 @@ export class AgentChatViewModel extends Observable implements TurnHost {
       load: (signal) => agent.listServerTools(signal),
       strings: () => this.strings,
     });
-    this.#unsubscribe = approvals.onRequested((pending) => this.#onApprovalRequested(pending), () => this.#session?.id);
+    const unsubscribeApprovals = approvals.onRequested((pending) => this.#onApprovalRequested(pending), () => this.#session?.id);
+    const unsubscribeOff = agent.onTurnedOffChange(() => this.notify());
+    this.#unsubscribe = () => {
+      unsubscribeApprovals();
+      unsubscribeOff();
+    };
     this.grants = new GrantsViewModel(agent, approvals, this.#context, {
       stopTurn: () => this.stop(),
       session: () => this.#session,
@@ -627,7 +632,40 @@ export class AgentChatViewModel extends Observable implements TurnHost {
   }
 
   get canSend(): boolean {
-    return this.#ready && !this.#busy && this.#input.trim().length > 0;
+    return this.#ready && !this.#busy && !this.isAgentOff && this.#input.trim().length > 0;
+  }
+
+  /**
+   * The organisation turned this agent off (`FadenstackAgent.turnedOff`): the chat shows `agentOffText` with "Check again"
+   * (`checkAgain()`), and the composer is disabled. .NET: `AgentChatViewModel.IsAgentOff`.
+   */
+  get isAgentOff(): boolean {
+    return this.#agent.turnedOff;
+  }
+
+  /** The notice: "Your organisation turned this agent off." in the panel's language. */
+  get agentOffText(): string {
+    return this.strings.agentTurnedOff;
+  }
+
+  /** The label of the button under the notice. */
+  get checkAgainText(): string {
+    return this.strings.agentTurnedOffCheckAgain;
+  }
+
+  /** The composer takes input: the chat is ready and the agent is not off. */
+  get isInputEnabled(): boolean {
+    return this.#ready && !this.isAgentOff;
+  }
+
+  /** "Check again": reads the agent's profile again (`FadenstackAgent.checkAgain`); `enabled: true` clears the notice. */
+  async checkAgain(): Promise<void> {
+    try {
+      await this.#agent.checkAgain();
+    } catch {
+      // the server cannot be reached: the notice stays, and the person can try again
+    }
+    this.notify();
   }
 
   get isReady(): boolean {

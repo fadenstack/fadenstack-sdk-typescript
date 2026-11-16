@@ -180,7 +180,7 @@ class ModuleState {
   }
 
   backend(call: ToolServiceCall): ProvenanceBackend {
-    return (this.#backend ??= this.options.backend ?? (call.agent.connection === "standalone" ? this.#local(call) : new ServerBackend(call.agent.client)));
+    return (this.#backend ??= this.options.backend ?? (call.agent.connection === "standalone" ? this.#local(call) : new ServerBackend(call.agent.client, (run) => call.agent.route?.(run) ?? run())));
   }
 
   #local(call: ToolServiceCall): LocalProvenanceBackend {
