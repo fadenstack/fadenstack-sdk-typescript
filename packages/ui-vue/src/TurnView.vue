@@ -74,6 +74,8 @@ function savePrompt(): void {
         <span v-if="saveNote" :class="saveNote.saved ? 'fdn-muted' : 'fdn-muted fdn-error-text'" role="status">{{ saveNote.message }}</span>
         <span class="fdn-muted">{{ turnMeta(turn) }}</span>
       </div>
+      <!-- What the last copy said: "Copied", or why nothing was copied (the agent's policy requires the AI mark). -->
+      <div v-if="!turn.isRunning && !turn.isPromptBlocked" :class="turn.copyRefused ? 'fdn-copy-status fdn-refused' : 'fdn-copy-status'" aria-live="polite">{{ turn.copyStatus }}</div>
     </div>
   </article>
 </template>

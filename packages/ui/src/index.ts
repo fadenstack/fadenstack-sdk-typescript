@@ -81,6 +81,8 @@ export {
   type DiffLine,
   type NoticeTexts,
   type NoticeSeverity,
+  type CopyContent,
+  type CopyResult,
   type PartContext,
   type ToolCallState,
 } from "./parts.js";

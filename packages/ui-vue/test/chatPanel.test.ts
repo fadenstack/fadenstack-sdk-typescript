@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { flushPromises, mount, type VueWrapper } from "@vue/test-utils";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { h, nextTick } from "vue";
 
 import { SDK_VERSION } from "@fadenstack/client";
@@ -74,9 +74,9 @@ describe("ChatPanel (Vue)", () => {
     await button(wrapper, "Send").trigger("click");
     await settle(chat);
     await button(wrapper, "Copy table").trigger("click");
-    expect(clipboard.lastText).toBe("Task\tInterval\nSeal check\t2 000 h");
+    await vi.waitFor(() => expect(clipboard.lastText).toBe("Task\tInterval\nSeal check\t2 000 h"));
     expect(clipboard.lastHtml).toContain("<td>Seal check</td>");
-    expect(button(wrapper, "Copy table").attributes("title")).toBe("Copied");
+    await vi.waitFor(() => expect(button(wrapper, "Copy table").attributes("title")).toBe("Copied"));
   });
 
   it("downloads a table of an answer as CSV through the host's saveFile, the second one as table-2.csv", async () => {

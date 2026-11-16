@@ -90,7 +90,7 @@ describe("ChatPanel", () => {
       fireEvent.click(screen.getByRole("button", { name: "Send" }));
     });
     fireEvent.click(await screen.findByRole("button", { name: "Copy table" }));
-    expect(clipboard.lastText).toBe("Task\tInterval\nSeal check\t2 000 h");
+    await waitFor(() => expect(clipboard.lastText).toBe("Task\tInterval\nSeal check\t2 000 h"));
     expect(clipboard.lastHtml).toContain("<td>Seal check</td>");
   });
 

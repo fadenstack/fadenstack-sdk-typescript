@@ -27,7 +27,23 @@ export interface PartContext {
   showUnmarked?: boolean;
   /** Saves a file (a table as CSV); the host's, else the browser's download. */
   saveFile?: SaveFile;
+  /**
+   * Copies through the agent's marking (`agent.markCopy`): the HTML gets its mark where the agent has the provenance module, the
+   * text stays as it is; a copy the policy refuses is not made. The chat sets it; without it a part writes to `clipboard` as it is.
+   */
+  copyContent?(content: CopyContent): Promise<CopyResult>;
 }
+
+/** What is copied: text, and the same as HTML; `code` marks a code block (exempt from marking); `turn` is the answer's turn. */
+export interface CopyContent {
+  text: string;
+  html?: string;
+  code?: boolean;
+  turn?: string;
+}
+
+/** How a copy ended: on the clipboard, refused by the agent's policy (nothing copied), or the clipboard failed. */
+export type CopyResult = "copied" | "refused" | "failed";
 
 /**
  * One piece of an answer, in the order it happened: text, a tool call, an approval, a notice, citations. Skins
@@ -53,10 +69,13 @@ export class MarkdownPart extends ResponsePart {
   readonly document: MarkdownDocument;
   #streaming: boolean;
   readonly #context: PartContext;
+  readonly #turn: (() => string | undefined) | undefined;
 
-  constructor(context: PartContext, text?: string, streaming = false) {
+  /** `turn`: the id of the turn the text is in, for the record of a copy (the receipt of its answer). */
+  constructor(context: PartContext, text?: string, streaming = false, turn?: () => string | undefined) {
     super();
     this.#context = context;
+    this.#turn = turn;
     this.document = new MarkdownDocument(text);
     this.#streaming = streaming;
   }
@@ -85,13 +104,25 @@ export class MarkdownPart extends ResponsePart {
     if (this.document.append(text)) this.notify();
   }
 
-  copyCode(code: string): void {
-    void this.#context.clipboard.setText(code);
+  /** Copies a code block as it is: code is exempt from marking, and the agent records the copy as exempt. */
+  copyCode(code: string): Promise<CopyResult> {
+    return this.#copy({ text: code, code: true });
   }
 
-  /** Copies a table: tab-separated for spreadsheets, and as an HTML table for mail and documents. */
-  copyTable(table: Extract<MarkdownBlock, { kind: "table" }>): void {
-    void Promise.resolve(writeClipboard(this.#context.clipboard, { text: tableToTsv(table), html: toHtml([table]) })).catch(() => undefined);
+  /** Copies a table: tab-separated for spreadsheets, and as an HTML table (marked as AI-generated where the agent marks) for mail and documents. */
+  copyTable(table: Extract<MarkdownBlock, { kind: "table" }>): Promise<CopyResult> {
+    return this.#copy({ text: tableToTsv(table), html: toHtml([table]) });
+  }
+
+  async #copy(content: CopyContent): Promise<CopyResult> {
+    const copy = this.#context.copyContent;
+    try {
+      if (copy) return await copy.call(this.#context, { ...content, ...(this.#turn?.() ? { turn: this.#turn() } : {}) } as CopyContent);
+      await writeClipboard(this.#context.clipboard, content.html ? { text: content.text, html: content.html } : { text: content.text });
+      return "copied";
+    } catch {
+      return "failed";
+    }
   }
 
   /**

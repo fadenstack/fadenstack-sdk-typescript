@@ -82,23 +82,31 @@ function renderBlock(block: MarkdownBlock, strings: UiStrings, actions: BlockAct
   }
 }
 
-/** A copy button that shows a tick for a moment after copying. */
-function CopyButton({ label, strings, onCopy }: { label: string; strings: UiStrings; onCopy: () => void }): ReactElement {
-  const [copied, setCopied] = useState(false);
+/**
+ * A copy button that shows a tick for a moment after copying. A copy the agent's policy refused (`onCopy` gives `"refused"`) shows
+ * why instead, and a copy the clipboard did not take shows nothing.
+ */
+function CopyButton({ label, strings, onCopy }: { label: string; strings: UiStrings; onCopy: () => unknown }): ReactElement {
+  const [state, setState] = useState<"copied" | "refused" | undefined>();
   return (
-    <button
-      type="button"
-      className="fdn-icon-button fdn-small"
-      aria-label={label}
-      title={copied ? strings.copied : label}
-      onClick={() => {
-        onCopy();
-        setCopied(true);
-        setTimeout(() => setCopied(false), COPIED_MS);
-      }}
-    >
-      <Icon name={copied ? "check" : "copy"} size={14} />
-    </button>
+    <>
+      <button
+        type="button"
+        className="fdn-icon-button fdn-small"
+        aria-label={label}
+        title={state === "copied" ? strings.copied : state === "refused" ? strings.copyRefused : label}
+        onClick={() => {
+          void Promise.resolve(onCopy()).then((result) => {
+            if (result === "failed") return;
+            setState(result === "refused" ? "refused" : "copied");
+            setTimeout(() => setState(undefined), COPIED_MS);
+          }, () => undefined);
+        }}
+      >
+        <Icon name={state === "copied" ? "check" : "copy"} size={14} />
+      </button>
+      {state === "refused" && <span className="fdn-copy-status fdn-refused" role="alert">{strings.copyRefused}</span>}
+    </>
   );
 }
 

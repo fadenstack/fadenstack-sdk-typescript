@@ -12,9 +12,13 @@ import {
   ReasoningPart,
   ToolCallPart,
   type ApprovalState,
+  type CopyResult,
   type PartContext,
   type ResponsePart,
 } from "./parts.js";
+
+/** How long "Copied" (or why nothing was copied) stays under the answer. */
+const COPY_STATUS_MS = 3000;
 
 export type TurnState = "running" | "waiting_for_approval" | "completed" | "blocked" | "stopped" | "failed";
 
@@ -22,7 +26,8 @@ export type TurnState = "running" | "waiting_for_approval" | "completed" | "bloc
 export interface TurnHost {
   edit(text: string): void;
   retry(turn: TurnViewModel): Promise<void>;
-  copy(text: string): void;
+  /** Copies an answer through the agent's marking; the turn's id links the record to its receipt. */
+  copy(text: string, turn?: string): Promise<CopyResult>;
   /** The chat has a prompt store: a message can be saved as a prompt. */
   readonly canSavePrompts?: boolean;
   savePrompt?(text: string): Promise<{ saved: boolean; message: string }>;
@@ -44,6 +49,9 @@ export class TurnViewModel extends Observable {
   readonly #host: TurnHost | undefined;
   readonly #tools = new Map<string, ToolCallPart>();
   #id: string | undefined;
+  #copyStatus = "";
+  #copyRefused = false;
+  #copyCount = 0;
   #parts: readonly ResponsePart[] = [];
   #text: MarkdownPart | undefined;
   #reasoning: ReasoningPart | undefined;
@@ -142,8 +150,35 @@ export class TurnViewModel extends Observable {
   /** Explicit commands have no prompt to edit or resend. */
   get canEdit(): boolean { return this.#host !== undefined && !this.isRunning; }
 
-  copy(): void {
-    this.#host?.copy(this.answerText);
+  /**
+   * Copies the answer: its Markdown as text and as HTML, marked as AI-generated where the agent marks. `copyStatus` says how it went
+   * for a few seconds.
+   */
+  async copy(): Promise<void> {
+    if (!this.#host) return;
+    const result = await this.#host.copy(this.answerText, this.#id);
+    if (result === "failed") return;
+    const strings = this.#context.strings;
+    this.#copyStatus = result === "copied" ? strings.copied : strings.copyRefused;
+    this.#copyRefused = result === "refused";
+    const count = ++this.#copyCount;
+    this.notify();
+    setTimeout(() => {
+      if (count !== this.#copyCount) return;
+      this.#copyStatus = "";
+      this.#copyRefused = false;
+      this.notify();
+    }, COPY_STATUS_MS);
+  }
+
+  /** What the last copy said, for a few seconds: "Copied", or why nothing was copied; empty otherwise. */
+  get copyStatus(): string {
+    return this.#copyStatus;
+  }
+
+  /** The last copy was refused by the agent's policy (`copyStatus` says why): a skin may show the line as a warning. */
+  get copyRefused(): boolean {
+    return this.#copyRefused;
   }
 
   /** The message can be kept as one of the user's prompts: the chat has a prompt store, and this is a message the person wrote. */
@@ -184,7 +219,7 @@ export class TurnViewModel extends Observable {
   appendText(text: string): void {
     if (!this.#text) {
       this.#closeReasoning();
-      this.#text = new MarkdownPart(this.#context, undefined, true);
+      this.#text = new MarkdownPart(this.#context, undefined, true, () => this.#id);
       this.#parts = [...this.#parts, this.#text];
       this.notify();
     }
@@ -296,7 +331,7 @@ export class TurnViewModel extends Observable {
 
   /** @internal */
   addRestoredText(text: string): void {
-    this.#parts = [...this.#parts, new MarkdownPart(this.#context, text)];
+    this.#parts = [...this.#parts, new MarkdownPart(this.#context, text, false, () => this.#id)];
   }
 
   /** @internal */

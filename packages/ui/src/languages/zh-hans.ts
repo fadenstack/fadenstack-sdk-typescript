@@ -134,6 +134,8 @@ export const chineseSimplifiedStrings: UiStrings = {
   copyCode: "复制代码",
   copyTable: "复制表格",
   copied: "已复制",
+  copyRefused: "未复制：无法将此回答标记为人工智能生成的内容，而贵组织要求这样做。",
+  exportRefused: "未保存：无法将此聊天标记为人工智能生成的内容，而贵组织要求这样做。",
   edit: "编辑",
   editAndResend: "编辑并重新发送",
   retry: "重试",

@@ -556,6 +556,21 @@
   margin-inline-start: 6px;
 }
 
+/* What the last copy said under an answer ("Copied"), or why nothing was copied (the agent's policy requires the AI mark). */
+.fdn-copy-status {
+  margin-top: 2px;
+  color: var(--fdn-text-muted);
+  font-size: 12px;
+}
+
+.fdn-copy-status:empty {
+  display: none;
+}
+
+.fdn-copy-status.fdn-refused {
+  color: var(--fdn-danger);
+}
+
 .fdn-spinner {
   display: inline-block;
   flex: none;
