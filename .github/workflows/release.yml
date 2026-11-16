@@ -1,6 +1,6 @@
 name: Release
 
-# A tag v<version> publishes the eight @fadenstack packages to npm. The version is the one in the packages
+# A tag v<version> publishes the ten @fadenstack packages to npm. The version is the one in the packages
 # (scripts/version.mjs sets it), and the tag must name it. A version with a suffix (v0.2.0-rc.1) is published
 # under the dist-tag `next`, so `npm install` keeps getting the latest release.
 #
@@ -44,6 +44,8 @@ jobs:
         run: node scripts/version.mjs --check "${GITHUB_REF_NAME#v}"
 
       - run: npm ci
+      - name: Third-party notices are current
+        run: node scripts/third-party-notices.mjs --check
       - run: npm run typecheck
       - run: npm test
       - run: npm run build
