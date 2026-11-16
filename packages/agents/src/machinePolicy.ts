@@ -85,6 +85,15 @@ export class MachinePolicy {
   /** No policy at all: everything the person may choose stays theirs. */
   static readonly none = new MachinePolicy();
 
+  /**
+   * For a host whose policy source failed (Chrome's `chrome.storage.managed.get()` threw or timed out, a policy the app
+   * could not open): use it instead of `none`, which allows everything. It forbids what the person could add or turn on
+   * (standalone, local MCP, local skills, web search, plain http), turns time-stamps off (less leaves the device) and locks
+   * those keys; `server` stays open, so the person can still sign in to their organisation's server by hand. .NET:
+   * `MachinePolicy.Unreadable`.
+   */
+  static readonly unreadable: MachinePolicy = MachinePolicy.#closed("The machine policy could not be read");
+
   /** The known keys, as a policy names them. */
   static readonly keys: readonly string[] = KEYS;
 
@@ -151,11 +160,12 @@ export class MachinePolicy {
   }
 
   /** An administrator's policy the SDK cannot read: fail closed, as for an unknown value. */
-  static #unreadable(why: string): MachinePolicy {
+  static #closed(why: string): MachinePolicy {
     return new MachinePolicy({
       standalone: PolicyAccess.Forbidden, plainHttp: PolicyAccess.Forbidden, mcp: PolicyRule.forbidden, skills: PolicyRule.forbidden,
-      webSearch: PolicyAccess.Forbidden,
-      warnings: [`${why}: standalone, local MCP, local skills, web search and plain http are forbidden.`],
+      webSearch: PolicyAccess.Forbidden, timestamping: TimestampingPolicy.off,
+      locked: KEYS.filter((k) => k !== "server"),
+      warnings: [`${why}: standalone, local MCP, local skills, web search and plain http are forbidden; time-stamps are off.`],
     });
   }
 
@@ -164,7 +174,7 @@ export class MachinePolicy {
    * plain object forbids what it could have allowed. .NET: `From(JsonElement)`.
    */
   static from(root: unknown): MachinePolicy {
-    if (root === null || typeof root !== "object" || Array.isArray(root)) return MachinePolicy.#unreadable("The policy is not a JSON object");
+    if (root === null || typeof root !== "object" || Array.isArray(root)) return MachinePolicy.#closed("The policy is not a JSON object");
     const warnings: string[] = [];
     const locked: string[] = [];
     const values = new Map<string, unknown>();
