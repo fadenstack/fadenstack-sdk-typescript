@@ -278,6 +278,22 @@ describe("the off-switch", () => {
     expect(s.gateway.refusedWhileOff(before)).toHaveLength(1);
   });
 
+  it("the switch ends the running turns of every chat with the sentence, not as stopped", async () => {
+    const s = await twoBusyChats();
+    await s.agent.grants.grantForTime("read_page", 30 * 60_000);
+    s.gateway.turnOff();
+
+    await expect(s.agent.grants.refresh()).rejects.toSatisfy(isAgentDisabled); // a route finds it out
+
+    expect(await s.turnA || await s.turnB).toBe(false); // not stopped: the turns ended with the notice
+    for (const chat of [s.a, s.b]) {
+      expect(chat.transcript.filter((e) => e.type === EntryTypes.turnEnd).at(-1)!.data).toMatchObject({ status: "error", outcome: "agent_disabled" });
+      expect(chat.transcript.filter((e) => e.type === EntryTypes.governanceNotice).at(-1)!.data["outcome"]).toBe("agent_disabled");
+    }
+    expect(s.grants.status("g-1")).toBe("revoked");
+    expect(s.agent.grants.live).toEqual([]);
+  });
+
   it("check again reads the profile only, and turns the agent back on when it says enabled", async () => {
     const s = await fixture();
     s.gateway.turnOff();
