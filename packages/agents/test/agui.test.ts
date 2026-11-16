@@ -4,11 +4,42 @@ import { fileURLToPath } from "node:url";
 
 import { describe, expect, it } from "vitest";
 
+import type * as Core from "@ag-ui/core";
 import { EventSchemas } from "@ag-ui/core/schemas";
 import { agUiEvents, agUiJson, type AgentEvent, type AgUiEvent, type ApprovalRequest } from "@fadenstack/agents";
+import type * as Ours from "../src/aguiTypes.js";
 
 // AG-UI events (sdk/51 F07): the golden files in test/agui are the same bytes as the .NET SDK's
 // tests/Fadenstack.Agents.Tests/AgUi, one JSON event per line. Set FADEN_UPDATE_GOLDEN=1 to write them.
+
+// Type-level parity with @ag-ui/core 1.0.4 (a dev dependency): each of our interfaces must be assignable to the wire shape
+// of the matching core type (`type` as the plain string), and must carry no key core does not know. A drift fails `tsc`.
+type Wire<E extends { type: string }> = Omit<E, "type"> & { type: `${E["type"]}` };
+type Fits<O, C> = [O] extends [C] ? ([keyof O] extends [keyof C] ? true : false) : false;
+type Assert<T extends true> = T;
+export type ParityChecks = [
+  Assert<Fits<Ours.RunStartedEvent, Wire<Core.RunStartedEvent>>>,
+  Assert<Fits<Ours.RunFinishedEvent, Wire<Core.RunFinishedEvent>>>,
+  Assert<Fits<Ours.RunErrorEvent, Wire<Core.RunErrorEvent>>>,
+  Assert<Fits<Ours.TextMessageStartEvent, Wire<Core.TextMessageStartEvent>>>,
+  Assert<Fits<Ours.TextMessageContentEvent, Wire<Core.TextMessageContentEvent>>>,
+  Assert<Fits<Ours.TextMessageEndEvent, Wire<Core.TextMessageEndEvent>>>,
+  Assert<Fits<Ours.ReasoningStartEvent, Wire<Core.ReasoningStartEvent>>>,
+  Assert<Fits<Ours.ReasoningMessageStartEvent, Wire<Core.ReasoningMessageStartEvent>>>,
+  Assert<Fits<Ours.ReasoningMessageContentEvent, Wire<Core.ReasoningMessageContentEvent>>>,
+  Assert<Fits<Ours.ReasoningMessageEndEvent, Wire<Core.ReasoningMessageEndEvent>>>,
+  Assert<Fits<Ours.ReasoningEndEvent, Wire<Core.ReasoningEndEvent>>>,
+  Assert<Fits<Ours.ToolCallStartEvent, Wire<Core.ToolCallStartEvent>>>,
+  Assert<Fits<Ours.ToolCallArgsEvent, Wire<Core.ToolCallArgsEvent>>>,
+  Assert<Fits<Ours.ToolCallEndEvent, Wire<Core.ToolCallEndEvent>>>,
+  Assert<Fits<Ours.ToolCallResultEvent, Wire<Core.ToolCallResultEvent>>>,
+  Assert<Fits<Ours.CustomEvent, Wire<Core.CustomEvent>>>,
+  Assert<Fits<Ours.Interrupt, Core.Interrupt>>,
+  Assert<Fits<Ours.TokenUsage, Core.TokenUsage>>,
+  Assert<Fits<Ours.RunFinishedOutcome, Core.RunFinishedOutcome>>,
+  // The union has exactly the sixteen core event types the adapter emits.
+  Assert<[Ours.AgUiEvent["type"]] extends [`${Core.EventType}`] ? true : false>,
+];
 
 const dir = join(dirname(fileURLToPath(import.meta.url)), "agui");
 const T = "turn-1";

@@ -59,7 +59,7 @@ This table is for SDK 0.3.0, against Fadenstack server 0.7.1. TypeScript names a
 | The web search tool | `WebSearchModule`, `WebSearchOptions`; `WebSearchStore` in the person's folder ([Pictures and web search](web-search.md)) | `webSearchModule`, `WebSearchOptions`; `IndexedDbWebSearchStore`, `MemoryWebSearchStore` | The host needs permission for the provider's origin; the Chrome agent keeps the browser's own search |
 | Approvals keyed by source, sealed | `StoredApproval.Source`, `Server`, `Covers`; `FileApprovalStore` seals each with an HMAC | `StoredApproval.source`, `server`, `approvalCovers`; IndexedDB seals each with the person's WebCrypto key | |
 | A reason for declining | `ApprovalDecision.Deny(reason)`, `MaxReasonChars`, `CleanReason`; the transcript's `reason` | `ApprovalDecision.deny(reason)`, `MAX_REASON_CHARS`, `cleanReason`; the transcript's `reason` | |
-| AG-UI events | `AgUiEvents.From(events, options)`, `AgUiJson` ([Interop](interop.md)) | `agUiEvents(events, options)`, `agUiJson`; the types of `@ag-ui/core` 1.0.4 | |
+| AG-UI events | `AgUiEvents.From(events, options)`, `AgUiJson` ([Interop](interop.md)) | `agUiEvents(events, options)`, `agUiJson`; our own types following AG-UI 1.0.4 | |
 | Hooks | `IAgentHooks`, `AgentHooks`, `AddHooks(hooks, order)`, `ToolHookVerdict` | `AgentHooks`, `addHooks(hooks, order)`, `toolHook` | |
 | OpenTelemetry | `UseOpenTelemetry(...)`, opt-in | Later | |
 | SDK ids for empty or repeated call ids | `fs-{turn}-{round}-{index}` | `fs-{turn}-{round}-{index}` | |

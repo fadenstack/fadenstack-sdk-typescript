@@ -1,50 +1,9 @@
-import type {
-  CustomEvent,
-  Interrupt,
-  ReasoningEndEvent,
-  ReasoningMessageContentEvent,
-  ReasoningMessageEndEvent,
-  ReasoningMessageStartEvent,
-  ReasoningStartEvent,
-  RunErrorEvent,
-  RunFinishedEvent,
-  RunStartedEvent,
-  TextMessageContentEvent,
-  TextMessageEndEvent,
-  TextMessageStartEvent,
-  TokenUsage,
-  ToolCallArgsEvent,
-  ToolCallEndEvent,
-  ToolCallResultEvent,
-  ToolCallStartEvent,
-} from "@ag-ui/core";
 import type { GovernanceNotice, Usage } from "@fadenstack/client";
 
 import type { AgentEvent } from "./events.js";
+import type { AgUiEvent, Interrupt, TokenUsage } from "./aguiTypes.js";
 
-/**
- * An AG-UI event in the JSON a third-party AG-UI client reads. The shapes are `@ag-ui/core` 1.0.4's; only the `type`
- * is the plain string (`"RUN_STARTED"`), so this package needs `@ag-ui/core` for types only, never at run time.
- */
-type Wire<E extends { type: string }> = Omit<E, "type"> & { type: `${E["type"]}` };
-
-export type AgUiEvent =
-  | Wire<RunStartedEvent>
-  | Wire<RunFinishedEvent>
-  | Wire<RunErrorEvent>
-  | Wire<TextMessageStartEvent>
-  | Wire<TextMessageContentEvent>
-  | Wire<TextMessageEndEvent>
-  | Wire<ReasoningStartEvent>
-  | Wire<ReasoningMessageStartEvent>
-  | Wire<ReasoningMessageContentEvent>
-  | Wire<ReasoningMessageEndEvent>
-  | Wire<ReasoningEndEvent>
-  | Wire<ToolCallStartEvent>
-  | Wire<ToolCallArgsEvent>
-  | Wire<ToolCallEndEvent>
-  | Wire<ToolCallResultEvent>
-  | Wire<CustomEvent>;
+export type * from "./aguiTypes.js";
 
 /** What {@link agUiEvents} needs to know besides the events. */
 export interface AgUiOptions {

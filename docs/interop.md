@@ -4,7 +4,7 @@ How a Fadenstack agent talks to the rest of the ecosystem: AG-UI-shaped events f
 
 ## AG-UI events
 
-[AG-UI](https://docs.ag-ui.com) is the open protocol agent front ends speak. The SDK's own view models keep using the native `AgentEvent`s; `agUiEvents` is an adapter over that stream, so a third-party AG-UI client (CopilotKit, assistant-ui with its AG-UI adapter) can render a Fadenstack agent. The types are `@ag-ui/core` 1.0.4's (MIT, a type-only dependency; it asks for `zod` as a peer dependency, which your package manager installs).
+[AG-UI](https://docs.ag-ui.com) is the open protocol agent front ends speak. The SDK's own view models keep using the native `AgentEvent`s; `agUiEvents` is an adapter over that stream, so a third-party AG-UI client (CopilotKit, assistant-ui with its AG-UI adapter) can render a Fadenstack agent. The event types are the SDK's own and follow AG-UI 1.0.4; the package has no runtime dependency on `@ag-ui/*`. The test suite checks the shapes against `@ag-ui/core` 1.0.4 and the streams against `@ag-ui/client` 1.0.4 (`HttpAgent`), which accepted all five golden streams (text with reasoning, tool call, approval interrupt and resume, notices, run error).
 
 ```ts
 import { agUiEvents, agUiJson } from "@fadenstack/agents";
