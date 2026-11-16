@@ -6,6 +6,7 @@ import { userStoreName, type StorePrincipal } from "./userData.js";
  * object store is on an allowlist, so a store or a key that comes later is never handed over by accident:
  *
  * - `fadenstack-preferences`: every object store (the thinking level and anything else the person picked);
+ * - `fadenstack-apps`: the app records (names, agent slugs, times);
  * - `fadenstack-skills` and `fadenstack-skill-switches`: the person's own text and what they turned off;
  * - `fadenstack-provenance`: the `records` and the `placements` log, never the `keys` store (the device's signing key);
  * - `fadenstack-mcp`: the `servers` without their sealed header values and with each field named below only, and the `audit` log;
@@ -38,6 +39,7 @@ interface Allowed {
 
 const ALLOWED: readonly Allowed[] = [
   { base: "fadenstack-preferences", as: "preferences", stores: "*" },
+  { base: "fadenstack-apps", as: "apps", stores: "*" }, // which apps use the person's data: names, agent slugs and times
   { base: "fadenstack-skills", as: "skills", stores: { skills: null } },
   { base: "fadenstack-skill-switches", as: "skill-switches", stores: "*" },
   { base: "fadenstack-provenance", as: "provenance", stores: { records: null, placements: null } }, // never `keys`

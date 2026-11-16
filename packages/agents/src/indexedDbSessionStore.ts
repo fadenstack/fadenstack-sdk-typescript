@@ -151,6 +151,22 @@ export class IndexedDbSessionStore implements SessionStore, ListsAgents, PrunesS
     return this.#writes.run(() => this.#delete(agent, sessionId));
   }
 
+  /**
+   * Every session of the agent, by key, not by what lists: a record that does not decrypt is the person's to be rid of as well
+   * (the per-app removal, GDPR Art. 17).
+   */
+  deleteAgent(agent: string): Promise<void> {
+    return this.#writes.run(async () => {
+      const db = await this.#open();
+      await transact(db, [ENTRIES, SESSIONS], "readwrite", (tx) => {
+        const all = this.#range.bound([agent], [agent, []]);
+        tx.objectStore(ENTRIES).delete(all);
+        tx.objectStore(SESSIONS).delete(all);
+        return Promise.resolve();
+      });
+    });
+  }
+
   async #delete(agent: string, sessionId: string): Promise<void> {
     const db = await this.#open();
     await transact(db, [ENTRIES, SESSIONS], "readwrite", (tx) => {

@@ -183,7 +183,11 @@ export {
   chatRetentionState, isValidRetentionChats, isValidRetentionDays, retentionLimits,
   type ChatRetentionChoice, type ChatRetentionControl, type ChatRetentionState, type ChatRetentionStore, type IndexedDbChatRetentionStoreOptions,
 } from "./chatRetention.js";
-export type { DataDeletion, ExportedSession, MyDataExport } from "./dataRights.js";
+export type { DataDeletion, ExportedSession, ExportScope, MyDataExport } from "./dataRights.js";
+export {
+  IndexedDbAppRecords, MemoryAppRecords, appNameOf, listMyDataApps, planMyData,
+  type AppRecord, type AppRecords, type DataScope, type MyDataApp, type MyDataOptions, type MyDataPlan,
+} from "./myData.js";
 // What the skill editor and the skills module share (sdk/51 F04): the contracts, the limits and the strict SKILL.md reader and writer.
 export {
   DEFAULT_SKILL_PRIORITY,

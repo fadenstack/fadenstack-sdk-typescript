@@ -21,7 +21,12 @@ import {
 
 import type { PermissionMode } from "./approvals.js";
 import { type ApprovalStore, type StoredApproval } from "./approvalStore.js";
-import { DefaultStores, buildExport, deleteUserDatabases, deleteUserLocalStorage, type DataDeletion, type MyDataExport } from "./dataRights.js";
+import { DefaultStores, buildExport, deleteUserDatabases, deleteUserLocalStorage, userDatabaseNames, type DataDeletion, type MyDataExport } from "./dataRights.js";
+import {
+  IndexedDbAppRecords, MemoryAppRecords, appNameOf, listMyDataApps, planMyData,
+  type AppRecords, type DataScope, type MyDataApp, type MyDataOptions, type MyDataPlan,
+} from "./myData.js";
+import { deletesAgents, listsAgents } from "./storeSupport.js";
 import { DEFAULT_RETENTION, withinServerRetention, type PrunesSessions, type SessionRetention, type SessionStore } from "./sessionStore.js";
 import {
   IndexedDbChatRetentionStore, MemoryChatRetentionStore, chatRetentionChoice, chatRetentionFromApp, chatRetentionState, retentionLimits,
@@ -89,6 +94,7 @@ export class FadenstackAgent {
   // The chats this agent gave out: never pruned while they live.
   readonly #handedOut = new Set<WeakRef<ChatSession>>();
   #defaults: DefaultStores | undefined;
+  #appRecords: AppRecords | undefined;
   #problems = 0;
   #starting: Promise<void> | undefined;
   #warned = false;
@@ -482,6 +488,7 @@ export class FadenstackAgent {
     this.#sourceTools = fromSources;
     this.#tools = this.#compose(hosts, fromSources);
     this.#settleStores(profile.principal);
+    await this.#recordApp(profile.principal);
     this.#reasoningChoices = ReasoningChoices.fromUi(profile.ui);
     this.#reasoningPick = await this.#picks?.get(this.slug).catch(() => undefined);
     this.#retentionPick = await this.#retentionStore?.get().catch(() => undefined);
@@ -521,9 +528,11 @@ export class FadenstackAgent {
     const key = principal ? `${principal.tenantId}\n${principal.userId}` : "";
     if (this.#storesFor === key) return;
     this.#defaults?.close();
+    (this.#appRecords as { close?: () => void } | undefined)?.close?.();
     (this.#reasoningStore as { close?: () => void } | undefined)?.close?.();
     (this.#retentionStore as { close?: () => void } | undefined)?.close?.();
     const indexed = !!globalThis.indexedDB;
+    this.#appRecords = indexed ? new IndexedDbAppRecords({ name: userDatabaseNames(principal).apps }) : new MemoryAppRecords();
     // A host that keeps both stores itself has taken over the device's storage: the pick then lasts for the run only.
     this.#reasoningStore = this.settings.reasoningStore ? undefined
       : this.settings.sessions && this.settings.approvalStore ? new MemoryReasoningStore()
@@ -732,6 +741,7 @@ export class FadenstackAgent {
   async dispose(): Promise<void> {
     await this.flush();
     this.#defaults?.close();
+    (this.#appRecords as { close?: () => void } | undefined)?.close?.();
     (this.#reasoningStore as { close?: () => void } | undefined)?.close?.();
     (this.#retentionStore as { close?: () => void } | undefined)?.close?.();
     for (const stop of this.#unsubscribe.splice(0)) stop();
@@ -832,27 +842,108 @@ export class FadenstackAgent {
    * keys are never included, nor is what the server keeps. A store the
    * host passed is read for this agent only. .NET: `ExportMyDataAsync` (a ZIP there; a document here, which the host saves
    * or offers as a download as it likes).
+   *
+   * The export follows the scope of the removal (since 0.3.0 the default is `thisApp`): exactly what `deleteMyData({ scope })` would
+   * remove. For `thisApp` while other apps use the person's data that is this app's agents' chats and "Allow always", their thinking
+   * levels and this app's record, and `notIncluded` names what stayed and for which apps; `allApps` is all of it. Passing an
+   * `AbortSignal` alone still works (scope `thisApp`).
    */
-  async exportMyData(signal?: AbortSignal): Promise<MyDataExport> {
+  async exportMyData(options?: AbortSignal | MyDataOptions): Promise<MyDataExport> {
+    const { scope, signal } = myDataOptions(options);
     await this.start(signal);
-    return buildExport(this.sessionStore, this.approvalStore, this.slug, () => this.#problems, { principal: this.profile.principal });
+    const principal = this.profile.principal;
+    const exportScope = scope === "thisApp" && principal ? { app: this.appName, plan: await this.#myDataPlan() } : undefined;
+    return buildExport(this.sessionStore, this.approvalStore, this.slug, () => this.#problems, { principal }, exportScope);
   }
 
   /**
-   * Deletes the signed-in user's data on this device (an erasure request, GDPR Art. 17): the user's IndexedDB databases --
-   * sessions, "Allow always" -- and their key, so that no copy left anywhere (a backup of the profile) can ever be read.
-   * Afterwards the stores start empty. It does not sign out (that is the host's call). It leaves stores the host passed to
-   * their owner -- they may hold other people's data -- but says so in the result, so a host never believes a person's data
-   * gone that its own store still keeps. What the server keeps is for its operator to erase. .NET: `DeleteMyDataAsync`.
+   * The apps that use the signed-in person's data in this browser, this app first: what a removal of all of it affects, and why a
+   * removal of this app's data leaves the shared data. An app on an older SDK shows as its agent (`recorded` false). .NET: `MyDataAppsAsync`.
    */
-  async deleteMyData(signal?: AbortSignal): Promise<DataDeletion> {
+  async myDataApps(signal?: AbortSignal): Promise<MyDataApp[]> {
+    await this.start(signal);
+    return this.#myDataApps();
+  }
+
+  /** The app's name for the person's data: what the host described (`describeApp`), else the slug. .NET: `AppName`. */
+  get appName(): string {
+    return appNameOf(this.app?.name, this.slug);
+  }
+
+  async #myDataApps(): Promise<MyDataApp[]> {
+    if (!this.profile.principal) return [{ name: this.appName, agents: [this.slug], isThisApp: true, recorded: false }];
+    const records = await this.#appRecords?.list().catch(() => []) ?? [];
+    return listMyDataApps(records, await this.#agentsWithData(), this.appName, this.slug);
+  }
+
+  async #myDataPlan(): Promise<MyDataPlan> {
+    return planMyData(await this.#myDataApps());
+  }
+
+  /** The agents with data in the SDK's own stores for the person: sessions, "Allow always" and a thinking level (a host's own stores are the host's). */
+  async #agentsWithData(): Promise<string[]> {
+    const agents = new Set<string>();
+    for (const store of [this.#sessions, this.#approvalStore, this.settings.reasoningStore ? undefined : this.#reasoningStore]) {
+      if (store && (listsAgents(store) || typeof (store as { agents?: unknown }).agents === "function")) {
+        for (const agent of await (store as { agents(): Promise<string[]> }).agents().catch(() => [] as string[])) agents.add(agent);
+      }
+    }
+    return [...agents];
+  }
+
+  /** Records that this app runs this agent for the person (names and times). Never fails the start: an app without a record is inferred from its data, which keeps the shared data (the safe side). */
+  async #recordApp(principal: AgentPrincipal | undefined): Promise<void> {
+    if (!principal || (this.settings.sessions && this.settings.approvalStore)) return;
+    try {
+      await this.#appRecords?.record(this.appName, this.slug, new Date(this.clock()).toISOString());
+    } catch {
+      // inferred from its data instead
+    }
+  }
+
+  /**
+   * Deletes the signed-in user's data on this device -- since 0.3.0 this app's part (`scope: "thisApp"`, the default; owner, 16 Nov), or,
+   * with `scope: "allApps"`, all of the person's (an erasure request, GDPR Art. 17).
+   *
+   * `thisApp`: the sessions, "Allow always" and thinking levels of this app's agents, and its record; an agent another app also uses
+   * stays (`agentsKept`); the shared data (skills, the MCP list, keys, provenance records, the person's other preferences) and the data
+   * key go only when no other app uses the person's data (`otherApps` names those that do; none: everything goes, as `allApps`).
+   * `allApps`: the user's IndexedDB databases and their key, so that no copy left anywhere (a backup of the profile) can ever be read.
+   *
+   * Afterwards the stores start empty. It does not sign out (that is the host's call). It leaves stores the host passed to their
+   * owner -- they may hold other people's data -- but says so in the result, so a host never believes a person's data gone that its own
+   * store still keeps. What the server keeps is for its operator to erase. Passing an `AbortSignal` alone still works (scope `thisApp`).
+   * .NET: `DeleteMyDataAsync`.
+   */
+  async deleteMyData(options?: AbortSignal | MyDataOptions): Promise<DataDeletion> {
+    const { scope, signal } = myDataOptions(options);
     await this.start(signal);
     const principal = this.profile.principal;
+    const hostSessionStoreLeft = this.settings.sessions !== undefined;
+    const hostApprovalStoreLeft = this.settings.approvalStore !== undefined;
+    const result = (storesCleared: number, extra: Pick<DataDeletion, "scope" | "otherApps" | "agentsKept">): DataDeletion => ({
+      storesCleared, hostSessionStoreLeft, hostApprovalStoreLeft, hostStoresLeft: hostSessionStoreLeft || hostApprovalStoreLeft,
+      scope: extra.scope, otherApps: extra.otherApps, sharedDataKept: extra.otherApps.length > 0, agentsKept: extra.agentsKept,
+    });
+    if (scope === "allApps") return result(await this.#deleteEverything(principal), { scope, otherApps: [], agentsKept: [] });
+    if (!principal) {
+      // A server that names no user: the shared databases of an older SDK hold no record of apps; this agent's own data goes, the rest stays.
+      const plan: MyDataPlan = { ownAgents: [this.slug], keptAgents: [], otherApps: [], sharedGoes: false };
+      return result(await this.#deleteOwn(plan), { scope, otherApps: [], agentsKept: [] });
+    }
+    const plan = await this.#myDataPlan();
+    const cleared = plan.sharedGoes ? await this.#deleteEverything(principal) : await this.#deleteOwn(plan, true);
+    return result(cleared, { scope, otherApps: plan.otherApps.map((a) => a.name), agentsKept: plan.keptAgents });
+  }
+
+  /** The whole of the person's data: their databases (their key with them) and their `localStorage` keys. */
+  async #deleteEverything(principal: AgentPrincipal | undefined): Promise<number> {
     // The SDK's own preferences store goes too (a host's own reasoning store stays the host's): closed first, an open
     // database blocks its deletion.
     if (!this.settings.reasoningStore) (this.#reasoningStore as { close?: () => void } | undefined)?.close?.();
     (this.#retentionStore as { close?: () => void } | undefined)?.close?.();
     await this.#defaults?.closeAsync();
+    await (this.#appRecords as { closeAsync?: () => Promise<void> } | undefined)?.closeAsync?.();
     let storesCleared = 0;
     try {
       storesCleared = await deleteUserDatabases(principal);
@@ -864,9 +955,41 @@ export class FadenstackAgent {
       this.#applyRetention(this.profile);
       if (!this.settings.reasoningStore) this.#reasoningPick = undefined;
     }
-    const hostSessionStoreLeft = this.settings.sessions !== undefined;
-    const hostApprovalStoreLeft = this.settings.approvalStore !== undefined;
-    return { storesCleared, hostSessionStoreLeft, hostApprovalStoreLeft, hostStoresLeft: hostSessionStoreLeft || hostApprovalStoreLeft };
+    return storesCleared;
+  }
+
+  /**
+   * Only this app's own agents: their sessions, "Allow always" and thinking levels in the SDK's stores, and (`record`) this app's record.
+   * The person's data key stays with the shared data (other apps' records are sealed under it); there is no separate seal key here,
+   * the approvals are sealed under that key. Returns how many things went (an agent's chats, its approvals, a level, the record).
+   */
+  async #deleteOwn(plan: MyDataPlan, record = false): Promise<number> {
+    let removed = 0;
+    const sessions = this.#sessions;
+    const approvals = this.#approvalStore;
+    for (const agent of plan.ownAgents) {
+      if (sessions) {
+        const had = (await sessions.list(agent)).length > 0 || (listsAgents(sessions) && (await sessions.agents()).includes(agent));
+        if (deletesAgents(sessions)) await sessions.deleteAgent(agent);
+        else for (const info of await sessions.list(agent)) await sessions.delete(agent, info.id);
+        if (had) removed++;
+      }
+      if (approvals) {
+        const had = (await approvals.list(agent)).length > 0 || (listsAgents(approvals) && (await approvals.agents()).includes(agent));
+        await approvals.remove(agent);
+        if (had) removed++;
+      }
+      if (!this.settings.reasoningStore && this.#reasoningStore) {
+        const had = (await this.#reasoningStore.agents?.().catch(() => [] as string[]) ?? []).includes(agent);
+        if (had) {
+          await this.#reasoningStore.set(agent, undefined);
+          removed++;
+        }
+      }
+    }
+    if (record && await this.#appRecords?.remove(this.appName).catch(() => false)) removed++;
+    if (plan.ownAgents.includes(this.slug) && !this.settings.reasoningStore) this.#reasoningPick = undefined;
+    return removed;
   }
 
   /**
@@ -918,4 +1041,12 @@ function manifestOutput(output: ToolOutput): NonNullable<ManifestTool["output"]>
     mediaType: output.mediaType,
     ...(typeof output.edit === "string" ? { editKind: output.edit } : {}),
   };
+}
+
+/** Reads `exportMyData` and `deleteMyData`'s argument: an options object, or (as before 0.3.0) an `AbortSignal` alone. The default scope is this app's. */
+function myDataOptions(options: AbortSignal | MyDataOptions | undefined): { scope: DataScope; signal: AbortSignal | undefined } {
+  if (options === undefined) return { scope: "thisApp", signal: undefined };
+  if (typeof (options as AbortSignal).aborted === "boolean") return { scope: "thisApp", signal: options as AbortSignal };
+  const given = options as MyDataOptions;
+  return { scope: given.scope === "allApps" ? "allApps" : "thisApp", signal: given.signal };
 }

@@ -28,7 +28,7 @@ const mcp = mcpModule({
 const agent = FadenstackAgent.createBuilder().useEndpoint(endpoint).useLocalProfile(definition).use(mcp).build();
 ```
 
-**The person's own servers** live in IndexedDB, one database per principal (`fadenstack-mcp`). Standalone is its own principal, and `deleteMyData` removes them. A header value (a token) is sealed with the principal's WebCrypto key. [Data on the device](data-on-device.md) lists it with the SDK's other databases.
+**The person's own servers** live in IndexedDB, one database per principal (`fadenstack-mcp`). Standalone is its own principal, and `deleteMyData` removes them (with the person's other shared data, when no other Fadenstack app in the browser uses it, or with `scope: "allApps"`). A header value (a token) is sealed with the principal's WebCrypto key. [Data on the device](data-on-device.md) lists it with the SDK's other databases.
 
 **One list in several contexts** (a side panel and a service worker, two tabs): each server is its own record, so one context's change never overwrites another's, and the label check and the write are one transaction. A change is told to the other contexts of the origin over a `BroadcastChannel` (`MCP_STORE_CHANNEL`; the message carries the database's name, nothing else), so their module asks again and a Tools view reads the list; `broadcast: false` turns that off. .NET does the same for several apps on one file (`McpHost`).
 
