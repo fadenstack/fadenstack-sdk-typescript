@@ -1,5 +1,6 @@
 import { FadenstackError } from "@fadenstack/client";
 
+import { AuditRetention } from "./audit.js";
 import { DEFAULT_CHAT_RETENTION, chatRetentionChoice, isValidRetentionChats, isValidRetentionDays, type ChatRetentionChoice } from "./chatRetention.js";
 
 /** A machine policy's word on a feature: allowed, forbidden, or allowed only for the listed items. The strings are .NET's `PolicyAccess` names. */
@@ -68,11 +69,12 @@ export interface MachinePolicyInit {
   webSearch?: PolicyAccess;
   timestamping?: TimestampingPolicy;
   chatRetention?: ChatRetentionChoice | undefined;
+  auditRetentionDays?: number | undefined;
   locked?: readonly string[];
   warnings?: readonly string[];
 }
 
-const KEYS: readonly string[] = Object.freeze(["server", "standalone", "endpoints", "plainHttp", "mcp", "skills", "webSearch", "timestamping", "chatRetention"]);
+const KEYS: readonly string[] = Object.freeze(["server", "standalone", "endpoints", "plainHttp", "mcp", "skills", "webSearch", "timestamping", "chatRetention", "auditRetentionDays"]);
 
 /**
  * What IT set for this machine (sdk/51 F09, D6, R3-8): one vocabulary for every app, read from the app's managed location
@@ -121,6 +123,11 @@ export class MachinePolicy {
    * undefined when the policy leaves it to the person. A governed agent follows its server instead. .NET: `MachinePolicy.ChatRetention`.
    */
   readonly chatRetention: ChatRetentionChoice | undefined;
+  /**
+   * How many days entries of the person's record of tool calls are kept (`auditRetentionDays`, 30 to 3650), fixed by IT; undefined: 180
+   * days. A value out of bounds or not a whole number is reported and becomes 180. .NET: `MachinePolicy.AuditRetentionDays`.
+   */
+  readonly auditRetentionDays: number | undefined;
   /** The keys the policy set itself (the app locks them in its UI and never writes them into the person's settings). */
   readonly locked: readonly string[];
   /** What was ignored or narrowed while reading: unknown keys, unknown values (never a value itself). */
@@ -136,6 +143,7 @@ export class MachinePolicy {
     this.webSearch = init.webSearch ?? PolicyAccess.Allowed;
     this.timestamping = init.timestamping ?? TimestampingPolicy.on;
     this.chatRetention = init.chatRetention;
+    this.auditRetentionDays = init.auditRetentionDays;
     this.locked = Object.freeze([...(init.locked ?? [])]);
     this.warnings = Object.freeze([...(init.warnings ?? [])]);
     Object.freeze(this);
@@ -174,6 +182,7 @@ export class MachinePolicy {
       standalone: PolicyAccess.Forbidden, plainHttp: PolicyAccess.Forbidden, mcp: PolicyRule.forbidden, skills: PolicyRule.forbidden,
       webSearch: PolicyAccess.Forbidden, timestamping: TimestampingPolicy.off,
       chatRetention: DEFAULT_CHAT_RETENTION, // old chats are deleted as by default; the person cannot turn it off
+      auditRetentionDays: AuditRetention.defaultDays,
       locked: KEYS.filter((k) => k !== "server"),
       warnings: [`${why}: standalone, local MCP, local skills, web search and plain http are forbidden; time-stamps are off.`],
     });
@@ -216,6 +225,7 @@ export class MachinePolicy {
       webSearch: access(values, "webSearch", byDefault, warnings),
       timestamping: timestamps(values, warnings),
       chatRetention: values.has("chatRetention") ? retention(values.get("chatRetention"), warnings) : undefined,
+      auditRetentionDays: values.has("auditRetentionDays") ? auditDays(values.get("auditRetentionDays"), warnings) : undefined,
       locked,
       warnings,
     });
@@ -269,6 +279,12 @@ function timestamps(values: Map<string, unknown>, warnings: string[]): Timestamp
  * `{ "autoDelete": true, "maxAgeDays": 30, "maxSessions": 100 }`. What it leaves out is the default (on, 90 days, 50 chats); a value
  * that is not understood or out of bounds is reported and also becomes the default, so chats are not kept longer than that.
  */
+function auditDays(value: unknown, warnings: string[]): number {
+  if (typeof value === "number" && AuditRetention.isValid(value)) return value;
+  warnings.push(`'auditRetentionDays' is not a whole number from ${AuditRetention.minDays} to ${AuditRetention.maxDays}: the default (${AuditRetention.defaultDays}).`);
+  return AuditRetention.defaultDays;
+}
+
 function retention(value: unknown, warnings: string[]): ChatRetentionChoice {
   if (value === null || typeof value !== "object" || Array.isArray(value)) {
     warnings.push("'chatRetention' is not an object: the defaults (on, 90 days, 50 chats) apply.");

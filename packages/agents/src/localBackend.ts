@@ -197,7 +197,7 @@ export class LocalBackend implements AgentBackend {
     return Promise.resolve([]);
   }
 
-  answerApproval(_approvalId: string, _approved: boolean, _scope: AnswerScope): Promise<void> {
+  answerApproval(_approvalId: string, _approved: boolean, _scope: AnswerScope, _argumentsSha256?: string): Promise<void> {
     return Promise.reject(noServer("a gateway approval"));
   }
 

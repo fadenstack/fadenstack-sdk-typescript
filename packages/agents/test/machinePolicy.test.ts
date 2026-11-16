@@ -40,9 +40,10 @@ describe("reading", () => {
     const policy = MachinePolicy.fromJson(`
       {"server":"https://ai.example.test","standalone":"allowed","endpoints":["http://localhost:11434","https://llm.example.test/v1"],
        "plainHttp":"forbidden","mcp":["notes-db"],"skills":"allowed","webSearch":"forbidden","timestamping":"off",
-       "chatRetention":{"autoDelete":false,"maxAgeDays":30,"maxSessions":100}}`);
+       "chatRetention":{"autoDelete":false,"maxAgeDays":30,"maxSessions":100},"auditRetentionDays":90}`);
 
     expect(policy.server?.href).toBe("https://ai.example.test/");
+    expect(policy.auditRetentionDays).toBe(90);
     expect(policy.standalone).toBe(PolicyAccess.Allowed);
     expect(policy.endpoints).toEqual(["http://localhost:11434", "https://llm.example.test/v1"]);
     expect(policy.plainHttp).toBe(PolicyAccess.Forbidden);

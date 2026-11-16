@@ -32,7 +32,8 @@ import {
 } from "@fadenstack/client";
 
 import type { FadenstackAgent } from "./agent.js";
-import { ApprovalDecision, cleanReason, type ApprovalHandler, type ApprovalRequest, type ApprovalScope } from "./approvals.js";
+import { ApprovalDecision, cleanReason, denyAllApprovals, type ApprovalHandler, type ApprovalRequest, type ApprovalScope } from "./approvals.js";
+import { AuditDecisions, AuditOutcomes, AuditScopes, argumentsSha256 } from "./audit.js";
 import { approvalCovers } from "./approvalStore.js";
 import { BypassSignInError } from "./stepUp.js";
 import { attachmentData, type MessageAttachment } from "./attachments.js";
@@ -572,6 +573,13 @@ export class ChatSession {
   }
 }
 
+/** What the audit log will say about the call being run: the decision, its scope, and whether the call never got as far as running. */
+interface AuditNote {
+  decision: string;
+  scope: string | undefined;
+  notRun: boolean;
+}
+
 /** How a call that needed approval was settled. */
 interface Settled {
   scope?: ApprovalScope;
@@ -637,6 +645,9 @@ class Turn {
   readonly #began = performance.now();
   #rounds = 0;
   #approvalKind: string | undefined;
+  // What the audit log will say about the call that is running now (calls run one after the other): who or what let it run, or
+  // stopped it. Set where the decision is made (#approve, #decideAndRun), written once at the end of the call (#audit).
+  #auditNote: AuditNote = { decision: AuditDecisions.none, scope: undefined, notRun: false };
 
   /** The log's scope: the conversation and the turn (.NET `Log.TurnScope`). */
   get #scope(): { ConversationId: string; TurnId: string } {
@@ -976,6 +987,9 @@ class Turn {
   async #answerGatewayApproval(value: unknown, signal: AbortSignal): Promise<void> {
     const approvalId = str(value, "approvalId");
     if (!approvalId) return;
+    // The gateway keeps the arguments: the hash is only there when its word carries them as a text.
+    const text = str(value, "arguments");
+    const hash = text === undefined ? undefined : await argumentsSha256(text);
     const request: ApprovalRequest = {
       callId: str(value, "toolCallId") ?? "",
       toolName: str(value, "toolCallName") ?? "",
@@ -983,16 +997,21 @@ class Turn {
       source: "gateway",
       reason: str(value, "message") ?? "",
       arguments: {},
+      ...(hash !== undefined ? { argumentsSha256: hash } : {}),
       ...(saysOpenWorld(value) ? { openWorld: true } : {}),
     };
+    const note: AuditNote = this.#auditNote = { decision: AuditDecisions.none, scope: undefined, notRun: false };
     const timeoutS = (value as Data)["timeoutS"];
     // A gateway that does not say whether a rule asks is taken as one: it asks every time.
     const rule = (value as Data)["rule"] !== false;
     const settled = await this.#approve(request, rule, typeof timeoutS === "number" ? timeoutS * 1000 : 5 * 60_000, signal,
       undefined, false, true);
+    // The gateway runs the tool: an approved call is recorded as released to it, a refused or unanswered one as it stands.
+    note.notRun = settled.timedOut;
+    await this.#audit(request.toolName, request.toolClass, "gateway", undefined, hash, settled.approved ? "ok" : "denied");
     if (settled.timedOut) return; // the gateway expires it on its own
     const scope = settled.scope === "chat" || settled.scope === "always" ? settled.scope : "once";
-    await this.#answerGateway(approvalId, settled.approved, scope, signal);
+    await this.#answerGateway(approvalId, settled.approved, scope, this.#agent.sendsArgumentsHash ? hash : undefined, signal);
     if (!settled.approved) this.#toolDenied = true;
   }
 
@@ -1004,7 +1023,7 @@ class Turn {
    * 404, which counts as taken: the stream says which. Any other refusal (409 and the rest) is not retried. .NET:
    * `ChatSession.AnswerGatewayAsync`.
    */
-  async #answerGateway(approvalId: string, approved: boolean, scope: AnswerScope, signal: AbortSignal): Promise<void> {
+  async #answerGateway(approvalId: string, approved: boolean, scope: AnswerScope, hash: string | undefined, signal: AbortSignal): Promise<void> {
     for (let attempt = 0; ; attempt++) {
       // A controller and a timer of our own, not AbortSignal.any with AbortSignal.timeout: Node holds those weakly, and a
       // collected one never fires, which would leave the answer hanging.
@@ -1014,7 +1033,7 @@ class Turn {
       signal.addEventListener("abort", stop, { once: true });
       if (signal.aborted) stop();
       try {
-        await this.#agent.backend.answerApproval(approvalId, approved, scope, waiting.signal);
+        await this.#agent.backend.answerApproval(approvalId, approved, scope, hash, waiting.signal);
         return;
       } catch (error) {
         if (attempt === 0 && !signal.aborted && (waiting.signal.aborted || unanswered(error))) {
@@ -1053,9 +1072,40 @@ class Turn {
     if (Array.isArray(hidden)) for (const name of hidden) if (typeof name === "string") this.#hidden.add(name);
   }
 
+  /**
+   * Writes the call's entry in the person's audit log (sdk/51 8.10): the decision, the scope, the outcome, and the hash of the
+   * arguments' text -- never the arguments, the result or any text. Never breaks the turn: a log that cannot be written is logged by
+   * its kind, the call goes on, and the next verify reports the gap (ASVS 5.0 V16). .NET: `ChatSession.AuditAsync`.
+   */
+  async #audit(tool: string, toolClass: ToolClass, source: string, server: string | undefined, hash: string | undefined, outcome: string, cancelled = false): Promise<void> {
+    const note = this.#auditNote;
+    try {
+      await this.#agent.pruneAuditIfDue();
+      await this.#agent.audit.append({
+        app: this.#agent.appName, agent: this.#agent.slug, chat: this.#session.id, turn: this.#id, tool, class: toolClass, source,
+        ...(server !== undefined ? { server } : {}), decision: note.decision, ...(note.scope !== undefined ? { scope: note.scope } : {}),
+        ...(hash !== undefined ? { argumentsSha256: hash } : {}),
+        outcome: cancelled ? AuditOutcomes.cancelled
+          : note.notRun || (outcome === "error" && note.decision === AuditDecisions.none) ? AuditOutcomes.notRun
+          : outcome === "ok" ? AuditOutcomes.ran : outcome === "denied" ? AuditOutcomes.refused : AuditOutcomes.failed,
+      });
+    } catch (error) {
+      writeLog(this.#agent.settings.logger, AgentLog.auditNotWritten, { Kind: error instanceof Error ? error.name : typeof error }, this.#scope);
+    }
+  }
+
+  /** The audit scope of an approval's scope: `grant` is a grant for a time (a work or Bypass grant has none). */
+  #auditScope(scope: ApprovalScope | undefined, grantId: string | undefined): string | undefined {
+    return scope === "once" ? AuditScopes.once : scope === "chat" ? AuditScopes.chat : scope === "always" ? AuditScopes.always
+      : scope === "grant" && grantId !== undefined && this.#agent.grants.find(grantId)?.kind === "time" ? AuditScopes.time : undefined;
+  }
+
   async #runTool(planned: PlannedCall, signal: AbortSignal): Promise<void> {
     const { call, mark } = planned;
     this.#approvalKind = undefined;
+    const note: AuditNote = this.#auditNote = { decision: AuditDecisions.none, scope: undefined, notRun: false };
+    // The model's `function.arguments` text as the stream carried it (a blank one is written back as `{}`); for a person's own command, the canonical command JSON.
+    const argumentsHash = await argumentsSha256(call.argumentsJson || "{}");
     const tool = this.#agent.find(call.name);
     const source = tool?.source ?? "host";
     const toolClass: ToolClass = tool ? stricterClass(tool.toolClass, mark?.toolClass) : "unknown";
@@ -1071,10 +1121,13 @@ class Turn {
     const answered = tool && !planned.denied && call.argumentsError === undefined && !this.#commandOrigin
       ? tool.scope?.beforeCall(tool, this.#session) : undefined;
     if (!tool) {
+      note.notRun = true;
       [result, outcome] = [this.#agent.isRefusedPictureTool(call.name) ? IMAGES_DISABLED_RESULT
         : this.#agent.isGone(call.name) ? `${call.name} is no longer available.` : `Tool '${call.name}' does not exist here.`, "error"];
     } else if (planned.denied) {
       // The gateway refused the call: the hooks are told, and cannot change it.
+      // The mode hides it (the gateway says so, or the mode does): hidden; any other refusal of the gateway is a rule's.
+      note.decision = planned.hidden || decideTool(this.#mode, toolClass, undefined, tool.openWorld === true) === "hidden" ? AuditDecisions.hidden : AuditDecisions.ruleDenied;
       await this.#beforeToolHooks(hookState, tool, toolClass, call, args, "refused", signal);
       if (planned.hidden) {
         this.#toolDenied = true;
@@ -1083,14 +1136,19 @@ class Turn {
       }
       [result, outcome] = [`Tool '${call.name}' is not allowed here.`, "denied"];
     } else if (call.argumentsError !== undefined) {
+      note.notRun = true;
       [result, outcome] = [`Error: the arguments are not valid JSON (${call.argumentsError}).`, "error"];
     } else if (answered !== undefined) {
+      note.notRun = true;
       [result, outcome] = [answered, "ok"]; // a tool outside the conversation's scope, now switched on
     } else {
       try {
         ({ result, outcome, waited } = await this.#decideAndRun(tool, toolClass, mark, call, args, hookState, signal));
       } catch (error) {
-        if (signal.aborted) await this.#afterToolHooks(hookState, tool, call, "cancelled", performance.now() - started, undefined, signal);
+        if (signal.aborted) {
+          await this.#audit(tool.name, toolClass, source, tool.server, argumentsHash, "error", true);
+          await this.#afterToolHooks(hookState, tool, call, "cancelled", performance.now() - started, undefined, signal);
+        }
         throw error;
       }
     }
@@ -1106,11 +1164,13 @@ class Turn {
     // A name the model made up is its words, not ours: only the agent's own tools are named in logs.
     writeLog(this.#agent.settings.logger, AgentLog.toolCall, { Tool: tool?.name ?? "(unknown)", ToolClass: toolClass, Source: source,
       Outcome: outcome, Approval: this.#approvalKind ?? "none", DurationMs: Math.round(ran) }, this.#scope);
+    await this.#audit(tool?.name ?? "(unknown)", toolClass, source, tool?.server, argumentsHash, outcome);
     if (tool) {
       this.#agent.reporter.add({
         type: "tool.executed", conversationId: this.#session.id, tool: call.name,
         source: source === "mcp" ? "mcp" : "host", durationMs: ran, outcome,
         ...(tool.server !== undefined ? { server: tool.server } : {}),
+        ...(this.#agent.sendsArgumentsHash ? { argumentsSha256: argumentsHash } : {}),
       });
     }
   }
@@ -1134,6 +1194,7 @@ class Turn {
           throw new Error("The host call's authenticated identity changed.");
         if (decision.decision === "deny") {
           this.#toolDenied = true;
+          this.#auditNote.decision = AuditDecisions.ruleDenied;
           await this.#beforeToolHooks(hookState, tool, toolClass, call, args, "refused", signal);
           await this.#notice({ outcome: "tool_denied", stage: "tool", message: decision.message });
           return { result: decision.message, outcome: "denied", waited: 0 };
@@ -1143,6 +1204,7 @@ class Turn {
         this.#mode = narrowestMode(narrowestMode(this.#mode, this.#session.effectiveToolMode), decision.effectiveToolMode);
       } catch (error) {
         if (signal.aborted) throw signal.reason ?? error;
+        this.#auditNote.notRun = true; // the server's word could not be had: the call did not go on
         return { result: `Error: ${error instanceof Error ? error.message : String(error)}`, outcome: "error", waited: 0 };
       }
     }
@@ -1152,6 +1214,7 @@ class Turn {
     const decision = decideTool(this.#mode, toolClass, contractApproval, openWorld);
     if (decision === "hidden") {
       this.#toolDenied = true;
+      this.#auditNote.decision = AuditDecisions.hidden;
       await this.#beforeToolHooks(hookState, tool, toolClass, call, args, "refused", signal);
       const why = `the tool mode is ${this.#mode}`;
       await this.#notice({ outcome: "tool_denied", stage: "tool", category: "mode", message: `'${tool.name}' is not allowed: ${why}.` });
@@ -1174,6 +1237,7 @@ class Turn {
       const hooked = await this.#beforeToolHooks(hookState, tool, toolClass, call, args, policySays, signal);
       if (hooked.deny) {
         this.#toolDenied = true;
+        this.#auditNote.decision = AuditDecisions.ruleDenied;
         return { result: `'${tool.name}' was declined by the app (${hooked.reason ?? "declined by the app"}).`, outcome: "denied", waited: 0 };
       }
       if (hooked.ask && policySays === "runs") {
@@ -1194,6 +1258,7 @@ class Turn {
             ? `What '${tool.name}' is given leaves the organisation; the tool mode is ${this.#mode}.`
           : `'${tool.name}' is ${toolClass}; the tool mode is ${this.#mode}.`,
         arguments: args,
+        argumentsSha256: await argumentsSha256(call.argumentsJson || "{}"),
         ...(openWorld ? { openWorld: true } : {}),
         ...(tool.server ? { server: tool.server } : {}),
         ...(tool.readOnlyHint !== undefined ? { readOnlyHint: tool.readOnlyHint } : {}),
@@ -1209,6 +1274,10 @@ class Turn {
         const reason = cleanReason(settled.reason);
         return { result: `The user declined to run '${tool.name}'.${reason ? ` Their reason: ${reason}` : ""}`, outcome: "denied", waited };
       }
+    }
+    // Nothing asked and nothing stood in the way: the server's rule said run, or the tool mode did.
+    if (this.#auditNote.decision === AuditDecisions.none) {
+      this.#auditNote.decision = policy?.decision.decision === "run" ? AuditDecisions.ruleAllowed : AuditDecisions.mode;
     }
     try {
       const services = this.#services(tool, toolClass, call.id, args, signal);
@@ -1352,13 +1421,14 @@ class Turn {
     const decision = decideTool(mode, toolClass, undefined, invocation.tool.openWorld);
     if (prepared.decision === "deny" || decision === "hidden") {
       this.#toolDenied = true;
+      this.#auditNote.decision = decision === "hidden" && prepared.decision !== "deny" ? AuditDecisions.hidden : AuditDecisions.ruleDenied;
       await this.#notice({ outcome: "tool_denied", stage: "tool", message: prepared.message });
       throw new CommandDenied(prepared.message);
     }
     if (prepared.decision === "ask" || decision === "ask") {
       const settled = await this.#approve({ callId: invocation.context.callId,
         toolName: invocation.tool.name, toolClass, source: "host", reason: prepared.message,
-        arguments: freezeCommand(JSON.parse(serialized) as Record<string, unknown>),
+        arguments: freezeCommand(JSON.parse(serialized) as Record<string, unknown>), argumentsSha256: await argumentsSha256(serialized),
       }, prepared.requiredByRule, undefined, signal,
       invocation.tool.describe ? () => describeTarget(invocation.tool, args, signal) : undefined, true);
       if (!settled.approved) {
@@ -1367,6 +1437,9 @@ class Turn {
       }
     }
     if (commandJson(invocation.arguments) !== serialized) throw new Error("The command changed after review.");
+    if (this.#auditNote.decision === AuditDecisions.none) {
+      this.#auditNote.decision = prepared.decision === "run" ? AuditDecisions.ruleAllowed : AuditDecisions.mode;
+    }
     const checked = await resource.checkHostTool({ ...base, phase: "dispatch", prepared }, signal);
     if (checked.decision === "deny" || checked.profileStamp !== prepared.profileStamp
       || checked.argumentsStamp !== prepared.argumentsStamp || checked.decisionStamp !== prepared.decisionStamp
@@ -1407,6 +1480,8 @@ class Turn {
       verdict = await this.#agent.grants.check(marked.grantId, this.#grantCall({ ...base, requiredByRule: rule }, gatewayWait), signal);
     }
     if (verdict.covered && marked) {
+      this.#auditNote.decision = AuditDecisions.serverGrant;
+      this.#auditNote.scope = this.#auditScope("grant", marked.grantId);
       await this.#record(base, { approved: true, scope: "grant", asked: false, rule, timedOut: false, waitedMs: undefined, grantId: marked.grantId });
       return { approved: true, scope: "grant", grantId: marked.grantId, coveredGrantId: marked.grantId,
         timedOut: false, waitedMs: undefined, reason: undefined };
@@ -1418,6 +1493,8 @@ class Turn {
       : chatAllowed && this.#access.approved.has(chatKey(name, base.source, base.server)) ? "chat"
       : undefined;
     if (standing) {
+      this.#auditNote.decision = AuditDecisions.savedApproval;
+      this.#auditNote.scope = this.#auditScope(standing, undefined);
       await this.#record(base, { approved: true, scope: standing, asked: false, rule, timedOut: false, waitedMs: undefined });
       return { approved: true, scope: standing, timedOut: false, waitedMs: undefined, reason: undefined };
     }
@@ -1464,6 +1541,10 @@ class Turn {
     if (scope === "always" && !(await this.#keepAlways(name, toolClass, base.source, base.server))) scope = "once";
     if (scope === "chat") this.#access.approved.add(chatKey(name, base.source, base.server));
     const declined = scope === undefined ? cleanReason(decision?.reason) : undefined;
+    this.#auditNote.decision = decision === undefined ? AuditDecisions.askedTimeout
+      : scope === undefined ? ((this.#session.approvals ?? this.#agent.settings.approvals) === denyAllApprovals ? AuditDecisions.floor : AuditDecisions.askedDenied)
+      : AuditDecisions.askedApproved;
+    this.#auditNote.scope = this.#auditScope(scope, grantId);
     await this.#record(base, { approved: scope !== undefined, scope, asked: true, rule, timedOut: decision === undefined, waitedMs,
       ...(declined !== undefined ? { reason: declined } : {}),
       ...(leadsOutside !== undefined ? { outsideGrant: true } : {}),
@@ -1522,6 +1603,7 @@ class Turn {
       ...(how.waitedMs !== undefined ? { waitMs: how.waitedMs } : {}),
       ...(how.scope ? { scope: how.scope } : {}),
       ...(how.grantId ? { grantId: how.grantId } : {}),
+      ...(this.#agent.sendsArgumentsHash && request.argumentsSha256 !== undefined ? { argumentsSha256: request.argumentsSha256 } : {}),
     });
   }
 

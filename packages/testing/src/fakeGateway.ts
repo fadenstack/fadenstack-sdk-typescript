@@ -175,7 +175,9 @@ export interface FakeReply {
      * gateway holds the tool open-world, from 0.7.1) are sent when given, as a current gateway sends them; without them
      * the event is an older gateway's.
      */
-    approval?: { message?: string; timeoutS?: number; rule?: boolean; toolClass?: string; openWorld?: boolean };
+    approval?: { message?: string; timeoutS?: number; rule?: boolean; toolClass?: string; openWorld?: boolean;
+      /** The event carries the call's arguments as their JSON text (`arguments`), which a client may hash for its audit log; a current gateway sends none. */
+      withArguments?: boolean };
   };
   /** A client tool the gateway refuses (`faden.tool_denied`), e.g. by a tool rule. */
   deniedTool?: { name: string; message: string; callId?: string };
@@ -325,6 +327,8 @@ const EVENT_FIELDS: Record<string, readonly string[]> = {
   "session.stats": ["turns", "compactions", "retention_sessions", "retention_days"],
 };
 const EVENT_COMMON = ["type", "occurred_at", "conversation_id"];
+/** The feature that lets a client send `arguments_sha256` (sdk/51 8.10). */
+const ARGUMENTS_SHA256_FEATURE = "client_events.arguments_sha256";
 const ID_PATTERN = /^[A-Za-z0-9._:-]{1,128}$/;
 
 /**
@@ -348,7 +352,7 @@ export class FakeGateway {
   /** Agents created through the API, by whom, with the body sent. */
   readonly createdAgents: { slug: string; by: string; body: Record<string, unknown> }[] = [];
   /** Answers to gateway approvals. */
-  readonly approvals: { approvalId: string; approved: boolean }[] = [];
+  readonly approvals: { approvalId: string; approved: boolean; argumentsSha256?: string }[] = [];
   /** The records the server signed for placements, in order. */
   readonly provenanceRecords: FakeSignedRecord[] = [];
   /** The placement reports clients sent, as sent. */
@@ -1177,6 +1181,7 @@ export class FakeGateway {
         ...(tool.approval.toolClass !== undefined ? { toolClass: tool.approval.toolClass } : {}),
         ...(tool.approval.rule !== undefined ? { rule: tool.approval.rule } : {}),
         ...(tool.approval.openWorld !== undefined ? { openWorld: tool.approval.openWorld } : {}),
+        ...(tool.approval.withArguments ? { arguments: JSON.stringify(tool.arguments ?? {}) } : {}),
       } }));
       const approved = await answered;
       this.#pendingApprovals.delete(approvalId);
@@ -1202,7 +1207,10 @@ export class FakeGateway {
       return json(422, { detail: [{ msg: "events must hold 1 to 100 events" }] });
     }
     for (const event of events as Record<string, unknown>[]) {
-      const allowed = EVENT_FIELDS[String(event["type"])];
+      // `arguments_sha256` is taken only where the profile lists the feature (core is asked to list it): else the whole batch is refused.
+      const base = EVENT_FIELDS[String(event["type"])];
+      const allowed = base && ["tool.executed", "approval.decided"].includes(String(event["type"])) && this.#lists(ARGUMENTS_SHA256_FEATURE)
+        ? [...base, "arguments_sha256"] : base;
       if (!allowed) return json(422, { detail: [{ msg: `unknown event type ${String(event["type"])}` }] });
       const extra = Object.keys(event).filter((k) => !allowed.includes(k) && !EVENT_COMMON.includes(k));
       if (extra.length) return json(422, { detail: [{ msg: `extra fields not permitted: ${extra.join(", ")}` }] });
@@ -1216,10 +1224,14 @@ export class FakeGateway {
   }
 
   #approve(approvalId: string, body: unknown): Response {
-    const approved = ((body ?? {}) as Record<string, unknown>)["approved"] === true;
+    const answer = (body ?? {}) as Record<string, unknown>;
+    const approved = answer["approved"] === true;
+    const hash = answer["arguments_sha256"];
+    if (hash !== undefined && (!this.#lists(ARGUMENTS_SHA256_FEATURE) || typeof hash !== "string" || !/^[0-9a-f]{64}$/.test(hash)))
+      return json(422, { detail: [{ msg: "extra fields not permitted: arguments_sha256" }] });
     const pending = this.#pendingApprovals.get(approvalId);
     if (!pending) return json(404, { detail: "No such approval." });
-    this.approvals.push({ approvalId, approved });
+    this.approvals.push({ approvalId, approved, ...(typeof hash === "string" ? { argumentsSha256: hash } : {}) });
     pending(approved);
     return json(200, { status: approved ? "approved" : "rejected" });
   }
@@ -1230,6 +1242,11 @@ export class FakeGateway {
       type: "function" as const,
       function: { name: c.name, arguments: typeof c.arguments === "string" ? c.arguments : JSON.stringify(c.arguments ?? {}) },
     }));
+  }
+
+  /** Whether the profile lists `feature` (the ones the fake always has and the options add). */
+  #lists(feature: string): boolean {
+    return (this.#options.features ?? []).includes(feature);
   }
 
   #now(): number {

@@ -21,6 +21,7 @@ import {
 
 import type { PermissionMode } from "./approvals.js";
 import { type ApprovalStore, type StoredApproval } from "./approvalStore.js";
+import { ARGUMENTS_SHA256_FEATURE, AuditRetention, MemoryAuditLog, type AuditExportFormat, type AuditLog, type AuditVerification } from "./audit.js";
 import { DefaultStores, buildExport, deleteUserDatabases, deleteUserLocalStorage, userDatabaseNames, type DataDeletion, type MyDataExport } from "./dataRights.js";
 import {
   IndexedDbAppRecords, MemoryAppRecords, appNameOf, listMyDataApps, planMyData,
@@ -94,6 +95,8 @@ export class FadenstackAgent {
   // The chats this agent gave out: never pruned while they live.
   readonly #handedOut = new Set<WeakRef<ChatSession>>();
   #defaults: DefaultStores | undefined;
+  #memoryAudit: AuditLog | undefined;
+  #auditPruned = 0;
   #appRecords: AppRecords | undefined;
   #problems = 0;
   #starting: Promise<void> | undefined;
@@ -497,6 +500,7 @@ export class FadenstackAgent {
     this.#context = context;
     this.#applyRetention(profile);
     await this.#pruneChats(); // an idle profile ages out too (F08), when pruning is on
+    await this.pruneAuditIfDue();
     const dropped = this.settings.tools.filter((t) => !hosts.some((h) => h.name === t.name));
     for (const tool of dropped) writeLog(this.settings.logger, AgentLog.toolDropped, { Tool: tool.name });
     writeLog(this.settings.logger, AgentLog.profileLoaded, { Agent: this.slug, Version: profile.version ?? null, Edition: profile.edition,
@@ -546,6 +550,9 @@ export class FadenstackAgent {
       onProblem: (problem) => this.#storeProblem(problem),
       sessions: !this.settings.sessions,
       approvals: !this.settings.approvalStore,
+      // On by default; like the thinking level, in memory for a host that keeps both stores itself (it has taken over the device's
+      // storage) unless the host gives a log of its own (`useAuditLog`).
+      audit: !this.settings.auditLog && !(this.settings.sessions && this.settings.approvalStore),
     });
     this.#defaults = defaults;
     this.#sessions = defaults.sessions;
@@ -633,6 +640,53 @@ export class FadenstackAgent {
     const store = this.settings.approvalStore ?? this.#approvalStore;
     if (!store) throw new Error("Call start() first.");
     return store;
+  }
+
+  /**
+   * The person's record of tool calls: the host's (`useAuditLog`), or the SDK's own once `start` knows whose it is (in memory where
+   * the host keeps both stores itself, or there is no IndexedDB). @internal .NET: `FadenstackAgent.Audit`.
+   */
+  get audit(): AuditLog {
+    return this.settings.auditLog ?? this.#defaults?.audit ?? (this.#memoryAudit ??= new MemoryAuditLog());
+  }
+
+  /** Whether the server takes the arguments' hash in its events and answers (`client_events.arguments_sha256`); older ones refuse the whole batch. @internal */
+  get sendsArgumentsHash(): boolean {
+    return this.#profile?.features.includes(ARGUMENTS_SHA256_FEATURE) === true;
+  }
+
+  /** How long entries of the record of tool calls are kept: the machine policy's `auditRetentionDays`, else 180 days. .NET: `AuditRetentionDays`. */
+  get auditRetentionDays(): number {
+    return this.settings.machinePolicy?.auditRetentionDays ?? AuditRetention.defaultDays;
+  }
+
+  /**
+   * Checks the person's record of tool calls in this browser: whether every entry reads, links, hashes and seals as it should, how
+   * many there are and since when. A damaged record names the first entry that does not hold, never its content. .NET: `VerifyAuditAsync`.
+   */
+  async verifyAudit(signal?: AbortSignal): Promise<AuditVerification> {
+    await this.start(signal);
+    return this.audit.verify();
+  }
+
+  /**
+   * The record of tool calls (every app of the person in this browser writes into the same one) as a CSV or a self-contained HTML page,
+   * as text, with the verification result at the top; the host saves it or offers it as a download. .NET: `ExportAuditAsync`.
+   */
+  async exportAudit(format: AuditExportFormat, signal?: AbortSignal): Promise<string> {
+    await this.start(signal);
+    return this.audit.export(format);
+  }
+
+  /** @internal Removes entries older than `auditRetentionDays` at the start and then at most once a day. Never fails the caller. */
+  async pruneAuditIfDue(): Promise<void> {
+    if (this.clock() - this.#auditPruned < 86_400_000) return;
+    this.#auditPruned = this.clock();
+    try {
+      await this.audit.prune(this.auditRetentionDays);
+    } catch (error) {
+      writeLog(this.settings.logger, AgentLog.auditNotPruned, { Kind: error instanceof Error ? error.name : typeof error });
+    }
   }
 
   // The default stores need the profile (whose database); a store the host passed does not.
@@ -853,7 +907,7 @@ export class FadenstackAgent {
     await this.start(signal);
     const principal = this.profile.principal;
     const exportScope = scope === "thisApp" ? { app: this.appName, plan: principal ? await this.#myDataPlan() : this.#noUserPlan() } : undefined;
-    return buildExport(this.sessionStore, this.approvalStore, this.slug, () => this.#problems, { principal }, exportScope);
+    return buildExport(this.sessionStore, this.approvalStore, this.slug, () => this.#problems, { principal }, exportScope, this.audit);
   }
 
   /**

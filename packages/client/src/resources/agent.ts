@@ -157,11 +157,18 @@ export class AgentResource {
   /** Approves or declines a gateway tool call waiting for the user (`faden.approval_required`). */
   answerApproval(approvalId: string, approved: boolean, signal?: AbortSignal): Promise<void>;
   answerApproval(approvalId: string, approved: boolean, scope: AnswerScope, signal?: AbortSignal): Promise<void>;
-  async answerApproval(approvalId: string, approved: boolean, scopeOrSignal?: AnswerScope | AbortSignal, signal?: AbortSignal): Promise<void> {
+  /**
+   * The same, with the SHA-256 (lowercase hex) of the held call's arguments' JSON text, as the audit log keeps it. Send it only to a
+   * server whose profile lists `client_events.arguments_sha256`; undefined leaves it out. .NET: `AnswerApprovalAsync(..., argumentsSha256, ...)`.
+   */
+  answerApproval(approvalId: string, approved: boolean, scope: AnswerScope, argumentsSha256: string | undefined, signal?: AbortSignal): Promise<void>;
+  async answerApproval(approvalId: string, approved: boolean, scopeOrSignal?: AnswerScope | AbortSignal, hashOrSignal?: string | AbortSignal, last?: AbortSignal): Promise<void> {
     const scope = typeof scopeOrSignal === "string" ? scopeOrSignal : undefined;
     if (scope !== undefined && !["once", "chat", "always"].includes(scope)) throw new TypeError("Invalid approval answer scope.");
+    const hash = typeof hashOrSignal === "string" ? hashOrSignal : undefined;
+    const signal = last ?? (typeof scopeOrSignal === "string" ? (hashOrSignal instanceof AbortSignal ? hashOrSignal : undefined) : scopeOrSignal);
     await this.#transport.post<unknown>(this.#route(`approvals/${encodeURIComponent(approvalId)}`),
-      { approved, ...(scope !== undefined ? { scope } : {}) }, typeof scopeOrSignal === "string" ? signal : scopeOrSignal);
+      { approved, ...(scope !== undefined ? { scope } : {}), ...(hash !== undefined ? { arguments_sha256: hash } : {}) }, signal);
   }
 
   /** The person's confirmed request; only the returned server scope holds. Never create a grant automatically. */

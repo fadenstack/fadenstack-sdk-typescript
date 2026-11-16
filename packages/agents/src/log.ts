@@ -51,4 +51,8 @@ export const AgentLog = Object.freeze({
   webSearchRan: defineLog(AGENT_LOG_CATEGORY, 2080, "WebSearchRan", "information", "A web search with {Provider} found {Count} results in {DurationMs} ms"),
   webSearchFailed: defineLog(AGENT_LOG_CATEGORY, 2081, "WebSearchFailed", "warning", "A web search with {Provider} failed ({Kind})"),
   webSearchOff: defineLog(AGENT_LOG_CATEGORY, 2082, "WebSearchOff", "debug", "Web search is not offered ({Reason})"),
+  /** sdk/51 8.10: a tool call could not be written to the person's audit log; the call goes on and the next check reports the gap. */
+  auditNotWritten: defineLog(AGENT_LOG_CATEGORY, 2083, "AuditNotWritten", "warning",
+    "A tool call could not be written to the audit log ({Kind}); the call goes on and the next check of the log reports the gap"),
+  auditNotPruned: defineLog(AGENT_LOG_CATEGORY, 2084, "AuditNotPruned", "warning", "Old entries of the audit log could not be removed ({Kind})"),
 });
