@@ -97,6 +97,7 @@ function onDrop(e: DragEvent): void {
       ref="box"
       rows="1"
       dir="auto"
+      :disabled="chat.isAgentOff"
       :value="chat.input"
       :placeholder="placeholder ?? chat.strings.composerPlaceholder"
       :aria-label="placeholder ?? chat.strings.composerPlaceholder"

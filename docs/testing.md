@@ -73,7 +73,7 @@ Without options, the gateway serves one agent, `test-agent`, to one user, `user@
 | `users` | The users it knows. Default: `user@example.com` with the password `secret`. |
 | `model` | The scripted model. See below. |
 | `serverUrl` | The address the in-process `fetch` answers for. Default `https://faden.test`. |
-| `accessTtlSeconds` | How long an access token lasts. Default 600. |
+| `accessTtlSeconds` | How long an access token lasts. Default 300, the longest core 0.7.1 (rc21) issues; the SDKs refresh from `expires_in` and assume no lifetime. |
 | `refreshTtlSeconds` | How long a refresh token lasts. Default 86 400. |
 | `chunkSize` | Characters per streamed piece of text. Default 6. |
 | `models` | The models `GET /v1/models` lists. Default `["fake-model"]`. |

@@ -16,22 +16,28 @@ import type { ProvenanceBackend } from "./types.js";
 /** The agent's server: its provenance routes (`client.agent.provenance`). */
 export class ServerBackend implements ProvenanceBackend {
   readonly #client: FadenstackClient;
+  readonly #route: <T>(call: () => Promise<T>) => Promise<T>;
 
-  constructor(client: FadenstackClient) {
+  /**
+   * @param route How a call goes to the server: the agent's (`agent.route`) refuses it, on the device, while the organisation has the agent
+   * turned off and notes an `agent_disabled` answer; by default it goes as it is.
+   */
+  constructor(client: FadenstackClient, route: <T>(call: () => Promise<T>) => Promise<T> = (call) => call()) {
     if (!client.agent) throw new TypeError("The provenance module needs an agent's client.");
     this.#client = client;
+    this.#route = route;
   }
 
   policy(signal: AbortSignal): Promise<Required<ProvenancePolicy>> {
-    return this.#client.agent!.provenance.policy(signal);
+    return this.#route(() => this.#client.agent!.provenance.policy(signal));
   }
 
   signRecord(request: RecordRequest, signal: AbortSignal): Promise<SignedRecord> {
-    return this.#client.agent!.provenance.signRecord(request, signal);
+    return this.#route(() => this.#client.agent!.provenance.signRecord(request, signal));
   }
 
   reportPlacement(report: PlacementReport, signal: AbortSignal): Promise<void> {
-    return this.#client.agent!.provenance.reportPlacement(report, signal);
+    return this.#route(() => this.#client.agent!.provenance.reportPlacement(report, signal));
   }
 }
 

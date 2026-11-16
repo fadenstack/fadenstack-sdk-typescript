@@ -139,6 +139,19 @@ describe("tokens", () => {
     expect(s.gateway.requests.filter((r) => r.path === "/api/agent-tokens/refresh")).toHaveLength(1);
   });
 
+  it("refreshes from expires_in and assumes no lifetime: core's tokens live 300 s at most (rc21), and a shorter one refreshes sooner", async () => {
+    for (const [ttl, before, after] of [[300, 260_000, 275_000], [120, 80_000, 95_000]] as const) {
+      const s = await signedIn({ accessTtlSeconds: ttl });
+      const refreshes = () => s.gateway.requests.filter((r) => r.path === "/api/agent-tokens/refresh").length;
+      s.tick(before); // more than 30 s before the end
+      await s.client.agent!.getProfile();
+      expect(refreshes()).toBe(0);
+      s.tick(after - before); // within 30 s of the end
+      await s.client.agent!.getProfile();
+      expect(refreshes()).toBe(1);
+    }
+  });
+
   it("retries once with a fresh token when the server refuses the token (401)", async () => {
     const s = await signedIn();
     s.gateway.expireAccessTokens();

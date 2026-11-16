@@ -30,6 +30,12 @@ export interface AgentProfile {
   vision: boolean | null;
   /** Whether the agent's tools can make pictures: an image model is set up. */
   images: boolean;
+  /**
+   * Whether the organisation has the agent turned on (the profile's `enabled`, core 0.7.1). True when the key is missing, as from an
+   * older server. False: every other agent route is refused (`ErrorCodes.agentDisabled`); `FadenstackAgent.turnedOff` says it for
+   * the app. .NET: `AgentProfile.Enabled`.
+   */
+  enabled: boolean;
   /** Whether the user can pick skills for a message (`AgentResource.listSkills`): the server runs the skills module. */
   skills: boolean;
   instructionsSha256: string | null;
@@ -178,6 +184,7 @@ export function toAgentProfile(json: unknown): AgentProfile {
     model: str(p["model"]) ?? null,
     vision: typeof p["vision"] === "boolean" ? (p["vision"] as boolean) : null,
     images: p["images"] === true,
+    enabled: p["enabled"] !== false,
     skills: p["skills"] === true,
     instructionsSha256: str(p["instructions_sha256"]) ?? null,
     hostToolContract: Array.isArray(p["host_tool_contract"])

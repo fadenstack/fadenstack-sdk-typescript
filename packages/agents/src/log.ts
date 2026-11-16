@@ -51,4 +51,10 @@ export const AgentLog = Object.freeze({
   webSearchRan: defineLog(AGENT_LOG_CATEGORY, 2080, "WebSearchRan", "information", "A web search with {Provider} found {Count} results in {DurationMs} ms"),
   webSearchFailed: defineLog(AGENT_LOG_CATEGORY, 2081, "WebSearchFailed", "warning", "A web search with {Provider} failed ({Kind})"),
   webSearchOff: defineLog(AGENT_LOG_CATEGORY, 2082, "WebSearchOff", "debug", "Web search is not offered ({Reason})"),
+
+  // The off-switch and "Stop everything" (core 0.7.1, release plan 8.3 and 8.11): the agent's slug and counts, never content (ASVS 5.0 V16).
+  agentTurnedOff: defineLog(AGENT_LOG_CATEGORY, 2090, "AgentTurnedOff", "warning",
+    "Agent {Agent} was turned off by the organisation: its turns stopped and its grants ended"),
+  stoppedEverything: defineLog(AGENT_LOG_CATEGORY, 2091, "StoppedEverything", "information",
+    "Agent {Agent} stopped everything: {Turns} turns stopped, {Grants} grants ended, {NotTold} the server was not told about"),
 });

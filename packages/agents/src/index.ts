@@ -18,6 +18,8 @@ export {
   type WebSearchSettings,
   type WebSearchStore,
 } from "./webSearch.js";
+export { TURNED_OFF_TEXT } from "./backend.js";
+export { addStopResults, emptyStopResult, nothingRan, type StopAllResult } from "./stopAll.js";
 export { ChatSession, BYPASS_ENDED_NOTE, resultText, type PickedSkill, type SendOptions, type HostCommandOptions, type HostCommandResult } from "./session.js";
 export {
   ApprovalDecision,

@@ -54,6 +54,10 @@ const chat = useViewModel(() => props.chat);
         <template v-if="slots.avatar" #avatar><slot name="avatar" /></template>
       </Conversation>
       <div v-if="chat.error && !chat.signInRequired" class="fdn-banner" role="alert">{{ chat.error }}</div>
+      <div v-if="chat.isAgentOff" class="fdn-grant-marker fdn-agent-off" role="status">
+        <span class="fdn-grant-marker-text">{{ chat.agentOffText }}</span>
+        <button type="button" class="fdn-button" :aria-label="chat.checkAgainText" @click="chat.checkAgain()">{{ chat.checkAgainText }}</button>
+      </div>
       <GrantsBar :grants="chat.grants" :strings="chat.strings" />
       <slot name="context-bar" />
       <Composer :chat="chat" :placeholder="placeholder"><slot name="composer-accessory" /></Composer>

@@ -103,6 +103,7 @@ export class GrantsViewModel extends Observable {
         if (card && (request.conversationId === undefined ? card.waiting : request.conversationId === card.conversationId)) card.stepUp(request, stage);
       }),
       agent.grants.onChanged(() => this.tick()),
+      agent.onTurnedOffChange(() => this.notify()),
     );
     if (tickEvery > 0) {
       this.#timer = setInterval(() => this.#onTimer(), tickEvery);
@@ -111,6 +112,12 @@ export class GrantsViewModel extends Observable {
   }
 
   get #strings(): UiStrings { return this.#context.strings; }
+
+  /** The organisation turned the agent off: every grant ended with it (`agentOffGrantsText` says so). .NET: `GrantsViewModel.IsAgentOff`. */
+  get isAgentOff(): boolean { return this.#agent.turnedOff; }
+
+  /** "Your organisation turned this agent off; its grants have ended." for the grants view while the agent is off; empty otherwise. */
+  get agentOffGrantsText(): string { return this.isAgentOff ? this.#strings.grantsEndedByOff : ""; }
 
   // -- the work grant's cards and marker -----------------------------------------------------------------------------
 

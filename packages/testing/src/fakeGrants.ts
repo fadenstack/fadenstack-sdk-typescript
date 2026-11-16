@@ -121,6 +121,13 @@ export class FakeGrants {
     grant["revoked_at"] = new Date(this.serverNow).toISOString();
   }
 
+  /** The server ends every running grant (the off-switch: `agent_turned_off`). */
+  endAll(by: string): void {
+    for (const grant of this.#grants) {
+      if (grant["status"] === "active" || grant["status"] === "paused") this.end(grant["id"] as string, by);
+    }
+  }
+
   /** The value of a stream's `faden.grants`: the live grants, as the gateway sends them. */
   snapshot(): { serverNow: string; grants: Wire[] } {
     return { serverNow: new Date(this.serverNow).toISOString(), grants: this.#live().map((g) => this.#shown(g)) };

@@ -58,6 +58,12 @@ export function ChatPanel(props: ChatPanelProps): ReactElement {
         <>
           <Conversation {...props} />
           {chat.error && !chat.signInRequired && <div className="fdn-banner" role="alert">{chat.error}</div>}
+          {chat.isAgentOff && (
+            <div className="fdn-grant-marker fdn-agent-off" role="status">
+              <span className="fdn-grant-marker-text">{chat.agentOffText}</span>
+              <button type="button" className="fdn-button" aria-label={chat.checkAgainText} onClick={() => void chat.checkAgain()}>{chat.checkAgainText}</button>
+            </div>
+          )}
           <GrantsBar grants={chat.grants} strings={chat.strings} />
           {props.contextBar}
           <Composer chat={chat} accessory={props.composerAccessory} placeholder={props.placeholder} />

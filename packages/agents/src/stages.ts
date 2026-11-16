@@ -56,6 +56,11 @@ export interface AgentContext {
   readonly profile: AgentProfile;
   /** Reports an event to the server (names and counts, never content). */
   report(event: AgentClientEvent): Promise<void>;
+  /**
+   * For a module of the SDK, not for apps: a call to the server for a module that asks it itself (the provenance routes): refused on the device, without a request,
+   * while the organisation has the agent turned off, and an `agent_disabled` answer turns it off. Absent in a context a test built.
+   */
+  route?<T>(call: () => Promise<T>): Promise<T>;
 }
 
 /** What a tool service's factory knows about the call it serves (`AgentBuilder.addToolService`). */
