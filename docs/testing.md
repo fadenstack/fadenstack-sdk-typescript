@@ -242,3 +242,26 @@ expect(provenance.requests[0]!.content).toBe("<p>Hello</p>");
 `@fadenstack/testing/provenance` needs `@fadenstack/provenance` installed (an optional peer dependency). To test the
 marks themselves, run the tool in an agent with the provenance module against `FakeGateway`, or a marker with
 `checkMarker` (see [Marking AI-generated content](provenance.md#testing-a-marker)).
+
+## The injection suite
+
+The SDK's own tests include a suite that runs injected content through every untrusted channel (an MCP server's result, a web
+search result, a document's text fenced with `fenceUntrusted`) against a scripted endpoint. No real model, no network. A corpus of
+46 attacks (instruction overrides, forged closing lines, chat-template tags, hidden characters, forged approvals, forged tool calls,
+exfiltration by image or link, induced calls, encoded instructions, padding, prompt-leak requests) is the same file in the
+TypeScript and the .NET SDK; each suite checks its hash. (This SDK has no delegation tool; the .NET suite also runs delegation
+answers.)
+
+Four gates hold for every case and channel: the content reaches the model only inside one fence of ours (G1); a call the content
+asks for meets the rules any call meets and never runs without approval where the rules say ask (G2); below `auto` an open-world
+call to an address from the content asks (G3, and in `auto` it runs today: a known limit until the tainted-turn marker, sdk/51
+item 8.4); a remote image in an answer is never loaded (G4: the Markdown model has an `image` inline that no skin draws as an
+`<img>`). It lives in `packages/agents/test/injection` (and `packages/ui-vue/test/injectionImages.test.ts` for the Vue skin) and
+runs as its own step, "Injection suite (sdk/51 7.1)", in the release workflow:
+
+```
+node node_modules/vitest/vitest.mjs run packages/agents/test/injection packages/ui-vue/test/injectionImages.test.ts
+```
+
+The README beside the corpus says what each kind tests and how to add a case. What is not done: the live run with promptfoo
+against a real model endpoint (0.3.1). See also [Fencing content you did not write](tools.md#fencing-content-you-did-not-write).

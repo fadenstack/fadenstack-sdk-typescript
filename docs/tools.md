@@ -437,7 +437,7 @@ write and open-world tools behind approval, and never put the text where the sys
 (injection) and the OWASP LLM01 prompt-injection guidance. One known limit: in Auto mode an open-world call whose address
 came from fenced text still runs without a question (a marker for tainted turns is planned); below Auto it asks.
 
-The SDK's injection suite (`packages/agents/test/injection`) runs a corpus of attacks through every channel in CI.
+The SDK's injection suite (`packages/agents/test/injection`, see [Testing](testing.md#the-injection-suite)) runs a corpus of attacks through every channel in CI.
 
 ## Tools from other sources
 
