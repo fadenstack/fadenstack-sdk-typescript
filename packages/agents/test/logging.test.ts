@@ -121,8 +121,8 @@ describe("the agent's log", () => {
       [2053, "ApprovalAnswerRetried", "warning"], [2054, "NoProvenanceModule", "warning"], [2060, "HookFailed", "warning"],
       [2083, "ContentLoggingStarted", "information"], [2084, "ContentLoggingStopped", "information"],
       [2080, "WebSearchRan", "information"], [2081, "WebSearchFailed", "warning"], [2082, "WebSearchOff", "debug"],
-      [2085, "AuditNotWritten", "warning"], [2086, "AuditNotPruned", "warning"], [2087, "AuditInMemory", "warning"],
-      [2090, "AgentTurnedOff", "warning"], [2091, "StoppedEverything", "information"]]);
+      [2090, "AgentTurnedOff", "warning"], [2091, "StoppedEverything", "information"],
+      [2085, "AuditNotWritten", "warning"], [2086, "AuditNotPruned", "warning"], [2087, "AuditInMemory", "warning"]]);
   });
 });
 
