@@ -1,0 +1,17 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "types": ["node"],
+    "paths": {
+      "@fadenstack/client": ["../../packages/client/src/index.ts"],
+      "@fadenstack/agents": ["../../packages/agents/src/index.ts"],
+      "@fadenstack/ui": ["../../packages/ui/src/index.ts"],
+      "@fadenstack/ui-web": ["../../packages/ui-web/src/index.ts"],
+      "@fadenstack/ui-react": ["../../packages/ui-react/src/index.ts"],
+      "@fadenstack/testing": ["../../packages/testing/src/index.ts"],
+      "@fadenstack/provenance": ["../../packages/provenance/src/index.ts"]
+    }
+  },
+  "include": ["src", "test", "vite.config.ts"]
+}

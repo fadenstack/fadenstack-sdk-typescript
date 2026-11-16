@@ -22,10 +22,12 @@
   "scripts": {
     "build": "tsc -b packages/client packages/agents packages/ui packages/ui-web packages/ui-react packages/testing packages/provenance packages/skills packages/mcp && npm run build --workspace @fadenstack/ui-vue",
     "clean": "tsc -b --clean packages/client packages/agents packages/ui packages/ui-web packages/ui-react packages/testing packages/provenance packages/skills packages/mcp",
-    "typecheck": "tsc -p tsconfig.json --noEmit && vue-tsc -p packages/ui-vue/tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p samples/web-standalone/tsconfig.json && vue-tsc -p packages/ui-vue/tsconfig.json",
     "test": "vitest run",
     "test:watch": "vitest",
-    "livecheck": "node samples/livecheck.mjs"
+    "livecheck": "node samples/livecheck.mjs",
+    "sample:web": "vite --config samples/web-standalone/vite.config.ts",
+    "sample:web:build": "vite build --config samples/web-standalone/vite.config.ts"
   },
   "devDependencies": {
     "@testing-library/react": "^16.3.3",

@@ -17,6 +17,6 @@
     }
   },
   "include": ["packages/*/src", "packages/*/test", "samples", "vitest.config.ts"],
-  // The Vue skin is checked by vue-tsc (npm run typecheck), which reads .vue files.
-  "exclude": ["packages/ui-vue"]
+  // The Vue skin is checked by vue-tsc (npm run typecheck), which reads .vue files. The web sample has its own tsconfig (DOM, JSX).
+  "exclude": ["packages/ui-vue", "samples/web-standalone"]
 }
