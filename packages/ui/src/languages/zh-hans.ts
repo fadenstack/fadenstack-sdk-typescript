@@ -31,6 +31,7 @@ export const chineseSimplifiedStrings: UiStrings = {
   serverTool: "服务器工具",
   approvalOutside: "发送到外部",
   approvalOutsideWhy: "它收到的内容会离开您的组织，发送到其他网站。",
+  approvalArgumentsShortened: "参数已被截短。",
   approvalFromMcp: (server) => `来自 ${server}，此计算机上的 MCP 服务器`,
   approvalUnchecked: "贵组织尚未审查此工具。",
   approvalServerReadOnly: "服务器表示它只读取。",

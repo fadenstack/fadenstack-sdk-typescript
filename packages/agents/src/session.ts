@@ -173,6 +173,34 @@ const asksEveryTime = (toolClass: ToolClass): boolean => toolClass === "destruct
 
 class CommandDenied extends Error {}
 
+/** The most of a held call's arguments text the card keeps: the gateway's own cap. */
+const MAX_GATEWAY_ARGUMENTS_TEXT = 8000;
+
+/**
+ * The arguments a held call's card shows, from the event's `arguments` text (core 0.7.1 rc22; capped at 8000 characters there and here): the
+ * members of the JSON object when the text is complete, else the text as one read-only value, with the flag that the card says it is shortened.
+ * Nothing from an older gateway or an empty text. .NET: `ChatSession.GatewayArguments`.
+ */
+export function gatewayArguments(value: unknown): { arguments: Readonly<Record<string, unknown>>; shortened: boolean } {
+  const none = { arguments: {}, shortened: false };
+  let text = str(value, "arguments");
+  if (text === undefined || text.length === 0) return none;
+  let cut = value !== null && typeof value === "object" && (value as Data)["argumentsTruncated"] === true;
+  if (text.length > MAX_GATEWAY_ARGUMENTS_TEXT) {
+    text = text.slice(0, MAX_GATEWAY_ARGUMENTS_TEXT);
+    cut = true;
+  }
+  if (!cut) {
+    try {
+      const parsed: unknown = JSON.parse(text);
+      if (parsed !== null && typeof parsed === "object" && !Array.isArray(parsed)) return { arguments: freezeCommand(parsed as Record<string, unknown>), shortened: false };
+    } catch {
+      // not JSON: shown as the text it is
+    }
+  }
+  return { arguments: Object.freeze({ arguments: text }), shortened: true };
+}
+
 function freezeCommand<T>(value: T): T {
   if (value && typeof value === "object") {
     for (const child of Object.values(value)) freezeCommand(child);
@@ -1078,13 +1106,15 @@ class Turn {
     const text = str(value, "arguments");
     const cut = value && typeof value === "object" && (value as Data)["argumentsTruncated"] === true;
     const hash = given !== undefined && /^[0-9a-f]{64}$/.test(given) ? given : text !== undefined && !cut ? await argumentsSha256(text) : undefined;
+    const shown = gatewayArguments(value);
     const request: ApprovalRequest = {
       callId: str(value, "toolCallId") ?? "",
       toolName: str(value, "toolCallName") ?? "",
       toolClass: parseToolClass(str(value, "toolClass")),
       source: "gateway",
       reason: str(value, "message") ?? "",
-      arguments: {},
+      arguments: shown.arguments,
+      ...(shown.shortened ? { argumentsShortened: true } : {}),
       ...(hash !== undefined ? { argumentsSha256: hash } : {}),
       ...(saysOpenWorld(value) ? { openWorld: true } : {}),
     };

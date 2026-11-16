@@ -321,8 +321,21 @@ export class ApprovalPart extends ResponsePart {
     this.request = request;
     this.#state = state;
     this.#pending = pending;
-    const lines = Object.entries(request.arguments).map(([k, v]) => `${k}: ${typeof v === "string" ? v : JSON.stringify(v)}`);
+    // A shortened text (cut, or not a JSON object) is one read-only value: its text alone, no name before it.
+    const entries = Object.entries(request.arguments);
+    const alone = request.argumentsShortened === true && entries.length === 1 && entries[0]![0] === "arguments" && typeof entries[0]![1] === "string";
+    const lines = alone ? [entries[0]![1] as string] : entries.map(([k, v]) => `${k}: ${typeof v === "string" ? v : JSON.stringify(v)}`);
     this.argumentsText = preview(lines.join("\n"), context.previewLength, context.strings.moreCharacters, context.locale);
+  }
+
+  /** "The arguments are shortened." under a held call's arguments that were cut or are not a JSON object; else "". .NET: `ArgumentsNote`. */
+  get argumentsNote(): string {
+    return this.request.argumentsShortened === true && this.argumentsText ? this.#context.strings.approvalArgumentsShortened : "";
+  }
+
+  /** Whether the card shows `argumentsNote`. */
+  get hasArgumentsNote(): boolean {
+    return this.argumentsNote.length > 0;
   }
 
   get toolName(): string {

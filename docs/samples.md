@@ -1,8 +1,18 @@
 # Samples
 
-This page covers the samples in the SDK's repository: a script that checks an SDK setup against a server, and the same script run against the fake server. The repository has no console or chat-panel sample like the .NET SDK's; the [chat panel](chat-panel.md) and [Build an agent](agent.md) pages have the code to start from.
+This page covers the samples in the SDK's repository: a script that checks an SDK setup against a server (and the same script run against the fake server), and a web page that runs on the person's own model. The repository has no console sample like the .NET SDK's; the [chat panel](chat-panel.md) and [Build an agent](agent.md) pages have the code to start from.
 
 Run the samples from the repository's root with Node.js 24 or later, after `npm install` and `npm run build`.
+
+## Web page on your own model
+
+`samples/web-standalone/` is a page that runs in the browser with [standalone mode](connecting.md) and the React skin. It is open source and meant to be read: `src/sample.ts` builds the agent, `src/main.tsx` is the page.
+
+```bash
+npm run sample:web
+```
+
+The person picks their endpoint with the SDK's `ConnectionWizard` ("Use my own AI" only), then gets the `ChatPanel` with one harmless app tool, `save_note`, which saves a note into the page's own list and asks first. Content marking is on (the records are signed on the device), "Stop everything" is in the header, and the settings drawer holds "Your data in this browser". A key goes to the SDK's own key store in the browser and nowhere else. `samples/README.md` says how to allow the page's origin in Ollama (`OLLAMA_ORIGINS`) and LM Studio (CORS). The sample builds with `npm run sample:web:build`, and `npm run typecheck` covers it.
 
 ## LiveCheck
 
