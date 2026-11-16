@@ -12,6 +12,7 @@ import {
 } from "@fadenstack/client";
 
 import { FadenstackAgent } from "./agent.js";
+import type { AnswerCopyHost, AnswerCopyMarker } from "./answerCopy.js";
 import { ServerBackend, type AgentBackend } from "./backend.js";
 import type { AgentDefinition } from "./definition.js";
 import { AgentLog } from "./log.js";
@@ -60,6 +61,8 @@ export interface AgentSettings {
   readonly hookContent?: boolean;
   /** What modules give tools per call, by key. */
   readonly toolServices: ReadonlyMap<ToolServiceKey<unknown>, ToolServiceFactory<unknown>>;
+  /** Who marks what the person copies out of a chat (`useAnswerCopyMarker`). */
+  readonly copyMarker?: (host: AnswerCopyHost) => AnswerCopyMarker;
   readonly modules: readonly string[];
   readonly approvals: ApprovalHandler;
   /** The host's own session store; undefined: the SDK keeps them in the signed-in user's own database (`FadenstackAgent.sessionStore`). */
@@ -122,6 +125,7 @@ export class AgentBuilder {
   readonly #hooks: { order: number; hooks: AgentHooks }[] = [];
   #hookContent = false;
   readonly #toolServices = new Map<ToolServiceKey<unknown>, ToolServiceFactory<unknown>>();
+  #copyMarker: ((host: AnswerCopyHost) => AnswerCopyMarker) | undefined;
   readonly #modules: string[] = [];
   #client: FadenstackClient | undefined;
   #options: FadenstackClientOptions | undefined;
@@ -416,6 +420,15 @@ export class AgentBuilder {
     return this;
   }
 
+  /**
+   * Who marks what the person copies out of a chat (`agent.markCopy`): `create` is given what it needs of the agent when it is first needed.
+   * `@fadenstack/provenance` sets it; one set later replaces it. .NET: `UseAnswerCopyMarker`.
+   */
+  useAnswerCopyMarker(create: (host: AnswerCopyHost) => AnswerCopyMarker): this {
+    this.#copyMarker = create;
+    return this;
+  }
+
   use(module: FadenstackModule): this {
     if (module.name) this.#modules.push(module.name);
     module.configure(this);
@@ -505,6 +518,7 @@ export class AgentBuilder {
       hooks: this.#hooks.map((h, index) => ({ ...h, index })).sort((a, b) => a.order - b.order || a.index - b.index).map((h) => h.hooks),
       hookContent: this.#hookContent,
       toolServices: new Map(this.#toolServices),
+      ...(this.#copyMarker ? { copyMarker: this.#copyMarker } : {}),
       modules: [...this.#modules],
       approvals: this.#approvals,
       ...(this.#sessions ? { sessions: this.#sessions } : {}),

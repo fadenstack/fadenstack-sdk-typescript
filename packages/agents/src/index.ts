@@ -68,6 +68,7 @@ export {
   rank as rankTools,
   type OnRequestToolsOptions,
 } from "./toolSearch.js";
+export type { AnswerCopy, AnswerCopyHost, AnswerCopyMarker, MarkedCopy } from "./answerCopy.js";
 export {
   StageOrder,
   isChangingToolSource,

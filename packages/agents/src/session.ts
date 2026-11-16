@@ -556,6 +556,17 @@ export class ChatSession {
     return undefined;
   }
 
+  /**
+   * @internal An entry a module writes outside a turn's own flow (the mark on a copy): its own type, such as
+   * `provenance.placed`, into the transcript under the turn it names.
+   */
+  async recordModuleEntry(type: string, turnId: string | null, data: Data): Promise<void> {
+    if (CORE_ENTRY_TYPES.has(type) || !MODULE_ENTRY_TYPE.test(type)) {
+      throw new TypeError(`A module's transcript entry is its own type, such as 'provenance.placed': not '${type}'.`);
+    }
+    await this.#append(type, turnId, data);
+  }
+
   /** Adds an entry to the transcript and the store. A stopped turn is still recorded. */
   async #append(type: string, turnId: string | null, data: Data, status: string | null = null): Promise<void> {
     const entry: TranscriptEntry = {
