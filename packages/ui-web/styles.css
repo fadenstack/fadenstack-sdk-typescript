@@ -1150,6 +1150,12 @@
   border-color: var(--fdn-danger);
 }
 
+/* While content logging is on (8.1): the warning look, because prompts and answers are being written to the logs. */
+.fdn-content-logging-band {
+  border-color: var(--fdn-warning);
+  background: var(--fdn-warning-soft);
+}
+
 .fdn-grant-summary {
   position: relative;
   padding: 8px 32px 8px 10px;
