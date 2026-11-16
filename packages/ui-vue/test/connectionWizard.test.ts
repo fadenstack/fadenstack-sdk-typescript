@@ -374,3 +374,15 @@ describe("ConnectionWizard (Vue): the countdown", () => {
     expect(draw(vm).get('[role="alert"]').text()).toBe(vm.problemText);
   });
 });
+
+describe("ConnectionWizard: the language changes", () => {
+  it("draws the new language after retext, on the same step", async () => {
+    const { vm } = await at(WizardStep.OwnFailed);
+    const w = draw(vm);
+    expect(w.get('[role="alert"]').text()).toBe(englishStrings.wizardProblem[vm.problem!]);
+    vm.retext(germanStrings);
+    await flushPromises();
+    expect(w.get('[role="alert"]').text()).toBe(germanStrings.wizardProblem[vm.problem!]);
+    expect(vm.step).toBe(WizardStep.OwnFailed);
+  });
+});

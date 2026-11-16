@@ -1,3 +1,5 @@
+import { createHash } from "node:crypto";
+
 import { describe, expect, it } from "vitest";
 
 import {
@@ -231,9 +233,100 @@ describe("the endpoint check", () => {
     expect(fake.requests.some((r) => r.body.includes("image_url"))).toBe(false);
 
     const asked = make();
+    asked.fake.answers.push(OpenAiFake.text("OK"), OpenAiFake.calls(["call-1", "report_ready", "{}"]), OpenAiFake.text("Green."));
     const withPicture = await asked.check.run({ probeVision: true });
     expect(withPicture.vision).toBe(true);
     expect(asked.fake.requests.some((r) => r.body.includes("image_url"))).toBe(true);
+  });
+
+  /** The probe against a model that answers the picture with `answer`. */
+  async function seeing(answer: string, reasoning?: string) {
+    const { check, fake } = make();
+    fake.answers.push(OpenAiFake.text("OK"), OpenAiFake.calls(["call-1", "report_ready", "{}"]), OpenAiFake.text(answer, reasoning));
+    const report = await check.run({ probeVision: true });
+    return { report, fake };
+  }
+
+  it.each([["Green.", true], ["green", true], ["It is GREEN", true], ["Blue", false], ["I cannot see images.", false], ["", false], ["greenish", false]])(
+    "the vision probe: the answer %j gives vision %s", async (answer, expected) => {
+      expect((await seeing(answer)).report.vision).toBe(expected);
+    });
+
+  it("the vision probe reads the answer, not the reasoning", async () => {
+    expect((await seeing("", "The picture is green, I think.")).report.vision).toBe(false);
+    expect((await seeing("Green", "Hmm, blue?")).report.vision).toBe(true);
+  });
+
+  it("the vision probe sends a 64x64 green PNG as an image part and leaves room for a reasoning model", async () => {
+    const { fake } = await seeing("Green");
+    const picture = fake.requests.filter(isChat).find((r) => r.body.includes("image_url"))!.json();
+    expect(picture["max_tokens"]).toBe(256);
+    const parts = (picture["messages"] as { content: { type: string; text?: string; image_url?: { url: string } }[] }[])[0]!.content;
+    expect(parts.find((p) => p.type === "text")!.text).toBe("What colour is this picture? One word.");
+    const url = parts.find((p) => p.type === "image_url")!.image_url!.url;
+    expect(url.startsWith("data:image/png;base64,")).toBe(true);
+    const bytes = Buffer.from(url.slice("data:image/png;base64,".length), "base64");
+    expect(bytes.readUInt32BE(16)).toBe(64); // width
+    expect(bytes.readUInt32BE(20)).toBe(64); // height
+    // The same literal as in the .NET tests: the two SDKs send the same picture.
+    expect(createHash("sha256").update(bytes).digest("hex")).toBe("931d03be1da351bf941b2244ee433b9e69215f8294432340c1c64ab818d2a119");
+  });
+
+  it("the vision probe is false on an API error", async () => {
+    const { check, fake } = make();
+    fake.answers.push(OpenAiFake.text("OK"), OpenAiFake.calls(["call-1", "report_ready", "{}"]));
+    fake.intercept = (r) => (isChat(r) && r.body.includes("image_url") ? OpenAiFake.error(400, "images are not supported") : undefined);
+    expect((await check.run({ probeVision: true })).vision).toBe(false);
+  });
+
+  describe("Ollama's context length", () => {
+    const loaded = (name: string, length: number) => ({ models: [{ name, model: name, context_length: length }] });
+
+    it("num_ctx of the model wins over /api/ps", async () => {
+      const { check, fake } = make();
+      fake.ollamaShow = { model_info: { "qwen3.context_length": 40960 }, parameters: "num_ctx 16384" };
+      fake.ollamaPs = loaded("qwen3:14b", 4096);
+      const report = await check.run();
+      expect(report.contextLength).toBe(16384);
+      expect(report.problems).not.toContain(EndpointProblem.OllamaDefaultContext);
+    });
+
+    it("without num_ctx, the loaded model's length in /api/ps is the running one (after the chat probe)", async () => {
+      const { check, fake } = make();
+      fake.ollamaShow = { model_info: { "qwen3.context_length": 40960 }, parameters: "temperature 0.6" };
+      fake.ollamaPs = { models: [{ name: "other:1b", context_length: 2048 }, { name: "x", model: "qwen3:14b", context_length: 8192 }] };
+      const report = await check.run();
+      expect(report.contextLength).toBe(8192);
+      expect(report.modelContextLength).toBe(40960);
+      expect(report.problems).not.toContain(EndpointProblem.OllamaDefaultContext);
+      const order = fake.requests.map((r) => (isChat(r) ? "chat" : r.url.pathname.split("/").slice(-2).join("/")));
+      expect(order.indexOf("api/ps")).toBeGreaterThan(order.lastIndexOf("chat"));
+    });
+
+    it("the person's setting wins over /api/ps", async () => {
+      const { check, fake } = make();
+      fake.ollamaShow = { parameters: "temperature 0.6" };
+      fake.ollamaPs = loaded("qwen3:14b", 8192);
+      expect((await check.run({ contextLength: 32000 })).contextLength).toBe(32000);
+    });
+
+    it("/api/ps without the model leaves the length unknown and the problem", async () => {
+      const { check, fake } = make();
+      fake.ollamaShow = { model_info: { "qwen3.context_length": 40960 }, parameters: "temperature 0.6" };
+      fake.ollamaPs = loaded("other:1b", 8192);
+      const report = await check.run();
+      expect(report.contextLength).toBeNull();
+      expect(report.problems).toContain(EndpointProblem.OllamaDefaultContext);
+    });
+
+    it("a failing /api/ps leaves the length unknown and the problem", async () => {
+      const { check, fake } = make();
+      fake.ollamaShow = { model_info: { "qwen3.context_length": 40960 }, parameters: "temperature 0.6" };
+      const report = await check.run(); // the fake answers 404
+      expect(report.contextLength).toBeNull();
+      expect(report.modelContextLength).toBe(40960);
+      expect(report.problems).toContain(EndpointProblem.OllamaDefaultContext);
+    });
   });
 
   it("the report round trips as json", async () => {

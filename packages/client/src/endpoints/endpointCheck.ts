@@ -55,7 +55,7 @@ export type EndpointPlace = (typeof EndpointPlace)[keyof typeof EndpointPlace];
 
 /** What the check is to do. */
 export interface EndpointCheckOptions {
-  /** Also send a small picture and see whether the model takes it (optional; the person may set it instead). */
+  /** Also send a small green picture and ask for its colour; the model sees pictures only if the answer says "green" (optional; the person may set it instead). */
   probeVision?: boolean;
   /** The context length the person set, which wins over what the server says. */
   contextLength?: number;
@@ -86,9 +86,9 @@ export interface EndpointReportData {
   usage: boolean | null;
   /** Whether the model calls tools; false means the agent can only talk. */
   toolCalls: boolean | null;
-  /** Whether the model took a picture; null when not probed. */
+  /** Whether the model saw a picture (its answer to a solid green one named "green"); false for any other answer, an empty one, a refusal or an API error; null when not probed. */
   vision: boolean | null;
-  /** The context length that applies: the person's, else the server's running setting, else null (unknown). */
+  /** The context length that applies: the person's, else the server's running setting (Ollama: the model's `num_ctx`, else the loaded model's length in `/api/ps`), else null (unknown). */
   contextLength: number | null;
   /** The model's own maximum, where the server says (Ollama's model_info, vLLM's max_model_len). */
   modelContextLength: number | null;
@@ -215,15 +215,30 @@ export class EndpointReport implements EndpointReportData {
 
 const PROBE_TOOL = "report_ready";
 
-/** A one-pixel PNG for the vision probe. */
-const ONE_PIXEL = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==";
+/**
+ * A 64x64 PNG of one solid green (#00A000) for the vision probe, base64 (SHA-256 of the bytes:
+ * 931d03be1da351bf941b2244ee433b9e69215f8294432340c1c64ab818d2a119; the .NET SDK carries the same bytes). A model that cannot
+ * see the picture has nothing to name, and the probe asks it for the colour.
+ */
+export const GREEN_PICTURE = "iVBORw0KGgoAAAANSUhEUgAAAEAAAABACAIAAAAlC+aJAAAATElEQVR42u3PQQkAAAgAseufwqhG8C0MVmA1/SYgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgcFlT0gCXrcLQywAAAABJRU5ErkJggg==";
+
+/** The probe's question: one line, the colour in one word. */
+const VISION_QUESTION = "What colour is this picture? One word.";
+
+/** Enough for a reasoning model to think and then answer; only the answer text is read. */
+const VISION_MAX_TOKENS = 256;
+
+/** The model saw the picture when its answer names the colour: the word "green", whole, in any case. */
+export function namesGreen(answer: string | null | undefined): boolean {
+  return /\bgreen\b/i.test(answer ?? "");
+}
 
 type Json = Record<string, unknown>;
 
 /**
  * Checks an endpoint step by step (sdk/51 F03): `/models` (reachable, the key, the models), a one-token streamed chat (usage
- * figures), the tool-call probe (a dummy function with `tool_choice: "required"`), optionally a picture, the context length
- * (Ollama's `/api/show`, vLLM's `/models`, LM Studio's own API, or the person's setting), and the text watermark status from
+ * figures), the tool-call probe (a dummy function with `tool_choice: "required"`), optionally a picture (a green one: the model has to name the colour), the context length
+ * (Ollama's `/api/show` for the maximum and `/api/ps` for the length the loaded model runs with, vLLM's `/models`, LM Studio's own API, or the person's setting), and the text watermark status from
  * the sourced table. Every request goes to the endpoint's own origin and nowhere else.
  *
  * There is **no local search** here (.NET's `FindLocalAsync`, which tries the loopback ports of Ollama, LM Studio, vLLM and
@@ -356,15 +371,15 @@ export class EndpointCheck {
     }
     if (report.toolCalls === false) problems.push(EndpointProblem.NoToolCalls);
 
-    // 4. A picture, when asked for.
+    // 4. A picture, when asked for: only an answer that names the colour (green) counts; a model that cannot see answers anyway.
     if (options.probeVision) {
       try {
         const picture: ChatMessage = { role: "user", content: [
-          { type: "text", text: "What colour is this picture? One word." },
-          { type: "image_url", image_url: { url: `data:image/png;base64,${ONE_PIXEL}` } },
+          { type: "text", text: VISION_QUESTION },
+          { type: "image_url", image_url: { url: `data:image/png;base64,${GREEN_PICTURE}` } },
         ] };
-        await client.complete([picture], withSignal({ maxTokens: 8 }, signal));
-        report = { ...report, vision: true };
+        const answer = await client.complete([picture], withSignal({ maxTokens: VISION_MAX_TOKENS }, signal));
+        report = { ...report, vision: namesGreen(answer.text) }; // the answer text only, not the reasoning
       } catch (e) {
         if (!(e instanceof FadenstackApiError)) throw e;
         report = { ...report, vision: false };
@@ -503,6 +518,8 @@ async function contextOf(transport: EndpointTransport, model: string, server: En
             if (parts.length === 2 && parts[0] === "num_ctx" && /^[+-]?\d+$/.test(parts[1]!)) running = Number.parseInt(parts[1]!, 10);
           }
         }
+        // No num_ctx in the model: the server's own default (OLLAMA_CONTEXT_LENGTH) applies, which only /api/ps of the loaded model shows.
+        running ??= await ollamaRunning(transport, model, signal);
         return { running, maximum };
       }
       case EndpointServer.Vllm:
@@ -528,6 +545,22 @@ async function contextOf(transport: EndpointTransport, model: string, server: En
     }
   } catch (e) {
     if (e instanceof FadenstackError) return none;
+    throw e;
+  }
+}
+
+/** The length Ollama runs the loaded model with (`/api/ps`, after the chat probe loaded it); null when it does not say. */
+async function ollamaRunning(transport: EndpointTransport, model: string, signal: AbortSignal | undefined): Promise<number | null> {
+  try {
+    const ps = await getJson(transport, endpointRoot(transport.base, "api/ps"), signal);
+    const models = isObject(ps) ? ps["models"] : undefined;
+    const same = (a: unknown) => typeof a === "string" && (a === model || a === `${model}:latest`);
+    for (const entry of Array.isArray(models) ? models : []) {
+      if (isObject(entry) && (same(entry["name"]) || same(entry["model"])) && int32(entry["context_length"]) !== null) return int32(entry["context_length"]);
+    }
+    return null;
+  } catch (e) {
+    if (e instanceof FadenstackError) return null;
     throw e;
   }
 }

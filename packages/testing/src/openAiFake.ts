@@ -48,6 +48,8 @@ export class OpenAiFake {
   readonly chatHeaders: Record<string, string> = {};
   /** Ollama's `/api/show` answer, or undefined for none (404). */
   ollamaShow: unknown;
+  /** Ollama's `/api/ps` answer (the loaded models), or undefined for none (404). */
+  ollamaPs: unknown;
   /** vLLM's `/version` answer, or undefined for none (404). */
   vllmVersion: string | undefined;
   /** Answers before the routes do; undefined lets them answer. */
@@ -114,6 +116,7 @@ export class OpenAiFake {
       return OpenAiFake.json({ created: 1, data: [{ b64_json: Buffer.from([0x89, 0x50, 0x4e, 0x47]).toString("base64") }] });
     }
     if (request.method === "POST" && path.endsWith("/api/show") && this.ollamaShow !== undefined) return OpenAiFake.json(this.ollamaShow);
+    if (request.method === "GET" && path.endsWith("/api/ps") && this.ollamaPs !== undefined) return OpenAiFake.json(this.ollamaPs);
     if (request.method === "GET" && path.endsWith("/version") && this.vllmVersion !== undefined) return OpenAiFake.json({ version: this.vllmVersion });
     return OpenAiFake.error(404, "404 page not found");
   };

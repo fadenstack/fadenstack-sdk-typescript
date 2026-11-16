@@ -171,7 +171,7 @@ export class ConnectionWizardViewModel extends Observable {
   readonly #clipboard: Clipboard | undefined;
   readonly #links: LinkOpener | undefined;
   readonly #language: () => string;
-  readonly #strings: UiStrings;
+  #strings: UiStrings;
   readonly #completed = new Set<(outcome: WizardOutcome) => void>();
 
   #run: AbortController | undefined;
@@ -513,6 +513,20 @@ export class ConnectionWizardViewModel extends Observable {
   }
 
   // ---- Texts (UiStrings, five languages) ----
+
+  /**
+   * The app's language changed: every text the wizard shows (the titles, lines, labels and buttons a skin binds from
+   * `strings`, and the computed ones below: the problems, the waiting line, the result lines) is read from `strings` from now
+   * on, and the skin is told. The step, the typed values, the check result and everything else stay as they are.
+   *
+   * @param strings The texts of the new language (as `services.strings` of the constructor).
+   * @throws TypeError `strings` is missing.
+   */
+  retext(strings: UiStrings): void {
+    if (!strings) throw new TypeError("strings are needed.");
+    this.#strings = strings;
+    this.notify();
+  }
 
   /** The texts; a skin binds the fixed ones (`strings.wizardServerTitle`) and the computed ones below. */
   get strings(): UiStrings {
