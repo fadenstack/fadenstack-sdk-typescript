@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 
 import { MemoryClipboard, markdownToHtml, markdownToPlainText, tableToTsv, tablesOf, writeClipboard } from "@fadenstack/ui";
@@ -49,6 +50,14 @@ describe("markdownToHtml", () => {
       '<table><thead><tr><th style="text-align:left">Task</th><th style="text-align:right">h</th></tr></thead>' +
       '<tbody><tr><td style="text-align:left">Seal</td><td style="text-align:right">2 000</td></tr></tbody></table>',
     );
+  });
+});
+
+describe("markdownToHtml, the cases both SDKs share", () => {
+  // The .NET SDK tests the same file (tests/Fadenstack.UI.Tests/vectors/markdown-html.json).
+  const cases = JSON.parse(readFileSync(new URL("./vectors/markdown-html.json", import.meta.url), "utf8")) as { name: string; markdown: string; html: string }[];
+  it.each(cases.map((c) => [c.name, c] as const))("%s", (_name, c) => {
+    expect(markdownToHtml(c.markdown)).toBe(c.html);
   });
 });
 

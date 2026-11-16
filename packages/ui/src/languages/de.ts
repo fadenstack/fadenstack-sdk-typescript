@@ -138,6 +138,8 @@ export const germanStrings: UiStrings = {
   copyCode: "Code kopieren",
   copyTable: "Tabelle kopieren",
   copied: "Kopiert",
+  copyRefused: "Nicht kopiert: Diese Antwort konnte nicht als KI-generiert gekennzeichnet werden, und Ihre Organisation verlangt das.",
+  exportRefused: "Nicht gespeichert: Dieser Chat konnte nicht als KI-generiert gekennzeichnet werden, und Ihre Organisation verlangt das.",
   edit: "Bearbeiten",
   editAndResend: "Bearbeiten und erneut senden",
   retry: "Erneut versuchen",

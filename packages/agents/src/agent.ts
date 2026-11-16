@@ -46,7 +46,8 @@ import { HookRunner } from "./hooks.js";
 import { LocalBackend } from "./localBackend.js";
 import { EventReporter } from "./reporter.js";
 import { ChatSession } from "./session.js";
-import { isChangingToolSource, type AgentContext, type ToolSource } from "./stages.js";
+import { isChangingToolSource, type AgentContext, type ToolServiceCall, type ToolSource } from "./stages.js";
+import type { AnswerCopy, AnswerCopyMarker, MarkedCopy } from "./answerCopy.js";
 import { AgentLog } from "./log.js";
 import { isCoreToolSource, isReservedToolName, settleHostTools, toDefinition, type AgentTool, type ToolOutput } from "./tools.js";
 import { newId, type SessionInfo } from "./transcript.js";
@@ -668,6 +669,40 @@ export class FadenstackAgent {
     } catch {
       // nothing to do: the server learns of the tools at the next start
     }
+  }
+
+  #copyMarker: AnswerCopyMarker | undefined;
+
+  /**
+   * Marks an answer the person copies out of a chat, through the module that marks content (`@fadenstack/provenance`), as a
+   * tool's placement is: the same policy, a record signed by the server (or by this device, without one), a report and a
+   * transcript entry. Without that module the copy comes back as it is (`marked` false). The chat view calls it for its
+   * Copy; an app that shows answers in its own view calls it itself, before it puts them on the clipboard. `refused` is set
+   * when the policy forbids the copy: nothing is to be copied. .NET: `MarkCopyAsync`.
+   */
+  async markCopy(copy: AnswerCopy, signal?: AbortSignal): Promise<MarkedCopy> {
+    const marker = (this.#copyMarker ??= this.settings.copyMarker?.({ call: (c, signal) => this.#copyCall(c, signal) }));
+    if (!marker) return { text: copy.text, ...(copy.html !== undefined ? { html: copy.html } : {}), marked: false };
+    await this.start();
+    return marker.mark(copy, signal);
+  }
+
+  /** A call that is no tool call, for the module that marks copies to place content with (`AnswerCopyHost.call`). */
+  #copyCall(copy: AnswerCopy, signal: AbortSignal): ToolServiceCall {
+    let session: ChatSession | undefined;
+    for (const ref of this.#handedOut) {
+      const open = ref.deref();
+      if (open && copy.chat !== undefined && open.id === copy.chat) session = open;
+    }
+    const tool: AgentTool = { name: "copy", parameters: { type: "object", properties: {} }, toolClass: "write", source: "host", invoke: () => "" };
+    return {
+      tool, toolClass: "write", arguments: Object.freeze({}), callId: `copy-${newId()}`, sessionId: copy.chat ?? "", turnId: copy.turn ?? "", signal,
+      agent: this.context,
+      record: async (type, data) => {
+        if (session) await session.recordModuleEntry(type, copy.turn ?? null, data);
+      },
+      notice: async () => undefined,
+    };
   }
 
   /** A new session, in the agent's default mode (`ask`) unless `toolMode` says otherwise. */

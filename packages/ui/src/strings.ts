@@ -157,6 +157,10 @@ export interface UiStrings {
   copyCode: string;
   copyTable: string;
   copied: string;
+  /** What the answer's Copy says when the agent's policy refused the copy: nothing is on the clipboard. */
+  copyRefused: string;
+  /** What saving the chat as Markdown says when the policy refused it: nothing is saved. */
+  exportRefused: string;
   edit: string;
   editAndResend: string;
   retry: string;
@@ -1023,6 +1027,8 @@ export const englishStrings: UiStrings = {
   copyCode: "Copy code",
   copyTable: "Copy table",
   copied: "Copied",
+  copyRefused: "Not copied: this answer could not be marked as AI-generated, and your organisation requires it.",
+  exportRefused: "Not saved: this chat could not be marked as AI-generated, and your organisation requires it.",
   edit: "Edit",
   editAndResend: "Edit and resend",
   retry: "Retry",

@@ -59,9 +59,10 @@ export const TurnView = memo(function TurnView({ turn, strings, renderers }: {
           </div>
         )}
         {done && !turn.isPromptBlocked && (
+          <>
           <div className="fdn-turn-actions">
             {turn.answerText && (
-              <button type="button" className="fdn-icon-button fdn-small" title={strings.copy} aria-label={strings.copy} onClick={() => turn.copy()}>
+              <button type="button" className="fdn-icon-button fdn-small" title={strings.copy} aria-label={strings.copy} onClick={() => void turn.copy()}>
                 <Icon name="copy" size={14} />
               </button>
             )}
@@ -82,6 +83,9 @@ export const TurnView = memo(function TurnView({ turn, strings, renderers }: {
             {saveNote && <span className={saveNote.saved ? "fdn-muted" : "fdn-muted fdn-error-text"} role="status">{saveNote.message}</span>}
             <span className="fdn-muted">{turnMeta(turn)}</span>
           </div>
+          {/* What the last copy said: "Copied", or why nothing was copied (the agent's policy requires the AI mark). */}
+          <div className={turn.copyRefused ? "fdn-copy-status fdn-refused" : "fdn-copy-status"} aria-live="polite">{turn.copyStatus}</div>
+          </>
         )}
       </div>
     </article>

@@ -14,7 +14,11 @@ import {
   StageOrder,
   outputEditKind,
   toolServiceKey,
+  type AnswerCopy,
+  type AnswerCopyHost,
+  type AnswerCopyMarker,
   type FadenstackModule,
+  type MarkedCopy,
   type ToolCallContext,
   type ToolOutput,
   type ToolServiceCall,
@@ -33,9 +37,12 @@ import { ServerSignedMarker } from "./markers/serverSigned.js";
 import { SidecarMarker } from "./markers/sidecar.js";
 import { VisibleLabelMarker } from "./markers/visibleLabel.js";
 import { WatermarkStatus } from "./markers/watermarkStatus.js";
-import { ProvenanceEntryTypes, ProvenanceUnmarkedError, placeContent, type Insert, type PipelineSettings } from "./pipeline.js";
+import {
+  ProvenanceEntryTypes, ProvenanceRefusedError, ProvenanceUnmarkedError, placeContent, type Insert, type PipelineSettings,
+} from "./pipeline.js";
 import { tightenPolicy } from "./policy.js";
 import type { MarkStringsOption } from "./titles.js";
+import { Carriers } from "./types.js";
 import type {
   ContentMarker,
   EditClassifier,
@@ -45,6 +52,7 @@ import type {
   PlaceRequest,
   ProvenanceBackend,
   RecordEnricher,
+  SinkInfo,
 } from "./types.js";
 
 /** The module's name, as an agent profile's `required_client_modules` names it. */
@@ -141,7 +149,8 @@ export function provenanceModule(options: ProvenanceOptions = {}): FadenstackMod
       builder
         .addChatStage(StageOrder.provenance, (inner) => receiptStage(inner, state.receipts))
         .addToolStage(StageOrder.provenance, checkingStage())
-        .addToolService(Provenance, (call) => new CallProvenance(state, call));
+        .addToolService(Provenance, (call) => new CallProvenance(state, call))
+        .useAnswerCopyMarker((host) => new CopyMarker(state, host));
     },
   };
 }
@@ -239,6 +248,19 @@ class TurnReceipts {
     return this.#turns.get(turnId)?.get(callId);
   }
 
+  readonly #answers = new Map<string, ReceiptNote | undefined>();
+
+  /** The receipt of the turn's latest model call (an answer with no receipt leaves none), for what is copied out of the answer. */
+  keepAnswer(turnId: string, notes: readonly ReceiptNote[]): void {
+    this.#answers.delete(turnId);
+    this.#answers.set(turnId, [...notes].reverse().find((n) => n.status === "signed") ?? notes[notes.length - 1]);
+    while (this.#answers.size > KEPT_TURNS) this.#answers.delete(this.#answers.keys().next().value!);
+  }
+
+  answerOf(turnId: string): ReceiptNote | undefined {
+    return this.#answers.get(turnId);
+  }
+
   readonly #markings = new Map<string, EndpointMarking>();
 
   /** A person's own endpoint said what it did about its watermark for the turn's latest model call (F10). */
@@ -268,6 +290,7 @@ function receiptStage(inner: ChatStreamer, receipts: TurnReceipts): ChatStreamer
         }
       } finally {
         if (options?.turnId && calls.length) receipts.keep(options.turnId, notes, calls);
+        if (options?.turnId) receipts.keepAnswer(options.turnId, notes);
       }
     },
   };
@@ -299,14 +322,17 @@ class CallProvenance implements Provenance {
   placements = 0;
   readonly #state: ModuleState;
   readonly #call: ToolServiceCall;
+  readonly #ofAnswer: boolean;
 
-  constructor(state: ModuleState, call: ToolServiceCall) {
+  /** `ofAnswer`: a copy out of the chat, not a tool call: the receipt is the one of the turn's answer. */
+  constructor(state: ModuleState, call: ToolServiceCall, ofAnswer = false) {
     this.#state = state;
     this.#call = call;
+    this.#ofAnswer = ofAnswer;
   }
 
   get receipt(): ReceiptNote | undefined {
-    return this.#state.receipts.forCall(this.#call.turnId, this.#call.callId);
+    return this.#ofAnswer ? this.#state.receipts.answerOf(this.#call.turnId) : this.#state.receipts.forCall(this.#call.turnId, this.#call.callId);
   }
 
   policy(): Promise<Required<ProvenancePolicy>> {
@@ -372,6 +398,57 @@ class CallProvenance implements Provenance {
       throw new ProvenanceUnmarkedError(`'${this.#call.tool.name}' declares content for people in '${output.argument}' and did not `
         + "place it through place(), so it is not marked. Place it with provenanceOf(context).place(...) in the tool.");
     }
+  }
+}
+
+/** The sink a copy out of the chat goes to (`clipboard`, carrying the HTML attribute only), and a saved export (`file`, front matter). */
+const CLIPBOARD = "clipboard";
+const FILE = "file";
+
+/**
+ * Marks what the person copies out of a chat (`agent.markCopy`), through the same pipeline a tool places content with
+ * (`placeContent`): one placement per copy, outside a tool call, with the tool named `copy` in the report and in the
+ * transcript's `provenance.placed` entry (never the content). The sink is `clipboard`, which keeps `html-attribute` only:
+ * the HTML gets its mark, the plain text stays as it is. Without HTML the copy is Markdown text with no carrier: the record
+ * is signed and reported, and the text is the person's. Code and what the policy exempts are recorded as exempt and copied
+ * as they are. With the policy `refuse`, a copy that cannot get a layer it needs comes back `refused`. A saved export
+ * (`file`) goes to the sink `file`, which carries `front-matter`. ASVS 5.0 V16 (security logging): the report and the
+ * transcript hold names, ids and outcomes, never what was copied. .NET: `AnswerCopyMarker`.
+ */
+class CopyMarker implements AnswerCopyMarker {
+  readonly #state: ModuleState;
+  readonly #host: AnswerCopyHost;
+
+  constructor(state: ModuleState, host: AnswerCopyHost) {
+    this.#state = state;
+    this.#host = host;
+  }
+
+  async mark(copy: AnswerCopy, signal: AbortSignal = new AbortController().signal): Promise<MarkedCopy> {
+    const provenance = new CallProvenance(this.#state, this.#host.call(copy, signal), true);
+    const html = !copy.file && copy.html !== undefined && copy.html !== "";
+    let landed: string | undefined;
+    const sink: SinkInfo = copy.file
+      ? { kind: FILE, carries: [Carriers.frontMatter], container: true, readBack: () => landed }
+      : { kind: CLIPBOARD, carries: [Carriers.htmlAttribute], container: html, readBack: () => landed };
+    const mediaType = copy.code ? "text/x-code" : html ? "text/html" : "text/markdown";
+    let placement: Placement<string>;
+    try {
+      placement = await provenance.place({ content: html ? copy.html! : copy.text, mediaType, sink, editKind: "generated" }, (marked) => {
+        landed = marked.content as string;
+        return landed;
+      });
+    } catch (error) {
+      if (error instanceof ProvenanceRefusedError) return { text: copy.text, marked: false, refused: true };
+      throw error;
+    }
+    const marks = !placement.exempt && placement.signed && placement.result !== (html ? copy.html : copy.text);
+    const exempt = placement.exempt ? { exemptBecause: placement.exemptBecause! } : {};
+    const recordId = placement.recordId ? { recordId: placement.recordId } : {};
+    if (copy.file) return { text: marks ? placement.result : copy.text, marked: marks, ...recordId, ...exempt };
+    return {
+      text: copy.text, ...(html ? { html: marks ? placement.result : copy.html! } : {}), marked: marks && html, ...recordId, ...exempt,
+    };
   }
 }
 

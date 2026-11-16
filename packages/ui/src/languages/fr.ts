@@ -139,6 +139,8 @@ export const frenchStrings: UiStrings = {
   copyCode: "Copier le code",
   copyTable: "Copier le tableau",
   copied: "Copié",
+  copyRefused: "Non copié : cette réponse n’a pas pu être marquée comme générée par l’IA, et votre organisation l’exige.",
+  exportRefused: "Non enregistré : cette conversation n’a pas pu être marquée comme générée par l’IA, et votre organisation l’exige.",
   edit: "Modifier",
   editAndResend: "Modifier et renvoyer",
   retry: "Réessayer",

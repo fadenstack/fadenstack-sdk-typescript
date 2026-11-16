@@ -1,5 +1,5 @@
 import type {
-  AgentEvent, ChatSession, FadenstackAgent, HostCommandResult, MessageAttachment, ReasoningLevel, TranscriptEntry,
+  AgentEvent, ChatSession, FadenstackAgent, HostCommandResult, MarkedCopy, MessageAttachment, ReasoningLevel, TranscriptEntry,
 } from "@fadenstack/agents";
 import { FadenstackSignInRequiredError, TOOL_MODES, narrowestMode, type SkillOption, type ToolMode } from "@fadenstack/client";
 
@@ -12,7 +12,7 @@ import { RenderBatcher } from "./batcher.js";
 import { formatNumber, formatWhen } from "./format.js";
 import { markdownToHtml } from "./markdown/serialize.js";
 import { Observable } from "./observable.js";
-import { NoticePart, type PartContext } from "./parts.js";
+import { NoticePart, type CopyContent, type CopyResult, type PartContext } from "./parts.js";
 import { citationsRenderer, fallbackRenderer, piiRenderer, unmarkedRenderer, type AgentEventRenderer } from "./renderers.js";
 import { timeoutScheduler, writeClipboard, type Clipboard, type UiScheduler } from "./services.js";
 import { builtInStrings, stringsFor } from "./languages/index.js";
@@ -340,6 +340,7 @@ export class AgentChatViewModel extends Observable implements TurnHost {
       now: options.now ?? (() => new Date()),
       showUnmarked: false,
       saveFile: options.saveFile,
+      copyContent: (content) => this.copyContent(content),
     };
     this.#saveFile = options.saveFile;
     this.#promptStore = options.prompts;
@@ -586,7 +587,22 @@ export class AgentChatViewModel extends Observable implements TurnHost {
     this.notify();
     if (!this.canExport) return;
     try {
-      await this.#saveFile({ name: this.exportFileName, type: "text/markdown", content: this.exportMarkdown() });
+      // The file is handed on like a copy: marked in its front matter through the agent's marking; refused, it is not saved.
+      let content = this.exportMarkdown();
+      try {
+        const marked = await this.#agent.markCopy({
+          text: content, file: true, ...(this.#session ? { chat: this.#session.id } : {}), ...(this.#turns.at(-1)?.id ? { turn: this.#turns.at(-1)!.id! } : {}),
+        });
+        if (marked.refused) {
+          this.#error = this.strings.exportRefused;
+          this.notify();
+          return;
+        }
+        content = marked.text;
+      } catch {
+        // the marking failed on its own: the file is saved as it is
+      }
+      await this.#saveFile({ name: this.exportFileName, type: "text/markdown", content });
     } catch {
       // the host could not save: the person sees what the host shows
     }
@@ -1396,9 +1412,36 @@ export class AgentChatViewModel extends Observable implements TurnHost {
     return this.send(turn.userText);
   }
 
-  /** Copies an answer: its Markdown as text, and as HTML, so it pastes formatted into mail and documents. */
-  copy(text: string): void {
-    void Promise.resolve(writeClipboard(this.#context.clipboard, { text, html: markdownToHtml(text) })).catch(() => undefined);
+  /**
+   * Copies an answer: its Markdown as text, and as HTML, so it pastes formatted into mail and documents -- through the agent's
+   * marking (`agent.markCopy`): the HTML carries the AI mark where the agent has the provenance module, the text stays as it is.
+   */
+  copy(text: string, turn?: string): Promise<CopyResult> {
+    return this.copyContent({ text, html: markdownToHtml(text), ...(turn ? { turn } : {}) });
+  }
+
+  /**
+   * Puts content on the clipboard through the agent's marking: `refused` when its policy requires the AI mark and the content could
+   * not get it (nothing is copied), `failed` when the clipboard did not take it. A marking that fails on its own is not the
+   * policy's refusal: the copy goes on as it was.
+   */
+  async copyContent(content: CopyContent): Promise<CopyResult> {
+    let marked: MarkedCopy;
+    try {
+      marked = await this.#agent.markCopy({
+        text: content.text, ...(content.html ? { html: content.html } : {}), ...(content.code ? { code: true } : {}),
+        ...(this.#session ? { chat: this.#session.id } : {}), ...(content.turn ? { turn: content.turn } : {}),
+      });
+    } catch {
+      marked = { text: content.text, ...(content.html ? { html: content.html } : {}), marked: false };
+    }
+    if (marked.refused) return "refused";
+    try {
+      await writeClipboard(this.#context.clipboard, marked.html ? { text: marked.text, html: marked.html } : { text: marked.text });
+      return "copied";
+    } catch {
+      return "failed";
+    }
   }
 
   // -- the turn -------------------------------------------------------------------------------------

@@ -258,7 +258,7 @@ describe("AgentChatViewModel", () => {
   it("copies an answer", async () => {
     const { vm, clipboard } = await chat({ model: () => ({ text: "Copy me" }) });
     await vm.send("x");
-    vm.turns[0]!.copy();
+    await vm.turns[0]!.copy();
     expect(clipboard.lastText).toBe("Copy me");
     // And as HTML, so it pastes formatted into mail and documents.
     expect(clipboard.lastHtml).toBe("<p>Copy me</p>");

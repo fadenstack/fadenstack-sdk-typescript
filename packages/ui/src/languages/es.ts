@@ -138,6 +138,8 @@ export const spanishStrings: UiStrings = {
   copyCode: "Copiar código",
   copyTable: "Copiar tabla",
   copied: "Copiado",
+  copyRefused: "No copiado: esta respuesta no se pudo marcar como generada por IA, y su organización lo exige.",
+  exportRefused: "No guardado: este chat no se pudo marcar como generado por IA, y su organización lo exige.",
   edit: "Editar",
   editAndResend: "Editar y reenviar",
   retry: "Reintentar",
