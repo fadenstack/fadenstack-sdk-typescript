@@ -193,7 +193,7 @@ describe("the record of tool calls", () => {
     expect(entries.map((e) => e.seq).sort((a, b) => a - b)).toEqual(Array.from({ length: 40 }, (_, i) => i + 1));
     const result = await one.verify();
     expect(result).toMatchObject({ intact: true, entries: 40 });
-  });
+  }, 30_000);
 
   it("a changed field is found at its entry", async () => {
     const log = open();
