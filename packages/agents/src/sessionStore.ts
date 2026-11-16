@@ -12,6 +12,12 @@ export interface SessionStore {
   delete(agent: string, sessionId: string): Promise<void>;
 }
 
+/** A store that can delete a person's old chats by the rules in force (the SDK's own `IndexedDbSessionStore`). .NET: `IPrunesSessions`. */
+export interface PrunesSessions {
+  /** Deletes the agent's chats that are too old or too many; the `keep` ones (the open ones) are never deleted. Returns how many went. */
+  prune(agent: string, keep?: readonly string[]): Promise<number>;
+}
+
 /** How many sessions, and how old, are kept per agent (defaults: 50, 90 days). */
 export interface SessionRetention {
   maxSessions: number;

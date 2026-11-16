@@ -176,7 +176,12 @@ export {
   type SecretProtector,
 } from "./secretProtection.js";
 export type { ListsAgents, StoreName, StoreProblem, StoreProblemHandler } from "./storeSupport.js";
-export { withinServerRetention } from "./sessionStore.js";
+export { withinServerRetention, type PrunesSessions } from "./sessionStore.js";
+export {
+  CHAT_RETENTION_LIMITS, DEFAULT_CHAT_RETENTION, IndexedDbChatRetentionStore, MemoryChatRetentionStore, chatRetentionChoice, chatRetentionChoiceOf,
+  chatRetentionState, isValidRetentionChats, isValidRetentionDays, retentionLimits,
+  type ChatRetentionChoice, type ChatRetentionControl, type ChatRetentionState, type ChatRetentionStore, type IndexedDbChatRetentionStoreOptions,
+} from "./chatRetention.js";
 export type { DataDeletion, ExportedSession, MyDataExport } from "./dataRights.js";
 // What the skill editor and the skills module share (sdk/51 F04): the contracts, the limits and the strict SKILL.md reader and writer.
 export {

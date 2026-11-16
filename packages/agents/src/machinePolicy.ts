@@ -1,5 +1,7 @@
 import { FadenstackError } from "@fadenstack/client";
 
+import { DEFAULT_CHAT_RETENTION, chatRetentionChoice, isValidRetentionChats, isValidRetentionDays, type ChatRetentionChoice } from "./chatRetention.js";
+
 /** A machine policy's word on a feature: allowed, forbidden, or allowed only for the listed items. The strings are .NET's `PolicyAccess` names. */
 export const PolicyAccess = Object.freeze({
   Allowed: "Allowed",
@@ -65,11 +67,12 @@ export interface MachinePolicyInit {
   skills?: PolicyRule;
   webSearch?: PolicyAccess;
   timestamping?: TimestampingPolicy;
+  chatRetention?: ChatRetentionChoice | undefined;
   locked?: readonly string[];
   warnings?: readonly string[];
 }
 
-const KEYS: readonly string[] = Object.freeze(["server", "standalone", "endpoints", "plainHttp", "mcp", "skills", "webSearch", "timestamping"]);
+const KEYS: readonly string[] = Object.freeze(["server", "standalone", "endpoints", "plainHttp", "mcp", "skills", "webSearch", "timestamping", "chatRetention"]);
 
 /**
  * What IT set for this machine (sdk/51 F09, D6, R3-8): one vocabulary for every app, read from the app's managed location
@@ -104,6 +107,11 @@ export class MachinePolicy {
   readonly webSearch: PolicyAccess;
   /** RFC 3161 time-stamps for records signed on the device (only a hash leaves the device; F10): on, off, or an own server. */
   readonly timestamping: TimestampingPolicy;
+  /**
+   * How long a standalone agent keeps old chats, fixed by IT (`chatRetention`: `autoDelete`, `maxAgeDays`, `maxSessions`);
+   * undefined when the policy leaves it to the person. A governed agent follows its server instead. .NET: `MachinePolicy.ChatRetention`.
+   */
+  readonly chatRetention: ChatRetentionChoice | undefined;
   /** The keys the policy set itself (the app locks them in its UI and never writes them into the person's settings). */
   readonly locked: readonly string[];
   /** What was ignored or narrowed while reading: unknown keys, unknown values (never a value itself). */
@@ -118,6 +126,7 @@ export class MachinePolicy {
     this.skills = init.skills ?? PolicyRule.allowed;
     this.webSearch = init.webSearch ?? PolicyAccess.Allowed;
     this.timestamping = init.timestamping ?? TimestampingPolicy.on;
+    this.chatRetention = init.chatRetention;
     this.locked = Object.freeze([...(init.locked ?? [])]);
     this.warnings = Object.freeze([...(init.warnings ?? [])]);
     Object.freeze(this);
@@ -195,6 +204,7 @@ export class MachinePolicy {
       skills: rule(values, "skills", byDefaultRule, warnings),
       webSearch: access(values, "webSearch", byDefault, warnings),
       timestamping: timestamps(values, warnings),
+      chatRetention: values.has("chatRetention") ? retention(values.get("chatRetention"), warnings) : undefined,
       locked,
       warnings,
     });
@@ -242,6 +252,39 @@ function timestamps(values: Map<string, unknown>, warnings: string[]): Timestamp
   }
   warnings.push("'timestamping' is neither on, off nor an http(s) address: off.");
   return TimestampingPolicy.off;
+}
+
+/**
+ * `{ "autoDelete": true, "maxAgeDays": 30, "maxSessions": 100 }`. What it leaves out is the default (on, 90 days, 50 chats); a value
+ * that is not understood or out of bounds is reported and also becomes the default, so chats are not kept longer than that.
+ */
+function retention(value: unknown, warnings: string[]): ChatRetentionChoice {
+  if (value === null || typeof value !== "object" || Array.isArray(value)) {
+    warnings.push("'chatRetention' is not an object: the defaults (on, 90 days, 50 chats) apply.");
+    return DEFAULT_CHAT_RETENTION;
+  }
+  let autoDelete = true;
+  let days = DEFAULT_CHAT_RETENTION.maxAgeDays;
+  let chats = DEFAULT_CHAT_RETENTION.maxSessions;
+  for (const [name, member] of Object.entries(value)) {
+    switch (name) {
+      case "autoDelete":
+        if (typeof member === "boolean") autoDelete = member;
+        else warnings.push("'chatRetention.autoDelete' is not true or false: on.");
+        break;
+      case "maxAgeDays":
+        if (isValidRetentionDays(member)) days = member;
+        else warnings.push(`'chatRetention.maxAgeDays' is not a whole number within its bounds: the default (${days}).`);
+        break;
+      case "maxSessions":
+        if (isValidRetentionChats(member)) chats = member;
+        else warnings.push(`'chatRetention.maxSessions' is not a whole number within its bounds: the default (${chats}).`);
+        break;
+      default:
+        warnings.push(`Unknown key 'chatRetention.${name}' ignored.`);
+    }
+  }
+  return chatRetentionChoice({ autoDelete, maxAgeDays: days, maxSessions: chats });
 }
 
 function rule(values: Map<string, unknown>, key: string, fallback: PolicyRule, warnings: string[]): PolicyRule {

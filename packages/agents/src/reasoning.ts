@@ -1,5 +1,6 @@
 import type { ReasoningEffort } from "@fadenstack/client";
 
+import { REASONING_STORE, openPreferences, preferencesExist } from "./preferencesDb.js";
 import { userStoreName } from "./userData.js";
 import type { AgentPrincipal } from "@fadenstack/client";
 
@@ -131,7 +132,7 @@ export class MemoryReasoningStore implements ReasoningStore {
   }
 }
 
-const PICKS = "reasoning";
+const PICKS = REASONING_STORE;
 
 export interface IndexedDbReasoningStoreOptions {
   /** The database's name (default `fadenstack-preferences`; the agent uses one per signed-in user). */
@@ -156,7 +157,7 @@ export class IndexedDbReasoningStore implements ReasoningStore {
   async get(agent: string): Promise<ReasoningLevel | undefined> {
     try {
       // Reading must not create a database for a person who never picked: where the browser can list them, look first.
-      if (!this.#db && !(await this.#exists())) return undefined;
+      if (!this.#db && !(await preferencesExist(this.#factory, this.#name))) return undefined;
       const row = await this.#run<{ level?: unknown } | undefined>("readonly", (store) => store.get(agent));
       return parseReasoningLevel(row?.level);
     } catch {
@@ -174,16 +175,6 @@ export class IndexedDbReasoningStore implements ReasoningStore {
     this.#db = undefined;
   }
 
-  async #exists(): Promise<boolean> {
-    const list = (this.#factory as { databases?: () => Promise<{ name?: string }[]> }).databases;
-    if (typeof list !== "function") return true; // cannot look: open it
-    try {
-      return (await list.call(this.#factory)).some((d) => d.name === this.#name);
-    } catch {
-      return true;
-    }
-  }
-
   async #run<T>(mode: IDBTransactionMode, work: (store: IDBObjectStore) => IDBRequest): Promise<T> {
     const db = await this.#open();
     return new Promise<T>((resolve, reject) => {
@@ -196,15 +187,7 @@ export class IndexedDbReasoningStore implements ReasoningStore {
   }
 
   #open(): Promise<IDBDatabase> {
-    this.#db ??= new Promise<IDBDatabase>((resolve, reject) => {
-      const open = this.#factory.open(this.#name, 1);
-      open.onupgradeneeded = () => {
-        open.result.createObjectStore(PICKS, { keyPath: "agent" });
-      };
-      open.onsuccess = () => resolve(open.result);
-      open.onerror = () => reject(open.error ?? new Error("IndexedDB could not be opened."));
-      open.onblocked = () => reject(new Error("IndexedDB is blocked by another open version."));
-    });
+    this.#db ??= openPreferences(this.#factory, this.#name, () => { this.#db = undefined; });
     return this.#db;
   }
 }

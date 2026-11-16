@@ -244,7 +244,7 @@ describe("the agent's level", () => {
     await first.setReasoning("high");
     await first.dispose();
     const db = await new Promise<IDBDatabase>((resolve, reject) => {
-      const open = indexedDB.open("fadenstack-preferences:tenant-1:user-1", 1);
+      const open = indexedDB.open("fadenstack-preferences:tenant-1:user-1"); // as it is: the store adds a `retention` store (version 2)
       open.onsuccess = () => resolve(open.result);
       open.onerror = () => reject(open.error);
     });

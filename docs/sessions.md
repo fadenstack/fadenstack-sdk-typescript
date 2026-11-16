@@ -113,9 +113,42 @@ It throws when a database stays open in a tab that does not close it; the SDK's 
 
 ### Retention
 
-`IndexedDbSessionStore` keeps the newest 50 sessions of each agent, and none older than 90 days. Sessions beyond
-these limits are deleted when a new session is created. To change the limits of the store the SDK keeps, use
-`useSessionRetention`; to change the limits of a store you create yourself, pass your own:
+By default the SDK keeps the newest 50 chats of each agent on the device, and none older than 90 days. Who decides depends
+on how the agent is connected:
+
+| Connection | Who decides | What the person sees |
+|---|---|---|
+| Standalone | The person, in the app's settings: automatic deletion on or off, and the limits. Defaults: on, 90 days, 50 chats (or the app's `useSessionRetention` limits). The machine policy may fix it (`chatRetention`, see [Machine policy](machine-policy.md)). | A switch and two limits; read only, with "Set by your organisation's policy on this computer", when the policy fixes it. |
+| Governed | The server: the stricter of the app's limits and the profile's `local_retention`. The person's stored choice is ignored. | No setting: "Your organisation keeps at most N chats for D days on this device", or "Your organisation sets no limit". |
+
+**When it runs.** Pruning runs when the agent starts (after the profile is known, for this agent's chats, so an idle profile
+ages out too), when a new chat is created, and at once when the person turns automatic deletion on or lowers a limit. A chat
+that is open (one the agent gave out with `startSession` or `openSession` that your app still holds) is never deleted, and
+counts among the chats kept. With automatic deletion off nothing is deleted: chats stay until the person deletes them
+(`deleteSession`). Only the store the SDK keeps is pruned, not one you passed.
+
+**The person's choice** is kept per person, in the `retention` object store of the person's `fadenstack-preferences`
+database (see [Data on the device](data-on-device.md)), beside the thinking level; it belongs to the person, not to one
+agent. Read and change it with:
+
+```ts
+const state = agent.chatRetention; // control: "person" | "organisation" | "machinePolicy"; autoDelete, maxAgeDays, maxSessions, canChange
+// A settings page, standalone only. Limits are whole numbers: days 1 to 3650, chats 1 to 10000 (a RangeError otherwise).
+await agent.setChatRetention({ autoDelete: true, maxAgeDays: 30, maxSessions: 100 });
+```
+
+`setChatRetention` returns the state in force. In governed mode, or when the machine policy fixes the setting, it keeps
+nothing and returns the state as it is. Before `start`, `chatRetention` shows the app's defaults. .NET: `ChatRetention`,
+`SetChatRetentionAsync`.
+
+**The settings control.** `@fadenstack/ui` has `ChatRetentionSettingsViewModel` (the switch, the two limits, Save and
+Cancel, the read-only states and their sentences, `retext()` for a new language); `@fadenstack/ui-react` and
+`@fadenstack/ui-vue` have `ChatRetentionSettings` for it. Put it where your app keeps its settings:
+`new ChatRetentionSettingsViewModel({ agent, strings })`, call `load()` once, and render `<ChatRetentionSettings settings={vm} />`.
+The texts (`chatRetention…`) are in the five built-in languages.
+
+To change the default limits of the store the SDK keeps (the standalone person's starting point, and the app's limit in
+governed mode), use `useSessionRetention`; to change the limits of a store you create yourself, pass your own:
 
 ```ts
 import { FadenstackAgent, IndexedDbSessionStore } from "@fadenstack/agents";
@@ -129,12 +162,12 @@ const own = FadenstackAgent.createBuilder().useClient(client).useSessionStore(se
 **The server's limits.** A server may set `local_retention` in the agent's profile (`maxSessions`, `maxAgeDays`; only
 positive whole numbers count). The SDK takes the stricter of the app's limits and the server's for each; a limit the
 server leaves out stays the app's, and the server cannot raise a limit above the app's (`withinServerRetention`; .NET:
-`SessionRetention.Within`). It applies to the store the SDK keeps, not to one you passed.
+`SessionRetention.Within`). It applies to governed agents, to the store the SDK keeps, not to one you passed.
 
 | Option | What it is |
 |---|---|
 | `name` | The database's name. Default `fadenstack-sessions`. |
-| `retention` | `{ maxSessions, maxAgeDays }`, per agent. Default `DEFAULT_RETENTION`: 50 sessions, 90 days. |
+| `retention` | `{ maxSessions, maxAgeDays }`, per agent. Default `DEFAULT_RETENTION`: 50 sessions, 90 days. `setRetention(undefined)` turns pruning off; `prune(agent, keep)` deletes beyond the limits now, never the chats in `keep`. |
 | `indexedDB` | The IndexedDB factory. Default `globalThis.indexedDB`. |
 | `keyRange` | The factory's `IDBKeyRange`. Default `globalThis.IDBKeyRange`. Pass it with `indexedDB`. |
 

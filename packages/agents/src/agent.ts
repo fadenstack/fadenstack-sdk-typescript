@@ -22,7 +22,11 @@ import {
 import type { PermissionMode } from "./approvals.js";
 import { type ApprovalStore, type StoredApproval } from "./approvalStore.js";
 import { DefaultStores, buildExport, deleteUserDatabases, deleteUserLocalStorage, type DataDeletion, type MyDataExport } from "./dataRights.js";
-import { DEFAULT_RETENTION, withinServerRetention, type SessionStore } from "./sessionStore.js";
+import { DEFAULT_RETENTION, withinServerRetention, type PrunesSessions, type SessionRetention, type SessionStore } from "./sessionStore.js";
+import {
+  IndexedDbChatRetentionStore, MemoryChatRetentionStore, chatRetentionChoice, chatRetentionFromApp, chatRetentionState, retentionLimits,
+  type ChatRetentionChoice, type ChatRetentionState, type ChatRetentionStore,
+} from "./chatRetention.js";
 import type { StoreProblem } from "./storeSupport.js";
 import { StepUpProofs, isStepUpHandler, type StepUpHandler } from "./stepUp.js";
 import {
@@ -80,6 +84,10 @@ export class FadenstackAgent {
   #reasoningStore: ReasoningStore | undefined;
   #reasoningChoices: ReasoningChoices = ReasoningChoices.everything;
   #reasoningPick: ReasoningLevel | undefined;
+  #retentionStore: ChatRetentionStore | undefined;
+  #retentionPick: ChatRetentionChoice | undefined;
+  // The chats this agent gave out: never pruned while they live.
+  readonly #handedOut = new Set<WeakRef<ChatSession>>();
   #defaults: DefaultStores | undefined;
   #problems = 0;
   #starting: Promise<void> | undefined;
@@ -476,10 +484,12 @@ export class FadenstackAgent {
     this.#settleStores(profile.principal);
     this.#reasoningChoices = ReasoningChoices.fromUi(profile.ui);
     this.#reasoningPick = await this.#picks?.get(this.slug).catch(() => undefined);
+    this.#retentionPick = await this.#retentionStore?.get().catch(() => undefined);
     this.#profile = profile;
     this.#profileRead = this.clock();
     this.#context = context;
     this.#applyRetention(profile);
+    await this.#pruneChats(); // an idle profile ages out too (F08), when pruning is on
     const dropped = this.settings.tools.filter((t) => !hosts.some((h) => h.name === t.name));
     for (const tool of dropped) writeLog(this.settings.logger, AgentLog.toolDropped, { Tool: tool.name });
     writeLog(this.settings.logger, AgentLog.profileLoaded, { Agent: this.slug, Version: profile.version ?? null, Edition: profile.edition,
@@ -512,11 +522,14 @@ export class FadenstackAgent {
     if (this.#storesFor === key) return;
     this.#defaults?.close();
     (this.#reasoningStore as { close?: () => void } | undefined)?.close?.();
+    (this.#retentionStore as { close?: () => void } | undefined)?.close?.();
     const indexed = !!globalThis.indexedDB;
     // A host that keeps both stores itself has taken over the device's storage: the pick then lasts for the run only.
     this.#reasoningStore = this.settings.reasoningStore ? undefined
       : this.settings.sessions && this.settings.approvalStore ? new MemoryReasoningStore()
       : indexed ? new IndexedDbReasoningStore({ name: reasoningStoreName(principal) }) : new MemoryReasoningStore();
+    this.#retentionStore = this.settings.sessions && this.settings.approvalStore ? new MemoryChatRetentionStore()
+      : indexed ? new IndexedDbChatRetentionStore({ name: reasoningStoreName(principal) }) : new MemoryChatRetentionStore();
     const defaults = new DefaultStores({
       principal,
       retention: this.settings.sessionRetention ?? DEFAULT_RETENTION,
@@ -652,7 +665,7 @@ export class FadenstackAgent {
   async startSession(toolMode?: ToolMode): Promise<ChatSession> {
     await this.start();
     await this.refreshProfile();
-    const session = new ChatSession(this, newId(), [], toolMode ?? this.defaultToolMode);
+    const session = this.#handOut(new ChatSession(this, newId(), [], toolMode ?? this.defaultToolMode));
     await session.writeStart();
     return session;
   }
@@ -677,7 +690,7 @@ export class FadenstackAgent {
     // The grant decides, not the transcript: Bypass switched on before the chat's first message left no turn in it.
     const lives = this.grants.live.some((g) => g.kind === "bypass" && g.conversationId === sessionId);
     const before = ChatSession.lastMode(entries) ?? this.defaultToolMode;
-    const session = new ChatSession(this, sessionId, entries, lives ? "bypass" : before);
+    const session = this.#handOut(new ChatSession(this, sessionId, entries, lives ? "bypass" : before));
     session.reopened(before);
     return session;
   }
@@ -720,13 +733,85 @@ export class FadenstackAgent {
     await this.flush();
     this.#defaults?.close();
     (this.#reasoningStore as { close?: () => void } | undefined)?.close?.();
+    (this.#retentionStore as { close?: () => void } | undefined)?.close?.();
     for (const stop of this.#unsubscribe.splice(0)) stop();
     for (const source of this.settings.sources) await source.dispose?.();
   }
 
-  /** The stricter of the app's limits and the server's (`local_retention`) for the sessions the SDK keeps; a limit the server leaves out stays. */
+  /** The limits the sessions the SDK keeps are pruned by, from the state in force (undefined: off). */
   #applyRetention(profile: AgentProfile): void {
-    this.#defaults?.setRetention(withinServerRetention(this.settings.sessionRetention ?? DEFAULT_RETENTION, profile.localRetention));
+    this.#defaults?.setRetention(retentionLimits(this.#chatRetentionFor(profile)));
+  }
+
+  /**
+   * How long old chats are kept on this device, and who decides (`control`). In a standalone agent the person chooses
+   * (`setChatRetention`; on, 90 days, 50 chats unless the app's `useSessionRetention` says otherwise) unless the machine policy fixes it
+   * (`chatRetention`). In a governed agent the server decides, as the stricter of its `local_retention` and the app's limits, and the
+   * person's stored choice is ignored. Call `start` first for the person's own choice and the server's limits. .NET: `ChatRetention`.
+   */
+  get chatRetention(): ChatRetentionState {
+    return this.#chatRetentionFor(this.#profile);
+  }
+
+  #chatRetentionFor(profile: AgentProfile | undefined): ChatRetentionState {
+    const app = this.settings.sessionRetention ?? DEFAULT_RETENTION;
+    if (this.connection === "governed") {
+      const server = profile?.localRetention;
+      const limits: SessionRetention = withinServerRetention(app, server);
+      return chatRetentionState("organisation", true, limits.maxAgeDays, limits.maxSessions, server !== undefined);
+    }
+    const fixed = this.machinePolicy.chatRetention;
+    if (fixed) return chatRetentionState("machinePolicy", fixed.autoDelete, fixed.maxAgeDays, fixed.maxSessions);
+    const choice = this.#retentionPick ?? chatRetentionFromApp(app);
+    return chatRetentionState("person", choice.autoDelete, choice.maxAgeDays, choice.maxSessions);
+  }
+
+  /**
+   * Keeps the person's choice for old chats (a standalone agent only), on this device and for this person, and applies it at once:
+   * when automatic deletion is on, chats beyond the limits go now, except the ones open. Returns the state in force. In governed mode,
+   * or when the machine policy fixes it, the choice is ignored (nothing is kept) and the state is returned as it is.
+   * @throws RangeError a limit is not a whole number within its bounds (`chatRetentionChoice` checks them).
+   * .NET: `SetChatRetentionAsync`.
+   */
+  async setChatRetention(choice: ChatRetentionChoice, signal?: AbortSignal): Promise<ChatRetentionState> {
+    const checked = chatRetentionChoice(choice);
+    await this.start(signal);
+    if (!this.chatRetention.canChange) return this.chatRetention;
+    this.#retentionPick = checked;
+    try {
+      await this.#retentionStore?.set(checked);
+    } catch {
+      // the choice still holds for this run; it is just not remembered
+    }
+    this.#applyRetention(this.profile);
+    await this.#pruneChats();
+    return this.chatRetention;
+  }
+
+  /** Deletes this agent's chats beyond the limits in force (nothing when automatic deletion is off), but never one that is open. */
+  async #pruneChats(): Promise<void> {
+    const store = this.settings.sessions ? undefined : this.#sessions; // only the store the SDK keeps; a host's own store is the host's
+    if (!store || typeof (store as Partial<PrunesSessions>).prune !== "function" || !retentionLimits(this.chatRetention)) return;
+    try {
+      await (store as unknown as PrunesSessions).prune(this.slug, this.#openChatIds());
+    } catch {
+      // a chat that cannot be removed stays for now; the next start tries again
+    }
+  }
+
+  #handOut(session: ChatSession): ChatSession {
+    this.#handedOut.add(new WeakRef(session));
+    return session;
+  }
+
+  #openChatIds(): string[] {
+    const ids: string[] = [];
+    for (const ref of this.#handedOut) {
+      const session = ref.deref();
+      if (session) ids.push(session.id);
+      else this.#handedOut.delete(ref);
+    }
+    return ids;
   }
 
   #storeProblem(problem: StoreProblem): void {
@@ -766,6 +851,7 @@ export class FadenstackAgent {
     // The SDK's own preferences store goes too (a host's own reasoning store stays the host's): closed first, an open
     // database blocks its deletion.
     if (!this.settings.reasoningStore) (this.#reasoningStore as { close?: () => void } | undefined)?.close?.();
+    (this.#retentionStore as { close?: () => void } | undefined)?.close?.();
     await this.#defaults?.closeAsync();
     let storesCleared = 0;
     try {
@@ -774,6 +860,7 @@ export class FadenstackAgent {
     } finally {
       this.#storesFor = undefined; // new, empty stores (and a new key) at the next use
       this.#settleStores(principal);
+      this.#retentionPick = undefined;
       this.#applyRetention(this.profile);
       if (!this.settings.reasoningStore) this.#reasoningPick = undefined;
     }

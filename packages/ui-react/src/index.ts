@@ -22,6 +22,7 @@ export { Markdown, type MarkdownProps } from "./Markdown.js";
 export { ConnectionWizard, type ConnectionWizardProps, type WizardTheme } from "./ConnectionWizard.js";
 export { SkillLibrary, type SkillLibraryProps } from "./SkillLibrary.js";
 export { SkillEditor, type SkillEditorProps } from "./SkillEditor.js";
+export { ChatRetentionSettings, type ChatRetentionSettingsProps } from "./ChatRetentionSettings.js";
 export { SkillDraft, type SkillDraftProps } from "./SkillDraft.js";
 export { ToolsPage, type ToolsPageProps } from "./ToolsPage.js";
 export { Icon, Spinner, type IconName } from "./icons.js";

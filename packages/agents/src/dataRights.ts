@@ -186,7 +186,8 @@ export class DefaultStores {
       : indexed ? new IndexedDbApprovalStore({ name: names.approvals, ...common }) : new MemoryApprovalStore();
   }
 
-  setRetention(retention: SessionRetention): void {
+  /** The limits chats are pruned by; undefined: pruning is off. */
+  setRetention(retention: SessionRetention | undefined): void {
     if (this.sessions instanceof IndexedDbSessionStore) this.sessions.setRetention(retention);
   }
 

@@ -39,7 +39,8 @@ describe("reading", () => {
   it("each key is read and locked", () => {
     const policy = MachinePolicy.fromJson(`
       {"server":"https://ai.example.test","standalone":"allowed","endpoints":["http://localhost:11434","https://llm.example.test/v1"],
-       "plainHttp":"forbidden","mcp":["notes-db"],"skills":"allowed","webSearch":"forbidden","timestamping":"off"}`);
+       "plainHttp":"forbidden","mcp":["notes-db"],"skills":"allowed","webSearch":"forbidden","timestamping":"off",
+       "chatRetention":{"autoDelete":false,"maxAgeDays":30,"maxSessions":100}}`);
 
     expect(policy.server?.href).toBe("https://ai.example.test/");
     expect(policy.standalone).toBe(PolicyAccess.Allowed);
@@ -51,6 +52,7 @@ describe("reading", () => {
     expect(policy.skills).toBe(PolicyRule.allowed);
     expect(policy.webSearch).toBe(PolicyAccess.Forbidden);
     expect(policy.timestamping).toBe(TimestampingPolicy.off);
+    expect(policy.chatRetention).toEqual({ autoDelete: false, maxAgeDays: 30, maxSessions: 100 });
     expect([...policy.locked].sort()).toEqual([...MachinePolicy.keys].sort());
     expect(policy.warnings).toEqual([]);
   });
