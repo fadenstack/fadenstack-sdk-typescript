@@ -787,6 +787,7 @@ export interface UiStrings {
   webSearchCancel: string;
   webSearchClose: string;
   webSearchSaved: string;
+  webSearchSaveFailed: string;
   toolsSkipNetwork: string;
   toolsFieldUrlHelp: string;
   toolsProblemPlainHttpWithHeaders: string;
@@ -1565,6 +1566,7 @@ export const englishStrings: UiStrings = {
   webSearchCancel: "Cancel",
   webSearchClose: "Close",
   webSearchSaved: "Saved.",
+  webSearchSaveFailed: "The settings could not be saved on this device. Try again.",
   toolsSkipNetwork: "A server on another computer is not imported. Add it yourself if you need it.",
   toolsFieldUrlHelp: "Use https for a server anywhere. Plain http works on this computer, and on your local network when you allow it under Advanced.",
   toolsProblemPlainHttpWithHeaders: "Headers hold secrets, so a plain http address beyond this computer cannot have any. Use https or remove the headers.",

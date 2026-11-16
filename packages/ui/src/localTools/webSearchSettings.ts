@@ -47,7 +47,7 @@ export class WebSearchSettingsViewModel extends Observable {
   #hasKey = false;
   #replacing = false;
   #removed = false;
-  #error = "";
+  #error: "webSearchKeyMissing" | "webSearchUrlMissing" | "webSearchUrlRefused" | "webSearchSaveFailed" | "" = "";
   #saved = "";
   #busy = false;
   #disposed = false;
@@ -182,7 +182,7 @@ export class WebSearchSettingsViewModel extends Observable {
 
   /** Why the sheet cannot be saved; empty when nothing is wrong. */
   get errorText(): string {
-    return this.#error;
+    return this.#error === "" ? "" : this.strings[this.#error];
   }
 
   get hasError(): boolean {
@@ -212,11 +212,11 @@ export class WebSearchSettingsViewModel extends Observable {
     let searxngUrl: string | undefined;
     if (this.#choice === "searxng") {
       searxngUrl = this.#address.trim();
-      if (searxngUrl === "") return this.#refuse(s.webSearchUrlMissing);
-      if (!isAllowedSearxngUrl(searxngUrl)) return this.#refuse(s.webSearchUrlRefused);
+      if (searxngUrl === "") return this.#refuse("webSearchUrlMissing");
+      if (!isAllowedSearxngUrl(searxngUrl)) return this.#refuse("webSearchUrlRefused");
     }
     const typed = this.#choice === "brave" ? this.#key.trim() : "";
-    if (this.#choice === "brave" && typed === "" && !this.keyIsKept && !(this.#hasKey && this.#replacing)) return this.#refuse(s.webSearchKeyMissing);
+    if (this.#choice === "brave" && typed === "" && !this.keyIsKept && !(this.#hasKey && this.#replacing)) return this.#refuse("webSearchKeyMissing");
     this.#error = "";
     this.#busy = true;
     this.notify();
@@ -226,9 +226,10 @@ export class WebSearchSettingsViewModel extends Observable {
       else if (this.#removed) await this.#store.setBraveKey(undefined);
     } catch (e) {
       this.#busy = false;
-      if (e instanceof TypeError) return this.#refuse(s.webSearchUrlRefused);
-      this.notify();
-      throw e;
+      // A failed write (a rejected transaction, a full quota, anything the store throws) keeps the sheet open and what was typed.
+      // Nothing about the failure is kept or shown: not its message, not the key.
+      if (e instanceof TypeError && searxngUrl !== undefined && !isAllowedSearxngUrl(searxngUrl)) return this.#refuse("webSearchUrlRefused");
+      return this.#refuse("webSearchSaveFailed");
     }
     this.#busy = false;
     this.#forget();
@@ -264,7 +265,7 @@ export class WebSearchSettingsViewModel extends Observable {
     this.#key = "";
   }
 
-  #refuse(text: string): void {
+  #refuse(text: "webSearchKeyMissing" | "webSearchUrlMissing" | "webSearchUrlRefused" | "webSearchSaveFailed"): void {
     this.#error = text;
     this.notify();
   }

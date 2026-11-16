@@ -737,6 +737,7 @@ export const spanishStrings: UiStrings = {
   webSearchCancel: "Cancelar",
   webSearchClose: "Cerrar",
   webSearchSaved: "Guardado.",
+  webSearchSaveFailed: "No se pudo guardar la configuración en este dispositivo. Inténtelo de nuevo.",
   toolsSkipNetwork: "Un servidor de otro equipo no se importa. Añádalo usted mismo si lo necesita.",
   toolsFieldUrlHelp: "Use https para un servidor en cualquier lugar. El http en texto plano funciona en este equipo y, si lo permite en Avanzado, en su red local.",
   toolsProblemPlainHttpWithHeaders: "Los encabezados guardan secretos, así que una dirección http en texto plano fuera de este equipo no puede tenerlos. Use https o quite los encabezados.",

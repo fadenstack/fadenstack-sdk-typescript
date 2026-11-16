@@ -738,6 +738,7 @@ export const frenchStrings: UiStrings = {
   webSearchCancel: "Annuler",
   webSearchClose: "Fermer",
   webSearchSaved: "Enregistré.",
+  webSearchSaveFailed: "Les paramètres n’ont pas pu être enregistrés sur cet appareil. Réessayez.",
   toolsSkipNetwork: "Un serveur sur un autre ordinateur n’est pas importé. Ajoutez-le vous-même si besoin.",
   toolsFieldUrlHelp: "Utilisez https pour un serveur n’importe où. Le http en clair fonctionne sur cet ordinateur, et sur votre réseau local si vous l’autorisez sous Avancé.",
   toolsProblemPlainHttpWithHeaders: "Les en-têtes contiennent des secrets : une adresse http en clair hors de cet ordinateur n’en peut avoir. Utilisez https ou retirez les en-têtes.",

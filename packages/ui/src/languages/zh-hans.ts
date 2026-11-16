@@ -733,6 +733,7 @@ export const chineseSimplifiedStrings: UiStrings = {
   webSearchCancel: "取消",
   webSearchClose: "关闭",
   webSearchSaved: "已保存。",
+  webSearchSaveFailed: "无法在此设备上保存设置。请重试。",
   toolsSkipNetwork: "其他电脑上的服务器不会被导入。如有需要，请自行添加。",
   toolsFieldUrlHelp: "任何位置的服务器请使用 https。明文 http 可用于这台电脑；在“高级”中允许后，也可用于局域网。",
   toolsProblemPlainHttpWithHeaders: "标头中含有机密，因此这台电脑之外的明文 http 地址不能带标头。请使用 https 或移除标头。",

@@ -737,6 +737,7 @@ export const germanStrings: UiStrings = {
   webSearchCancel: "Abbrechen",
   webSearchClose: "Schließen",
   webSearchSaved: "Gespeichert.",
+  webSearchSaveFailed: "Die Einstellungen konnten auf diesem Gerät nicht gespeichert werden. Versuchen Sie es erneut.",
   toolsSkipNetwork: "Ein Server auf einem anderen Computer wird nicht importiert. Fügen Sie ihn bei Bedarf selbst hinzu.",
   toolsFieldUrlHelp: "Verwenden Sie https für einen Server irgendwo. Klartext-http funktioniert auf diesem Computer und, wenn Sie es unter „Erweitert“ erlauben, im lokalen Netzwerk.",
   toolsProblemPlainHttpWithHeaders: "Kopfzeilen enthalten Geheimnisse; eine Klartext-http-Adresse außerhalb dieses Computers darf keine haben. Verwenden Sie https oder entfernen Sie die Kopfzeilen.",

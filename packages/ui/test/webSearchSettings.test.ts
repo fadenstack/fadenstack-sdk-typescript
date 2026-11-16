@@ -270,3 +270,80 @@ describe("the row on the Tools page", () => {
     expect(p.webSearchButtonText).toBe("Einrichten");
   });
 });
+
+describe("a failed write", () => {
+  // A store whose writes fail the way IndexedDB's do (a rejected transaction, a full quota); the failure's text is a trap.
+  class Failing extends MemoryWebSearchStore {
+    failSave = true;
+    failKey = false;
+    override async save(settings: Parameters<MemoryWebSearchStore["save"]>[0]): Promise<void> {
+      if (this.failSave) throw new DOMException(`quota exceeded for ${KEY}`, "QuotaExceededError");
+      return super.save(settings);
+    }
+    override async setBraveKey(key: string | undefined): Promise<void> {
+      if (this.failKey) throw new Error(`transaction aborted for ${KEY}`);
+      return super.setBraveKey(key);
+    }
+  }
+
+  it("keeps the sheet open with the error and what was typed, and shows nothing as saved", async () => {
+    const store = new Failing();
+    let closed = 0;
+    const { vm } = await sheet(store, () => { closed += 1; });
+    vm.choice = "brave";
+    vm.key = KEY;
+
+    await vm.save();
+
+    expect(vm.errorText).toBe(englishStrings.webSearchSaveFailed);
+    expect(vm.errorText).not.toContain(KEY);
+    expect(vm.hasSaved).toBe(false);
+    expect(vm.isBusy).toBe(false);
+    expect(closed).toBe(0);
+    expect(vm.key).toBe(KEY); // typed text stays, so a second try needs no retyping
+    expect(await store.hasBraveKey()).toBe(false);
+  });
+
+  it("does the same when the key cannot be written, and a second save that works clears the error and closes", async () => {
+    const store = new Failing();
+    store.failSave = false;
+    store.failKey = true;
+    let closed = 0;
+    const { vm } = await sheet(store, () => { closed += 1; });
+    vm.choice = "brave";
+    vm.key = KEY;
+
+    await vm.save();
+    expect(vm.hasError).toBe(true);
+    expect(vm.errorText).toBe(englishStrings.webSearchSaveFailed);
+    expect(vm.hasSaved).toBe(false);
+    expect(closed).toBe(0);
+
+    store.failKey = false;
+    await vm.save();
+    expect(vm.hasError).toBe(false);
+    expect(closed).toBe(1);
+    expect(await store.hasBraveKey()).toBe(true);
+    expect(vm.key).toBe("");
+  });
+
+  it("keeps a pending Remove key, and says the error again in a new language", async () => {
+    const store = new Failing();
+    store.failSave = false;
+    await store.setBraveKey(KEY);
+    await store.save({ provider: "brave" });
+    let current: UiStrings = englishStrings;
+    const vm = new WebSearchSettingsViewModel({ store, strings: () => current });
+    await vm.ready;
+    vm.removeKey();
+    vm.choice = "off";
+    store.failSave = true;
+
+    await vm.save();
+    expect(vm.keyIsRemoved).toBe(true);
+    expect(await store.hasBraveKey()).toBe(true);
+    current = germanStrings;
+    vm.retext();
+    expect(vm.errorText).toBe(germanStrings.webSearchSaveFailed);
+  });
+});
