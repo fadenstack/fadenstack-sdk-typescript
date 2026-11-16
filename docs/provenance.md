@@ -255,6 +255,28 @@ Part of D18 (owner, 14 Nov): the endpoint's text watermark is used, never switch
   `runtime-without-watermark` where the runtime has none (Ollama, LM Studio, llama.cpp, LocalAI); `no-watermark-greedy` for
   deterministic sampling; `no-watermark-remote-model` where the server said the answer is unmarked; otherwise not applied,
   with the reason in the entry's `detail` (only if the operator configured it, only if the account turned it on, not known).
+## Copying an answer
+
+What the person copies out of the chat leaves it, so it is marked like content a tool places. The chat's Copy button, and an app's own copy, go through the same pipeline, with the same policy, records and reports as a tool's placement: one placement per copy, outside a tool call, for the tool `copy`.
+
+```ts
+// The chat view does this for its own Copy. An app that shows answers in its own view does it itself:
+const copied = await agent.markCopy({ text: markdown, html, chat: chatId, turn: turnId });
+if (copied.refused) { /* the policy requires the mark and it could not be made: copy nothing, say so */ }
+else await writeClipboard(clipboard, { text: copied.text, html: copied.html }); // text as it was, HTML with its mark
+```
+
+- **What lands on the clipboard.** The answer's Markdown as plain text, exactly as it was, and the same answer as HTML. The HTML carries the mark (`<span data-ai-generated="<record id>" title="AI-generated <record id>">`, see [The built-in markers](#the-built-in-markers)). The plain text carries nothing: only the opt-in invisible-text marker could put a mark in it, and it is left off.
+- **Which targets keep the mark.** The HTML is kept by Word, Outlook, a browser's rich-text editor and most mail clients; a program that takes no formatting gets the plain text and so no mark. Gmail drops the `data-` attribute and keeps the `title`, which the record's report says (`html-title`). On the web the HTML goes as `text/html` of the browser's clipboard (`browserClipboard`); a clipboard without `setContent` gets the text only.
+- **The record.** The sink is `clipboard`, which carries `html-attribute` only; the media type is `text/html` (`text/markdown` when only text is given); the edit kind is `Generated`; the record is linked to the receipt of the turn the answer came from. It is signed by the server (governed) or by the device (standalone), as a tool's records are. The report and the transcript's `provenance.placed` entry name the tool `copy` and never hold the copied text.
+- **Exempt content.** Code (a code block's Copy), and whatever the policy exempts, is copied as it is and recorded as exempt. The reason is `MarkedCopy.exemptBecause`.
+- **The policy `refuse`.** A copy that cannot get a layer it needs (the HTML's mark, or the receipt's watermark) is not copied: `MarkedCopy.refused`, and the chat says "Not copied: this answer could not be marked as AI-generated, and your organisation requires it." Standalone, the device signs (`LocalProvenanceBackend`), so a copy works offline; governed with the server unreachable, the policy decides as it does for a tool. A marking that fails on its own (not the policy) lets the copy go on as it was.
+- **Without the module** the copy is unchanged (`marked` false), and `markCopy` is a pass-through.
+- **A saved chat.** The chat can save itself as a Markdown file (`saveChatMarkdown`); that file goes through the same pipeline with the sink `file`, which carries `front-matter` (`ai-generated: true`, `ai-record-id`): `agent.markCopy({ text, file: true })`. Refused, nothing is saved and the chat says "Not saved: this chat could not be marked as AI-generated, and your organisation requires it." The .NET SDK has no chat export (a gap that was there before this): `AnswerCopy.IsFile` is for an app that writes such a file itself.
+- **Tables.** A table's copy (tab-separated text and an HTML table) is marked like an answer. The .NET chat has no table copy button. `markdownToHtml` and `tableToTsv` (`@fadenstack/ui`) give an app the same text and HTML the chat uses; the .NET SDK has `MarkdownSerializer` for them.
+
+An app that shows answers in its own view, not the SDK's chat view, calls `markCopy` itself, as above, before it puts anything on the clipboard.
+
 ## Receipts
 
 Every answer ends with the server's receipt: what model made it, when, and whether the text is watermarked. The
@@ -370,7 +392,7 @@ one writes the other reads, and so does the server's detector. Both test suites 
 (`vectors.test.ts` here, `SharedVectorTests` there), and read the same files: `reader-text-vectors.json` for the text
 a reader sees, `edit-kind-vectors.json` for the edit kind and its reason, `mark-split-vectors.json` for marks split by
 a later write and a record's text read back, `office-anchor-vectors.json` for Office anchors and their parts, split by
-a later write, and a record's text read back from them, `office-shape-vectors.json` for PowerPoint's shape tags.
+a later write, and a record's text read back from them, `office-shape-vectors.json` for PowerPoint's shape tags. The chat's Markdown-to-HTML export has its own shared file, `markdown-html.json` (`serialize.test.ts` here, `MarkdownSerializerTests` there).
 
 | Step | What happens |
 |---|---|

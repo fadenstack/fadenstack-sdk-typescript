@@ -8,6 +8,15 @@ before 1.0, a minor version may break the API, and this file says where it does.
 
 ### Added
 
+- **The mark on copy** ([Marking AI-generated content: Copying an answer](docs/provenance.md#copying-an-answer), AI Act Art. 50(2)).
+  `agent.markCopy({ text, html?, chat?, turn?, code?, file? })` marks what the person copies out of the chat through the
+  provenance module's pipeline (the tool `copy`, the sink `clipboard` that carries `html-attribute`, the receipt of the turn):
+  the HTML carries the mark, the plain text stays as it is, code and exempt content is recorded as exempt, and with the policy
+  `refuse` a copy that cannot be marked is not made (`refused`; the chat says so in five languages). The chat's Copy, a copied
+  table and a code block's Copy use it, and a chat saved as Markdown (`saveChatMarkdown`) is marked in its front matter (the sink
+  `file`). An app with its own view of answers calls `markCopy` itself. `AnswerCopyMarker` and `AgentBuilder.useAnswerCopyMarker`
+  are the seam (the provenance module sets it). Under each answer `turn.copyStatus` says "Copied" or why nothing was copied, in
+  the React and Vue skins. Behaviour change: `turn.copy()`, `part.copyTable` and `part.copyCode` return a promise (a `CopyResult`).
 - **Your data per app** ([Data on the device: Export and delete](docs/data-on-device.md#export-and-delete)). `deleteMyData` and
   `exportMyData` take `{ scope: "thisApp" | "allApps" }`: `thisApp` (the default) covers the calling app's chats, "Allow always" and
   thinking levels, and the person's shared data (skills, the MCP list, keys, provenance records, other settings, the data key) only

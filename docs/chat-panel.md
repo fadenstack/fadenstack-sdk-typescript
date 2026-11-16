@@ -145,7 +145,7 @@ Call `chat.dispose()` when you remove the panel. It stops a running turn and sto
   approvals, your own items, and About last. See [Settings](#settings).
 - **The composer** has context chips, Enter to send, Shift+Enter for a new line, and Esc to stop. Under it are the AI
   notice and a muted Fadenstack link. See [About and the Fadenstack link](#about-and-the-fadenstack-link).
-- **After an answer**: copy (the Markdown as text, and as HTML so it pastes formatted into mail and documents), retry
+- **After an answer**: copy (the Markdown as text, and as HTML so it pastes formatted into mail and documents), marked as AI-generated where the agent has the provenance module ([Copying an answer](provenance.md#copying-an-answer)): the HTML carries the mark, the text stays as it was, and when the policy requires the mark and it could not be made nothing is copied and a line under the answer says so, retry
   for a turn that failed or was stopped, edit, and the turn's duration and tokens.
 - **An empty chat** shows the agent's avatar, its greeting, and its suggested prompts from the agent's profile.
 
@@ -622,7 +622,7 @@ reference. Each turn and each part is its own view model, so one change re-rende
 | View model | What it holds |
 |---|---|
 | `AgentChatViewModel` | The chat: `turns`, `input`, `attachments`, `sessions`, `toolModes`, `toolMode`, `greeting`, `suggestions`, `isBusy`, `isWaitingForSlot`, `signInRequired`, `error`, `strings`, `about`, `footerLink`, `showUnmarkedNotice`, the thinking members above, and the actions `send`, `stop`, `newChat`, `openSession`, `loadEarlier`, `selectToolMode`, `selectReasoning`, `setShowUnmarkedNotice`, `invokeTool`, `setAboutOpen`, `openLink`. |
-| `TurnViewModel` | One exchange: `userText`, `parts`, `state`, `outcome`, `usageText`, `durationText`, and `copy`, `edit`, `retry`. |
+| `TurnViewModel` | One exchange: `userText`, `parts`, `state`, `outcome`, `usageText`, `durationText`, `copyStatus` ("Copied", or why nothing was copied), and `copy`, `edit`, `retry`. |
 | `ResponsePart` | One part of an answer, with a `kind`: `markdown`, `reasoning`, `tool`, `approval`, `notice`, `citations`, and `card`, `table`, `progress` and `diff` for modules. |
 | `AttachmentViewModel` | One context chip. |
 
