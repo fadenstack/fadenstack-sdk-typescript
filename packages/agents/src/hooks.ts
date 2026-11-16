@@ -17,7 +17,7 @@ export const MAX_HOOK_NOTE_KEY = 64;
 /** The most characters of a note's value. */
 export const MAX_HOOK_NOTE_VALUE = 200;
 
-/** What a hook sees before a model call. No prompt text unless the app asked for it (`AgentBuilder.useHookContent`). */
+/** What a hook sees before a model call. No prompt text unless the app offered it (`AgentBuilder.useHookContent`) and content logging is on (`FadenstackAgent.contentLogging`). */
 export interface ModelCallHookContext {
   readonly agentName: string;
   readonly sessionId: string;
