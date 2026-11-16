@@ -251,6 +251,7 @@ const agent = FadenstackAgent.createBuilder()
 | `useLogging(logger)` | Where the SDK logs: a `FadenstackLogger`. Names, ids, counts and durations, never content. Nowhere by default. See [Logging](#logging). |
 | `requireHostToolPolicyChecks()` | Refuses to start against a server that does not offer the fresh policy check for host tools. See [Host commands and central policy](host-commands.md#requiring-the-check). |
 | `describeApp(app)` | The application the agent runs in, for the manifest. See [Tools and approvals](tools.md#the-app-manifest). |
+| `describePlugins(plugins)` | The plugins the app has loaded (name, version, SHA-256), for the device report. See [What your app reports about the device](tools.md#what-your-app-reports-about-the-device). |
 | `addChatStage(order, wrap)` | Wraps the chat, for example to mask what goes out. |
 | `addToolStage(order, stage)` | Wraps each tool call: sees the arguments before and the result after. |
 | `addToolService(key, factory)` | A service tools get per call by its key (`context.services.get(key)`), made by `factory` on the call's first use. One factory per key. |
@@ -281,7 +282,7 @@ The agent starts the first time you open a session, or when you call `agent.star
   class and the contract's; without a contract, or for an entry without a `risk`, a tool is `unknown` and asks;
 - warns once, on the console, when the app set bypass mode and the server does not offer Bypass for the agent, or the app opens
   no second sign-in (`useStepUpHandler`);
-- reports the app's manifest to the server, unless event reporting is off.
+- reports the app's manifest to the server, with the `device` block ([what your app reports about the device](tools.md#what-your-app-reports-about-the-device)), unless event reporting is off.
 
 After that, `agent.profile` is the `AgentProfile` and `agent.tools` lists the tools with the classes they run under.
 When a new version of the agent is published, `agent.restart()` loads the profile again. `agent.profile.user.language` is the language the user picked for all their clients and the console, or `null`; `agent.setUserLanguage(tag)` keeps a new one (`null` forgets it). The chat panel does both: see [Languages](chat-panel.md#languages).

@@ -173,6 +173,36 @@ reporting is off, and a manifest the server cannot take never fails the start.
 `agent.app` returns what you described (undefined without `describeApp`). The chat panel's About shows the name and
 version.
 
+### What your app reports about the device
+
+The manifest also carries a `device` block, per device (`PUT /v1/agents/{agent}/manifest`; `AppManifest.device`,
+`ManifestDevice`). The SDK fills it in. An older server drops what it does not know, so nothing needs switching on:
+
+| Field | What it holds |
+|---|---|
+| `os` | A short description of the platform, cut to 100 characters. In a browser: `navigator.userAgentData.platform` where it exists, else `navigator.platform`, else `Browser` (never the whole user agent). In Node: `os.type()`, `os.release()` and the architecture, such as `Windows_NT 10.0.26100 x64`. |
+| `app_version` | The app's own version (`describeApp({ version })`), cut to 50 characters. |
+| `plugins` | What you declare with `builder.describePlugins(...)`: for each plugin its name, version and the SHA-256 of its file (64 hex characters). The SDK does not hash plugins; your plugin loader knows them. |
+| `mcp_programs` | Always empty here. A browser starts no local program; the .NET SDK lists the programs of the local MCP servers it runs, by file name and hash. |
+
+```ts
+builder.describePlugins([
+  { name: "contoso-crm", version: "1.0.0", sha256: "9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08" },
+]);
+```
+
+- **The limits** are the server's (`DEVICE_LIMITS`): at most 100 plugins, names up to 128 characters, versions up to 50.
+  An entry that does not fit (an empty name, a hash that is not 64 hex characters) is left out, and the log says that a
+  plugin was left out and why (event 2018; never the entry). The SHA-256 is sent in lower case.
+- **What is never sent:** a path, a user name, an argument, an environment value.
+- **When.** At the agent's start, with the rest of the manifest. A plugin loaded later goes with the next start.
+  `useEventReporting(false)` sends no manifest, so no block.
+- **Who sees it.** The server keeps the latest report per device and shows it to an administrator with the agent's
+  devices in the console, and to the person in their own app sign-ins. It is erased with the person's account, and a
+  block not reported for 90 days goes.
+- **In tests,** `FakeGateway` checks the block as core does (a block that does not fit is a 400 `invalid_manifest`) and
+  `gateway.deviceOf("agent")` returns what the latest manifest carried.
+
 ## Tool modes
 
 The user picks a tool mode for each session. By each tool's class, the mode decides which tools run, which ask first,

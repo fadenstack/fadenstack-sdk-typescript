@@ -6,6 +6,7 @@ import {
   type FadenstackClientOptions,
   type ModelEndpoint,
   type ManifestContext,
+  type ManifestPlugin,
   type ReasoningEffort,
   type TokenProvider,
   type ToolMode,
@@ -85,6 +86,8 @@ export interface AgentSettings {
   readonly logger?: FadenstackLogger;
   /** The app the agent runs in, for the manifest it reports when it starts. */
   readonly app: AppDescription;
+  /** The plugins the app declared (`describePlugins`), for the manifest's device block. */
+  readonly plugins: readonly ManifestPlugin[];
   /** The app's limits for the sessions the SDK keeps (default 50 sessions, 90 days); the server's can only lower them. */
   readonly sessionRetention?: SessionRetention;
   /** What encrypts the stores the SDK keeps; undefined: a WebCrypto key per signed-in user in a browser, none elsewhere. */
@@ -149,6 +152,7 @@ export class AgentBuilder {
   #reasoningStore: ReasoningStore | undefined;
   #logger: FadenstackLogger | undefined;
   #app: AppDescription = { name: UNDESCRIBED_APP_NAME };
+  #plugins: ManifestPlugin[] = [];
   #sessionRetention: SessionRetention | undefined;
   #secretProtector: SecretProtector | undefined;
   #onStoreProblem: StoreProblemHandler | undefined;
@@ -374,6 +378,19 @@ export class AgentBuilder {
     return this;
   }
 
+  /**
+   * The plugins the app has loaded: name, version and the SHA-256 of each plugin's file (64 hex characters), which the app
+   * knows and the SDK does not hash itself. They go into the manifest's `device` block when the agent starts, where the
+   * organisation's administrators see them with the device (the agent's devices in the console) and the person sees them in
+   * their own app sign-ins. An entry that does not fit the server's limits (name up to 128 characters, version up to 50, at
+   * most 100 plugins) is left out of the report, and the log says so (kind and reason only). Replaces what was declared before.
+   * .NET: `DescribePlugins`.
+   */
+  describePlugins(plugins: readonly ManifestPlugin[]): this {
+    this.#plugins = plugins.map((p) => ({ name: p.name, version: p.version, sha256: p.sha256 }));
+    return this;
+  }
+
   /** A stage around the chat at `order` (`StageOrder`). */
   addChatStage(order: number, wrap: ChatStage): this {
     this.#chatStages.push({ order, wrap });
@@ -522,6 +539,7 @@ export class AgentBuilder {
       ...(this.#reasoningStore ? { reasoningStore: this.#reasoningStore } : {}),
       ...(this.#logger ? { logger: this.#logger } : {}),
       app: this.#app,
+      plugins: [...this.#plugins],
       ...(this.#sessionRetention ? { sessionRetention: this.#sessionRetention } : {}),
       ...(this.#secretProtector ? { secretProtector: this.#secretProtector } : {}),
       ...(this.#onStoreProblem ? { onStoreProblem: this.#onStoreProblem } : {}),

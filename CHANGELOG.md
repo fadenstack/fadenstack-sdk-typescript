@@ -8,6 +8,8 @@ before 1.0, a minor version may break the API, and this file says where it does.
 
 ### Added
 
+- **What the app reports about the device** ([Tools and approvals: What your app reports about the device](docs/tools.md#what-your-app-reports-about-the-device)). The manifest the agent sends at start carries a `device` block: a short `os` (the browser's platform, or Node's type, release and architecture; never the whole user agent), the app's `app_version` and the plugins the app declares with the new `describePlugins(plugins)` (name, version and SHA-256 of each). Cut to the server's limits (`DEVICE_LIMITS`); an entry that does not fit is left out and logged (event 2018) by kind and reason. `mcp_programs` is always empty in a browser. `FakeGateway` checks the block as core 0.7.1 does and `deviceOf(agent)` returns it.
+
 - **Your data per app** ([Data on the device: Export and delete](docs/data-on-device.md#export-and-delete)). `deleteMyData` and
   `exportMyData` take `{ scope: "thisApp" | "allApps" }`: `thisApp` (the default) covers the calling app's chats, "Allow always" and
   thinking levels, and the person's shared data (skills, the MCP list, keys, provenance records, other settings, the data key) only

@@ -33,6 +33,9 @@ export const AgentLog = Object.freeze({
     "A tool source's tool {Tool} was left out: the name is the SDK's own"),
   toolNameTaken: defineLog(AGENT_LOG_CATEGORY, 2017, "ToolNameTaken", "warning",
     "A tool source's tool {Tool} was left out: {Winner} has that name"),
+  /** The device block of the manifest left an entry out (kind and reason only, never the entry): sdk/51 8.3. */
+  deviceEntryDropped: defineLog(AGENT_LOG_CATEGORY, 2018, "DeviceEntryDropped", "warning",
+    "A {Kind} was left out of the device report: {Reason}"),
   toolCall: defineLog(AGENT_LOG_CATEGORY, 2020, "ToolCall", "information",
     "Tool {Tool} ({ToolClass}, {Source}) ended {Outcome} in {DurationMs} ms, approval {Approval}"),
   approval: defineLog(AGENT_LOG_CATEGORY, 2021, "Approval", "information",
