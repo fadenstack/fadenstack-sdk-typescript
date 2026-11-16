@@ -873,6 +873,22 @@ export interface UiStrings {
   chatRetentionDeviceLimit(chats: number, days: number): string;
   chatRetentionPolicyFixed: string;
 
+  // content logging (8.1): the band in the chat and the setting (.NET `ContentLoggingSettingsViewModel`, `ContentLoggingBandViewModel`)
+  contentLoggingTitle: string;
+  /** "Content logging is on until 14:30. Prompts and answers are written to the app's logs." (`time`: the end time in the person's locale) */
+  contentLoggingBand(time: string): string;
+  contentLoggingIntro: string;
+  contentLoggingDuration: string;
+  contentLoggingOneHour: string;
+  contentLoggingFourHours: string;
+  contentLoggingDay: string;
+  contentLoggingStart: string;
+  contentLoggingStartName: string;
+  /** The name of the Stop buttons, whose text is `markerStop`. */
+  contentLoggingStopName: string;
+  /** "On until 14:30." (`time`: the end time in the person's locale) */
+  contentLoggingOnUntil(time: string): string;
+
   // the "Your data" control: this app's data, or all (.NET `MyDataSettingsViewModel`)
   myDataTitle: string;
   myDataIntro: string;
@@ -1724,6 +1740,17 @@ export const englishStrings: UiStrings = {
   chatRetentionOrganisationLimit: (chats, days) => `Your organisation keeps at most ${chats} chats for ${days} days on this device.`,
   chatRetentionDeviceLimit: (chats, days) => `This device keeps at most ${chats} chats for ${days} days.`,
   chatRetentionPolicyFixed: "Set by your organisation's policy on this computer.",
+  contentLoggingTitle: "Content logging",
+  contentLoggingBand: (time) => `Content logging is on until ${time}. Prompts and answers are written to the app's logs.`,
+  contentLoggingIntro: "While it is on, prompts and answers are written to this app's logs. It switches off by itself when the time is up, and when the app restarts.",
+  contentLoggingDuration: "Switch on for",
+  contentLoggingOneHour: "1 hour",
+  contentLoggingFourHours: "4 hours",
+  contentLoggingDay: "24 hours",
+  contentLoggingStart: "Start",
+  contentLoggingStartName: "Start content logging",
+  contentLoggingStopName: "Stop content logging",
+  contentLoggingOnUntil: (time) => `On until ${time}.`,
 
   // the "Your data" control
   myDataTitle: "Your data in this browser",

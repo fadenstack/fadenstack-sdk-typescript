@@ -28,6 +28,8 @@ export { default as SkillLibrary } from "./SkillLibrary.vue";
 export { default as SkillEditor } from "./SkillEditor.vue";
 export { default as MyDataSettings } from "./MyDataSettings.vue";
 export { default as StopEverythingButton } from "./StopEverythingButton.vue";
+export { default as ContentLoggingBand } from "./ContentLoggingBand.vue";
+export { default as ContentLoggingSettings } from "./ContentLoggingSettings.vue";
 export { default as ChatRetentionSettings } from "./ChatRetentionSettings.vue";
 export { default as SkillDraft } from "./SkillDraft.vue";
 export { default as ToolsPage } from "./ToolsPage.vue";

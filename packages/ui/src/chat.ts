@@ -18,6 +18,7 @@ import { timeoutScheduler, writeClipboard, type Clipboard, type UiScheduler } fr
 import { builtInStrings, stringsFor } from "./languages/index.js";
 import type { PreferenceStore } from "./preferences.js";
 import { GrantsViewModel } from "./grants.js";
+import { ContentLoggingBandViewModel } from "./settings/contentLogging.js";
 import { period } from "./period.js";
 import { followsPerson } from "./person.js";
 import { MAX_PROMPTS, MAX_PROMPT_LENGTH, PromptStoreError, type PromptStore, type SavedPrompt } from "./prompts.js";
@@ -247,6 +248,11 @@ export class AgentChatViewModel extends Observable implements TurnHost {
    */
   readonly grants: GrantsViewModel;
   /**
+   * The band while content logging is on (8.1): "Content logging is on until 14:30. Prompts and answers are written to the app's logs." and
+   * Stop. The skins show it above the composer. .NET: `AgentChatViewModel.ContentLogging`.
+   */
+  readonly contentLogging: ContentLoggingBandViewModel;
+  /**
    * What the agent can use, read only (settings -> Tools): the app's own tools, and the organisation's server's tools for this
    * agent with whether each is available. Loaded when the view opens (`setToolsOpen`).
    */
@@ -378,6 +384,7 @@ export class AgentChatViewModel extends Observable implements TurnHost {
       session: () => this.#session,
       switchOnAgain: () => this.startBypass(),
     }, options.grantTickMs);
+    this.contentLogging = new ContentLoggingBandViewModel({ agent, strings: () => this.strings });
     this.grants.onBypassEnded(() => void this.#onBypassEnded());
     this.grants.onTicked(() => this.#showBypassTimes());
     // A store that answers at once (localStorage) gives the user's language from the first paint (not one kept per person: whose
@@ -1435,6 +1442,7 @@ export class AgentChatViewModel extends Observable implements TurnHost {
     this.#unsubscribe();
     this.#bypassAsk?.abort(abortError());
     this.grants.dispose();
+    this.contentLogging.dispose();
     this.#stop?.abort(abortError());
   }
 
@@ -1641,6 +1649,7 @@ export class AgentChatViewModel extends Observable implements TurnHost {
       }));
       for (const turn of this.#turns) turn.retext();
       this.grants.retext();
+      this.contentLogging.retext();
       this.#showBypassTimes();
     }
     this.notify();

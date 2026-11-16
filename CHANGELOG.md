@@ -27,6 +27,13 @@ before 1.0, a minor version may break the API, and this file says where it does.
   a request, and makes no request but its events and manifest. The chat panel shows "Your organisation turned this agent off." with "Check
   again" and a disabled composer. `FakeGateway` has `turnOff()` and `turnOn()`.
 - **What the app reports about the device** ([Tools and approvals: What your app reports about the device](docs/tools.md#what-your-app-reports-about-the-device)). The manifest the agent sends at start carries a `device` block: a short `os` (the browser's platform, or Node's type, release and architecture; never the whole user agent), the app's `app_version` and the plugins the app declares with the new `describePlugins(plugins)` (name, version and SHA-256 of each). Cut to the server's limits (`DEVICE_LIMITS`); an entry that does not fit is left out and logged (event 2018) by kind and reason. `mcp_programs` is always empty in a browser. `FakeGateway` checks the block as core 0.7.1 does and `deviceOf(agent)` returns it.
+- **Content logging is off until the person switches it on for a time** ([Interop: Content logging](docs/interop.md#content-logging), 8.1).
+  `agent.contentLogging` (`isOn`, `until`, `offered`, `canStart`, `onChanged`), `startContentLogging(ms)` (15 minutes to 24 hours)
+  and `stopContentLogging()`; `ContentLoggingError` when the app did not offer it or the policy forbids it; the machine policy key
+  `contentLogging` (`MachinePolicy.contentLogging`). It ends by itself, is not kept across restarts, and each start and stop is
+  logged without content (event ids 2083, 2084).
+  - `ContentLoggingSettingsViewModel` with `ContentLoggingSettings` (React and Vue), and the band in the chat
+    (`chat.contentLogging`, `ContentLoggingBand`, "Content logging is on until 14:30. ...", Stop); texts in five languages.
 - **Your data per app** ([Data on the device: Export and delete](docs/data-on-device.md#export-and-delete)). `deleteMyData` and
   `exportMyData` take `{ scope: "thisApp" | "allApps" }`: `thisApp` (the default) covers the calling app's chats, "Allow always" and
   thinking levels, and the person's shared data (skills, the MCP list, keys, provenance records, other settings, the data key) only
@@ -122,6 +129,9 @@ before 1.0, a minor version may break the API, and this file says where it does.
 
 ### Changed
 
+- **Behaviour change:** `useHookContent()` now only means that the app *offers* content logging. The model hooks see message and
+  answer text only while the person has switched content logging on (`startContentLogging`). A development setup calls
+  `startContentLogging` itself.
 - **`find_tool` is the SDK's own** (`FIND_TOOL_NAME`): read, needing no listing in the agent's contract (one that lists it
   with a `risk` still decides its class) and no server check per call; offered while any tool on request is left to find.
   A Fadenstack gateway from 0.7.1 takes it as read and never holds it back. **Breaking (unlikely to matter):**

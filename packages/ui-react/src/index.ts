@@ -24,6 +24,8 @@ export { SkillLibrary, type SkillLibraryProps } from "./SkillLibrary.js";
 export { SkillEditor, type SkillEditorProps } from "./SkillEditor.js";
 export { MyDataSettings, type MyDataSettingsProps } from "./MyDataSettings.js";
 export { StopEverythingButton, type StopEverythingButtonProps } from "./StopEverythingButton.js";
+export { ContentLoggingBand } from "./ContentLoggingBand.js";
+export { ContentLoggingSettings, type ContentLoggingSettingsProps } from "./ContentLoggingSettings.js";
 export { ChatRetentionSettings, type ChatRetentionSettingsProps } from "./ChatRetentionSettings.js";
 export { SkillDraft, type SkillDraftProps } from "./SkillDraft.js";
 export { ToolsPage, type ToolsPageProps } from "./ToolsPage.js";

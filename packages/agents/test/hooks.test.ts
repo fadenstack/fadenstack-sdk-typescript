@@ -225,6 +225,8 @@ describe("hooks", () => {
 
     const asked = probe("c", []);
     const t = await setup({ ...NOTES, model: callsOnce("read_page", { page: 7 }) }, undefined, (b) => b.addHooks(asked.hooks).useHookContent());
+    expect(t.agent.contentLogging.isOn).toBe(false); // offered is not on
+    t.agent.startContentLogging(60 * 60 * 1000);
     await (await t.agent.startSession("auto")).send("Go");
     expect((asked.seen.modelBefore[0] as { messages: unknown[] }).messages.length).toBeGreaterThan(0);
     expect(asked.seen.modelAfter[1]!.text).toBe("Done.");

@@ -68,11 +68,12 @@ export interface MachinePolicyInit {
   webSearch?: PolicyAccess;
   timestamping?: TimestampingPolicy;
   chatRetention?: ChatRetentionChoice | undefined;
+  contentLogging?: PolicyAccess;
   locked?: readonly string[];
   warnings?: readonly string[];
 }
 
-const KEYS: readonly string[] = Object.freeze(["server", "standalone", "endpoints", "plainHttp", "mcp", "skills", "webSearch", "timestamping", "chatRetention"]);
+const KEYS: readonly string[] = Object.freeze(["server", "standalone", "endpoints", "plainHttp", "mcp", "skills", "webSearch", "timestamping", "chatRetention", "contentLogging"]);
 
 /**
  * What IT set for this machine (sdk/51 F09, D6, R3-8): one vocabulary for every app, read from the app's managed location
@@ -121,6 +122,11 @@ export class MachinePolicy {
    * undefined when the policy leaves it to the person. A governed agent follows its server instead. .NET: `MachinePolicy.ChatRetention`.
    */
   readonly chatRetention: ChatRetentionChoice | undefined;
+  /**
+   * Content logging (`contentLogging`, 8.1): `Forbidden` means no app can switch prompts and answers into its logs, even for a time
+   * (`FadenstackAgent.startContentLogging` throws). Absent: allowed, and the app and the person decide. .NET: `MachinePolicy.ContentLogging`.
+   */
+  readonly contentLogging: PolicyAccess;
   /** The keys the policy set itself (the app locks them in its UI and never writes them into the person's settings). */
   readonly locked: readonly string[];
   /** What was ignored or narrowed while reading: unknown keys, unknown values (never a value itself). */
@@ -136,6 +142,7 @@ export class MachinePolicy {
     this.webSearch = init.webSearch ?? PolicyAccess.Allowed;
     this.timestamping = init.timestamping ?? TimestampingPolicy.on;
     this.chatRetention = init.chatRetention;
+    this.contentLogging = init.contentLogging ?? PolicyAccess.Allowed;
     this.locked = Object.freeze([...(init.locked ?? [])]);
     this.warnings = Object.freeze([...(init.warnings ?? [])]);
     Object.freeze(this);
@@ -172,7 +179,7 @@ export class MachinePolicy {
   static #closed(why: string): MachinePolicy {
     return new MachinePolicy({
       standalone: PolicyAccess.Forbidden, plainHttp: PolicyAccess.Forbidden, mcp: PolicyRule.forbidden, skills: PolicyRule.forbidden,
-      webSearch: PolicyAccess.Forbidden, timestamping: TimestampingPolicy.off,
+      webSearch: PolicyAccess.Forbidden, timestamping: TimestampingPolicy.off, contentLogging: PolicyAccess.Forbidden,
       chatRetention: DEFAULT_CHAT_RETENTION, // old chats are deleted as by default; the person cannot turn it off
       locked: KEYS.filter((k) => k !== "server"),
       warnings: [`${why}: standalone, local MCP, local skills, web search and plain http are forbidden; time-stamps are off.`],
@@ -216,6 +223,7 @@ export class MachinePolicy {
       webSearch: access(values, "webSearch", byDefault, warnings),
       timestamping: timestamps(values, warnings),
       chatRetention: values.has("chatRetention") ? retention(values.get("chatRetention"), warnings) : undefined,
+      contentLogging: access(values, "contentLogging", PolicyAccess.Allowed, warnings),
       locked,
       warnings,
     });

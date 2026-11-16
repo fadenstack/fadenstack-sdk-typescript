@@ -10,6 +10,7 @@ import ChatHeader from "./ChatHeader.vue";
 import Composer from "./Composer.vue";
 import { useViewModel } from "./composables.js";
 import Conversation from "./Conversation.vue";
+import ContentLoggingBand from "./ContentLoggingBand.vue";
 import GrantsBar from "./GrantsBar.vue";
 import NoticeLine from "./NoticeLine.vue";
 import type { ChatTheme, PartRenderer } from "./types.js";
@@ -58,6 +59,7 @@ const chat = useViewModel(() => props.chat);
         <span class="fdn-grant-marker-text">{{ chat.agentOffText }}</span>
         <button type="button" class="fdn-button" :aria-label="chat.checkAgainText" @click="chat.checkAgain()">{{ chat.checkAgainText }}</button>
       </div>
+      <ContentLoggingBand :band="chat.contentLogging" />
       <GrantsBar :grants="chat.grants" :strings="chat.strings" />
       <slot name="context-bar" />
       <Composer :chat="chat" :placeholder="placeholder"><slot name="composer-accessory" /></Composer>

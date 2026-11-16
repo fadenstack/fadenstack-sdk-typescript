@@ -40,8 +40,9 @@ describe("reading", () => {
     const policy = MachinePolicy.fromJson(`
       {"server":"https://ai.example.test","standalone":"allowed","endpoints":["http://localhost:11434","https://llm.example.test/v1"],
        "plainHttp":"forbidden","mcp":["notes-db"],"skills":"allowed","webSearch":"forbidden","timestamping":"off",
-       "chatRetention":{"autoDelete":false,"maxAgeDays":30,"maxSessions":100}}`);
+       "chatRetention":{"autoDelete":false,"maxAgeDays":30,"maxSessions":100},"contentLogging":"forbidden"}`);
 
+    expect(policy.contentLogging).toBe(PolicyAccess.Forbidden);
     expect(policy.server?.href).toBe("https://ai.example.test/");
     expect(policy.standalone).toBe(PolicyAccess.Allowed);
     expect(policy.endpoints).toEqual(["http://localhost:11434", "https://llm.example.test/v1"]);
@@ -55,6 +56,16 @@ describe("reading", () => {
     expect(policy.chatRetention).toEqual({ autoDelete: false, maxAgeDays: 30, maxSessions: 100 });
     expect([...policy.locked].sort()).toEqual([...MachinePolicy.keys].sort());
     expect(policy.warnings).toEqual([]);
+  });
+
+  it("content logging is allowed when the policy says nothing, and a value it does not know narrows", () => {
+    expect(MachinePolicy.none.contentLogging).toBe(PolicyAccess.Allowed);
+    expect(MachinePolicy.fromJson('{"timestamping":"off"}').contentLogging).toBe(PolicyAccess.Allowed);
+    expect(MachinePolicy.fromJson('{"contentLogging":"allowed"}').contentLogging).toBe(PolicyAccess.Allowed);
+    const odd = MachinePolicy.fromJson('{"contentLogging":"maybe"}');
+    expect(odd.contentLogging).toBe(PolicyAccess.Forbidden);
+    expect(odd.warnings.some((w) => w.includes("contentLogging"))).toBe(true);
+    expect(MachinePolicy.unreadable.contentLogging).toBe(PolicyAccess.Forbidden);
   });
 
   it("with a server and nothing else, standalone, mcp, skills and search are forbidden", () => {

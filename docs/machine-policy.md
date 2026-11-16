@@ -29,6 +29,7 @@ const agent = FadenstackAgent.createBuilder()
 | `mcp` | `allowed`, `forbidden`, or a list of allowed local MCP sources | like `standalone` |
 | `skills` | `allowed`, `forbidden`, or a list of allowed skill folders | like `standalone` |
 | `webSearch` | `allowed`, `forbidden` | like `standalone` |
+| `contentLogging` | `allowed`, `forbidden`: whether an app can switch prompts and answers into its logs, even for a time. `forbidden` makes `agent.startContentLogging` throw `ContentLoggingError` and hides the control; anything else is `forbidden` | `allowed` |
 | `chatRetention` | An object that fixes how long a standalone agent keeps old chats: `{ "autoDelete": true, "maxAgeDays": 30, "maxSessions": 100 }`. `autoDelete` is true or false (default true), `maxAgeDays` a whole number from 1 to 3650 (default 90), `maxSessions` from 1 to 10000 (default 50). The person sees the values in their settings and cannot change them. A governed agent ignores it: the server decides. | the person chooses |
 | `timestamping` | `on` (DigiCert), `off`, or the address of the organisation's own time-stamp server: RFC 3161 time-stamps for records signed on the device (only a hash leaves); anything else is `off` | `on` |
 
@@ -42,6 +43,7 @@ const agent = FadenstackAgent.createBuilder()
   never answers), it uses `MachinePolicy.unreadable`, not `MachinePolicy.none`. It forbids the same as an unreadable
   policy, fixes `chatRetention` at the defaults (old chats are deleted after 90 days, at most 50
   kept), locks those keys, and leaves `server` open, so the person can still sign in to their organisation's server.
+- **Content logging:** `contentLogging` is `policy.contentLogging` (`PolicyAccess`). A policy that cannot be read forbids it. See [Interop: Content logging](interop.md#content-logging).
 - **`chatRetention` is read as a whole:** a value that is not understood (not an object, `autoDelete` not true or false, a limit that is not a whole number within its bounds, an unknown member) is reported in `policy.warnings` and the default for it applies (on, 90 days, 50 chats), so chats are never kept longer than the default because of a typo. It is `policy.chatRetention` (undefined when the key is absent) and shows in `agent.chatRetention` with `control: "machinePolicy"`. See [Sessions: Retention](sessions.md#retention).
 - **The policy wins over the person's settings**, and with a server it narrows what the server allows (a server's
   `local_mcp` allow is off when the policy forbids local MCP, on every read and refresh of the profile); it never turns on

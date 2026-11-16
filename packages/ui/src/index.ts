@@ -199,6 +199,15 @@ export {
   MyDataSettingsViewModel, type MyDataPhase, type MyDataSaveRequest, type MyDataSettingsOptions, type MyDataSource,
 } from "./settings/myData.js";
 export { StopEverythingViewModel, describeStopResult, type StopEverythingOptions } from "./settings/stopEverything.js";
+export {
+  ContentLoggingBandViewModel,
+  ContentLoggingSettingsViewModel,
+  contentLoggingSource,
+  contentLoggingTime,
+  type ContentLoggingChoice,
+  type ContentLoggingOptions,
+  type ContentLoggingSource,
+} from "./settings/contentLogging.js";
 export { ChatRetentionSettingsViewModel, type ChatRetentionSettingsOptions, type ChatRetentionSource } from "./settings/chatRetention.js";
 export { SkillLibraryViewModel, SkillRowViewModel, type SkillLibraryOptions } from "./skills/skillLibrary.js";
 export {

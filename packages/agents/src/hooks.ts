@@ -17,7 +17,7 @@ export const MAX_HOOK_NOTE_KEY = 64;
 /** The most characters of a note's value. */
 export const MAX_HOOK_NOTE_VALUE = 200;
 
-/** What a hook sees before a model call. No prompt text unless the app asked for it (`AgentBuilder.useHookContent`). */
+/** What a hook sees before a model call. No prompt text unless the app offered it (`AgentBuilder.useHookContent`) and content logging is on (`FadenstackAgent.contentLogging`). */
 export interface ModelCallHookContext {
   readonly agentName: string;
   readonly sessionId: string;
@@ -173,13 +173,18 @@ export function frozenCopy(args: Record<string, unknown>): Readonly<Record<strin
 export class HookRunner {
   readonly #hooks: readonly AgentHooks[];
   readonly #logger: FadenstackLogger | undefined;
-  /** The app asked for message and answer text in the model-call hooks. */
-  readonly content: boolean;
+  readonly #content: () => boolean;
 
-  constructor(hooks: readonly AgentHooks[], content: boolean, logger: FadenstackLogger | undefined) {
+  /** `content` is asked at each call: content logging is on, so the hooks see message and answer text (8.1). */
+  constructor(hooks: readonly AgentHooks[], content: () => boolean, logger: FadenstackLogger | undefined) {
     this.#hooks = hooks;
-    this.content = content;
+    this.#content = content;
     this.#logger = logger;
+  }
+
+  /** The app offered message and answer text in the model-call hooks and content logging is on now. */
+  get content(): boolean {
+    return this.#content();
   }
 
   get any(): boolean {

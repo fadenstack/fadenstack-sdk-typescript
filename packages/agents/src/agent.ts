@@ -44,6 +44,7 @@ import {
 import { MachinePolicy, PolicyAccess } from "./machinePolicy.js";
 import { AgentBuilder, UNDESCRIBED_APP_NAME, type AgentSettings, type AppDescription } from "./builder.js";
 import { ServerBackend, type AgentBackend, type AgentConnection, type AgentSwitch } from "./backend.js";
+import { ContentLogging } from "./contentLogging.js";
 import { HookRunner } from "./hooks.js";
 import { LocalBackend } from "./localBackend.js";
 import { EventReporter } from "./reporter.js";
@@ -110,8 +111,38 @@ export class FadenstackAgent implements AgentSwitch {
     this.reporter = new EventReporter(settings.backend, settings.report);
     this.grants = new AgentGrants(this, settings.grantPlaceResolver);
     this.stepUps = new StepUpProofs(this);
-    this.hooks = new HookRunner(settings.hooks ?? [], settings.hookContent === true, settings.logger);
+    this.contentLogging = new ContentLogging({
+      agent: settings.agent,
+      offered: settings.hookContent === true,
+      allowedByPolicy: (settings.machinePolicy ?? MachinePolicy.none).contentLogging === PolicyAccess.Allowed,
+      logger: settings.logger,
+      ...(settings.contentLoggingNow ? { now: settings.contentLoggingNow } : {}),
+      ...(settings.contentLoggingSchedule ? { schedule: settings.contentLoggingSchedule } : {}),
+    });
+    this.hooks = new HookRunner(settings.hooks ?? [], () => this.contentLogging.isOn, settings.logger);
     if (settings.backend instanceof ServerBackend) settings.backend.attach(this);
+  }
+
+  /**
+   * Whether the agent writes content (prompts, answers, tool arguments and results) where hooks can see it now, and until when
+   * (`isOn`, `until`). Off by default, even where the app offered it at build time (`useHookContent`). .NET: `agent.ContentLogging`.
+   */
+  readonly contentLogging: ContentLogging;
+
+  /**
+   * Switches content logging on for `durationMs` (15 minutes to 24 hours); it ends by itself, and a new start after a restart is needed.
+   * The start and its end time are logged without any content. An app's settings call this when the person chooses it
+   * (`ContentLoggingSettings`); a development setup calls it itself. .NET: `StartContentLogging(TimeSpan)`.
+   * @throws ContentLoggingError the app did not offer content logging, or the machine policy forbids it.
+   * @throws RangeError the time is outside 15 minutes to 24 hours.
+   */
+  startContentLogging(durationMs: number): void {
+    this.contentLogging.start(durationMs);
+  }
+
+  /** Switches content logging off now. Nothing happens when it is off. .NET: `StopContentLogging()`. */
+  stopContentLogging(): void {
+    this.contentLogging.stop();
   }
 
   /** @internal The app's hooks (`AgentBuilder.addHooks`), in order. */
@@ -957,6 +988,7 @@ export class FadenstackAgent implements AgentSwitch {
   }
 
   async dispose(): Promise<void> {
+    this.contentLogging.dispose();
     await this.flush();
     this.#defaults?.close();
     (this.#appRecords as { close?: () => void } | undefined)?.close?.();
