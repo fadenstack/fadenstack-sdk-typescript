@@ -6,7 +6,12 @@ network are allowed. The app reads the policy from its managed location; the SDK
 file: a Chrome extension hands `chrome.storage.managed`'s object to the SDK.
 
 ```ts
-const policy = MachinePolicy.from(await chrome.storage.managed.get()); // MachinePolicy.none when there is none
+let policy: MachinePolicy;
+try {
+  policy = MachinePolicy.from(await chrome.storage.managed.get()); // MachinePolicy.none when there is none
+} catch {
+  policy = MachinePolicy.unreadable; // the managed storage failed: forbid, never fall back to none
+}
 const agent = FadenstackAgent.createBuilder()
   .useEndpoint(endpoint).useLocalProfile(definition)
   .useMachinePolicy(policy) // build() refuses what the policy forbids
@@ -29,8 +34,12 @@ const agent = FadenstackAgent.createBuilder()
 ## Rules
 
 - **Fail closed.** An unknown key is ignored and reported in `policy.warnings`; an unknown value narrows to `forbidden`; a
-  policy that is not an object forbids standalone, local MCP, local skills, web search and plain http. A warning names the
-  key, never the value. `MachinePolicy.fromJson` throws a `SyntaxError` for text that is not JSON: forbid in that case too.
+  policy that is not an object forbids standalone, local MCP, local skills, web search and plain http, and turns
+  time-stamps off. A warning names the key, never the value. `MachinePolicy.fromJson` throws a `SyntaxError` for text that
+  is not JSON: forbid in that case too.
+- **A source that fails:** where the app cannot read its managed location at all (`chrome.storage.managed.get()` throws or
+  never answers), it uses `MachinePolicy.unreadable`, not `MachinePolicy.none`. It forbids the same as an unreadable
+  policy, locks those keys, and leaves `server` open, so the person can still sign in to their organisation's server.
 - **The policy wins over the person's settings**, and with a server it narrows what the server allows (a server's
   `local_mcp` allow is off when the policy forbids local MCP, on every read and refresh of the profile); it never turns on
   what they left off.

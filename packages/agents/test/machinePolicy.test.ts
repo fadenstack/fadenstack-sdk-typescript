@@ -136,7 +136,25 @@ describe("reading", () => {
     expect(policy.skills).toBe(PolicyRule.forbidden);
     expect(policy.plainHttp).toBe(PolicyAccess.Forbidden);
     expect(policy.webSearch).toBe(PolicyAccess.Forbidden);
+    expect(policy.timestamping).toBe(TimestampingPolicy.off);
     expect(policy.warnings.length).toBeGreaterThan(0);
+  });
+
+  it("unreadable, for a host whose policy source failed, forbids what none allows and leaves the server open", () => {
+    const policy = MachinePolicy.unreadable;
+
+    expect(policy).not.toBe(MachinePolicy.none);
+    expect([policy.standalone, policy.plainHttp, policy.webSearch]).toEqual([PolicyAccess.Forbidden, PolicyAccess.Forbidden, PolicyAccess.Forbidden]);
+    expect([policy.mcp, policy.skills]).toEqual([PolicyRule.forbidden, PolicyRule.forbidden]);
+    expect(policy.mcp.allowsAny || policy.skills.allowsAny).toBe(false);
+    expect(policy.timestamping).toBe(TimestampingPolicy.off);
+    expect(policy.allowsEndpoint("http://localhost:11434/v1")).toBe(false);
+    expect(policy.server).toBeUndefined();
+    expect([...policy.locked].sort()).toEqual(MachinePolicy.keys.filter((k) => k !== "server").sort());
+    expect(policy.warnings).toEqual([
+      "The machine policy could not be read: standalone, local MCP, local skills, web search and plain http are forbidden; time-stamps are off.",
+    ]);
+    expect(Object.isFrozen(policy)).toBe(true);
   });
 
   it("text that is not JSON throws, as .NET's FromJson does (its Load catches it and forbids)", () => {
@@ -177,6 +195,12 @@ describe("enforced in the SDK", () => {
 
     expect(refusal).toThrow(MachinePolicyError);
     expect((() => { try { refusal(); } catch (e) { return e as MachinePolicyError; } return undefined; })()?.key).toBe("standalone");
+  });
+
+  it("an unreadable policy refuses a standalone agent at build", () => {
+    const keyOf = (build: () => unknown) => { try { build(); } catch (e) { return (e as MachinePolicyError).key; } return undefined; };
+
+    expect(keyOf(() => standalone(MachinePolicy.unreadable).build())).toBe("standalone");
   });
 
   it("an endpoint the policy does not list is refused, and a host's client too", () => {
