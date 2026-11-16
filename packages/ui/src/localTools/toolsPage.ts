@@ -1,4 +1,4 @@
-import { CloudToolsStatus, ToolsPolicy, newServerDraft, type CloudToolsResult, type LocalToolsCatalog } from "@fadenstack/agents";
+import { CloudToolsStatus, ToolsPolicy, newServerDraft, type CloudToolsResult, type LocalToolsCatalog, type WebSearchSettings, type WebSearchStore } from "@fadenstack/agents";
 
 import { Observable } from "../observable.js";
 import { plain } from "../tools.js";
@@ -9,16 +9,19 @@ import { ServerDetailsViewModel } from "./serverDetails.js";
 import { LocalServerViewModel } from "./serverCards.js";
 import { ServerSheetViewModel } from "./serverSheet.js";
 import { CloudGroupViewModel } from "./toolsCloud.js";
+import { WebSearchSettingsViewModel, webSearchStateText } from "./webSearchSettings.js";
 
 export interface ToolsPageOptions {
   /** The servers and the cloud tools (`McpToolsCatalog` of `@fadenstack/mcp`). */
   catalog: LocalToolsCatalog;
   /** The texts, asked for on every use (default: English); `retext()` says them again. */
   strings?: () => UiStrings;
+  /** The person's web search settings: with it "In this app" has a "Web search" row that opens the settings sheet; without it there is no row. */
+  webSearch?: WebSearchStore;
 }
 
-/** The add or edit sheet, or the import sheet. */
-export type ToolsSheet = ServerSheetViewModel | ImportSheetViewModel;
+/** The add or edit sheet, the import sheet, or the web search settings sheet. */
+export type ToolsSheet = ServerSheetViewModel | ImportSheetViewModel | WebSearchSettingsViewModel;
 
 /** The tabs: what the app itself gives the agent, the person's MCP servers, the organisation's tools (governed only). */
 export type ToolsTab = "app" | "computer" | "server";
@@ -45,6 +48,9 @@ export class ToolsPageViewModel extends Observable implements ToolsHost {
   readonly catalog: LocalToolsCatalog;
   readonly #strings: () => UiStrings;
   readonly #stop: () => void;
+  readonly #webSearch: WebSearchStore | undefined;
+  readonly #stopWebSearch: (() => void) | undefined;
+  #webSearchSettings: WebSearchSettings = { provider: "none" };
   readonly #cards = new Map<string, LocalServerViewModel>();
   #all: LocalServerViewModel[] = [];
   #servers: readonly LocalServerViewModel[] = [];
@@ -82,6 +88,8 @@ export class ToolsPageViewModel extends Observable implements ToolsHost {
     this.#stop = this.catalog.onChanged(() => {
       if (!this.#disposed) this.refresh();
     });
+    this.#webSearch = options.webSearch;
+    this.#stopWebSearch = this.#webSearch?.onChanged(() => void this.#readWebSearch());
     this.refresh();
   }
 
@@ -245,6 +253,52 @@ export class ToolsPageViewModel extends Observable implements ToolsHost {
       });
   }
 
+  // ---- web search (the row of "In this app") -----------------------------------------------------------------------
+
+  /** The app gave the page a web search store: "In this app" has the "Web search" row. */
+  get hasWebSearch(): boolean {
+    return this.#webSearch !== undefined;
+  }
+
+  get webSearchName(): string {
+    return this.strings.webSearchRowName;
+  }
+
+  get webSearchText(): string {
+    return this.strings.webSearchRowText;
+  }
+
+  /** "Off", "Brave" or "SearXNG · host". */
+  get webSearchState(): string {
+    return webSearchStateText(this.strings, this.#webSearchSettings.provider, this.#webSearchSettings.searxngUrl);
+  }
+
+  /** "Set up" while it is off, else "Change". */
+  get webSearchButtonText(): string {
+    return this.#webSearchSettings.provider === "none" ? this.strings.webSearchSetUp : this.strings.webSearchChange;
+  }
+
+  /** Opens the web search settings sheet in place of the list. */
+  openWebSearch(): void {
+    if (!this.#webSearch) return;
+    if (this.#details) this.closeDetails();
+    this.#openSheet(new WebSearchSettingsViewModel({ store: this.#webSearch, strings: this.#strings, onClose: () => this.closeSheet() }));
+  }
+
+  async #readWebSearch(): Promise<void> {
+    if (!this.#webSearch || this.#disposed) return;
+    try {
+      const settings = await this.#webSearch.settings();
+      if (this.#disposed) return;
+      if (settings.provider !== this.#webSearchSettings.provider || settings.searxngUrl !== this.#webSearchSettings.searxngUrl) {
+        this.#webSearchSettings = settings;
+        this.notify();
+      }
+    } catch {
+      // the row keeps what it showed
+    }
+  }
+
   // ---- on this computer ---------------------------------------------------------------------------------------------
 
   /** The servers the filter lets through, as cards. */
@@ -400,6 +454,7 @@ export class ToolsPageViewModel extends Observable implements ToolsHost {
     if (this.#disposed) return;
     this.#disposed = true;
     this.#stop();
+    this.#stopWebSearch?.();
     this.#abort?.abort();
     this.#sheet?.dispose();
   }
@@ -414,6 +469,7 @@ export class ToolsPageViewModel extends Observable implements ToolsHost {
     this.#governed = catalog.governed;
     if (!this.#governed && this.#tab === "server") this.#tab = "computer";
     this.#buildApp();
+    void this.#readWebSearch();
     this.#plainHttp = catalog.plainHttpPermitted;
     const policy = catalog.policy;
     [this.#policyText, this.#policyTip, this.#policyIsWarning, this.#hasPolicy] =

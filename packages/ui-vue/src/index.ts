@@ -28,6 +28,7 @@ export { default as SkillLibrary } from "./SkillLibrary.vue";
 export { default as SkillEditor } from "./SkillEditor.vue";
 export { default as SkillDraft } from "./SkillDraft.vue";
 export { default as ToolsPage } from "./ToolsPage.vue";
+export { default as WebSearchSettings } from "./WebSearchSettings.vue";
 export { useDismiss, useStickToBottom, useViewModel } from "./composables.js";
 export type { ChatTheme, PartRenderer } from "./types.js";
 export type { IconName } from "@fadenstack/ui-web";

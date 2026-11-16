@@ -9,7 +9,7 @@
  */
 import { computed, nextTick, ref, useId } from "vue";
 
-import { ImportSheetViewModel, ServerSheetViewModel, type ToolsPageViewModel } from "@fadenstack/ui";
+import { ImportSheetViewModel, ServerSheetViewModel, WebSearchSettingsViewModel, type ToolsPageViewModel } from "@fadenstack/ui";
 
 import { useViewModel } from "./composables.js";
 import Icon from "./Icon.vue";
@@ -22,6 +22,7 @@ import ToolsImportSheet from "./ToolsImportSheet.vue";
 import ToolsServerCard from "./ToolsServerCard.vue";
 import ToolsServerSheet from "./ToolsServerSheet.vue";
 import type { ChatTheme } from "./types.js";
+import WebSearchSheet from "./WebSearchSheet.vue";
 
 const props = withDefaults(defineProps<{
   /** The page's view model; the app calls `open()` when it shows it (and `retext()` when the language changes). */
@@ -39,7 +40,7 @@ const shell = ref<{ $el: Element } | null>(null);
 // A new layer takes the focus: its first marked field, else its title.
 useFirstFocus(shell, () => {
   const v = vm.value;
-  return v.sheet ? `sheet:${v.sheet instanceof ServerSheetViewModel ? v.sheet.title : "import"}` : v.details ? `details:${v.details.label}` : "main";
+  return v.sheet ? `sheet:${v.sheet instanceof ServerSheetViewModel ? v.sheet.title : v.sheet instanceof WebSearchSettingsViewModel ? "websearch" : "import"}` : v.details ? `details:${v.details.label}` : "main";
 });
 
 function onKeyDown(e: KeyboardEvent): void {
@@ -64,6 +65,7 @@ function tabKeys(e: KeyboardEvent): void {
   <SkillShell ref="shell" :strings="s" :theme="theme" :busy="vm.isLoadingCloud" extra-class="fdn-toolspage" @keydown="onKeyDown">
     <ToolsServerSheet v-if="vm.sheet instanceof ServerSheetViewModel" :sheet="vm.sheet" />
     <ToolsImportSheet v-else-if="vm.sheet instanceof ImportSheetViewModel" :sheet="vm.sheet" />
+    <WebSearchSheet v-else-if="vm.sheet instanceof WebSearchSettingsViewModel" :sheet="vm.sheet" />
     <ToolsDetails v-else-if="vm.details" :details="vm.details" />
     <template v-else>
       <h2 class="fdn-wizard-title" tabindex="-1" data-wizard-title dir="auto">{{ s.toolsTitle }}</h2>
@@ -92,6 +94,18 @@ function tabKeys(e: KeyboardEvent): void {
         <div v-if="vm.showsApp" :id="`${id}-app`" class="fdn-tp-section" role="tabpanel" :aria-labelledby="`${id}-app-tab`">
           <p v-if="vm.showsAppEmpty" class="fdn-muted" role="status" dir="auto">{{ vm.appEmptyText }}</p>
           <p v-if="vm.showsAppNoMatch" class="fdn-muted" role="status" dir="auto">{{ vm.appNoMatchText }}</p>
+          <section v-if="vm.hasWebSearch" class="fdn-card" :aria-label="vm.webSearchName">
+            <ul class="fdn-tp-cloud-list">
+              <li class="fdn-tp-cloud-tool">
+                <div>
+                  <div class="fdn-tp-name" dir="auto">{{ vm.webSearchName }}</div>
+                  <div class="fdn-muted" dir="auto">{{ vm.webSearchText }}</div>
+                </div>
+                <span class="fdn-badge" dir="auto">{{ vm.webSearchState }}</span>
+                <button type="button" class="fdn-button" :aria-label="`${vm.webSearchButtonText}: ${vm.webSearchName}`" dir="auto" @click="vm.openWebSearch()">{{ vm.webSearchButtonText }}</button>
+              </li>
+            </ul>
+          </section>
           <section v-if="vm.appTools.length > 0" class="fdn-card">
             <ul class="fdn-tp-cloud-list">
               <li v-for="t in vm.appTools" :key="t.name" class="fdn-tp-cloud-tool">

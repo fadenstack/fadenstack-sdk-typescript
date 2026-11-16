@@ -4,6 +4,7 @@ import { LocalToolClass, LocalToolRaise } from "@fadenstack/agents";
 import {
   ImportSheetViewModel,
   ServerSheetViewModel,
+  WebSearchSettingsViewModel,
   type CloudGroupViewModel,
   type LocalServerViewModel,
   type LocalToolViewModel,
@@ -15,6 +16,7 @@ import {
 
 import { Icon, Spinner } from "./icons.js";
 import { useViewModel } from "./hooks.js";
+import { WebSearchSheet } from "./WebSearchSettings.js";
 import { Actions, Alert, Button, Field, Shell, Title, useFirstFocus, type SkillViewProps } from "./SkillParts.js";
 
 export interface ToolsPageProps extends SkillViewProps {
@@ -50,6 +52,7 @@ export function ToolsPage(props: ToolsPageProps): ReactElement {
     <Shell s={s} theme={props.theme} className={`fdn-toolspage${props.className ? ` ${props.className}` : ""}`} busy={vm.isLoadingCloud} onKeyDown={onKeyDown} columnRef={column}>
       {sheet instanceof ServerSheetViewModel ? <ServerSheet sheet={sheet} />
         : sheet instanceof ImportSheetViewModel ? <ImportSheet sheet={sheet} />
+          : sheet instanceof WebSearchSettingsViewModel ? <WebSearchSheet sheet={sheet} />
           : details ? <Details details={details} />
             : <Main vm={vm} s={s} />}
     </Shell>
@@ -112,6 +115,20 @@ function AppPanel({ vm, panelId, tabId }: { vm: ToolsPageViewModel; panelId: str
     <div className="fdn-tp-section" role="tabpanel" id={panelId} aria-labelledby={tabId}>
       {vm.showsAppEmpty && <p className="fdn-muted" role="status" dir="auto">{vm.appEmptyText}</p>}
       {vm.showsAppNoMatch && <p className="fdn-muted" role="status" dir="auto">{vm.appNoMatchText}</p>}
+      {vm.hasWebSearch && (
+        <section className="fdn-card" aria-label={vm.webSearchName}>
+          <ul className="fdn-tp-cloud-list">
+            <li className="fdn-tp-cloud-tool">
+              <div>
+                <div className="fdn-tp-name" dir="auto">{vm.webSearchName}</div>
+                <div className="fdn-muted" dir="auto">{vm.webSearchText}</div>
+              </div>
+              <span className="fdn-badge" dir="auto">{vm.webSearchState}</span>
+              <Button label={`${vm.webSearchButtonText}: ${vm.webSearchName}`} onClick={() => vm.openWebSearch()}>{vm.webSearchButtonText}</Button>
+            </li>
+          </ul>
+        </section>
+      )}
       {vm.appTools.length > 0 && (
         <section className="fdn-card">
           <ul className="fdn-tp-cloud-list">

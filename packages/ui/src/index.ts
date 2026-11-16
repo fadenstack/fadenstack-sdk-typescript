@@ -224,4 +224,5 @@ export {
 } from "./localTools/serverDetails.js";
 export { SecretRowViewModel, ServerSheetViewModel, problemText, testLine } from "./localTools/serverSheet.js";
 export { ImportRowViewModel, ImportSheetViewModel, type SkippedRowViewModel } from "./localTools/importSheet.js";
+export { WebSearchSettingsViewModel, webSearchStateText, type WebSearchChoice, type WebSearchSettingsOptions } from "./localTools/webSearchSettings.js";
 export { containsText, type ToolsHost } from "./localTools/contracts.js";
