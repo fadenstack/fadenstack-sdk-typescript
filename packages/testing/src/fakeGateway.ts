@@ -101,6 +101,11 @@ export interface FakeAgent {
   /** Whether its model sees pictures (`vision` in the profile); not said by default, as an older server. */
   vision?: boolean;
   /**
+   * The profile's `images` (whether the server has an image model for the agent's tools); false unless set, as core 0.7.1 says
+   * it always. The images route answers as core 0.7.1 does whatever this says: 403, `invalid_request_error`, `images_disabled`.
+   */
+  images?: boolean;
+  /**
    * The skills its users can pick (`GET .../skills`; the profile says `skills: true`). Without it the server has no
    * skills module: the route answers `available: false`.
    */
@@ -533,7 +538,7 @@ export class FakeGateway {
       return json(200, { object: "list", data: (this.#options.models ?? ["fake-model"]).map((id) => ({ id, object: "model" })) });
     }
     if (path === "/v1/provenance/anchors" || path === "/v1/provenance/verify") return this.#provenanceRoute(request, path, body);
-    const match = /^\/v1\/agents\/([^/]+)\/(profile|user|skills|tools|chat\/completions|events|manifest|approvals\/([^/]+)|provenance\/(policy|records|placements|verify)|grants((?:\/[^/]+){0,2}))$/
+    const match = /^\/v1\/agents\/([^/]+)\/(profile|user|skills|tools|chat\/completions|images\/generations|events|manifest|approvals\/([^/]+)|provenance\/(policy|records|placements|verify)|grants((?:\/[^/]+){0,2}))$/
       .exec(path);
     if (!match) return json(404, { detail: "Not Found" });
     const agent = decodeURIComponent(match[1]!);
@@ -545,6 +550,10 @@ export class FakeGateway {
     if (method === "GET" && route === "tools") return this.#serverTools(agent);
     if (method === "PATCH" && route === "user") return this.#userSettings(auth, body);
     if (method === "POST" && route === "chat/completions") return this.#chat(request, agent, body);
+    // Core 0.7.1 refuses every picture before it reaches a model (EU AI Act, Article 5).
+    if (method === "POST" && route === "images/generations") {
+      return openAiError(403, "Image generation is turned off in this version.", "images_disabled", "invalid_request_error");
+    }
     if (method === "POST" && route === "events") return this.#events(body);
     if (method === "PUT" && route === "manifest") return this.#manifest(agent, body);
     if (method === "POST" && route.startsWith("approvals/")) return this.#approve(decodeURIComponent(match[3]!), body);
@@ -890,7 +899,7 @@ export class FakeGateway {
     const user = this.#users.find((u) => u.id === signIn.userId)!;
     return {
       object: "agent.profile", id: agent.id, slug: agent.slug, name: agent.name, version: agent.version, draft: false,
-      model: agent.model ?? "fake-model", ...(agent.vision !== undefined ? { vision: agent.vision } : {}), images: false,
+      model: agent.model ?? "fake-model", ...(agent.vision !== undefined ? { vision: agent.vision } : {}), images: agent.images === true,
       skills: agent.skills !== undefined, instructions_sha256: "0".repeat(64),
       host_tool_contract: agent.contract ?? [], server_tools: null, knowledge: [],
       local_mcp: { mode: agent.localMcpMode ?? "disable", developer_mode: user.developerMode ?? false,

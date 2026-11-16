@@ -11,6 +11,8 @@ export {
   FadenstackPairingPageElsewhereError,
   FadenstackHttpsRequiredError,
   FadenstackBadCredentialsError,
+  ErrorCodes,
+  isImagesDisabled,
   isAbortError,
 } from "./errors.js";
 export {

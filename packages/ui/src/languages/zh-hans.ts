@@ -64,6 +64,7 @@ export const chineseSimplifiedStrings: UiStrings = {
     round_limit: "已停止",
     provenance_refused: "未写入：无法将其标记为人工智能生成的内容",
     empty_answer: "未收到回答",
+    images_disabled: "图像生成已关闭",
     grant_failed: "仅本次允许：服务器未确认长时间批准",
   },
   noticeFallback: "提示",
@@ -76,6 +77,8 @@ export const chineseSimplifiedStrings: UiStrings = {
   settingsUnmarked: "当回答不带 AI 标记时提醒我",
   emptyAnswer: "模型结束时没有写出回答。您可以重试。",
   emptyAnswerLength: "模型在写出回答之前已达到长度上限，例如在思考时。您可以重试。",
+  imagesDisabled:
+    "此版本已关闭图像生成功能。自 2026 年 12 月 2 日起，欧盟《人工智能法》（第 5 条）要求采取防范生成有害图像的保障措施，而此版本尚未具备这些措施。图像生成功能将在以后的版本中恢复，并带有这些保障措施。",
   thinking: "思考中…",
   thoughtFor: (seconds) => `思考了 ${seconds} 秒`,
   usedReferences: (count) => `引用了 ${count} 个来源`,

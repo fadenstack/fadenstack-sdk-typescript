@@ -64,6 +64,7 @@ export const frenchStrings: UiStrings = {
     round_limit: "Arrêtée",
     provenance_refused: "Non écrit : le contenu n'a pas pu être marqué comme généré par IA",
     empty_answer: "Aucune réponse reçue",
+    images_disabled: "La génération d’images est désactivée",
     grant_failed: "Autorisé cette fois seulement : le serveur n'a pas confirmé l'approbation prolongée",
   },
   noticeFallback: "Remarque",
@@ -78,6 +79,8 @@ export const frenchStrings: UiStrings = {
   emptyAnswer: "Le modèle s'est arrêté sans écrire de réponse. Vous pouvez réessayer.",
   emptyAnswerLength:
     "Le modèle a atteint sa limite de longueur avant d'écrire une réponse, par exemple pendant sa réflexion. Vous pouvez réessayer.",
+  imagesDisabled:
+    "La génération d’images est désactivée dans cette version. À partir du 2 décembre 2026, le règlement européen sur l’IA (article 5) exige des garde-fous contre la génération d’images préjudiciables, et cette version n’en dispose pas encore. La génération d’images reviendra dans une version ultérieure, avec ces garde-fous.",
   thinking: "Réflexion…",
   thoughtFor: (seconds) => `A réfléchi ${seconds} s`,
   usedReferences: (count) => (count <= 1 ? `${count} référence utilisée` : `${count} références utilisées`),

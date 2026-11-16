@@ -6,6 +6,7 @@ import {
   conversationOnly,
   decideTool,
   eventKind,
+  isImagesDisabled,
   isRefusal,
   narrowestMode,
   parseToolClass,
@@ -46,6 +47,12 @@ import { AgentLog } from "./log.js";
 import { frozenCopy, type HookOutcome, type ToolHookAnswer, type ToolPolicyDecision, GO_ON } from "./hooks.js";
 import { reasoningLevelOf, reasoningRecord, type ReasoningLevel } from "./reasoning.js";
 import { AgentGrants, cutReason, type GrantCall, type GrantPlace, type GrantVerdict } from "./grants.js";
+
+/** What the model reads when a tool's picture was refused with `images_disabled` (core 0.7.1, EU AI Act Article 5). */
+const IMAGES_DISABLED_RESULT = "Image generation is turned off in this version (EU AI Act, Article 5). Do not try again.";
+
+/** The owner's note, in English: for a host that shows the notice's `message` as it is (the panel words it in the person's language). */
+const IMAGES_DISABLED_NOTE = "Image generation is turned off in this version. From 2 December 2026 the EU AI Act (Article 5) requires safeguards against generating harmful images, and this version does not have them yet. Image generation will return in a later version, with those safeguards.";
 
 /** A skill the user picked for a message: its slug for the server, its name for the transcript. */
 export interface PickedSkill {
@@ -614,6 +621,7 @@ class Turn {
   #usage: Usage | undefined;
   #blocked: GovernanceNotice | undefined;
   #toolDenied = false;
+  #imagesNoticed = false;
   #mode: ToolMode = "ask";
   #skills: string[] = [];
   #commandOrigin: "user_command" | "user_history" | undefined;
@@ -1063,7 +1071,8 @@ class Turn {
     const answered = tool && !planned.denied && call.argumentsError === undefined && !this.#commandOrigin
       ? tool.scope?.beforeCall(tool, this.#session) : undefined;
     if (!tool) {
-      [result, outcome] = [this.#agent.isGone(call.name) ? `${call.name} is no longer available.` : `Tool '${call.name}' does not exist here.`, "error"];
+      [result, outcome] = [this.#agent.isRefusedPictureTool(call.name) ? IMAGES_DISABLED_RESULT
+        : this.#agent.isGone(call.name) ? `${call.name} is no longer available.` : `Tool '${call.name}' does not exist here.`, "error"];
     } else if (planned.denied) {
       // The gateway refused the call: the hooks are told, and cannot change it.
       await this.#beforeToolHooks(hookState, tool, toolClass, call, args, "refused", signal);
@@ -1215,6 +1224,16 @@ class Turn {
     } catch (error) {
       if (signal.aborted) throw signal.reason ?? error;
       if (error instanceof CommandDenied) return { result: error.message, outcome: "denied", waited };
+      if (isImagesDisabled(error)) {
+        // The server turned image generation off (core 0.7.1): the model is told in English and not to retry, the person gets the
+        // owner's note once per turn (the panel words it in their language), and the picture tools go from the next round.
+        this.#agent.markImagesRefused();
+        if (!this.#imagesNoticed) {
+          this.#imagesNoticed = true;
+          await this.#notice({ outcome: "images_disabled", stage: "tool", category: "images", message: IMAGES_DISABLED_NOTE });
+        }
+        return { result: IMAGES_DISABLED_RESULT, outcome: "error", waited };
+      }
       return { result: `Error: ${error instanceof Error ? error.message : String(error)}`, outcome: "error", waited };
     }
   }
