@@ -46,6 +46,11 @@ jobs:
       - run: npm ci
       - run: npm run typecheck
       - run: npm test
+
+      # The injection suite runs inside the test step above too; this step names it, so a failure says what broke. It never needs a
+      # network or a model: injected content runs through every untrusted channel against a scripted endpoint.
+      - name: Injection suite (sdk/51 7.1)
+        run: npx vitest run packages/agents/test/injection packages/ui-vue/test/injectionImages.test.ts
       - run: npm run build
 
       # In the workspaces' order, which is the order they depend on each other. A package already on npm at this
