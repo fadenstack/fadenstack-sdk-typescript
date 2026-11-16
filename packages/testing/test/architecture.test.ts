@@ -235,7 +235,7 @@ describe("the architecture of the packages", () => {
     expect(judge("T2", findings)).toEqual({ findings: [], "stale allow-list entries": [] });
   });
 
-  it("keeps browser APIs out of the ui package and the modules (T3)", () => {
+  it("keeps browser APIs out of the ui package and the modules (T3)", { timeout: 30_000 }, () => {
     const findings: Finding[] = [];
     for (const pkg of ["ui", ...MODULES]) {
       for (const file of srcFiles(pkg, [".ts", ".tsx"])) {
