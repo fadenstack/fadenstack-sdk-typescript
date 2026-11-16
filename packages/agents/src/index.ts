@@ -32,6 +32,15 @@ export {
 } from "./approvals.js";
 export { ApprovalFloor } from "./approvalFloor.js";
 export {
+  MAX_FENCED_CHARS,
+  cleanUntrusted,
+  fenceText,
+  fenceUntrusted,
+  plainText,
+  type FenceTextOptions,
+  type FenceUntrustedOptions,
+} from "./untrustedContent.js";
+export {
   IndexedDbApprovalStore,
   MemoryApprovalStore,
   approvalCovers,
