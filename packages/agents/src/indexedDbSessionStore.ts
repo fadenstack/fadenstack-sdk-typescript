@@ -1,5 +1,5 @@
 import { recordContext, type SecretProtector } from "./secretProtection.js";
-import { DEFAULT_RETENTION, type SessionRetention, type SessionStore } from "./sessionStore.js";
+import { DEFAULT_RETENTION, type PrunesSessions, type SessionRetention, type SessionStore } from "./sessionStore.js";
 import {
   ENCRYPTED_FLAG, META_STORE, WorkQueue, openJson, request, sealJson, transact,
   type ListsAgents, type StoreProblemHandler,
@@ -30,6 +30,7 @@ type SessionRow = { agent: string; id: string; data?: Uint8Array } & Partial<Ses
 export interface IndexedDbSessionStoreOptions {
   /** The database's name (default `fadenstack-sessions`). */
   name?: string;
+  /** How many chats, and how old, are kept; `undefined` is the default (50, 90 days). `setRetention(undefined)` later turns pruning off. */
   retention?: SessionRetention;
   /** The IndexedDB factory (default `globalThis.indexedDB`; tests pass a fake). */
   indexedDB?: IDBFactory;
@@ -48,11 +49,11 @@ export interface IndexedDbSessionStoreOptions {
  * Sessions in the browser's IndexedDB, per agent: the transcript entry by entry, and a small list entry per
  * session (title, times) so the history opens without reading every transcript. Only this origin (the
  * extension or the web page) can read them; with a `protector` every record is also encrypted, bound to this database
- * and its own key. The newest `maxSessions` are kept, none older than `maxAgeDays`.
+ * and its own key. The newest `maxSessions` are kept, none older than `maxAgeDays`, unless pruning is off (`setRetention(undefined)`).
  */
-export class IndexedDbSessionStore implements SessionStore, ListsAgents {
+export class IndexedDbSessionStore implements SessionStore, ListsAgents, PrunesSessions {
   readonly #name: string;
-  #retention: SessionRetention;
+  #retention: SessionRetention | undefined;
   readonly #factory: IDBFactory;
   readonly #range: typeof IDBKeyRange;
   readonly #protector: SecretProtector | undefined;
@@ -73,8 +74,11 @@ export class IndexedDbSessionStore implements SessionStore, ListsAgents {
     this.#range = range;
   }
 
-  /** The limits the store prunes by; the agent sets the stricter of the app's and the server's (`withinServerRetention`). */
-  setRetention(retention: SessionRetention): void {
+  /**
+   * The limits the store prunes by. The agent sets the stricter of the app's and the server's (`withinServerRetention`) in governed
+   * mode, and the person's choice or the machine policy's in standalone; `undefined` is off: nothing is deleted.
+   */
+  setRetention(retention: SessionRetention | undefined): void {
     this.#retention = retention;
   }
 
@@ -100,7 +104,7 @@ export class IndexedDbSessionStore implements SessionStore, ListsAgents {
         tx.objectStore(SESSIONS).put(sessionRow);
         return Promise.resolve();
       });
-      if (created) await this.#prune(agent, sessionId);
+      if (created) await this.#prune(agent, [sessionId]);
     });
   }
 
@@ -169,12 +173,25 @@ export class IndexedDbSessionStore implements SessionStore, ListsAgents {
     if (db) (await db.catch(() => undefined))?.close();
   }
 
-  /** Keeps the newest `maxSessions` (the new one among them) not older than the age limit. */
-  async #prune(agent: string, keep: string): Promise<void> {
-    const cutoff = new Date(Date.now() - this.#retention.maxAgeDays * 86_400_000).toISOString();
-    const others = (await this.list(agent)).filter((s) => s.id !== keep);
-    const doomed = others.filter((s, i) => i >= this.#retention.maxSessions - 1 || s.lastActivity < cutoff);
+  /**
+   * Deletes the agent's chats that are too old or beyond the newest `maxSessions` (at the agent's start, when the person turns pruning
+   * on or lowers a limit). The chats in `keep` are open: they are never deleted, and they count among the chats kept. Nothing when
+   * pruning is off. Returns how many went. .NET: `PruneAsync`.
+   */
+  prune(agent: string, keep: readonly string[] = []): Promise<number> {
+    return this.#writes.run(() => this.#prune(agent, keep));
+  }
+
+  async #prune(agent: string, keep: readonly string[]): Promise<number> {
+    const retention = this.#retention;
+    if (!retention) return 0;
+    const cutoff = new Date(Date.now() - retention.maxAgeDays * 86_400_000).toISOString();
+    const all = await this.list(agent);
+    const others = all.filter((s) => !keep.includes(s.id));
+    const room = Math.max(0, retention.maxSessions - (all.length - others.length)); // the open ones are among the kept
+    const doomed = others.filter((s, i) => i >= room || s.lastActivity < cutoff);
     for (const s of doomed) await this.#delete(agent, s.id);
+    return doomed.length;
   }
 
   async #entryRow(agent: string, session: string, seq: number, entry: TranscriptEntry): Promise<EntryRow> {

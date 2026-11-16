@@ -831,6 +831,24 @@ export interface UiStrings {
   toolsPasteProblemTooLarge: string;
   toolsSkipProgram: string;
   toolsSkipSse: string;
+  // the setting for old chats (.NET `ChatRetentionSettingsViewModel`)
+  chatRetentionTitle: string;
+  chatRetentionAutoDelete: string;
+  chatRetentionAutoDeleteHint: string;
+  chatRetentionMaxAge: string;
+  chatRetentionMaxSessions: string;
+  chatRetentionMaxAgeName: string;
+  chatRetentionMaxSessionsName: string;
+  chatRetentionDaysError(min: number, max: number): string;
+  chatRetentionChatsError(min: number, max: number): string;
+  chatRetentionSave: string;
+  chatRetentionCancel: string;
+  chatRetentionSaveName: string;
+  chatRetentionCancelName: string;
+  chatRetentionSaved: string;
+  chatRetentionOrganisationLimit(chats: number, days: number): string;
+  chatRetentionDeviceLimit(chats: number, days: number): string;
+  chatRetentionPolicyFixed: string;
 }
 
 /**
@@ -1613,6 +1631,23 @@ export const englishStrings: UiStrings = {
   toolsPasteProblemTooLarge: "That text is too large.",
   toolsSkipProgram: "It starts a program, which a browser cannot do.",
   toolsSkipSse: "It uses the old SSE transport, which is not supported.",
+  chatRetentionTitle: "Old chats",
+  chatRetentionAutoDelete: "Delete old chats automatically",
+  chatRetentionAutoDeleteHint: "When this is off, chats stay on this device until you delete them.",
+  chatRetentionMaxAge: "Delete chats older than (days)",
+  chatRetentionMaxSessions: "Keep at most (chats)",
+  chatRetentionMaxAgeName: "Days after which old chats are deleted",
+  chatRetentionMaxSessionsName: "Number of chats to keep",
+  chatRetentionDaysError: (min, max) => `Enter a whole number of days from ${min} to ${max}.`,
+  chatRetentionChatsError: (min, max) => `Enter a whole number of chats from ${min} to ${max}.`,
+  chatRetentionSave: "Save",
+  chatRetentionCancel: "Cancel",
+  chatRetentionSaveName: "Save the setting for old chats",
+  chatRetentionCancelName: "Cancel changes to the setting for old chats",
+  chatRetentionSaved: "Saved.",
+  chatRetentionOrganisationLimit: (chats, days) => `Your organisation keeps at most ${chats} chats for ${days} days on this device.`,
+  chatRetentionDeviceLimit: (chats, days) => `This device keeps at most ${chats} chats for ${days} days.`,
+  chatRetentionPolicyFixed: "Set by your organisation's policy on this computer.",
 };
 
 /** Minutes and seconds as "9:41" (like .NET's `MinutesAndSeconds`): rounded up to the whole second, never negative. */

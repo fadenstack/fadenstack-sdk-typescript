@@ -193,6 +193,7 @@ export {
   type SkillEditorClosed,
   type SkillEditorOptions,
 } from "./skills/skillEditor.js";
+export { ChatRetentionSettingsViewModel, type ChatRetentionSettingsOptions, type ChatRetentionSource } from "./settings/chatRetention.js";
 export { SkillLibraryViewModel, SkillRowViewModel, type SkillLibraryOptions } from "./skills/skillLibrary.js";
 export {
   ANSWER_MAX_CHARS,
