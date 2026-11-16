@@ -31,7 +31,8 @@
   "files": [
     "dist",
     "src",
-    "NOTICE"
+    "NOTICE",
+    "THIRD-PARTY-NOTICES"
   ],
   "publishConfig": {
     "access": "public"
