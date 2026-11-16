@@ -413,4 +413,22 @@ describe("the architecture of the packages", () => {
     }
     expect(judge("T4", findings)).toEqual({ findings: [], "stale allow-list entries": [] });
   });
+
+  it("keeps @ag-ui/* out of every package's src and out of its dependencies and peerDependencies (T5)", () => {
+    // The AG-UI shapes are our own types; @ag-ui/core and @ag-ui/client are dev dependencies of the tests only.
+    const importPattern = /(?:from\s*|import\s*\(?\s*|require\s*\(\s*)["']@ag-ui\//;
+    const found: string[] = [];
+    for (const pkg of packageNames()) {
+      for (const file of srcFiles(pkg, [".ts", ".tsx", ".vue", ".js", ".mjs"])) {
+        if (importPattern.test(readFileSync(file, "utf8"))) found.push(`${rel(file)} imports @ag-ui/*`);
+      }
+      const manifest = JSON.parse(readFileSync(join(packagesDir, pkg, "package.json"), "utf8")) as Record<string, unknown>;
+      for (const field of ["dependencies", "peerDependencies", "optionalDependencies"]) {
+        for (const name of Object.keys((manifest[field] as Record<string, string> | undefined) ?? {})) {
+          if (name.startsWith("@ag-ui/")) found.push(`packages/${pkg}/package.json lists ${name} in ${field}`);
+        }
+      }
+    }
+    expect(found).toEqual([]);
+  });
 });
