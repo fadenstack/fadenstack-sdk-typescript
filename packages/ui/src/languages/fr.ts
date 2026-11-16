@@ -834,4 +834,11 @@ export const frenchStrings: UiStrings = {
   myDataHostStoresLeft: "Les données des espaces de stockage que votre application gère elle-même n'ont pas été supprimées ; c'est à l'application de le faire.",
   myDataExportFailed: "Vos données n'ont pas pu être exportées. Réessayez.",
   myDataRemoveFailed: "Vos données n'ont pas pu être supprimées entièrement. Fermez les autres onglets de cette application et réessayez.",
+  myDataAuditIntact: (count, since) => `Journal des appels d'outils : ${count} entrées depuis le ${since}, intact`,
+  myDataAuditIntactOne: (since) => `Journal des appels d'outils : 1 entrée depuis le ${since}, intact`,
+  myDataAuditDamaged: (entry) => `Journal des appels d'outils : endommagé à l'entrée ${entry}`,
+  myDataAuditEmpty: "Journal des appels d'outils : aucune entrée pour le moment",
+  myDataAuditUnreadable: "Journal des appels d'outils : n'a pas pu être vérifié",
+  myDataAuditExport: "Exporter le journal des appels d'outils…",
+  myDataAuditExportName: "Exporter le journal des appels d'outils… (sous forme de page web)",
 };

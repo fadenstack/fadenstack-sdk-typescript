@@ -833,4 +833,11 @@ export const germanStrings: UiStrings = {
   myDataHostStoresLeft: "Daten in Speichern, die Ihre App selbst verwaltet, wurden nicht entfernt; das muss die App tun.",
   myDataExportFailed: "Ihre Daten konnten nicht exportiert werden. Versuchen Sie es erneut.",
   myDataRemoveFailed: "Ihre Daten konnten nicht vollständig entfernt werden. Schließen Sie andere Tabs dieser App und versuchen Sie es erneut.",
+  myDataAuditIntact: (count, since) => `Protokoll der Werkzeugaufrufe: ${count} Einträge seit ${since}, unversehrt`,
+  myDataAuditIntactOne: (since) => `Protokoll der Werkzeugaufrufe: 1 Eintrag seit ${since}, unversehrt`,
+  myDataAuditDamaged: (entry) => `Protokoll der Werkzeugaufrufe: beschädigt bei Eintrag ${entry}`,
+  myDataAuditEmpty: "Protokoll der Werkzeugaufrufe: noch keine Einträge",
+  myDataAuditUnreadable: "Protokoll der Werkzeugaufrufe: konnte nicht geprüft werden",
+  myDataAuditExport: "Protokoll der Werkzeugaufrufe exportieren…",
+  myDataAuditExportName: "Protokoll der Werkzeugaufrufe exportieren… (als Webseite)",
 };

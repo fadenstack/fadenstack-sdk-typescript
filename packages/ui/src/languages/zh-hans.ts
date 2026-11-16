@@ -829,4 +829,11 @@ export const chineseSimplifiedStrings: UiStrings = {
   myDataHostStoresLeft: "您的应用自行管理的存储中的数据未被删除，需由应用自行删除。",
   myDataExportFailed: "无法导出您的数据。请重试。",
   myDataRemoveFailed: "无法完全删除您的数据。请关闭此应用的其他标签页后重试。",
+  myDataAuditIntact: (count, since) => `工具调用记录：自 ${since} 起共 ${count} 条，完好`,
+  myDataAuditIntactOne: (since) => `工具调用记录：自 ${since} 起共 1 条，完好`,
+  myDataAuditDamaged: (entry) => `工具调用记录：第 ${entry} 条已损坏`,
+  myDataAuditEmpty: "工具调用记录：暂无记录",
+  myDataAuditUnreadable: "工具调用记录：无法检查",
+  myDataAuditExport: "导出工具调用记录…",
+  myDataAuditExportName: "导出工具调用记录…（网页格式）",
 };

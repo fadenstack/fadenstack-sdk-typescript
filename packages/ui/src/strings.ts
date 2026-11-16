@@ -885,6 +885,13 @@ export interface UiStrings {
   myDataHostStoresLeft: string;
   myDataExportFailed: string;
   myDataRemoveFailed: string;
+  myDataAuditIntact(count: string, since: string): string;
+  myDataAuditIntactOne(since: string): string;
+  myDataAuditDamaged(entry: string): string;
+  myDataAuditEmpty: string;
+  myDataAuditUnreadable: string;
+  myDataAuditExport: string;
+  myDataAuditExportName: string;
 }
 
 /**
@@ -1720,6 +1727,13 @@ export const englishStrings: UiStrings = {
   myDataHostStoresLeft: "Data in stores your app keeps itself was not removed; the app has to remove that.",
   myDataExportFailed: "Your data could not be exported. Try again.",
   myDataRemoveFailed: "Your data could not be removed completely. Close other tabs of this app and try again.",
+  myDataAuditIntact: (count, since) => `Record of tool calls: ${count} entries since ${since}, intact`,
+  myDataAuditIntactOne: (since) => `Record of tool calls: 1 entry since ${since}, intact`,
+  myDataAuditDamaged: (entry) => `Record of tool calls: damaged at entry ${entry}`,
+  myDataAuditEmpty: "Record of tool calls: no entries yet",
+  myDataAuditUnreadable: "Record of tool calls: could not be checked",
+  myDataAuditExport: "Export the record of tool calls…",
+  myDataAuditExportName: "Export the record of tool calls… (as a web page)",
 };
 
 /** Minutes and seconds as "9:41" (like .NET's `MinutesAndSeconds`): rounded up to the whole second, never negative. */

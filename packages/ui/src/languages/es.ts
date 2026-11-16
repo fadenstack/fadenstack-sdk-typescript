@@ -833,4 +833,11 @@ export const spanishStrings: UiStrings = {
   myDataHostStoresLeft: "Los datos de los almacenes que su aplicación gestiona por sí misma no se eliminaron; debe hacerlo la aplicación.",
   myDataExportFailed: "No se pudieron exportar sus datos. Inténtelo de nuevo.",
   myDataRemoveFailed: "No se pudieron eliminar sus datos por completo. Cierre las demás pestañas de esta aplicación e inténtelo de nuevo.",
+  myDataAuditIntact: (count, since) => `Registro de llamadas a herramientas: ${count} entradas desde ${since}, íntegro`,
+  myDataAuditIntactOne: (since) => `Registro de llamadas a herramientas: 1 entrada desde ${since}, íntegro`,
+  myDataAuditDamaged: (entry) => `Registro de llamadas a herramientas: dañado en la entrada ${entry}`,
+  myDataAuditEmpty: "Registro de llamadas a herramientas: aún no hay entradas",
+  myDataAuditUnreadable: "Registro de llamadas a herramientas: no se pudo comprobar",
+  myDataAuditExport: "Exportar el registro de llamadas a herramientas…",
+  myDataAuditExportName: "Exportar el registro de llamadas a herramientas… (como página web)",
 };

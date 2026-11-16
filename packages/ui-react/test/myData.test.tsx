@@ -126,3 +126,48 @@ describe("the Your data control (React)", () => {
     expect(screen.getByRole("status").textContent).toBe(strings.myDataExported(saved[0]!.fileName));
   });
 });
+
+describe("the record of tool calls in the Your data control (React)", () => {
+  const showWithAudit = async (language: string = "en", configure: (s: FakeMyData) => void = () => undefined) => {
+    const source = new FakeMyData("others").withAudit();
+    configure(source);
+    const strings = builtInStrings[language]!;
+    const vm = new MyDataSettingsViewModel({ source, strings: () => strings });
+    const saved: MyDataSaveRequest[] = [];
+    vm.onSaveRequest((r) => saved.push(r));
+    await act(async () => { await vm.load(); });
+    const view = render(<MyDataSettings settings={vm} />);
+    return { source, vm, strings, view, saved };
+  };
+
+  it.each(LANGUAGES)("shows its line and a named button in %s", async (language) => {
+    const { strings, vm, view } = await showWithAudit(language);
+    expect(view.container.querySelector("[data-audit-line]")!.textContent).toBe(vm.auditLine);
+    expect(vm.auditLine).not.toBe("");
+    const button = screen.getByRole("button", { name: strings.myDataAuditExportName }) as HTMLButtonElement;
+    expect(button.textContent).toBe(strings.myDataAuditExport);
+    expect(button.disabled).toBe(false);
+    expect(strings.myDataAuditExportName.toLowerCase()).toContain(strings.myDataAuditExport.toLowerCase());
+  });
+
+  it("says a damaged record as a warning, and still in words", async () => {
+    const { view } = await showWithAudit("en", (s) => { s.verification = { intact: false, entries: 3, firstSeq: 1, brokenAtSeq: 4, problem: "hash_mismatch" }; });
+    const line = view.container.querySelector("[data-audit-line]")!;
+    expect(line.textContent).toBe("Record of tool calls: damaged at entry 4");
+    expect(line.className).toContain("fdn-skills-message-warning");
+  });
+
+  it("the button saves the record as a web page, and the result line says its name", async () => {
+    const { strings, saved } = await showWithAudit();
+    await press(strings.myDataAuditExportName);
+    expect(saved).toHaveLength(1);
+    expect(saved[0]).toMatchObject({ kind: "audit", scope: "allApps" });
+    expect(screen.getByRole("status").textContent).toBe(strings.myDataExported(saved[0]!.fileName));
+  });
+
+  it("a control without a record has neither the line nor the button", () => {
+    const { strings, view } = show("others");
+    expect(view.container.querySelector("[data-audit-line]")).toBeNull();
+    expect(screen.queryByRole("button", { name: strings.myDataAuditExportName })).toBeNull();
+  });
+});

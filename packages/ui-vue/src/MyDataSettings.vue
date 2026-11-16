@@ -60,6 +60,13 @@ function onKeydown(e: KeyboardEvent): void {
         <button type="button" class="fdn-button fdn-quiet" :disabled="!vm.canAct" :aria-label="s.myDataExportAllName" dir="auto" @click="vm.exportAll()">{{ s.myDataExportAll }}</button>
         <button type="button" class="fdn-button fdn-quiet" :disabled="!vm.canAct" :aria-label="s.myDataRemoveAllName" dir="auto" @click="vm.askRemoveAll()">{{ s.myDataRemoveAll }}</button>
       </div>
+      <template v-if="vm.hasAudit">
+        <!-- The person's record of tool calls: how many entries since when, intact or damaged; and its export as a web page. -->
+        <p v-if="vm.hasAuditLine" :class="vm.auditDamaged ? 'fdn-skills-message fdn-skills-message-warning' : 'fdn-skills-message'" data-audit-line dir="auto">{{ vm.auditLine }}</p>
+        <div class="fdn-wizard-actions">
+          <button type="button" class="fdn-button" :disabled="!vm.canAct" :aria-label="s.myDataAuditExportName" dir="auto" @click="vm.exportAudit()">{{ s.myDataAuditExport }}</button>
+        </div>
+      </template>
     </template>
     <p class="fdn-skills-message" :role="vm.isError ? 'alert' : 'status'" dir="auto">{{ vm.statusText }}</p>
   </SkillShell>
