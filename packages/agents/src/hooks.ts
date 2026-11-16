@@ -173,13 +173,18 @@ export function frozenCopy(args: Record<string, unknown>): Readonly<Record<strin
 export class HookRunner {
   readonly #hooks: readonly AgentHooks[];
   readonly #logger: FadenstackLogger | undefined;
-  /** The app asked for message and answer text in the model-call hooks. */
-  readonly content: boolean;
+  readonly #content: () => boolean;
 
-  constructor(hooks: readonly AgentHooks[], content: boolean, logger: FadenstackLogger | undefined) {
+  /** `content` is asked at each call: content logging is on, so the hooks see message and answer text (8.1). */
+  constructor(hooks: readonly AgentHooks[], content: () => boolean, logger: FadenstackLogger | undefined) {
     this.#hooks = hooks;
-    this.content = content;
+    this.#content = content;
     this.#logger = logger;
+  }
+
+  /** The app offered message and answer text in the model-call hooks and content logging is on now. */
+  get content(): boolean {
+    return this.#content();
   }
 
   get any(): boolean {

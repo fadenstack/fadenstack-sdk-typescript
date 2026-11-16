@@ -14,6 +14,7 @@ import {
 import { FadenstackAgent } from "./agent.js";
 import { ServerBackend, type AgentBackend } from "./backend.js";
 import type { AgentDefinition } from "./definition.js";
+import type { ContentLoggingSchedule } from "./contentLogging.js";
 import { AgentLog } from "./log.js";
 import type { AgentHooks } from "./hooks.js";
 import { LocalBackend, type LocalProfileOptions } from "./localBackend.js";
@@ -56,8 +57,12 @@ export interface AgentSettings {
   readonly toolStages: readonly ToolStage[];
   /** The app's hooks (`addHooks`), in the order they run before a call. */
   readonly hooks?: readonly AgentHooks[];
-  /** Whether the model-call hooks see message and answer text (`useHookContent`). */
+  /** Whether the app offers content logging, so the model-call hooks can see message and answer text while it is on (`useHookContent`). */
   readonly hookContent?: boolean;
+  /** @internal Tests: the clock content logging reads (milliseconds since 1970). */
+  readonly contentLoggingNow?: () => number;
+  /** @internal Tests: the timer that ends content logging. */
+  readonly contentLoggingSchedule?: ContentLoggingSchedule;
   /** What modules give tools per call, by key. */
   readonly toolServices: ReadonlyMap<ToolServiceKey<unknown>, ToolServiceFactory<unknown>>;
   readonly modules: readonly string[];
@@ -121,6 +126,8 @@ export class AgentBuilder {
   readonly #toolStages: { order: number; stage: ToolStage }[] = [];
   readonly #hooks: { order: number; hooks: AgentHooks }[] = [];
   #hookContent = false;
+  #contentLoggingNow: (() => number) | undefined;
+  #contentLoggingSchedule: ContentLoggingSchedule | undefined;
   readonly #toolServices = new Map<ToolServiceKey<unknown>, ToolServiceFactory<unknown>>();
   readonly #modules: string[] = [];
   #client: FadenstackClient | undefined;
@@ -398,11 +405,19 @@ export class AgentBuilder {
   }
 
   /**
-   * Whether the model-call hooks see the messages and the answer text. Off by default: hooks see names, ids, counts, outcomes
-   * and times only.
+   * Offers content logging: the model-call hooks can see the messages and the answer text, but only while content logging is on
+   * (`agent.startContentLogging`, a time-limited choice of the person, 8.1). Off by default and after every restart: hooks see names,
+   * ids, counts, outcomes and times only. .NET: `UseHookContent`.
    */
   useHookContent(enabled = true): this {
     this.#hookContent = enabled;
+    return this;
+  }
+
+  /** @internal Tests: the clock and the timer content logging uses, so they can move time by hand. */
+  useContentLoggingTimers(now: () => number, schedule: ContentLoggingSchedule): this {
+    this.#contentLoggingNow = now;
+    this.#contentLoggingSchedule = schedule;
     return this;
   }
 
@@ -504,6 +519,8 @@ export class AgentBuilder {
       toolStages: [...this.#toolStages].sort((a, b) => a.order - b.order).map((s) => s.stage),
       hooks: this.#hooks.map((h, index) => ({ ...h, index })).sort((a, b) => a.order - b.order || a.index - b.index).map((h) => h.hooks),
       hookContent: this.#hookContent,
+      ...(this.#contentLoggingNow ? { contentLoggingNow: this.#contentLoggingNow } : {}),
+      ...(this.#contentLoggingSchedule ? { contentLoggingSchedule: this.#contentLoggingSchedule } : {}),
       toolServices: new Map(this.#toolServices),
       modules: [...this.#modules],
       approvals: this.#approvals,

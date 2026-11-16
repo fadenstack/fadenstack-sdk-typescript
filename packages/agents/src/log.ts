@@ -47,6 +47,12 @@ export const AgentLog = Object.freeze({
   /** sdk/51 F07: an app's hook threw; it counts as "go on". The hook's name and the error's type, never the message. */
   hookFailed: defineLog(AGENT_LOG_CATEGORY, 2060, "HookFailed", "warning", "A hook ({HookType}) threw {ErrorType}; the call goes on as the policy decided"),
 
+  // Content logging (8.1): when it was switched on or off and when it ends; never any content.
+  contentLoggingStarted: defineLog(AGENT_LOG_CATEGORY, 2083, "ContentLoggingStarted", "information",
+    "Agent {Agent}: content logging was switched on for {Minutes} minutes, until {Until}"),
+  contentLoggingStopped: defineLog(AGENT_LOG_CATEGORY, 2084, "ContentLoggingStopped", "information",
+    "Agent {Agent}: content logging is off ({How}); it was set to end at {Until}"),
+
   // web_search (sdk/51 F06): the provider, a count, a duration and the kind of failure; never the query, a result or the key.
   webSearchRan: defineLog(AGENT_LOG_CATEGORY, 2080, "WebSearchRan", "information", "A web search with {Provider} found {Count} results in {DurationMs} ms"),
   webSearchFailed: defineLog(AGENT_LOG_CATEGORY, 2081, "WebSearchFailed", "warning", "A web search with {Provider} failed ({Kind})"),
