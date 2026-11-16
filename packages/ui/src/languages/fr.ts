@@ -31,6 +31,7 @@ export const frenchStrings: UiStrings = {
   serverTool: "Outil du serveur",
   approvalOutside: "Sort de l'organisation",
   approvalOutsideWhy: "Ce qu'il reçoit quitte votre organisation : il part vers un autre site.",
+  approvalArgumentsShortened: "Les arguments sont abrégés.",
   approvalFromMcp: (server) => `De ${server}, un serveur MCP sur cet ordinateur`,
   approvalUnchecked: "Votre organisation n'a pas vérifié cet outil.",
   approvalServerReadOnly: "Le serveur indique qu'il ne fait que lire.",

@@ -995,6 +995,11 @@
   color: var(--fdn-text-muted);
 }
 
+.fdn-approval-args-note {
+  margin-top: 4px;
+  font-size: 12px;
+}
+
 .fdn-approval-target {
   margin: 8px 0 0;
   font-weight: 600;

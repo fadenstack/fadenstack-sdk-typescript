@@ -42,6 +42,8 @@ export interface UiStrings {
   /** The badge, and why it asks, for a tool that reaches outside the organisation (a web search, opening a page). */
   approvalOutside: string;
   approvalOutsideWhy: string;
+  /** The note under the arguments of a card whose text was cut or is not a JSON object. */
+  approvalArgumentsShortened: string;
   /** The source line of a card for a local MCP server's tool: "From Files, an MCP server on this computer". */
   approvalFromMcp(server: string): string;
   /** Why a card asks about a local MCP server's tool nobody classified. */
@@ -969,6 +971,7 @@ export const englishStrings: UiStrings = {
   serverTool: "Server tool",
   approvalOutside: "Goes outside",
   approvalOutsideWhy: "What it is given leaves your organisation: it goes to another site.",
+  approvalArgumentsShortened: "The arguments are shortened.",
   approvalFromMcp: (server) => `From ${server}, an MCP server on this computer`,
   approvalUnchecked: "Your organisation has not checked this tool.",
   approvalServerReadOnly: "The server says it only reads.",

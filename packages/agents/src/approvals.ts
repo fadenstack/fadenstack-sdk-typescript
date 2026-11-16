@@ -22,8 +22,17 @@ export interface ApprovalRequest {
   readOnlyHint?: boolean;
   /** The server's own hint that the tool may delete or overwrite (`AgentTool.destructiveHint`); absent when it gave none. */
   destructiveHint?: boolean;
-  /** The call's arguments, for the prompt (empty for gateway tools: the gateway keeps them). */
+  /**
+   * The call's arguments, for the prompt. For a gateway tool: what the gateway's event carried (core 0.7.1 rc22), the JSON object's members, or,
+   * when the text was cut or is not a JSON object, one member `arguments` holding the text (see `argumentsShortened`); empty from an older
+   * gateway. .NET: `ApprovalRequest.Arguments`.
+   */
   arguments: Readonly<Record<string, unknown>>;
+  /**
+   * `arguments` holds the call's text as one read-only value because it was cut (at most 8000 characters from the gateway) or is not a JSON
+   * object: the card says "The arguments are shortened." .NET: `ApprovalRequest.ArgumentsShortened`.
+   */
+  argumentsShortened?: boolean;
   /** @internal SHA-256 of the arguments' JSON text for the audit log and the server's events; absent where the SDK never had the text. */
   argumentsSha256?: string;
   /**

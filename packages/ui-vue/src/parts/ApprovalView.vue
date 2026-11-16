@@ -38,6 +38,7 @@ function closeReason(): void {
     <p v-if="part.reason" class="fdn-approval-reason" dir="auto">{{ part.reason }}</p>
     <p v-if="part.target" class="fdn-approval-target" dir="auto">{{ part.target }}</p>
     <pre v-if="part.argumentsText" class="fdn-approval-args" dir="auto">{{ part.argumentsText }}</pre>
+    <p v-if="part.hasArgumentsNote" class="fdn-approval-reason fdn-approval-args-note" dir="auto">{{ part.argumentsNote }}</p>
     <div v-if="part.isPending" class="fdn-approval-actions">
       <textarea
         v-if="part.isReasonOpen"

@@ -31,6 +31,7 @@ export const spanishStrings: UiStrings = {
   serverTool: "Herramienta del servidor",
   approvalOutside: "Sale de la organización",
   approvalOutsideWhy: "Lo que recibe sale de su organización: va a otro sitio.",
+  approvalArgumentsShortened: "Los argumentos están acortados.",
   approvalFromMcp: (server) => `De ${server}, un servidor MCP de este equipo`,
   approvalUnchecked: "Su organización no ha revisado esta herramienta.",
   approvalServerReadOnly: "El servidor indica que solo lee.",

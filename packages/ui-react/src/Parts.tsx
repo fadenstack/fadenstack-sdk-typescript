@@ -108,6 +108,7 @@ export function ApprovalView({ part, strings }: { part: ApprovalPart; strings: U
       {part.reason && <p className="fdn-approval-reason" dir="auto">{part.reason}</p>}
       {part.target && <p className="fdn-approval-target" dir="auto">{part.target}</p>}
       {part.argumentsText && <pre className="fdn-approval-args" dir="auto">{part.argumentsText}</pre>}
+      {part.hasArgumentsNote && <p className="fdn-approval-reason fdn-approval-args-note" dir="auto">{part.argumentsNote}</p>}
       {part.isPending ? (
         <div className="fdn-approval-actions">
           {part.isReasonOpen && (
