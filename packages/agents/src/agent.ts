@@ -51,6 +51,7 @@ import { ChatSession } from "./session.js";
 import { isChangingToolSource, type AgentContext, type ToolServiceCall, type ToolSource } from "./stages.js";
 import type { AnswerCopy, AnswerCopyMarker, MarkedCopy } from "./answerCopy.js";
 import { AgentLog } from "./log.js";
+import { buildDevice, describeDeviceOs } from "./device.js";
 import { isCoreToolSource, isReservedToolName, settleHostTools, toDefinition, type AgentTool, type ToolOutput } from "./tools.js";
 import { newId, type SessionInfo } from "./transcript.js";
 import { AgentGrants, isGrantHandler, type GrantHandler } from "./grants.js";
@@ -841,6 +842,10 @@ export class FadenstackAgent implements AgentSwitch {
       })),
       ...(app.context ? { context: app.context } : {}),
       ...(app.ui ? { ui: app.ui } : {}),
+      // What the app reports about the device (sdk/51 8.3): the operating system, the app's version and its plugins. A browser
+      // starts no local program, so there are no MCP programs here.
+      device: buildDevice({ os: describeDeviceOs(), appVersion: app.version, plugins: this.settings.plugins },
+        (kind, reason) => writeLog(this.settings.logger, AgentLog.deviceEntryDropped, { Kind: kind, Reason: reason })),
     };
     try {
       await this.backend.reportManifest(manifest);

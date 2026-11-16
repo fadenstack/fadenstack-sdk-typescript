@@ -116,7 +116,7 @@ describe("the agent's log", () => {
       [2000, "ProfileLoaded", "information"], [2001, "ToolsSettled", "information"], [2002, "ToolDropped", "warning"], [2003, "BypassMode", "warning"],
       [2009, "ProfileRereadFailed", "warning"], [2010, "TurnStarted", "information"], [2011, "TurnEnded", "information"],
       [2012, "ModelRequest", "debug"], [2013, "ToolsRefreshed", "information"], [2014, "ToolsRefreshFailed", "warning"],
-      [2016, "ToolNameReserved", "warning"], [2017, "ToolNameTaken", "warning"],
+      [2016, "ToolNameReserved", "warning"], [2017, "ToolNameTaken", "warning"], [2018, "DeviceEntryDropped", "warning"],
       [2020, "ToolCall", "information"], [2021, "Approval", "information"], [2030, "Notice", "information"],
       [2053, "ApprovalAnswerRetried", "warning"], [2054, "NoProvenanceModule", "warning"], [2060, "HookFailed", "warning"],
       [2080, "WebSearchRan", "information"], [2081, "WebSearchFailed", "warning"], [2082, "WebSearchOff", "debug"],

@@ -108,6 +108,7 @@ export {
   type ReasoningStore,
 } from "./reasoning.js";
 export { AGENT_LOG_CATEGORY, AgentLog } from "./log.js";
+export { buildDevice, describeDeviceOs, mcpProgramProblem, pluginProblem, type DeviceDropReason, type DeviceInput, type OsSource } from "./device.js";
 export {
   MAX_HOOK_NOTES,
   MAX_HOOK_NOTE_KEY,

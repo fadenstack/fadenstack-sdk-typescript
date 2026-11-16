@@ -174,7 +174,12 @@ export {
   toWireManifest,
   type AppManifest,
   type ManifestContext,
+  type ManifestDevice,
+  type ManifestMcpProgram,
+  type ManifestPlugin,
   type ManifestTool,
+  DEVICE_LIMITS,
+  SHA256_PATTERN,
 } from "./manifest.js";
 export {
   OPEN_WORLD_ENFORCED,

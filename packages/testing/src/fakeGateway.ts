@@ -346,6 +346,14 @@ export class FakeGateway {
   readonly reported: Record<string, unknown>[] = [];
   /** The manifests apps sent (`PUT /v1/agents/{agent}/manifest`), as sent. */
   readonly manifests: { agent: string; manifest: Record<string, unknown> }[] = [];
+  /**
+   * The `device` block of the latest manifest an agent sent (`os`, `app_version`, `plugins`, `mcp_programs`), as sent; undefined
+   * when it sent none. Checked like core 0.7.1 does (limits, lowercase hex): a block that does not fit is a 400.
+   */
+  deviceOf(agent: string): Record<string, unknown> | undefined {
+    const latest = [...this.manifests].reverse().find((x) => x.agent === agent);
+    return (latest?.manifest["device"] ?? undefined) as Record<string, unknown> | undefined;
+  }
   /** Tools the gateway held back from requests because the contract does not list them. */
   readonly heldTools: string[] = [];
   /** Agents created through the API, by whom, with the body sent. */
@@ -1056,7 +1064,7 @@ export class FakeGateway {
       : names.some((n) => !/^[A-Za-z0-9_.:-]{1,128}$/.test(n)) ? "a tool name is not valid"
       : new Set(names).size !== names.length ? "tool names must be unique"
       : tools.some((t) => !["read", "write", "destructive", "unknown", undefined].includes(t["class"] as string)) ? "a tool class is not valid"
-      : undefined;
+      : deviceProblem(m["device"]);
     if (problem) return openAiError(400, problem, "invalid_manifest", "invalid_request_error");
     const key = JSON.stringify(m);
     const isNew = !this.manifests.some((x) => x.agent === agent && JSON.stringify(x.manifest) === key);
@@ -1400,4 +1408,31 @@ const FAKE_CERTIFICATE = "-----BEGIN CERTIFICATE-----\nZmFrZSBjZXJ0aWZpY2F0ZQ==\
 function globMatch(pattern: string, name: string): boolean {
   const parts = pattern.split("*").map((p) => p.replace(/[.+?^${}()|[\]\\]/g, "\\$&"));
   return new RegExp(`^${parts.join(".*")}$`).test(name);
+}
+
+/**
+ * The manifest's `device` block as core 0.7.1 checks it (the 16 Nov contract, item 2): `os` up to 100 characters, `app_version`
+ * up to 50, up to 100 plugins and 100 MCP programs, `name` up to 128, `version` up to 50, `program` up to 255, `sha256` required
+ * (64 lowercase hex). A block that does not fit is a 400 `invalid_manifest`. No block, or a `null` one, is fine.
+ */
+function deviceProblem(device: unknown): string | undefined {
+  if (device === undefined || device === null) return undefined;
+  if (typeof device !== "object" || Array.isArray(device)) return "device must be an object";
+  const d = device as Record<string, unknown>;
+  const text = (value: unknown, max: number): boolean => value === undefined || (typeof value === "string" && value.length <= max);
+  if (!text(d["os"], 100)) return "device.os is not valid";
+  if (!text(d["app_version"], 50)) return "device.app_version is not valid";
+  const list = (value: unknown): Record<string, unknown>[] | undefined =>
+    value === undefined ? [] : Array.isArray(value) && value.length <= 100 && value.every((e) => e !== null && typeof e === "object")
+      ? (value as Record<string, unknown>[]) : undefined;
+  const plugins = list(d["plugins"]);
+  if (!plugins) return "device.plugins is not valid";
+  const programs = list(d["mcp_programs"]);
+  if (!programs) return "device.mcp_programs is not valid";
+  const hex = (value: unknown): boolean => typeof value === "string" && /^[0-9a-f]{64}$/.test(value);
+  if (plugins.some((p) => typeof p["name"] !== "string" || p["name"].length > 128 || !text(p["version"], 50) || !hex(p["sha256"]))) return "a device plugin is not valid";
+  if (programs.some((p) => typeof p["name"] !== "string" || p["name"].length > 128 || typeof p["program"] !== "string" || p["program"].length > 255 || !hex(p["sha256"]))) {
+    return "a device MCP program is not valid";
+  }
+  return undefined;
 }

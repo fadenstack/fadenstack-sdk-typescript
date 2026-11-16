@@ -17,6 +17,8 @@ A browser page or an extension cannot start a process, so this module speaks to 
 
 Many servers built for stdio do not, and then a browser session breaks.
 
+**No program, so no program pin.** Because this module starts no program, it has nothing to pin: the .NET SDK pins the file a local server starts (its path and SHA-256), checks it before every start, and does not start a program that changed until the person says so ([.NET: The program is pinned](../dotnet/local-mcp.md#the-program-is-pinned)). A server over HTTP has no program file the SDK could check, and it is not listed in the manifest's device block either ([What your app reports about the device](tools.md#what-your-app-reports-about-the-device)).
+
 ## Add the module
 
 ```ts
