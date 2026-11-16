@@ -852,7 +852,7 @@ export class FadenstackAgent {
     const { scope, signal } = myDataOptions(options);
     await this.start(signal);
     const principal = this.profile.principal;
-    const exportScope = scope === "thisApp" && principal ? { app: this.appName, plan: await this.#myDataPlan() } : undefined;
+    const exportScope = scope === "thisApp" ? { app: this.appName, plan: principal ? await this.#myDataPlan() : this.#noUserPlan() } : undefined;
     return buildExport(this.sessionStore, this.approvalStore, this.slug, () => this.#problems, { principal }, exportScope);
   }
 
@@ -878,6 +878,14 @@ export class FadenstackAgent {
 
   async #myDataPlan(): Promise<MyDataPlan> {
     return planMyData(await this.#myDataApps());
+  }
+
+  /**
+   * A server that names no user: the shared databases of an older SDK hold no record of apps. This app's part is this agent's own
+   * data (its chats, "Allow always" and thinking level); the rest stays, for the removal and the export alike.
+   */
+  #noUserPlan(): MyDataPlan {
+    return { ownAgents: [this.slug], keptAgents: [], otherApps: [], sharedGoes: false };
   }
 
   /** The agents with data in the SDK's own stores for the person: sessions, "Allow always" and a thinking level (a host's own stores are the host's). */
@@ -927,9 +935,7 @@ export class FadenstackAgent {
     });
     if (scope === "allApps") return result(await this.#deleteEverything(principal), { scope, otherApps: [], agentsKept: [] });
     if (!principal) {
-      // A server that names no user: the shared databases of an older SDK hold no record of apps; this agent's own data goes, the rest stays.
-      const plan: MyDataPlan = { ownAgents: [this.slug], keptAgents: [], otherApps: [], sharedGoes: false };
-      return result(await this.#deleteOwn(plan), { scope, otherApps: [], agentsKept: [] });
+      return result(await this.#deleteOwn(this.#noUserPlan()), { scope, otherApps: [], agentsKept: [] });
     }
     const plan = await this.#myDataPlan();
     const cleared = plan.sharedGoes ? await this.#deleteEverything(principal) : await this.#deleteOwn(plan, true);

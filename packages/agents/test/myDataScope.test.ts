@@ -349,6 +349,28 @@ describe("my data per app", () => {
     expect(await has("fadenstack-apps")).toBe(false); // no person, no record
   });
 
+  it("from a gateway that names no user, this app's export holds exactly what its removal takes", async () => {
+    const gw = new FakeGateway({ users, principal: false, model: () => ({ text: "Done." }), agents: [{ slug: AGENT_A }, { slug: AGENT_B }] });
+    const a = await app(gw, AGENT_A, APP_A);
+    const b = await app(gw, AGENT_B, APP_B);
+    await seedOwn(a, "A's chat");
+    await seedOwn(b, "B's chat");
+
+    const data = await a.exportMyData();
+
+    expect(data.scope).toBe("thisApp");
+    expect(data.sessions.map((s) => s.agent)).toEqual([AGENT_A]);
+    expect(data.approvals.map((x) => x.agent)).toEqual([AGENT_A]);
+    expect(JSON.stringify(data)).not.toContain("B's chat");
+    expect((data.databases?.["preferences"]?.["reasoning"] ?? []).map((r) => (r as { agent: string }).agent)).toEqual([AGENT_A]);
+    expect(data.localStorage).toBeUndefined();
+    expect(data.notIncluded.join(" ")).toContain("other agents' chats");
+    expect(data.notIncluded.join(" ")).not.toContain("()");
+
+    const all = await a.exportMyData({ scope: "allApps" });
+    expect(all.sessions.map((s) => s.agent).sort()).toEqual([AGENT_B, AGENT_A]);
+  });
+
   it("a governed person's removal leaves the standalone principal's data, and the other way round", async () => {
     const gw = gateway();
     const governed = await app(gw, AGENT_A, APP_A);

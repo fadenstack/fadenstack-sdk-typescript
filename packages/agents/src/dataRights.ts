@@ -150,7 +150,10 @@ export async function buildExport(sessions: SessionStore, approvals: ApprovalSto
 }
 
 function stayed(plan: MyDataPlan): string[] {
-  const lines = [`What other Fadenstack apps in this browser use (${plan.otherApps.map((a) => a.name).join(", ")}): your skills, your MCP servers, your provenance records and your other settings. Export all of your Fadenstack data to get them.`];
+  const lines = [plan.otherApps.length > 0
+    ? `What other Fadenstack apps in this browser use (${plan.otherApps.map((a) => a.name).join(", ")}): your skills, your MCP servers, your provenance records and your other settings. Export all of your Fadenstack data to get them.`
+    // A server that names no user: the data is this browser's, shared by every agent in it.
+    : "The other agents' chats and the settings this browser shares between Fadenstack apps. Export all of your Fadenstack data to get them."];
   if (plan.keptAgents.length > 0) lines.push(`The chats of ${plan.keptAgents.join(", ")}, which another app uses too.`);
   return lines;
 }
