@@ -30,6 +30,7 @@ export {
   type ApprovalScope,
   type PermissionMode,
 } from "./approvals.js";
+export { ApprovalFloor } from "./approvalFloor.js";
 export {
   IndexedDbApprovalStore,
   MemoryApprovalStore,
