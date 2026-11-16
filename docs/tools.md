@@ -202,6 +202,8 @@ returns `run`, `ask` or `hidden`.
 
 ## Approvals
 
+[Approvals](approvals.md) summarises the levels, the standing approvals, the never-skip list and what survives a restart.
+
 A tool call that asks goes to your approval handler. Pass it to the builder as a function, or as an object with a
 `request` method:
 

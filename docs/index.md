@@ -175,6 +175,7 @@ approval handler the SDK declines it. See [Tools and approvals](tools.md).
 
 - [Build an agent](agent.md): the client, signing in, the builder, sessions and streaming.
 - [Tools and approvals](tools.md): host tools, tool classes, tool modes and approvals.
+- [Approvals](approvals.md): the levels, standing approvals, the never-skip list, restarts and reasons.
 - [Host commands and central policy](host-commands.md): host tools the person starts, and the fresh policy check
   around every host tool call.
 - [Outcomes and errors](outcomes.md): how a turn ends, and what is thrown.
