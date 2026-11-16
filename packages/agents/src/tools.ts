@@ -139,6 +139,12 @@ export interface AgentTool {
   readonly server?: string;
   /** Reaches outside the organisation (recorded and shown; no mode acts on it yet). */
   readonly openWorld?: boolean;
+  /**
+   * The tool asks the server's image model for a picture (an app's `insert_image`, `add_image`). The agent offers it to the model
+   * only while `agent.imagesAvailable` is true, and refuses a call to it by name otherwise, as it refuses an unknown tool. The
+   * tool stays registered: `agent.tools` does not change. .NET: `MakesPictures`.
+   */
+  readonly makesPictures?: boolean;
   /** What the MCP server's annotations say: the tool only reads. Absent when the server did not say; the card shows it, no mode acts on it. */
   readonly readOnlyHint?: boolean;
   /** What the MCP server's annotations say: the tool may delete or overwrite. Absent when the server did not say. */
@@ -184,6 +190,11 @@ export interface ToolSpec<A extends Record<string, unknown>> {
   parameters?: JsonSchema;
   toolClass?: ToolClass;
   openWorld?: boolean;
+  /**
+   * The tool asks the server's image model for a picture (the app's `insert_image`, `add_image`): hidden from the model while
+   * `agent.imagesAvailable` is false (see `AgentTool.makesPictures`).
+   */
+  makesPictures?: boolean;
   /** What it writes for people to read (see `ToolOutput`); a tool that writes such content declares it. */
   output?: ToolOutput<A>;
   /** What a call acts on, for the approval card (see `AgentTool.describe`). */
@@ -212,6 +223,7 @@ export function defineTool<A extends Record<string, unknown> = Record<string, un
     ...tool,
     ...(spec.description !== undefined ? { description: spec.description } : {}),
     ...(spec.openWorld !== undefined ? { openWorld: spec.openWorld } : {}),
+    ...(spec.makesPictures !== undefined ? { makesPictures: spec.makesPictures } : {}),
     ...(spec.output !== undefined ? { output: toolOutput(spec.name, spec.output) } : {}),
     ...(describe ? { describe: (args: Record<string, unknown>, signal: AbortSignal) => describe(args as A, signal) } : {}),
   };
@@ -247,6 +259,7 @@ export function withToolClass(tool: AgentTool, toolClass: ToolClass): AgentTool 
     ...(tool.description !== undefined ? { description: tool.description } : {}),
     ...(tool.server !== undefined ? { server: tool.server } : {}),
     ...(tool.openWorld !== undefined ? { openWorld: tool.openWorld } : {}),
+    ...(tool.makesPictures !== undefined ? { makesPictures: tool.makesPictures } : {}),
     ...(tool.readOnlyHint !== undefined ? { readOnlyHint: tool.readOnlyHint } : {}),
     ...(tool.destructiveHint !== undefined ? { destructiveHint: tool.destructiveHint } : {}),
     ...(tool.output !== undefined ? { output: tool.output } : {}),

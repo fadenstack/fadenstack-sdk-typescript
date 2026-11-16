@@ -27,6 +27,34 @@ export class FadenstackApiError extends FadenstackError {
     this.type = fields.type;
     this.param = fields.param;
   }
+
+  /**
+   * The server refused a picture because image generation is off in this version (core 0.7.1, EU AI Act Article 5): a 403 whose
+   * code is `ErrorCodes.imagesDisabled`. Other 403s are not. .NET: `IsImagesDisabled`.
+   */
+  get isImagesDisabled(): boolean {
+    return this.status === 403 && this.code === ErrorCodes.imagesDisabled;
+  }
+}
+
+/** Error codes the server sends that an app may act on (`FadenstackApiError.code`). */
+export const ErrorCodes = Object.freeze({
+  /**
+   * 403, error type `invalid_request_error`: image generation (`/v1/images/generations`, the agent's `images/generations`) is
+   * turned off in this version, and `AgentProfile.images` is false. It is not temporary: do not retry.
+   */
+  imagesDisabled: "images_disabled",
+} as const);
+
+/**
+ * Whether `error` (or an error it was caused by) is the server's refusal of pictures: a 403 `images_disabled`. For an app that
+ * asks the images route itself. .NET: `FadenstackApiException.IsImagesDisabled`.
+ */
+export function isImagesDisabled(error: unknown): boolean {
+  for (let e: unknown = error, depth = 0; e instanceof Error && depth < 8; e = e.cause, depth++) {
+    if (e instanceof FadenstackApiError && e.isImagesDisabled) return true;
+  }
+  return false;
 }
 
 /** 401: no or a bad token. For an agent: sign in again. */

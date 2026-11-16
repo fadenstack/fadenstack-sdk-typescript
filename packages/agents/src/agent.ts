@@ -782,15 +782,45 @@ export class FadenstackAgent {
     return { storesCleared, hostSessionStoreLeft, hostApprovalStoreLeft, hostStoresLeft: hostSessionStoreLeft || hostApprovalStoreLeft };
   }
 
-  /** The tools a mode offers the model in `session` (when given): the mode's, and those the tool's scope offers. */
+  /**
+   * The tools a mode offers the model in `session` (when given): the mode's, and those the tool's scope offers; a tool that
+   * `makesPictures` only while `imagesAvailable` (read at each round, so a profile that changed `images` or a refusal counts
+   * from the next one).
+   */
   offer(mode: ToolMode, session?: ChatSession): ToolDefinition[] {
+    const pictures = this.imagesAvailable;
     return this.#tools
-      .filter((t) => (!t.scope || (session !== undefined && t.scope.offers(t, session))) && decideTool(mode, t.toolClass) !== "hidden")
+      .filter((t) => (pictures || !t.makesPictures) && (!t.scope || (session !== undefined && t.scope.offers(t, session)))
+        && decideTool(mode, t.toolClass) !== "hidden")
       .map(toDefinition);
   }
 
+  /** The tool of this name a call may run; a picture tool while `imagesAvailable` is false is not one (refused as unknown). */
   find(name: string): AgentTool | undefined {
-    return this.#tools.find((t) => t.name === name);
+    const tool = this.#tools.find((t) => t.name === name);
+    return tool?.makesPictures && !this.imagesAvailable ? undefined : tool;
+  }
+
+  #imagesRefused = false;
+
+  /**
+   * Whether tools that make pictures (`AgentTool.makesPictures`) are offered: only for a governed agent whose current profile
+   * says `images: true` and that the server has not refused with `images_disabled` since (`isImagesDisabled`). False in
+   * standalone (no pictures there yet) and before `start()`. An app that keeps its own list of picture tools (the Office
+   * add-ins) passes this instead of its own check. .NET: `ImagesAvailable`.
+   */
+  get imagesAvailable(): boolean {
+    return this.connection === "governed" && this.#profile?.images === true && !this.#imagesRefused;
+  }
+
+  /** @internal The server refused a picture with `images_disabled`: the picture tools are hidden from the next round on. */
+  markImagesRefused(): void {
+    this.#imagesRefused = true;
+  }
+
+  /** @internal Whether `name` is a picture tool hidden because the server refused pictures (a second call in the round that got the refusal). */
+  isRefusedPictureTool(name: string): boolean {
+    return this.#imagesRefused && this.#tools.some((t) => t.makesPictures === true && t.name === name);
   }
 }
 

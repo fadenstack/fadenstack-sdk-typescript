@@ -64,6 +64,7 @@ export const germanStrings: UiStrings = {
     round_limit: "Angehalten",
     provenance_refused: "Nicht geschrieben: Es konnte nicht als KI-generiert gekennzeichnet werden",
     empty_answer: "Keine Antwort erhalten",
+    images_disabled: "Bilderzeugung ist ausgeschaltet",
     grant_failed: "Nur dieses Mal zugelassen: Der Server hat die längere Freigabe nicht bestätigt",
   },
   noticeFallback: "Hinweis",
@@ -77,6 +78,8 @@ export const germanStrings: UiStrings = {
   emptyAnswer: "Das Modell hat aufgehört, ohne eine Antwort zu schreiben. Sie können es erneut versuchen.",
   emptyAnswerLength:
     "Das Modell hat seine maximale Länge erreicht, bevor es eine Antwort geschrieben hat, zum Beispiel beim Nachdenken. Sie können es erneut versuchen.",
+  imagesDisabled:
+    "Die Bilderzeugung ist in dieser Version ausgeschaltet. Ab dem 2. Dezember 2026 verlangt die EU-KI-Verordnung (Artikel 5) Schutzmaßnahmen gegen das Erzeugen schädlicher Bilder, und diese Version hat sie noch nicht. Die Bilderzeugung kommt in einer späteren Version mit diesen Schutzmaßnahmen zurück.",
   thinking: "Denkt nach…",
   thoughtFor: (seconds) => `${seconds} s nachgedacht`,
   usedReferences: (count) => (count === 1 ? "1 Quelle verwendet" : `${count} Quellen verwendet`),

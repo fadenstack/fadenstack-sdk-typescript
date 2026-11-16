@@ -32,6 +32,7 @@ const readPage = defineTool<{ page: number }>({
 | `parameters` | The arguments, as a JSON Schema object. Without it, the tool takes no arguments. |
 | `toolClass` | `read`, `write`, `destructive` or `unknown`. Without it, the class is `unknown`, and the tool asks before it runs in every mode that offers it. |
 | `openWorld` | The tool reaches outside the organisation. Below `auto`, a call to it asks ([Open-world tools](#open-world-tools)). |
+| `makesPictures` | The tool asks the server's image model for a picture (an app's `insert_image` or `add_image`). The agent hides it while `agent.imagesAvailable` is false ([Tools that make pictures](#tools-that-make-pictures)). |
 | `output` | What the tool writes for people to read: `{ argument, mediaType, edit }`. See [Content people read](#content-people-read). |
 | `describe(args, signal)` | What a call acts on, in the user's words (`button "Send" on mail.example.com`), for the approval card. Called only when the user is asked; may return a promise. A failure, nothing, or no answer within 3 seconds leaves the card with the arguments. |
 | `run(args, context)` | The tool's body. Required. |
@@ -297,6 +298,44 @@ for LLM Applications 2025, LLM02 and LLM06). So:
   mode would ask about.
 - `decideTool(mode, toolClass, approval, openWorld)` and `conversationOnly(mode, openWorld)` (`@fadenstack/client`)
   say what applies.
+
+### Tools that make pictures
+
+A tool that asks the server's image model for a picture (an app's `insert_image` or `add_image`) says so with `makesPictures: true`
+in `defineTool`. The SDK has no picture tool of its own.
+
+`agent.imagesAvailable` says whether such tools are offered. It is true only for a governed agent whose current profile says
+`images: true` and that the server has not refused with `images_disabled` since. It is false in standalone (there are no
+pictures there yet) and before `start()`. While it is false:
+
+- the agent leaves every `makesPictures` tool out of what the model is offered, on every turn: a profile refresh that flips
+  `images` changes the next turn;
+- a call to such a tool by name is refused like an unknown tool ("Tool 'insert_image' does not exist here.") and does not run;
+- the tools stay registered: `agent.tools` and the app's own list do not change.
+
+An app that keeps its own list of picture tools, such as the Office add-ins, reads `agent.imagesAvailable` instead of its own
+standalone check.
+
+#### Image generation is off in core 0.7.1
+
+From 2 December 2026 the EU AI Act (Article 5) requires safeguards against generating harmful images, and core 0.7.1 does not
+have them yet. It refuses `/v1/images/generations` and the agent's `images/generations` route with HTTP 403, error type
+`invalid_request_error` and code `images_disabled`, and its agent profile always says `images: false`, so the picture tools are
+hidden. If a call is refused anyway, the agent:
+
+1. gives the model the tool result "Image generation is turned off in this version (EU AI Act, Article 5). Do not try again.";
+2. raises one notice per turn: outcome `images_disabled`, stage `tool`, category `images`;
+3. sets `imagesAvailable` to false, so the picture tools are hidden from the next round on.
+
+The chat panel shows that notice with the title "Image generation is off" and the owner's note, in the person's language
+(English, German, French, Spanish, Simplified Chinese), instead of the server's message:
+"Image generation is turned off in this version. From 2 December 2026 the EU AI Act (Article 5) requires safeguards against
+generating harmful images, and this version does not have them yet. Image generation will return in a later version, with
+those safeguards."
+
+The TypeScript client has no images call yet: an app that asks the images route itself (for example with
+`client.transport.post`) tells this refusal from other errors with `isImagesDisabled(error)` or `error.isImagesDisabled` (a 403
+whose `code` is `ErrorCodes.imagesDisabled`, `"images_disabled"`). Do not retry.
 
 ### Allow always
 

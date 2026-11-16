@@ -93,6 +93,8 @@ export interface UiStrings {
   emptyAnswer: string;
   /** The same when the model ran out of tokens first (`empty_answer`, `length`), often while thinking. */
   emptyAnswerLength: string;
+  /** The owner's note when image generation is off (`images_disabled`): shown instead of the server's message. */
+  imagesDisabled: string;
   // reasoning and references
   thinking: string;
   thoughtFor(seconds: number): string;
@@ -868,6 +870,7 @@ export const englishStrings: UiStrings = {
     round_limit: "Stopped",
     provenance_refused: "Not written: it could not be marked as AI-generated",
     empty_answer: "No answer came back",
+    images_disabled: "Image generation is off",
     grant_failed: "Allowed this time only: the server did not confirm the longer approval",
   },
   noticeFallback: "Notice",
@@ -880,6 +883,8 @@ export const englishStrings: UiStrings = {
   settingsUnmarked: "Tell me when an answer carries no AI mark",
   emptyAnswer: "The model ended without writing an answer. You can try again.",
   emptyAnswerLength: "The model reached its length limit before it wrote an answer, for example while thinking. You can try again.",
+  imagesDisabled:
+    "Image generation is turned off in this version. From 2 December 2026 the EU AI Act (Article 5) requires safeguards against generating harmful images, and this version does not have them yet. Image generation will return in a later version, with those safeguards.",
   thinking: "Thinking...",
   thoughtFor: (seconds) => `Thought for ${seconds} s`,
   usedReferences: (count) => (count === 1 ? "Used 1 reference" : `Used ${count} references`),
