@@ -905,7 +905,7 @@ export class FakeGateway {
   }
 
   #tokens(signIn: SignIn, agentId: string): Record<string, unknown> {
-    const access = this.#options.accessTtlSeconds ?? 600;
+    const access = this.#options.accessTtlSeconds ?? 300;
     const refresh = this.#options.refreshTtlSeconds ?? 86_400;
     signIn.access = `access.${signIn.deviceId}.${this.#next()}`;
     signIn.refresh = `refresh.${signIn.deviceId}.${this.#next()}`;
