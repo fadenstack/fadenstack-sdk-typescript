@@ -367,3 +367,14 @@ describe("ConnectionWizard: the countdown", () => {
     expect(screen.getByRole("alert").textContent).toBe(vm.problemText);
   });
 });
+
+describe("ConnectionWizard: the language changes", () => {
+  it("draws the new language after retext, on the same step", async () => {
+    const { vm } = await at(WizardStep.OwnFailed);
+    draw(vm);
+    expect(screen.getByRole("alert").textContent).toBe(englishStrings.wizardProblem[vm.problem!]);
+    act(() => vm.retext(germanStrings));
+    expect(screen.getByRole("alert").textContent).toBe(germanStrings.wizardProblem[vm.problem!]);
+    expect(vm.step).toBe(WizardStep.OwnFailed);
+  });
+});

@@ -92,5 +92,7 @@ No secret stays in the view model (OWASP ASVS 5.0 V13):
 
 A newer action makes every older one's answer stale. A store that fails says so (`storeFailed`). Every text is a
 `UiStrings` member whose name starts with `wizard`, in five languages. The view model adds the texts that follow its
-state: `addressErrorText`, `problemText`, `waitingText`, `resultLines` and the others. The standalone notice and the
-liability sentence are legal texts: their German version is the binding one.
+state: `addressErrorText`, `problemText`, `waitingText`, `resultLines` and the others. When the app's language changes,
+`wizard.retext(strings)` reads every one of them again from the new `UiStrings` and notifies the skin; the step, the typed
+values and the check result stay as they are. The standalone notice and the liability sentence are legal texts: their
+German version is the binding one.

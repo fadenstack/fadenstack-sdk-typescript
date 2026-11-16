@@ -15,6 +15,7 @@ import {
   ConnectionWizardViewModel,
   createPairingTicket,
   germanStrings,
+  type UiStrings,
   type AcceptanceRecord,
   type AgentSignIn,
   type ConnectionResult,
@@ -432,12 +433,12 @@ export class WizardRig {
   /** Commands that rejected. */
   readonly failures: unknown[] = [];
 
-  constructor(configure?: (options: WizardOptions) => WizardOptions) {
+  constructor(configure?: (options: WizardOptions) => WizardOptions, strings: UiStrings = germanStrings) {
     this.options = configure ? configure(DEFAULT_OPTIONS) : DEFAULT_OPTIONS;
     this.sign = new FakeServerSignIn(() => this.clock.now());
     this.vm = new ConnectionWizardViewModel(this.options, this.store, {
       server: this.sign, keys: this.keys, checker: this.checker, clock: this.clock, clipboard: this.clipboard, links: this.links,
-      language: () => this.language, strings: germanStrings,
+      language: () => this.language, strings,
     });
     this.vm.subscribe(() => {
       if (this.steps.at(-1) !== this.vm.step) this.steps.push(this.vm.step);

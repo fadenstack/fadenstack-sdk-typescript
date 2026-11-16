@@ -26,10 +26,13 @@ import {
   WizardPoint,
   WizardStep,
   createEndpointChecker,
+  englishStrings,
+  germanStrings,
   type AgentSignIn,
   type ConnectionResult,
   type LocalEndpoint,
   type PairingApproval,
+  type UiStrings,
   type WizardCommandAvailability,
   type WizardOptions,
 } from "@fadenstack/ui";
@@ -82,7 +85,7 @@ const track = (rig: WizardRig): WizardRig => {
   rigs.push(rig);
   return rig;
 };
-const make = (configure?: Configure): WizardRig => track(new WizardRig(configure));
+const make = (configure?: Configure, strings?: UiStrings): WizardRig => track(new WizardRig(configure, strings));
 const made = (options: Partial<WizardOptions>): Configure => (o) => ({ ...o, ...options });
 
 const settingsRig = (current: ConnectionResult = SERVER_CONNECTION): WizardRig =>
@@ -2591,5 +2594,114 @@ describe("wizard: the texts", () => {
     expect(line(SERVER_CONNECTION)).toBe("Connected to https://ai.example.test/.");
     expect(line(ENDPOINT_CONNECTION)).toBe("Your own AI: https://api.openai.com/v1.");
     expect(line()).toBeUndefined();
+  });
+});
+
+describe("retext", () => {
+  /** First run, "Use my own AI", the terms accepted and an endpoint checked with this report, in these texts. */
+  async function checked(strings: UiStrings, report: ReturnType<typeof makeReport>, address?: string): Promise<WizardRig> {
+    const rig = make(undefined, strings);
+    rig.checker.report.returns(report);
+    await rig.start();
+    await rig.press("chooseOwnAi");
+    rig.vm.accepted = true;
+    await rig.press("accept");
+    await pick(rig, EndpointPreset.ollama);
+    if (address) type(rig, address);
+    await useEndpoint(rig);
+    return rig;
+  }
+
+  /** Every text the view model gives a skin, and the state it must keep. */
+  const texts = (vm: ConnectionWizardViewModel) => ({
+    strings: vm.strings, addressErrorText: vm.addressErrorText, startFailureText: vm.startFailureText,
+    passwordFailureText: vm.passwordFailureText, problemText: vm.problemText, waitingText: vm.waitingText,
+    signedInText: vm.signedInText, resultLines: vm.resultLines, connectedText: vm.connectedText,
+  });
+  const state = (vm: ConnectionWizardViewModel) => ({
+    step: vm.step, report: vm.report, problem: vm.problem, models: vm.models, selectedModel: vm.selectedModel,
+    endpointAddressText: vm.endpointAddressText, accepted: vm.accepted, selectedPreset: vm.selectedPreset, outcome: vm.outcome,
+    can: { ...vm.can },
+  });
+
+  it("a check result shown in English is German after retext, and nothing else changes", async () => {
+    const report = makeReport(OLLAMA, { problems: ["NoToolCalls", "OllamaDefaultContext"] });
+    const english = await checked(englishStrings, report);
+    const german = await checked(germanStrings, report);
+    expect(english.vm.step).toBe(WizardStep.OwnResult);
+    expect(english.vm.resultLines.length).toBeGreaterThan(2);
+    expect(english.vm.resultLines).not.toEqual(german.vm.resultLines);
+    const before = state(english.vm);
+    let notified = 0;
+    english.vm.subscribe(() => notified++);
+
+    english.vm.retext(germanStrings);
+
+    expect(notified).toBeGreaterThan(0);
+    expect(texts(english.vm)).toEqual(texts(german.vm));
+    expect(english.vm.resultLines[0]).toBe(germanStrings.wizardOwnWorks);
+    expect(state(english.vm)).toEqual(before);
+    english.vm.retext(englishStrings); // and back
+    expect(english.vm.resultLines[0]).toBe(englishStrings.wizardOwnWorks);
+  });
+
+  it("a problem shown in English is German after retext", async () => {
+    const report = failingReport(OLLAMA, "KeyRejected");
+    const english = await checked(englishStrings, report);
+    const german = await checked(germanStrings, report);
+    expect(english.vm.step).toBe(WizardStep.OwnFailed);
+    expect(english.vm.problemText).toBe(englishStrings.wizardProblem.KeyRejected);
+    const before = state(english.vm);
+
+    english.vm.retext(germanStrings);
+
+    expect(english.vm.problemText).toBe(germanStrings.wizardProblem.KeyRejected);
+    expect(texts(english.vm)).toEqual(texts(german.vm));
+    expect(state(english.vm)).toEqual(before);
+  });
+
+  it("an address error shown in English is German after retext, with the typed text kept", async () => {
+    const english = make(undefined, englishStrings);
+    await english.start();
+    await english.press("chooseOwnAi");
+    english.vm.accepted = true;
+    await english.press("accept");
+    type(english, "not an address");
+    await useEndpoint(english);
+    expect(english.vm.addressErrorText).toBe(englishStrings.wizardEndpointAddressInvalid);
+
+    english.vm.retext(germanStrings);
+
+    expect(english.vm.addressErrorText).toBe(germanStrings.wizardEndpointAddressInvalid);
+    expect(english.vm.endpointAddressText).toBe("not an address");
+    expect(english.vm.step).toBe(WizardStep.OwnPick);
+  });
+
+  it("the sign-in lines are German after retext", async () => {
+    const english = make(undefined, englishStrings);
+    await english.start();
+    await english.press("chooseServer");
+    english.vm.serverAddressText = ADDRESS;
+    await english.press("submitServer");
+    expect(english.vm.step).toBe(WizardStep.PairCode);
+    expect(english.vm.waitingText).toBe(englishStrings.wizardWaiting(english.vm.timeLeftMs));
+
+    english.vm.retext(germanStrings);
+
+    expect(english.vm.waitingText).toBe(germanStrings.wizardWaiting(english.vm.timeLeftMs));
+    expect(english.vm.signedInText).toBe(germanStrings.wizardSignedIn);
+    expect(english.vm.userCode).toBeDefined();
+  });
+
+  it("a settings page names the connection in German after retext", () => {
+    const rig = make(made({ entry: WizardEntry.Settings, current: SERVER_CONNECTION }), englishStrings);
+    expect(rig.vm.connectedText).toBe("Connected to https://ai.example.test/.");
+    rig.vm.retext(germanStrings);
+    expect(rig.vm.connectedText).toBe(germanStrings.wizardConnectedServer("https://ai.example.test/"));
+  });
+
+  it("needs texts", () => {
+    const rig = make();
+    expect(() => rig.vm.retext(undefined as unknown as UiStrings)).toThrow(TypeError);
   });
 });
