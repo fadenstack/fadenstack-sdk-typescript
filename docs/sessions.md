@@ -69,9 +69,13 @@ An access request (GDPR Art. 15 and 20) and an erasure request (Art. 17) for wha
 `ExportMyDataAsync` and `DeleteMyDataAsync`.
 
 ```ts
-const data = await agent.exportMyData();   // a MyDataExport: a JSON document, decrypted
-const result = await agent.deleteMyData(); // a DataDeletion: { storesCleared, hostSessionStoreLeft, hostApprovalStoreLeft, hostStoresLeft }
+const data = await agent.exportMyData();   // a MyDataExport: a JSON document, decrypted (this app's data; { scope: "allApps" } for all)
+const result = await agent.deleteMyData(); // a DataDeletion: { storesCleared, host…Left, hostStoresLeft, scope, otherApps, sharedDataKept, agentsKept }
+const apps = await agent.myDataApps();     // the apps that use the person's data; what { scope: "allApps" } affects
 ```
+
+Since 0.3.0 both default to this app's data (`scope: "thisApp"`); the person's shared data goes only when no other app uses it
+([Data on the device](data-on-device.md#export-and-delete)).
 
 Both start the agent first if it has not started, so the signed-in user is known. `MyDataExport`, `ExportedSession` and
 `DataDeletion` are types of `@fadenstack/agents`.

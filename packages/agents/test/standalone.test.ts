@@ -374,7 +374,8 @@ describe("the data guard (I02 commit 13)", () => {
     vi.unstubAllGlobals();
   });
 
-  const names = async () => (await indexedDB.databases()).map((d) => d.name).sort();
+  // The apps database (which apps use the person's data; names and times) is bookkeeping: myDataScope.test.ts looks at it.
+  const names = async () => (await indexedDB.databases()).map((d) => d.name).filter((n) => !n?.startsWith("fadenstack-apps")).sort();
 
   /** TypeScript has no adoption: an older SDK's shared databases are never moved to anyone (`FadenstackAgent`'s store settings). */
   it("keeps a standalone agent's stores apart from the shared base and from a governed user's", async () => {

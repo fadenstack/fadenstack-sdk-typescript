@@ -8,6 +8,17 @@ before 1.0, a minor version may break the API, and this file says where it does.
 
 ### Added
 
+- **Your data per app** ([Data on the device: Export and delete](docs/data-on-device.md#export-and-delete)). `deleteMyData` and
+  `exportMyData` take `{ scope: "thisApp" | "allApps" }`: `thisApp` (the default) covers the calling app's chats, "Allow always" and
+  thinking levels, and the person's shared data (skills, the MCP list, keys, provenance records, other settings, the data key) only
+  when no other Fadenstack app in this browser uses it; `allApps` covers everything. `DataDeletion` gains `scope`, `otherApps`,
+  `sharedDataKept` and `agentsKept`; `MyDataExport` gains `scope`, `app`, `otherApps` and `agentsKept`. `myDataApps()` lists the apps
+  that use the person's data; each agent start records its app in the person's `fadenstack-apps` database (names and times, no
+  content). **Behaviour change:** `deleteMyData()` and `exportMyData()` without a scope used to cover every app; pass
+  `{ scope: "allApps" }` for that (an `AbortSignal` alone still works and means `thisApp`).
+  - `MyDataSettingsViewModel` in `@fadenstack/ui`, with `MyDataSettings` in `@fadenstack/ui-react` and `@fadenstack/ui-vue`: the "Your
+    data in this browser" control (export, remove, each removal asked first with what stays and why, a result line); 34 `myData…`
+    texts in five languages, which say "in this browser" where the .NET SDK says "on this device".
 - **Old chats are a setting** ([Sessions: Retention](docs/sessions.md#retention)). In standalone mode the person chooses whether old
   chats are deleted automatically, and the limits (days 1 to 3650, chats 1 to 10000; defaults on, 90 days, 50 chats, or the app's
   `useSessionRetention`); off keeps every chat until the person deletes it. In governed mode the server decides as before (the

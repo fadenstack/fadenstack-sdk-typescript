@@ -34,6 +34,7 @@ A database's name is its base name, the tenant and the user, each escaped (`user
 | `fadenstack-approvals` | `@fadenstack/agents` | "Allow always": each tool, its class, and when it was allowed. | Encrypted; the agent and the tool's name stay in the clear. | Until the person resets them (`resetApprovals`). | Exported; deleted. |
 | `fadenstack-keys` | `@fadenstack/agents` | The person's AES-GCM key for the two databases above: a WebCrypto key that is not extractable. Script can use it, never read its bytes. | The browser's. | Until deleted; a new key is made afterwards. | Never exported (a key); deleted, so a copy of the profile restored later can never be read. |
 | `fadenstack-preferences` | `@fadenstack/agents` | How long the person lets each agent think (the `reasoning` store), and, in standalone mode, the person's choice for old chats (the `retention` store, one row: `{ id: "chat", autoDelete, maxAgeDays: 1 to 3650, maxSessions: 1 to 10000 }`; no chat text; not read in governed mode, where the server decides, nor where the machine policy fixes it; a damaged or out-of-range row counts as no choice). Version 2 added `retention` to databases made before. | Not encrypted. | Until the person changes it. | Exported as the records are; deleted. |
+| `fadenstack-apps` | `@fadenstack/agents` | Which apps use the person's data: one record per app, `{ app, agents, firstSeen, lastSeen }` (the app's name, the agent slugs that ran under it, and two times), written at each agent start, never any content ([Export and delete](#export-and-delete)). Not written where the host passes both its own stores. | Not encrypted. | Until the app's data is removed. | Exported as the records are; deleted. |
 | `fadenstack-skills` | `@fadenstack/skills` | The person's own skills ([Skills](skills.md)). The skills module learns whose they are from the agent's profile when the agent first asks for tools, whatever the policy says (local skills off included; standalone: the standalone principal). Before that its list holds the bundled skills only and a change is refused (`SkillsPersonUnknownError`: "Whose skills these are is not known yet: start the agent first"), so no skill reaches the wrong person's database. | Not encrypted. | Until the person deletes a skill in the editor. | Exported as the records are (the editor also exports a skill as a zip); deleted. |
 | `fadenstack-skill-switches` | `@fadenstack/skills` | The skills the person turned off. | Not encrypted. | Until the person changes it. | Exported as the records are; deleted. |
 | `fadenstack-web-search` | `@fadenstack/agents` (`webSearchModule`) | The person's web search provider (Brave or SearXNG), the SearXNG address, and the Brave key ([Pictures and web search](web-search.md)). | The key is sealed with the person's key; the rest is not encrypted. | Until the person changes it. | The settings exported, never the key; deleted. |
@@ -75,18 +76,56 @@ The .NET SDK moves its shared folders once, to the first person a server names.
 
 ## Export and delete
 
-A person can ask for the data a device holds about them (GDPR Art. 15 and 20) and for its deletion (Art. 17).
-[Export and delete my data](sessions.md#export-and-delete-my-data) shows the calls.
+A person can ask for the data this browser holds about them (GDPR Art. 15 and 20) and for its deletion (Art. 17).
+[Export and delete my data](sessions.md#export-and-delete-my-data) shows the calls. Several Fadenstack apps can share one person's
+data in a browser profile (the databases above are per person, not per app), so both calls take a scope:
+
+- **`thisApp`, the default since 0.3.0:** "Remove my data…" removes only the calling app's data. The export holds exactly what that
+  removal would remove.
+- **`allApps`:** "Remove all my Fadenstack data in this browser" removes the person's whole data, as `deleteMyData()` did before
+  0.3.0. The export holds all of it. The app can list the apps it affects first (`agent.myDataApps()`).
+
+**An app** is the name the host gave it (`describeApp`), or, when it did not, the agent's slug; its **agents** are the slugs that
+ran under it. Each agent start records, in the person's `fadenstack-apps` database, `{ app, agents, firstSeen, lastSeen }`: names and
+times, no content. A record is written only where the SDK keeps the person's databases (not where the host passes both its own
+stores, and not for a server that names no user).
+
+**What `thisApp` takes:** the sessions of this app's agents, their "Allow always", their entries in the thinking levels
+(`fadenstack-preferences`, `reasoning`), and this app's record. An agent that another app's record also names is never touched: its
+data stays and the result says so (`agentsKept`).
+
+**What counts as shared** (and goes only when no other app uses it): the person's skills and skill switches, the MCP servers, the web
+search settings, the provenance database, the person's other preferences (old chats, language), their `localStorage` keys and the
+person's data key (`fadenstack-keys`). Deleting that key makes everything encrypted under it unreadable, so it goes last, and only
+when nothing of another app remains. (The .NET SDK has an approvals seal key that goes with the last approvals; here the approvals are
+sealed under the person's data key, so there is no separate key.)
+
+**"Another app uses the person's data"** means: another app record exists, or an agent has sessions, "Allow always" or a thinking level
+that no record names. An app on an older SDK writes no record, so it is inferred from its data and named by its agent; it keeps the
+shared data (the safe side). When no other app uses the data, `thisApp` removes everything, the key included, as `allApps` does.
 
 | Call | What it covers | What it leaves |
 |---|---|---|
-| `agent.exportMyData()` | One JSON document (`format` and `version` 1; the newer fields are optional) with everything the deletion removes, without secrets: the person's sessions, decrypted, and their "Allow always" approvals; `databases`: the preferences, skills and switches as the records are, the provenance records and placement log, the MCP servers (without header values, the address without user, password, query and fragment) and their audit log, each read by an allowlist per database and object store; `localStorage`: the person's keys. A row that is not plain JSON data is counted in `counts.unreadable`, not exported. | Tokens and secrets, never exported; the `fadenstack-keys` database and the provenance signing key; the MCP header values; what the server keeps. |
-| `agent.deleteMyData()` | The person's databases, all nine, their key with them, and their `localStorage` keys (`storesCleared` counts both). Afterwards the stores start empty, with a new key. From a server that names no user: the shared databases and keys. | The sign-in (sign out for that); another person's databases (deleting a governed person's data leaves the standalone principal's, and the other way round); a store your app passed (`hostStoresLeft`); what the server keeps. |
+| `agent.exportMyData({ scope })` | One JSON document (`format` and `version` 1; the newer fields are optional), `scope` and `app` said in it. `allApps`: everything the deletion removes, without secrets: the person's sessions, decrypted, and their "Allow always" approvals; `databases`: the app records, the preferences, skills and switches as the records are, the provenance records and placement log, the MCP servers (without header values, the address without user, password, query and fragment) and their audit log, each read by an allowlist per database and object store; `localStorage`: the person's keys. `thisApp` while other apps use the data: only this app's agents' sessions and approvals, its record and its agents' thinking levels, and `notIncluded` names what stayed and for which apps (`otherApps`, `agentsKept`). A row that is not plain JSON data is counted in `counts.unreadable`, not exported. | Tokens and secrets, never exported; the `fadenstack-keys` database and the provenance signing key; the MCP header values; what the server keeps. |
+| `agent.deleteMyData({ scope })` | `allApps`: the person's databases, all ten, their key with them, and their `localStorage` keys (`storesCleared` counts both). Afterwards the stores start empty, with a new key. `thisApp`: as above; `storesCleared` counts the chats of an agent, its approvals, its thinking level and the record that went. The result says `scope`, `otherApps` (the apps for which the shared data stayed), `sharedDataKept` and `agentsKept`. From a server that names no user: `thisApp` takes this agent's chats, approvals and thinking level from the shared databases; `allApps` the shared databases and keys. | The sign-in (sign out for that); another person's databases (deleting a governed person's data leaves the standalone principal's, and the other way round); a store your app passed (`hostStoresLeft`); what the server keeps. |
+| `agent.myDataApps()` | The apps that use the person's data, this app first: `name`, `agents`, `lastSeen`, `isThisApp`, and `recorded` (false: an older app, inferred from an agent's data and named by that agent). | |
 | `tokens.signOut()` | Revokes the sign-in on the server where it can be reached, and deletes it from the token store. | The person's databases. |
 | `agent.deleteSession(id)`, `agent.resetApprovals()` | One session; this agent's "Allow always". | |
 
+**The default changed in 0.3.0:** `exportMyData()` and `deleteMyData()` without a scope used to cover every app; they now cover
+this app. Pass `{ scope: "allApps" }` for the old behaviour. An `AbortSignal` as the only argument still works (and means
+`thisApp`).
+
 `deleteMyData()` throws when a database stays open in a tab that does not close it; the SDK's own tabs close theirs on
-request.
+request. A removal of `thisApp` that leaves the other apps' data opens no database of theirs for deletion, so it is not blocked
+by their tabs.
+
+The `MyDataSettingsViewModel` in `@fadenstack/ui` (with `MyDataSettings` in `@fadenstack/ui-react` and `@fadenstack/ui-vue`) is the
+"Your data in this browser" control for an app's settings: Export my data, Remove my data…, Export all my Fadenstack data, Remove all
+my Fadenstack data in this browser…. Each removal asks first in the control (for this app: what goes and, when other apps use shared
+data, that skills, MCP servers, keys and provenance records stay because they are used by those apps; for all: the apps it
+affects), then shows a result line. An export raises `onSaveRequest` with a suggested file name and the document as a `Blob`; the
+app chooses where it goes.
 
 ## What your app keeps
 

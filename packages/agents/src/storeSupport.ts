@@ -30,6 +30,15 @@ export function listsAgents(store: unknown): store is ListsAgents {
   return typeof (store as Partial<ListsAgents> | null)?.agents === "function";
 }
 
+/** A store that can delete all of one agent's data at once (the per-app removal; the SDK's own stores). */
+export interface DeletesAgents {
+  deleteAgent(agent: string): Promise<void>;
+}
+
+export function deletesAgents(store: unknown): store is DeletesAgents {
+  return typeof (store as Partial<DeletesAgents> | null)?.deleteAgent === "function";
+}
+
 const META = "meta";
 const ENCRYPTED = "encrypted";
 

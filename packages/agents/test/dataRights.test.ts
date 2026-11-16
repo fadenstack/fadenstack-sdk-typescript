@@ -45,7 +45,8 @@ describe("my data on this device", () => {
       .useApprovals(() => Promise.resolve(ApprovalDecision.approveAlways()))).build();
   }
 
-  const names = async () => (await indexedDB.databases()).map((d) => d.name).sort();
+  // The apps database (which apps use the person's data; names and times) is bookkeeping: myDataScope.test.ts looks at it.
+  const names = async () => (await indexedDB.databases()).map((d) => d.name).filter((n) => !n?.startsWith("fadenstack-apps")).sort();
 
   async function chat(agent: FadenstackAgent, text = SECRET): Promise<void> {
     await (await agent.startSession("ask")).send(text);
@@ -166,7 +167,7 @@ describe("my data on this device", () => {
       await agent.sessionStore.append("excel", "x1", entry("user.message", { text: "Sum the column" }));
       await agent.approvalStore.add("excel", { tool: "write_cells", toolClass: "write", approvedAt: "2026-11-01T10:00:00.000Z" });
 
-      const data = await agent.exportMyData();
+      const data = await agent.exportMyData({ scope: "allApps" }); // every agent the stores hold: all of the person's
       expect(JSON.parse(JSON.stringify(data))).toEqual(data); // plain JSON
       expect(data).toMatchObject({ format: "fadenstack-my-data", version: 1, counts: { agents: 2, sessions: 2, approvals: 2, unreadable: 0 } });
       const docs = data.sessions.find((s) => s.agent === "docs")!;
@@ -226,7 +227,10 @@ describe("my data on this device", () => {
       await chat(anna);
 
       const result = await anna.deleteMyData();
-      expect(result).toEqual({ storesCleared: 3, hostSessionStoreLeft: false, hostApprovalStoreLeft: false, hostStoresLeft: false });
+      expect(result).toEqual({
+        storesCleared: 4, hostSessionStoreLeft: false, hostApprovalStoreLeft: false, hostStoresLeft: false,
+        scope: "thisApp", otherApps: [], sharedDataKept: false, agentsKept: [], // the only app: it takes the shared data too
+      });
       expect(await names()).toEqual(["fadenstack-approvals:tenant-1:user-2", "fadenstack-keys:tenant-1:user-2", "fadenstack-sessions:tenant-1:user-2"]);
       expect(await anna.listSessions()).toEqual([]);
       expect(await anna.listApprovals()).toEqual([]);
@@ -256,7 +260,7 @@ describe("my data on this device", () => {
 
       const result = await anna.deleteMyData();
 
-      expect(result.storesCleared).toBe(4);
+      expect(result.storesCleared).toBe(5);
       expect((await names()).filter((n) => n?.startsWith("fadenstack-skills:"))).toEqual([]);
       await anna.dispose();
     });
@@ -270,7 +274,7 @@ describe("my data on this device", () => {
       expect(await preferences()).toHaveLength(1);
 
       const result = await anna.deleteMyData();
-      expect(result.storesCleared).toBe(4);
+      expect(result.storesCleared).toBe(5);
       expect(await preferences()).toEqual([]);
       expect(anna.reasoning).not.toBe("low");
       await anna.dispose();
@@ -307,7 +311,7 @@ describe("my data on this device", () => {
     it("leaves a store the host passed to the host, and says so", async () => {
       const gateway = gatewayFor();
       const both = await agentFor(gateway, "anna@example.com", (b) => b.useSessionStore(new MemorySessionStore()).useApprovalStore(new MemoryApprovalStore()));
-      expect(await both.deleteMyData()).toEqual({ storesCleared: 0, hostSessionStoreLeft: true, hostApprovalStoreLeft: true, hostStoresLeft: true });
+      expect(await both.deleteMyData()).toMatchObject({ storesCleared: 0, hostSessionStoreLeft: true, hostApprovalStoreLeft: true, hostStoresLeft: true, scope: "thisApp" });
 
       const sessionsOnly = await agentFor(gateway, "anna@example.com", (b) => b.useSessionStore(new MemorySessionStore()));
       expect(await sessionsOnly.deleteMyData()).toMatchObject({ hostSessionStoreLeft: true, hostApprovalStoreLeft: false, hostStoresLeft: true });
@@ -331,7 +335,7 @@ describe("my data on this device", () => {
       const agent = await agentFor(gatewayFor({ principal: false }), "anna@example.com");
       await chat(agent);
       expect(await names()).toEqual(["fadenstack-approvals", "fadenstack-keys", "fadenstack-sessions"]);
-      expect((await agent.deleteMyData()).storesCleared).toBe(3);
+      expect((await agent.deleteMyData({ scope: "allApps" })).storesCleared).toBe(3);
       expect(await names()).toEqual([]);
     });
   });

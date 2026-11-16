@@ -115,6 +115,8 @@ export interface ReasoningStore {
   get(agent: string): Promise<ReasoningLevel | undefined>;
   /** Keeps the pick; undefined forgets it. */
   set(agent: string, level: ReasoningLevel | undefined): Promise<void>;
+  /** The agents with a pick, when the store can name them (the SDK's own can; the per-app removal and the app list use it). */
+  agents?(): Promise<string[]>;
 }
 
 /** The pick in memory only: gone with the page or process. */
@@ -123,6 +125,10 @@ export class MemoryReasoningStore implements ReasoningStore {
 
   get(agent: string): Promise<ReasoningLevel | undefined> {
     return Promise.resolve(this.#picks.get(agent));
+  }
+
+  agents(): Promise<string[]> {
+    return Promise.resolve([...this.#picks.keys()]);
   }
 
   set(agent: string, level: ReasoningLevel | undefined): Promise<void> {
@@ -167,6 +173,15 @@ export class IndexedDbReasoningStore implements ReasoningStore {
 
   async set(agent: string, level: ReasoningLevel | undefined): Promise<void> {
     await this.#run("readwrite", (store) => (level === undefined ? store.delete(agent) : store.put({ agent, level: reasoningWire(level) })));
+  }
+
+  async agents(): Promise<string[]> {
+    try {
+      if (!this.#db && !(await preferencesExist(this.#factory, this.#name))) return [];
+      return (await this.#run<IDBValidKey[]>("readonly", (store) => store.getAllKeys())).map(String);
+    } catch {
+      return []; // unreadable: no picks
+    }
   }
 
   /** Closes the database (a later call opens it again). */

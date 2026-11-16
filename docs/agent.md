@@ -306,8 +306,8 @@ Bypass (`session.bypass` is the grant, with its time left); see [Server-held gra
 | `agent.openSession(sessionId)` | A session from the store, to continue in the mode it was last in. |
 | `agent.listSessions()` | This agent's sessions on the device, newest first. |
 | `agent.deleteSession(sessionId)` | Deletes a session from the store. |
-| `agent.exportMyData()` | Everything on this device that `deleteMyData` removes, without secrets, as one JSON document: the signed-in user's sessions (decrypted), approvals, preferences, skills, provenance records, MCP servers (no header values) and their `localStorage` keys. See [Export and delete my data](sessions.md#export-and-delete-my-data). |
-| `agent.deleteMyData()` | Deletes the user's databases, their `localStorage` keys and their key; says when a store you passed was left. [Data on the device](data-on-device.md) lists the databases. |
+| `agent.exportMyData({ scope })` | Everything on this device that `deleteMyData({ scope })` removes (this app's data by default, `allApps` for all), without secrets, as one JSON document: the signed-in user's sessions (decrypted), approvals, preferences, skills, provenance records, MCP servers (no header values) and their `localStorage` keys. See [Export and delete my data](sessions.md#export-and-delete-my-data). |
+| `agent.deleteMyData({ scope })` | Deletes this app's data (`thisApp`, the default since 0.3.0) or all of the user's (`allApps`: their databases, `localStorage` keys and key); the shared data goes with `thisApp` only when no other app uses it; says when a store you passed was left. `agent.myDataApps()` lists the apps. [Data on the device](data-on-device.md) lists the databases. |
 
 A session runs one turn at a time. Starting a second turn while one runs throws; `session.isRunning` says whether a
 turn is running. See [Sessions on the device](sessions.md) for where sessions are kept and for how long.

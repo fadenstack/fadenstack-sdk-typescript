@@ -849,6 +849,42 @@ export interface UiStrings {
   chatRetentionOrganisationLimit(chats: number, days: number): string;
   chatRetentionDeviceLimit(chats: number, days: number): string;
   chatRetentionPolicyFixed: string;
+
+  // the "Your data" control: this app's data, or all (.NET `MyDataSettingsViewModel`)
+  myDataTitle: string;
+  myDataIntro: string;
+  myDataExport: string;
+  myDataExportName: string;
+  myDataRemove: string;
+  myDataRemoveName: string;
+  myDataExportAll: string;
+  myDataExportAllName: string;
+  myDataRemoveAll: string;
+  myDataRemoveAllName: string;
+  myDataConfirmThisAppTitle(app: string): string;
+  myDataConfirmThisApp(app: string): string;
+  myDataConfirmKept(apps: string): string;
+  myDataConfirmAgentsKept(agents: string): string;
+  myDataConfirmNoOtherApps: string;
+  myDataConfirmAllTitle: string;
+  myDataConfirmAll: string;
+  myDataConfirmAllApps(apps: string): string;
+  myDataConfirmAllNoApps: string;
+  myDataConfirmRemove: string;
+  myDataConfirmRemoveName: string;
+  myDataConfirmRemoveAll: string;
+  myDataConfirmRemoveAllName: string;
+  myDataCancel: string;
+  myDataCancelName: string;
+  myDataWorking: string;
+  myDataExported(file: string): string;
+  myDataRemoved(app: string): string;
+  myDataRemovedKept(apps: string): string;
+  myDataRemovedAgentsKept(agents: string): string;
+  myDataRemovedAll: string;
+  myDataHostStoresLeft: string;
+  myDataExportFailed: string;
+  myDataRemoveFailed: string;
 }
 
 /**
@@ -1648,6 +1684,42 @@ export const englishStrings: UiStrings = {
   chatRetentionOrganisationLimit: (chats, days) => `Your organisation keeps at most ${chats} chats for ${days} days on this device.`,
   chatRetentionDeviceLimit: (chats, days) => `This device keeps at most ${chats} chats for ${days} days.`,
   chatRetentionPolicyFixed: "Set by your organisation's policy on this computer.",
+
+  // the "Your data" control
+  myDataTitle: "Your data in this browser",
+  myDataIntro: "Each Fadenstack app keeps its own chats, approvals and settings. Export or remove yours here.",
+  myDataExport: "Export my data",
+  myDataExportName: "Export my data (this app only)",
+  myDataRemove: "Remove my data…",
+  myDataRemoveName: "Remove my data… (this app only)",
+  myDataExportAll: "Export all my Fadenstack data",
+  myDataExportAllName: "Export all my Fadenstack data (every app)",
+  myDataRemoveAll: "Remove all my Fadenstack data in this browser…",
+  myDataRemoveAllName: "Remove all my Fadenstack data in this browser… (every app)",
+  myDataConfirmThisAppTitle: (app) => `Remove your data from ${app}?`,
+  myDataConfirmThisApp: (app) => `This removes the chats, the "Allow always" approvals and the settings of ${app} in this browser. It cannot be undone.`,
+  myDataConfirmKept: (apps) => `Your skills, MCP servers, keys and provenance records stay, because they are also used by ${apps}.`,
+  myDataConfirmAgentsKept: (agents) => `The chats and approvals of ${agents} stay, because another app uses them too.`,
+  myDataConfirmNoOtherApps: "No other Fadenstack app uses your data in this browser, so your skills, MCP servers, keys and provenance records are removed too.",
+  myDataConfirmAllTitle: "Remove all your Fadenstack data in this browser?",
+  myDataConfirmAll: "This removes everything Fadenstack keeps for you in this browser, for every app: chats, approvals, settings, skills, MCP servers, keys and provenance records. It cannot be undone.",
+  myDataConfirmAllApps: (apps) => `These apps are affected: ${apps}.`,
+  myDataConfirmAllNoApps: "No app has recorded its data here; anything left over is removed.",
+  myDataConfirmRemove: "Remove",
+  myDataConfirmRemoveName: "Remove my data from this app now",
+  myDataConfirmRemoveAll: "Remove everything",
+  myDataConfirmRemoveAllName: "Remove everything: all my Fadenstack data in this browser",
+  myDataCancel: "Cancel",
+  myDataCancelName: "Cancel: keep my data",
+  myDataWorking: "Working…",
+  myDataExported: (file) => `Your data was exported as ${file}.`,
+  myDataRemoved: (app) => `Your data was removed from ${app}.`,
+  myDataRemovedKept: (apps) => `Skills, MCP servers, keys and provenance records stayed, because they are also used by ${apps}.`,
+  myDataRemovedAgentsKept: (agents) => `The chats and approvals of ${agents} stayed, because another app uses them too.`,
+  myDataRemovedAll: "All your Fadenstack data in this browser was removed.",
+  myDataHostStoresLeft: "Data in stores your app keeps itself was not removed; the app has to remove that.",
+  myDataExportFailed: "Your data could not be exported. Try again.",
+  myDataRemoveFailed: "Your data could not be removed completely. Close other tabs of this app and try again.",
 };
 
 /** Minutes and seconds as "9:41" (like .NET's `MinutesAndSeconds`): rounded up to the whole second, never negative. */

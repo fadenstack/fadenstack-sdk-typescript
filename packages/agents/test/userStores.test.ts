@@ -32,7 +32,8 @@ describe("stores per signed-in user", () => {
       .useApprovals(() => Promise.resolve(ApprovalDecision.approveAlways()))).build();
   }
 
-  const names = async () => (await indexedDB.databases()).map((d) => d.name).sort();
+  // The apps database (which apps use the person's data; names and times) is bookkeeping: myDataScope.test.ts looks at it.
+  const names = async () => (await indexedDB.databases()).map((d) => d.name).filter((n) => !n?.startsWith("fadenstack-apps")).sort();
 
   it("keeps sessions and what was allowed always in the user's own database", async () => {
     const gateway = new FakeGateway({ users, principal: true, model, agents: [{ slug: "docs", contract: [...PAGE_CONTRACT] }] });

@@ -217,8 +217,8 @@ For an agent on the person's own endpoint (`useEndpoint`) the module chooses the
   plain SHA-256 (`hash_key_version` 0); a server's is a keyed HMAC.
 - **The key:** one per principal in a browser profile, made on first use: a non-extractable WebCrypto key kept in the
   principal's own IndexedDB database. A page can sign with it but never read its bytes; only the public key is exported, for
-  the certificate. Without IndexedDB (Node) it lives in memory for as long as the signer does. `deleteMyData()` removes the
-  database, and the key with it; records signed before keep their own public key and still verify.
+  the certificate. Without IndexedDB (Node) it lives in memory for as long as the signer does. `deleteMyData({ scope: "allApps" })` removes the
+  database, and the key with it (`thisApp` does too once no other app uses the person's data); records signed before keep their own public key and still verify.
 - **The time-stamp:** an RFC 3161 token from DigiCert (`DEFAULT_TIMESTAMP_AUTHORITY`, `http://timestamp.digicert.com`)
   over the signature: only its SHA-256 leaves the device, and plain http is fine because the token is signed. A machine
   policy's `timestamping` names the organisation's own server instead, or `off` sends nothing;

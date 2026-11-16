@@ -4,7 +4,8 @@ import { browserSecretProtector, type IndexedDbKeyStore, type SecretProtector } 
 import { MemorySessionStore, type SessionRetention, type SessionStore } from "./sessionStore.js";
 import { deleteDatabase, listsAgents, type StoreProblemHandler } from "./storeSupport.js";
 import type { TranscriptEntry } from "./transcript.js";
-import { readPersonalDatabases } from "./personalData.js";
+import { readPersonalDatabases, type PersonalDatabases } from "./personalData.js";
+import type { DataScope, MyDataApp, MyDataPlan } from "./myData.js";
 import { deletePersonalLocalEntries, pageLocalStorage, personalLocalEntries, userStoreName, type StorePrincipal } from "./userData.js";
 
 /**
@@ -23,6 +24,17 @@ export interface DataDeletion {
   hostApprovalStoreLeft: boolean;
   /** Whether the person's data may still be in a store the host passed. */
   hostStoresLeft: boolean;
+  /** What was removed: this app's data, or all of the person's (the default is this app's, since 0.3.0). */
+  scope: DataScope;
+  /**
+   * For `thisApp`: the other apps that use the person's data in this browser, for which the shared data (skills, the MCP list, keys,
+   * provenance records, the person's other preferences and the data key) stayed. Empty: it went too.
+   */
+  otherApps: string[];
+  /** Whether the shared data stayed because other apps use it. */
+  sharedDataKept: boolean;
+  /** This app's agents whose data stayed because another app uses the same agent. */
+  agentsKept: string[];
 }
 
 /** One session in an export. */
@@ -56,6 +68,20 @@ export interface MyDataExport {
   localStorage?: { name: string; value: string }[];
   /** What is not in it, and why (as .NET's README says). */
   notIncluded: string[];
+  /** What the export covers (the default is this app's, since 0.3.0). Absent from an older export, which held everything. */
+  scope?: DataScope;
+  /** For `thisApp`: the app. */
+  app?: string;
+  /** For `thisApp` while other apps use the person's data: the apps whose data (and the shared data) is not in it. */
+  otherApps?: string[];
+  /** For `thisApp`: this app's agents whose chats are not in it because another app uses the same agent. */
+  agentsKept?: string[];
+}
+
+/** The calling app and what a removal of its data takes, for an export of `thisApp`. */
+export interface ExportScope {
+  app: string;
+  plan: MyDataPlan;
 }
 
 const NOT_INCLUDED = [
@@ -68,11 +94,13 @@ const NOT_INCLUDED = [
  * Reads everything the stores hold -- through the stores, so decrypted the way they decrypt -- into one document. A store that
  * cannot name its agents (the host's own) is read for `slug` only. `unreadable` counts what could not be read.
  */
-export async function buildExport(sessions: SessionStore, approvals: ApprovalStore, slug: string, unreadable: () => number, personal?: { principal: StorePrincipal | undefined }): Promise<MyDataExport> {
+export async function buildExport(sessions: SessionStore, approvals: ApprovalStore, slug: string, unreadable: () => number, personal?: { principal: StorePrincipal | undefined }, scope?: ExportScope): Promise<MyDataExport> {
   const before = unreadable();
   let failed = 0;
-  const sessionAgents = listsAgents(sessions) ? await sessions.agents() : [slug];
-  const approvalAgents = listsAgents(approvals) ? await approvals.agents() : [slug];
+  // This app only, while other apps use the person's data: exactly what its removal takes (owner, 16 Nov).
+  const only = scope && !scope.plan.sharedGoes ? new Set(scope.plan.ownAgents) : undefined;
+  const sessionAgents = (listsAgents(sessions) ? await sessions.agents() : [slug]).filter((a) => !only || only.has(a));
+  const approvalAgents = (listsAgents(approvals) ? await approvals.agents() : [slug]).filter((a) => !only || only.has(a));
   const exportedSessions: ExportedSession[] = [];
   for (const agent of sessionAgents) {
     for (const info of await sessions.list(agent)) {
@@ -94,8 +122,10 @@ export async function buildExport(sessions: SessionStore, approvals: ApprovalSto
     }
   }
   // The person's other databases and their localStorage keys: everything `deleteMyData` removes, without secrets.
-  const others = personal ? await readPersonalDatabases(personal.principal) : undefined;
-  const local = personal ? personalLocalEntries(pageLocalStorage(), personal.principal).map((e) => ({ name: e.name, value: e.value })) : undefined;
+  let others = personal ? await readPersonalDatabases(personal.principal) : undefined;
+  if (others && scope && only) others = ownDatabases(others, scope);
+  // The person's localStorage keys are shared by every app of the browser: they stay with the other apps.
+  const local = personal && !only ? personalLocalEntries(pageLocalStorage(), personal.principal).map((e) => ({ name: e.name, value: e.value })) : undefined;
   return {
     format: "fadenstack-my-data",
     version: 1,
@@ -112,15 +142,45 @@ export async function buildExport(sessions: SessionStore, approvals: ApprovalSto
     },
     ...(others ? { databases: others.databases } : {}),
     ...(local && local.length > 0 ? { localStorage: local } : {}),
-    notIncluded: [...NOT_INCLUDED],
+    notIncluded: [...NOT_INCLUDED, ...(scope && only ? stayed(scope.plan) : [])],
+    scope: scope ? "thisApp" : "allApps",
+    ...(scope ? { app: scope.app } : {}),
+    ...(scope && only ? { otherApps: scope.plan.otherApps.map((a) => a.name), agentsKept: [...scope.plan.keptAgents] } : {}),
   };
+}
+
+function stayed(plan: MyDataPlan): string[] {
+  const lines = [plan.otherApps.length > 0
+    ? `What other Fadenstack apps in this browser use (${plan.otherApps.map((a) => a.name).join(", ")}): your skills, your MCP servers, your provenance records and your other settings. Export all of your Fadenstack data to get them.`
+    // A server that names no user: the data is this browser's, shared by every agent in it.
+    : "The other agents' chats and the settings this browser shares between Fadenstack apps. Export all of your Fadenstack data to get them."];
+  if (plan.keptAgents.length > 0) lines.push(`The chats of ${plan.keptAgents.join(", ")}, which another app uses too.`);
+  return lines;
+}
+
+/** This app's part of the person's other databases: its record, and its agents' thinking levels (the rest stays, other apps use it). */
+function ownDatabases(all: PersonalDatabases, scope: ExportScope): PersonalDatabases {
+  const databases: PersonalDatabases["databases"] = {};
+  let records = 0;
+  const mine = (all.databases["apps"]?.["apps"] ?? []).filter((r) => (r as { app?: unknown }).app === scope.app);
+  if (mine.length > 0) {
+    databases["apps"] = { apps: mine };
+    records += mine.length;
+  }
+  const own = new Set(scope.plan.ownAgents);
+  const picks = (all.databases["preferences"]?.["reasoning"] ?? []).filter((r) => own.has(String((r as { agent?: unknown }).agent)));
+  if (picks.length > 0) {
+    databases["preferences"] = { reasoning: picks };
+    records += picks.length;
+  }
+  return { databases, found: Object.keys(databases).length, records, unreadable: all.unreadable };
 }
 
 /**
  * The names of the databases a user has on this device: sessions, "Allow always", their key, their preferences and their provenance key and log (the
  * thinking level picked per agent, `reasoningStoreName`).
  */
-export function userDatabaseNames(principal: StorePrincipal | undefined): { sessions: string; approvals: string; keys: string; preferences: string; provenance: string; skills: string; skillSwitches: string; mcp: string; webSearch: string } {
+export function userDatabaseNames(principal: StorePrincipal | undefined): { sessions: string; approvals: string; keys: string; preferences: string; provenance: string; skills: string; skillSwitches: string; mcp: string; webSearch: string; apps: string } {
   return {
     sessions: userStoreName("fadenstack-sessions", principal),
     approvals: userStoreName("fadenstack-approvals", principal),
@@ -135,6 +195,8 @@ export function userDatabaseNames(principal: StorePrincipal | undefined): { sess
     mcp: userStoreName("fadenstack-mcp", principal),
     // The person's web search provider and their sealed Brave key (sdk/51 F06).
     webSearch: userStoreName("fadenstack-web-search", principal),
+    // Which apps use the person's data (names, agent slugs and times; no content): the per-app removal reads it (0.3.0).
+    apps: userStoreName("fadenstack-apps", principal),
   };
 }
 
@@ -146,7 +208,7 @@ export async function deleteUserDatabases(principal: StorePrincipal | undefined,
   if (!factory) return 0;
   const names = userDatabaseNames(principal);
   let removed = 0;
-  for (const name of [names.sessions, names.approvals, names.keys, names.preferences, names.provenance, names.skills, names.skillSwitches, names.mcp, names.webSearch]) if (await deleteDatabase(factory, name)) removed++;
+  for (const name of [names.sessions, names.approvals, names.keys, names.preferences, names.provenance, names.skills, names.skillSwitches, names.mcp, names.webSearch, names.apps]) if (await deleteDatabase(factory, name)) removed++;
   return removed;
 }
 

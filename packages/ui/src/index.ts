@@ -193,6 +193,9 @@ export {
   type SkillEditorClosed,
   type SkillEditorOptions,
 } from "./skills/skillEditor.js";
+export {
+  MyDataSettingsViewModel, type MyDataPhase, type MyDataSaveRequest, type MyDataSettingsOptions, type MyDataSource,
+} from "./settings/myData.js";
 export { ChatRetentionSettingsViewModel, type ChatRetentionSettingsOptions, type ChatRetentionSource } from "./settings/chatRetention.js";
 export { SkillLibraryViewModel, SkillRowViewModel, type SkillLibraryOptions } from "./skills/skillLibrary.js";
 export {

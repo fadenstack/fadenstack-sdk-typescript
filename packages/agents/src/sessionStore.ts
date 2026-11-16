@@ -67,4 +67,11 @@ export class MemorySessionStore implements SessionStore {
     this.#sessions.delete(`${agent}/${sessionId}`);
     return Promise.resolve();
   }
+
+  /** Every session of the agent. */
+  deleteAgent(agent: string): Promise<void> {
+    const prefix = `${agent}/`;
+    for (const key of [...this.#sessions.keys()]) if (key.startsWith(prefix)) this.#sessions.delete(key);
+    return Promise.resolve();
+  }
 }
