@@ -987,9 +987,13 @@ class Turn {
   async #answerGatewayApproval(value: unknown, signal: AbortSignal): Promise<void> {
     const approvalId = str(value, "approvalId");
     if (!approvalId) return;
-    // The gateway keeps the arguments: the hash is only there when its word carries them as a text.
+    // From core 0.7.1 rc22 the event of a call the gateway holds carries `arguments` (the text, cut at 8000 characters), `argumentsTruncated` (only
+    // when it was cut) and `argumentsSha256` (of the whole text). The entry takes the gateway's hash; else the hash of the text when it was not cut;
+    // else none (a cut text without a hash, or an older gateway). The answer carries no hash: the server records its own.
+    const given = str(value, "argumentsSha256");
     const text = str(value, "arguments");
-    const hash = text === undefined ? undefined : await argumentsSha256(text);
+    const cut = value && typeof value === "object" && (value as Data)["argumentsTruncated"] === true;
+    const hash = given !== undefined && /^[0-9a-f]{64}$/.test(given) ? given : text !== undefined && !cut ? await argumentsSha256(text) : undefined;
     const request: ApprovalRequest = {
       callId: str(value, "toolCallId") ?? "",
       toolName: str(value, "toolCallName") ?? "",
@@ -1011,7 +1015,7 @@ class Turn {
     await this.#audit(request.toolName, request.toolClass, "gateway", undefined, hash, settled.approved ? "ok" : "denied");
     if (settled.timedOut) return; // the gateway expires it on its own
     const scope = settled.scope === "chat" || settled.scope === "always" ? settled.scope : "once";
-    await this.#answerGateway(approvalId, settled.approved, scope, this.#agent.sendsArgumentsHash ? hash : undefined, signal);
+    await this.#answerGateway(approvalId, settled.approved, scope, undefined, signal);
     if (!settled.approved) this.#toolDenied = true;
   }
 

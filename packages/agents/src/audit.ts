@@ -68,6 +68,10 @@ export const AuditProblems = Object.freeze({
   anchorMissing: "anchor_missing",
   /** The log has entries and the seal key is gone: no seal can be checked. */
   keyMissing: "key_missing",
+  /** The last entry is not the one the sealed head names: entries after the head's number are missing (the tail was cut), or the head names another hash, or was forged. */
+  headMismatch: "head_mismatch",
+  /** The log has entries and no head: the head was deleted (or the log is from before the head existed and has not been written to since). */
+  headMissing: "head_missing",
 });
 
 /** How long entries are kept: 180 days unless the machine policy's `auditRetentionDays` says otherwise (30 to 3650). .NET: `AuditRetention`. */
@@ -184,6 +188,13 @@ export interface AuditLog {
   prune(retentionDays: number): Promise<number>;
 }
 
+/** The sealed head: the last entry's number and hash, written with every append, so that cutting off the end of the log is found. .NET: `audit-head.json`. */
+export interface AuditHead {
+  seq: number;
+  hash: string;
+  seal: string;
+}
+
 /** The sealed mark a prune leaves: the last removed entry's seq and hash. */
 export interface AuditAnchor {
   seq: number;
@@ -199,6 +210,7 @@ const encoder = new TextEncoder();
 /** The first line of the canonical text. */
 export const AUDIT_VERSION = "fadenstack.audit.v1";
 const ANCHOR_VERSION = "fadenstack.audit.anchor.v1";
+const HEAD_VERSION = "fadenstack.audit.head.v1";
 
 /** The `prev` of seq 1: 64 zeros. */
 export const AUDIT_ZEROS = "0".repeat(64);
@@ -253,6 +265,11 @@ export function auditSeal(key: Uint8Array, hash: string): Promise<string> {
 /** The anchor's seal: HMAC-SHA256 over the anchor version, the seq and the hash. .NET: `AuditChain.AnchorSeal`. */
 export function auditAnchorSeal(key: Uint8Array, seq: number, hash: string): Promise<string> {
   return hmac(key, `${ANCHOR_VERSION}\n${seq}\n${hash}`);
+}
+
+/** The head's seal: the same shape as the anchor's, under the head version. .NET: `AuditChain.HeadSeal`. */
+export function auditHeadSeal(key: Uint8Array, seq: number, hash: string): Promise<string> {
+  return hmac(key, `${HEAD_VERSION}\n${seq}\n${hash}`);
 }
 
 /**
@@ -327,7 +344,7 @@ export function auditFromWire(value: unknown): AuditEntry | undefined {
  * Checks entries in order (`undefined`: a line that could not be read). `key` undefined: no seal can be checked. The first entry links
  * to `anchor` when the log starts after seq 1. .NET: `AuditChain.Verify`.
  */
-export async function verifyAuditChain(entries: readonly (AuditEntry | undefined)[], key: Uint8Array | undefined, anchor: AuditAnchor | undefined): Promise<AuditVerification> {
+export async function verifyAuditChain(entries: readonly (AuditEntry | undefined)[], key: Uint8Array | undefined, anchor: AuditAnchor | undefined, head?: AuditHead): Promise<AuditVerification> {
   let count = 0;
   let first: AuditEntry | undefined;
   let last: AuditEntry | undefined;
@@ -353,6 +370,14 @@ export async function verifyAuditChain(entries: readonly (AuditEntry | undefined
     first ??= entry;
     last = entry;
     count++;
+  }
+  // The sealed head: the log must end where it says. Entries gone from the end, a head that names another entry, a forged head or a deleted one are found.
+  if (last || anchor || head) {
+    const endSeq = last?.seq ?? anchor?.seq ?? 0;
+    const endHash = last?.hash ?? anchor?.hash ?? "";
+    if (!head) return broken(endSeq, AuditProblems.headMissing);
+    if (!key || !fixedEquals(head.seal, await auditHeadSeal(key, head.seq, head.hash))) return broken(head.seq, AuditProblems.headMismatch);
+    if (head.seq !== endSeq || !fixedEquals(head.hash, endHash)) return broken(head.seq > endSeq ? endSeq + 1 : head.seq, AuditProblems.headMismatch);
   }
   return { intact: true, entries: count, ...(first ? { firstSeq: first.seq, firstTime: first.time } : {}), ...(last ? { lastTime: last.time } : {}) };
 }
@@ -421,6 +446,7 @@ export class MemoryAuditLog implements AuditLog {
   readonly #clock: () => Date;
   readonly #queue = new WorkQueue();
   #anchor: AuditAnchor | undefined;
+  #head: AuditHead | undefined;
 
   /** @param clock The time of an entry that names none; now by default. */
   constructor(clock: () => Date = () => new Date()) {
@@ -438,16 +464,17 @@ export class MemoryAuditLog implements AuditLog {
       const prev = last ?? this.#anchor;
       const entry = await nextAuditEntry(record, prev ? { seq: prev.seq, hash: prev.hash } : undefined, this.#key, this.#clock());
       this.#entries.push(entry);
+      this.#head = { seq: entry.seq, hash: entry.hash, seal: await auditHeadSeal(this.#key, entry.seq, entry.hash) };
       return { ...entry };
     });
   }
 
   verify(): Promise<AuditVerification> {
-    return this.#queue.run(() => verifyAuditChain(this.#entries, this.#key, this.#anchor));
+    return this.#queue.run(() => verifyAuditChain(this.#entries, this.#key, this.#anchor, this.#head));
   }
 
   export(format: AuditExportFormat): Promise<string> {
-    return this.#queue.run(async () => auditExportText(format, await verifyAuditChain(this.#entries, this.#key, this.#anchor), this.#entries));
+    return this.#queue.run(async () => auditExportText(format, await verifyAuditChain(this.#entries, this.#key, this.#anchor, this.#head), this.#entries));
   }
 
   prune(retentionDays: number): Promise<number> {
@@ -469,6 +496,7 @@ const ENTRIES = "entries";
 const META = "meta";
 const SEAL_KEY = "seal";
 const ANCHOR = "anchor";
+const HEAD = "head";
 
 interface Row {
   seq: number;
@@ -519,8 +547,11 @@ export class IndexedDbAuditLog implements AuditLog {
       const last = await this.#lastKnown();
       const entry = await nextAuditEntry(record, last, key, this.#clock());
       const row = await this.#row(entry);
+      const head: AuditHead = { seq: entry.seq, hash: entry.hash, seal: await auditHeadSeal(key, entry.seq, entry.hash) };
       try {
-        await this.#write("readwrite", [ENTRIES], (tx) => { tx.objectStore(ENTRIES).add(row); });
+        // The entry and the head in one transaction: the add's ConstraintError aborts both, so the loser of a race leaves no head behind. A log from
+        // before the head existed takes its head with its next append.
+        await this.#write("readwrite", [ENTRIES, META], (tx) => { tx.objectStore(ENTRIES).add(row); tx.objectStore(META).put(head, HEAD); });
         return entry;
       } catch (error) {
         if ((error as { name?: string } | undefined)?.name !== "ConstraintError") throw error; // another writer took the seq: read again
@@ -530,13 +561,13 @@ export class IndexedDbAuditLog implements AuditLog {
   }
 
   async verify(): Promise<AuditVerification> {
-    const { entries, key, anchor } = await this.#all();
-    return verifyAuditChain(entries, key, anchor);
+    const { entries, key, anchor, head } = await this.#all();
+    return verifyAuditChain(entries, key, anchor, head);
   }
 
   async export(format: AuditExportFormat): Promise<string> {
-    const { entries, key, anchor } = await this.#all();
-    return auditExportText(format, await verifyAuditChain(entries, key, anchor), entries.filter((e): e is AuditEntry => e !== undefined));
+    const { entries, key, anchor, head } = await this.#all();
+    return auditExportText(format, await verifyAuditChain(entries, key, anchor, head), entries.filter((e): e is AuditEntry => e !== undefined));
   }
 
   async prune(retentionDays: number): Promise<number> {
@@ -621,18 +652,22 @@ export class IndexedDbAuditLog implements AuditLog {
     return anchor && typeof anchor.seq === "number" && typeof anchor.hash === "string" ? { seq: anchor.seq, hash: anchor.hash } : undefined;
   }
 
-  async #all(): Promise<{ entries: (AuditEntry | undefined)[]; key: Uint8Array | undefined; anchor: AuditAnchor | undefined }> {
-    if (!(await this.#exists())) return { entries: [], key: undefined, anchor: undefined };
+  async #all(): Promise<{ entries: (AuditEntry | undefined)[]; key: Uint8Array | undefined; anchor: AuditAnchor | undefined; head: AuditHead | undefined }> {
+    if (!(await this.#exists())) return { entries: [], key: undefined, anchor: undefined, head: undefined };
     const db = await this.#open();
     let rows: Row[] = [];
     let anchor: AuditAnchor | undefined;
+    let head: AuditHead | undefined;
     await transact(db, [ENTRIES, META], "readonly", async (tx) => {
       rows = await request<Row[]>(tx.objectStore(ENTRIES).getAll());
       anchor = await request<AuditAnchor | undefined>(tx.objectStore(META).get(ANCHOR));
+      head = await request<AuditHead | undefined>(tx.objectStore(META).get(HEAD));
     });
+    const headOk = head && typeof head.seq === "number" && typeof head.hash === "string" && typeof head.seal === "string";
     const entries = await Promise.all(rows.map((r) => this.#entryOf(r)));
     const valid = anchor && typeof anchor.seq === "number" && typeof anchor.hash === "string" && typeof anchor.seal === "string";
-    return { entries, key: await this.#key(false), anchor: anchor === undefined ? undefined : valid ? anchor : { seq: 0, hash: "", prunedAt: "", seal: "" } };
+    return { entries, key: await this.#key(false), anchor: anchor === undefined ? undefined : valid ? anchor : { seq: 0, hash: "", prunedAt: "", seal: "" },
+      head: head === undefined ? undefined : headOk ? head : { seq: 0, hash: "", seal: "" } };
   }
 
   // ---- the key ----
@@ -685,7 +720,7 @@ export class IndexedDbAuditLog implements AuditLog {
       const tx = db.transaction(stores, mode);
       let failure: unknown;
       tx.oncomplete = () => resolve();
-      tx.onerror = (event) => { failure = (event.target as IDBRequest | null)?.error ?? tx.error; };
+      tx.onerror = (event) => { failure ??= (event.target as IDBRequest | null)?.error ?? tx.error; }; // the first request's error is the reason; the others only say aborted
       tx.onabort = () => reject(failure ?? tx.error ?? new Error("IndexedDB transaction aborted."));
       try {
         work(tx);

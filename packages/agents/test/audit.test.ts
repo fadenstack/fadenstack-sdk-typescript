@@ -13,6 +13,7 @@ import {
   WebCryptoSecretProtector,
   argumentsSha256,
   auditAnchorSeal,
+  auditHeadSeal,
   auditCanonicalText,
   auditFromWire,
   auditHash,
@@ -102,7 +103,7 @@ describe("the record of tool calls", () => {
   }
 
   async function sealKeyOf(name: string): Promise<Uint8Array> {
-    const row = (await rows(name, "meta"))[0] as unknown as { data: Uint8Array };
+    const row = (await rows(name, "meta")).find((r) => r["data"] !== undefined) as unknown as { data: Uint8Array };
     const stored = JSON.parse(new TextDecoder().decode(await protector.unprotect(row.data, recordContext(name, "meta", "key", "seal")))) as { key: string };
     return Uint8Array.from(atob(stored.key), (c) => c.charCodeAt(0));
   }
@@ -141,6 +142,7 @@ describe("the record of tool calls", () => {
     expect(await auditHash(two)).toBe("4ede970e8bfea453d7762d5b94669e6ec36fb8b6175ff9419fcc61228dffc6a2");
     expect(await auditSeal(VECTOR_KEY, await auditHash(two))).toBe("W96Za/zLEg2/Eopq8rv7EgtpDs/Jbc6h/mUCQblIsO8=");
     expect(await auditAnchorSeal(VECTOR_KEY, 7, await auditHash(one))).toBe("k1NEiONJG9RFLUFaoPd4RhaN7N+bJVDg5RLzCmrVrbQ=");
+    expect(await auditHeadSeal(VECTOR_KEY, 7, await auditHash(one))).toBe("kQnmGQD/HVREn3S+2Wge+RAR7wEUNYQggSql1Ys2i+w=");
   });
 
   it("the canonical text is the version and the fields in order, with nothing for an absent one", async () => {
@@ -289,6 +291,61 @@ describe("the record of tool calls", () => {
     expect(await log.verify()).toMatchObject({ intact: false, brokenAtSeq: 2, problem: AuditProblems.unreadable });
   });
 
+  // ---- the sealed head: the end of the log ----
+
+  const NAME = "fadenstack-audit:t:u";
+
+  it("a tail cut by one entry or by several is found", async () => {
+    const log = open();
+    await append(log, 5);
+
+    await change(NAME, "entries", (s) => { s.delete(5); });
+    expect(await log.verify()).toMatchObject({ intact: false, brokenAtSeq: 5, problem: AuditProblems.headMismatch });
+
+    await change(NAME, "entries", (s) => { s.delete(4); s.delete(3); });
+    expect(await log.verify()).toMatchObject({ brokenAtSeq: 3, problem: AuditProblems.headMismatch });
+
+    await change(NAME, "entries", (s) => { s.clear(); });
+    expect(await log.verify()).toMatchObject({ intact: false, problem: AuditProblems.headMismatch }); // everything gone
+  });
+
+  it("a deleted head is found, and a log from before the head takes one with its next append", async () => {
+    const log = open();
+    await append(log, 3);
+    await change(NAME, "meta", (s) => { s.delete("head"); });
+
+    expect(await log.verify()).toMatchObject({ intact: false, brokenAtSeq: 3, problem: AuditProblems.headMissing });
+
+    await log.append(record()); // a valid chain without a head: the head is written once, with this entry
+    expect((await log.verify()).intact).toBe(true);
+  });
+
+  it("a forged or stale head is found", async () => {
+    const log = open();
+    await append(log, 3);
+    const head = (await rows(NAME, "meta")).find((r) => r["seq"] === 3)!;
+
+    await change(NAME, "meta", (s) => { s.put({ ...head, seq: 2 }, "head"); }); // another number, the old seal
+    expect((await log.verify()).problem).toBe(AuditProblems.headMismatch);
+
+    await change(NAME, "meta", (s) => { s.put("not a head", "head"); });
+    expect((await log.verify()).problem).toBe(AuditProblems.headMismatch);
+
+    await change(NAME, "meta", (s) => { s.put(head, "head"); });
+    expect((await log.verify()).intact).toBe(true);
+  });
+
+  it("pruning leaves the head alone", async () => {
+    const log = open();
+    await append(log, 2);
+    const before = JSON.stringify((await rows(NAME, "meta")).filter((r) => r["seq"] === 2));
+    now = new Date(now.getTime() + 400 * 86_400_000);
+    await log.prune(180);
+
+    expect(JSON.stringify((await rows(NAME, "meta")).filter((r) => r["seq"] === 2 && r["prunedAt"] === undefined))).toBe(before);
+    expect((await log.verify()).intact).toBe(true);
+  });
+
   // ---- retention ----
 
   const threeAtOneHundredDays = async (log: AuditLog) => {
@@ -305,7 +362,7 @@ describe("the record of tool calls", () => {
     expect(await log.prune(180)).toBe(2);
 
     expect(await log.verify()).toMatchObject({ intact: true, entries: 1, firstSeq: 3 });
-    expect((await rows("fadenstack-audit:t:u", "meta")).length).toBe(2); // the key and the anchor
+    expect((await rows("fadenstack-audit:t:u", "meta")).length).toBe(3); // the key, the head and the anchor
     expect((await log.append(record())).seq).toBe(4); // the chain goes on
     expect((await log.verify()).intact).toBe(true);
   });
@@ -340,7 +397,7 @@ describe("the record of tool calls", () => {
     await append(log, 1);
 
     expect(await log.prune(180)).toBe(0);
-    expect((await rows("fadenstack-audit:t:u", "meta")).length).toBe(1); // only the key
+    expect((await rows("fadenstack-audit:t:u", "meta")).length).toBe(2); // only the key and the head
   });
 
   // ---- export ----

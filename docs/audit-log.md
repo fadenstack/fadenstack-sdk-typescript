@@ -54,8 +54,10 @@ answers, with source `gateway`: `ran` means it was released to the gateway, whic
 `function.arguments` string, `ToolCall.argumentsJson`), UTF-8, lowercase hex; a blank text is `{}`, as the SDK writes it back.
 The server stores the SDK's value and never computes it itself, so both SDKs must agree, and they do (a shared test vector is
 in both suites). For a person's own command (`invokeTool`) the text is the canonical command JSON the server's check also
-sees. For a call a gateway holds, the gateway keeps the arguments: the hash is there only if its word carries them as a text
-(`arguments`), else the entry has none.
+sees. For a call a gateway holds (`faden.approval_required` with an `approvalId`), core 0.7.1 rc22 adds `arguments` (the text, cut
+at 8000 characters), `argumentsTruncated` (only when it was cut) and `argumentsSha256` (of the whole text) to the event. The entry
+takes the gateway's hash; if only the text came and it was not cut, the SDK hashes it; a cut text without a hash leaves the field
+empty. An older gateway sends none of these, so the field is empty.
 
 ## The chain
 
@@ -72,7 +74,7 @@ HMAC-SHA256 of `hash` under a key of this log's own, made at the first write. We
 | Store | What it holds |
 |---|---|
 | `entries` | One row per entry, keyed by `seq`. The row is the entry's JSON sealed with the agent's `SecretProtector` (the person's AES-GCM key), bound to its database, store and number, so a row moved elsewhere does not open. |
-| `meta` | The seal key (32 random bytes, sealed with the protector) and the anchor a prune leaves. |
+| `meta` | The seal key (32 random bytes, sealed with the protector), the anchor a prune leaves, and the sealed head: the last entry's `seq` and `hash` (HMAC over `fadenstack.audit.head.v1`, the seq and the hash, the same shape as the anchor's seal). The head is put in the same transaction as the entry, so a writer that lost the race leaves none behind; a prune leaves it alone. |
 
 **Several tabs and apps.** An entry is added under its `seq` with IndexedDB's `add`, which refuses a key that exists. A writer
 that lost the race reads the new last entry and tries again, so tabs and apps of one origin never fork the chain (two
@@ -102,7 +104,7 @@ const html = await agent.exportAudit("html"); // or "csv": text, for the app to 
 `verify` checks that every row decrypts and parses, that `seq` has no gap, that every `prev` links, that every hash
 recomputes, that every seal holds, and that the first entry links to the anchor (or to zeros at entry 1). A problem names
 its kind (`AuditProblems`: `unreadable_line`, `seq_gap`, `prev_mismatch`, `hash_mismatch`, `seal_mismatch`, `anchor_mismatch`,
-`anchor_missing`, `key_missing`) and the entry's number, never content.
+`anchor_missing`, `key_missing`, `head_mismatch`, `head_missing`) and the entry's number, never content. The head makes a cut-off end visible: the last entry must be the one the sealed head names (`head_mismatch` when entries after the head's number are missing, or the head names another hash or was forged; `head_missing` when entries exist and the head was deleted). A log from before the head existed takes its head with its next append.
 
 `export` writes every entry readable, with the verification result at the top. The CSV has the verification in its first
 two lines, then one row per entry; a cell that starts with `=`, `+`, `-` or `@` gets a leading apostrophe so a spreadsheet
@@ -118,18 +120,18 @@ const agent = FadenstackAgent.createBuilder()
   .build();
 ```
 
-- **By default** an agent keeps the record in the person's database. An agent whose app passes **both** its own session store
-  and its own approval store has taken over the browser storage: its record then stays in memory for the run unless the app
-  passes its own log (the same rule as the thinking level).
+- **By default** every agent keeps the durable record in the person's database, whatever stores the app passed (where there is
+  no IndexedDB, in memory, and the agent logs that once). An app that wants no durable record (one whose server keeps the record,
+  like the Nextcloud app) passes a `MemoryAuditLog` on purpose.
 - `useAuditLog(log)` replaces the log. `AuditLog` has `append`, `verify`, `export` and `prune`; `MemoryAuditLog` and
   `IndexedDbAuditLog` implement it.
 - The agent appends in one place: where it settles and finishes a tool call (the session's `#runTool`), not in every tool.
 
 ## What the server is told
 
-`approval.decided` and `tool.executed` carry `arguments_sha256`, and so does the answer to a call the server holds
-(`POST /v1/agents/{agent}/approvals/{id}`; `answerApproval(id, approved, scope, argumentsSha256)`), **only when the profile's
-`features` list `client_events.arguments_sha256`**. An older server refuses a whole batch with an unknown field (400
+`approval.decided` and `tool.executed` of a call the SDK runs carry `arguments_sha256` **only when the profile's `features` list
+`client_events.arguments_sha256`**. The answer to a call the gateway holds carries none: the server records its own hash of those
+(`answerApproval` still takes one, and the server accepts it). An older server refuses a whole batch with an unknown field (400
 `invalid_events`), so without the feature nothing new is sent. `@fadenstack/testing`'s `FakeGateway` teaches the field and the
 feature (list it in `features`; without it the fake refuses the field as core does). The server can pair its own record of a
 call with the device's by this hash without ever holding the arguments' text.
@@ -147,7 +149,7 @@ the last app takes it. The texts are in the five languages the package ships.
 ## What it does not do
 
 It is tamper-evident, not tamper-proof. Script on the page can use the person's key, so someone who runs code in the origin
-can write a chain that verifies. Taking away the **last** entries leaves a chain that still verifies, because nothing after
-them names them: pair the record with the server's own count where the server keeps one. What it does find is what the person
-or a defence file needs: a changed field, a deleted or swapped entry, an entry from another person's log, a seal that does not
-hold, and a log that was cut at the front without its anchor.
+can write a chain that verifies. What it finds is what the person or a defence file needs: a changed field, a deleted or swapped
+entry, an entry from another person's log, a seal that does not hold, a log cut at the front without its anchor, and one cut at
+the end (the sealed head). What it can still miss: the whole database replaced by an older copy of itself, which verifies as it
+did then.

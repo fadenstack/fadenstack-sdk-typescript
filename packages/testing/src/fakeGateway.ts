@@ -176,8 +176,11 @@ export interface FakeReply {
      * the event is an older gateway's.
      */
     approval?: { message?: string; timeoutS?: number; rule?: boolean; toolClass?: string; openWorld?: boolean;
-      /** The event carries the call's arguments as their JSON text (`arguments`), which a client may hash for its audit log; a current gateway sends none. */
-      withArguments?: boolean };
+      /**
+       * What core 0.7.1 rc22 adds to the event of a call it holds: `arguments` (the call's text, cut at 8000 characters), `argumentsTruncated` (only when
+       * it was cut) and `argumentsSha256` (of the whole text). An older gateway sends none.
+       */
+      argumentsEvent?: { arguments?: string; argumentsTruncated?: true; argumentsSha256?: string } };
   };
   /** A client tool the gateway refuses (`faden.tool_denied`), e.g. by a tool rule. */
   deniedTool?: { name: string; message: string; callId?: string };
@@ -1181,7 +1184,7 @@ export class FakeGateway {
         ...(tool.approval.toolClass !== undefined ? { toolClass: tool.approval.toolClass } : {}),
         ...(tool.approval.rule !== undefined ? { rule: tool.approval.rule } : {}),
         ...(tool.approval.openWorld !== undefined ? { openWorld: tool.approval.openWorld } : {}),
-        ...(tool.approval.withArguments ? { arguments: JSON.stringify(tool.arguments ?? {}) } : {}),
+        ...(tool.approval.argumentsEvent ?? {}),
       } }));
       const approved = await answered;
       this.#pendingApprovals.delete(approvalId);

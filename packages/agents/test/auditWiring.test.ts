@@ -10,6 +10,7 @@ import {
   AuditScopes,
   FadenstackAgent,
   MachinePolicy,
+  MemorySessionStore,
   MemoryApprovalStore,
   MemoryAuditLog,
   STANDALONE_PRINCIPAL,
@@ -160,21 +161,32 @@ describe("the agent's record of tool calls", () => {
     expect(JSON.stringify(s.gateway.reported)).not.toContain("arguments_sha256");
   });
 
-  it.each([true, false])("the answer to a call the server holds carries the hash only with the feature (%s)", async (feature) => {
+  const HELD = '{"title":"x"}';
+  const OTHER = "b".repeat(64);
+
+  /** What the event of a call the gateway holds carries (core 0.7.1 rc22): the text, whether it was cut, the hash of the whole text. */
+  it.each([
+    ["a gateway of rc22 with the hash", { argumentsSha256: OTHER }, OTHER],
+    ["the text alone", { arguments: HELD }, "hash-of-held"],
+    ["the text and its hash", { arguments: HELD, argumentsSha256: OTHER }, OTHER],
+    ["a cut text with the hash of the whole", { arguments: '{"ti', argumentsTruncated: true as const, argumentsSha256: OTHER }, OTHER],
+    ["a cut text without a hash", { arguments: '{"ti', argumentsTruncated: true as const }, undefined],
+    ["an older gateway", {}, undefined],
+  ])("a call the server holds takes its hash from the event, and the answer carries none: %s", async (_why, event, expected) => {
     const log = new MemoryAuditLog();
-    const call = { name: "mcp.github.comment", arguments: { title: "x" } };
     const s = await setup({
-      ...(feature ? { features: [ARGUMENTS_SHA256_FEATURE] } : {}),
-      model: (request) => (lastToolResults(request).size ? { text: "Done." } : { text: "Commenting.", gatewayTool: { ...call, approval: { rule: true, toolClass: "write", withArguments: true } } }),
+      features: [ARGUMENTS_SHA256_FEATURE],
+      model: (request) => (lastToolResults(request).size ? { text: "Done." }
+        : { text: "Commenting.", gatewayTool: { name: "mcp.github.comment", arguments: { title: "x" }, approval: { rule: true, toolClass: "write", argumentsEvent: event } } }),
     }, sayYes, audited(log));
 
     await (await s.agent.startSession("ask")).send("Comment.");
 
     const answer = s.gateway.approvals[0]!;
-    expect(answer.argumentsSha256).toBe(feature ? await sha(JSON.stringify(call.arguments)) : undefined);
+    expect(answer.argumentsSha256).toBeUndefined(); // the server records its own hash of a call it holds
     const [entry] = log.entries;
     expect([entry?.tool, entry?.source, entry?.decision]).toEqual(["mcp.github.comment", "gateway", AuditDecisions.askedApproved]);
-    expect(entry?.argumentsSha256).toBe(await sha(JSON.stringify(call.arguments))); // the record keeps it either way, as far as the SDK knows it
+    expect(entry?.argumentsSha256).toBe(expected === "hash-of-held" ? await sha(HELD) : expected);
   });
 
   // ---- retention ----
@@ -230,6 +242,41 @@ describe("the agent's record of tool calls", () => {
     expect(csv).toContain("Excel add-in");
     await word.dispose();
     await excel.dispose();
+  });
+
+  it("an app that passes both of its own stores still gets the durable record, and a memory log is the app's own choice", async () => {
+    const gateway = gatewayFor(scripted([{ name: "read_page", arguments: { page: 7 } }, { name: "read_page", arguments: { page: 8 } }]));
+    const { client, tokens } = FadenstackClient.forAgent({ serverUrl: gateway.serverUrl, agent: "docs", fetch: gateway.fetch });
+    await tokens.signIn(await loginWithPassword({ apiUrl: gateway.serverUrl, email: "anna@example.com", password: "secret", fetch: gateway.fetch }));
+    const own = FadenstackAgent.createBuilder().useClient(client).addTools(new Pages().read).useSessionStore(new MemorySessionStore())
+      .useApprovalStore(new MemoryApprovalStore()).build();
+
+    await (await own.startSession("auto")).send("Read.");
+    expect(await names()).toEqual([auditDb]);
+    expect((await own.verifyAudit()).entries).toBe(1);
+    await own.dispose();
+
+    const quiet = FadenstackAgent.createBuilder().useClient(client).addTools(new Pages().read).useSessionStore(new MemorySessionStore())
+      .useApprovalStore(new MemoryApprovalStore()).useAuditLog(new MemoryAuditLog()).build(); // an app whose server keeps the record
+    await (await quiet.startSession("auto")).send("Read.");
+    expect((await quiet.verifyAudit()).entries).toBe(1); // its own, in memory
+    await quiet.dispose();
+    const other = FadenstackAgent.createBuilder().useClient(client).addTools(new Pages().read).build();
+    expect((await other.verifyAudit()).entries).toBe(1); // the durable record still holds only the first
+    await other.dispose();
+  });
+
+  it("where there is no IndexedDB the record stays in memory and the agent says so once, by its kind only", async () => {
+    vi.unstubAllGlobals(); // Node has none
+    const lines: unknown[] = [];
+    const log = { log: (...a: unknown[]) => { lines.push(a); }, isEnabled: () => true } as never;
+    const s = await setup({ model: scripted([{ name: "read_page", arguments: { page: 7 } }, { name: "read_page", arguments: { page: 8 } }]) }, sayYes, (b) => b.useLogging(log));
+    const session = await s.agent.startSession("auto");
+    await session.send("Read.");
+    await session.send("Read.");
+
+    expect((await s.agent.verifyAudit()).entries).toBe(2);
+    expect(lines.filter((l) => JSON.stringify(l).includes("AuditInMemory"))).toHaveLength(1);
   });
 
   it("the export of all data holds the record as a csv with its verification", async () => {

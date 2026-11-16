@@ -13,10 +13,10 @@ before 1.0, a minor version may break the API, and this file says where it does.
   it run, the outcome, and `argumentsSha256`), in the person's own IndexedDB database (`fadenstack-audit`), written by every tab and app of
   the origin into the same log without forking the chain. `agent.verifyAudit()` finds a changed, deleted, swapped or forged
   entry; `agent.exportAudit("csv" | "html")` writes it readable; entries older than 180 days go (the machine policy's
-  `auditRetentionDays`, 30 to 3650), the last one removed stays in a sealed anchor. `useAuditLog` replaces the log; an agent whose
-  app passes both its own session and approval store keeps it in memory unless the app passes one. The events `tool.executed`
-  and `approval.decided`, and the answer to a call the server holds (`answerApproval(..., argumentsSha256)`), carry `arguments_sha256`
-  only where the profile lists `client_events.arguments_sha256`; `FakeGateway` knows the field and the feature. `MyDataSettingsViewModel`
+  `auditRetentionDays`, 30 to 3650), the last one removed stays in a sealed anchor. `useAuditLog` replaces the log (an app whose server keeps the record passes a `MemoryAuditLog`); the record is durable for every agent, and a
+  sealed head makes a cut-off end visible. The events `tool.executed` and `approval.decided` carry `arguments_sha256` only where the profile
+  lists `client_events.arguments_sha256`; for a call the gateway holds (core rc22) the entry takes the gateway's `argumentsSha256`, or the hash of its
+  `arguments` text, and the answer carries none; `FakeGateway` knows the fields and the feature. `MyDataSettingsViewModel`
   shows "Record of tool calls: N entries since <date>, intact" and exports it as a web page (`MyDataSaveRequest.kind` is `"audit"`);
   `exportMyData` holds it as `auditLog`; it is shared data, removed with "Remove all" or when no other app uses the person's data.
   Five languages; React and Vue.

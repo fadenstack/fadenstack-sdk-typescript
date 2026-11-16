@@ -97,6 +97,7 @@ export class FadenstackAgent {
   #defaults: DefaultStores | undefined;
   #memoryAudit: AuditLog | undefined;
   #auditPruned = 0;
+  #auditMemoryTold = false;
   #appRecords: AppRecords | undefined;
   #problems = 0;
   #starting: Promise<void> | undefined;
@@ -550,10 +551,14 @@ export class FadenstackAgent {
       onProblem: (problem) => this.#storeProblem(problem),
       sessions: !this.settings.sessions,
       approvals: !this.settings.approvalStore,
-      // On by default; like the thinking level, in memory for a host that keeps both stores itself (it has taken over the device's
-      // storage) unless the host gives a log of its own (`useAuditLog`).
-      audit: !this.settings.auditLog && !(this.settings.sessions && this.settings.approvalStore),
+      // Durable by default, for every agent, whatever stores the host passed; an app that wants none (its server keeps the record) passes a
+      // `MemoryAuditLog` on purpose (`useAuditLog`). Where there is no IndexedDB the record stays in memory, said once.
+      audit: !this.settings.auditLog,
     });
+    if (!this.settings.auditLog && !indexed && !this.#auditMemoryTold) {
+      this.#auditMemoryTold = true;
+      writeLog(this.settings.logger, AgentLog.auditInMemory, { Agent: this.slug });
+    }
     this.#defaults = defaults;
     this.#sessions = defaults.sessions;
     this.#approvalStore = defaults.approvals;

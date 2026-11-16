@@ -97,7 +97,8 @@ describe("stores per signed-in user", () => {
 
     expect(agent.sessionStore).toBe(sessions);
     expect(agent.approvalStore).toBe(approvals);
-    expect(await names()).toEqual([]);
+    // The stores are the host's; the record of tool calls is the SDK's own and durable, so the person's key (for sealing it) exists now.
+    expect(await names()).toEqual(["fadenstack-keys:tenant-1:user-1"]);
     expect(await agent.listApprovals()).toHaveLength(1);
   });
 
