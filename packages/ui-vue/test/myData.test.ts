@@ -34,6 +34,23 @@ const press = async (wrapper: VueWrapper, name: string) => {
 };
 
 describe("the Your data control (Vue)", () => {
+  it("reads the record of tool calls when it is shown: an entry added after load() is counted", async () => {
+    const source = new FakeMyData("alone").withAudit();
+    source.verification = { intact: true, entries: 0 };
+    const vm = new MyDataSettingsViewModel({ source, strings: () => builtInStrings.en! });
+    await vm.load();
+    source.verification = { intact: true, entries: 1, firstSeq: 1, firstTime: "2026-08-01T10:00:00.000Z" };
+    const wrapper = mount(MyDataSettings, { props: { settings: vm }, attachTo: document.body });
+    wrappers.push(wrapper);
+    await flushPromises();
+    expect(wrapper.find("[data-audit-line]").text()).toContain("1 entry");
+
+    source.verification = { intact: true, entries: 2, firstSeq: 1, firstTime: "2026-08-01T10:00:00.000Z" };
+    document.dispatchEvent(new Event("visibilitychange"));
+    await flushPromises();
+    expect(wrapper.find("[data-audit-line]").text()).toContain("2 entries");
+  });
+
   describe.each(LANGUAGES)("in %s", (language) => {
     it("draws the idle state with four named actions", () => {
       const { strings, wrapper } = show("others", language);

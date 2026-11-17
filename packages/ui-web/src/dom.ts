@@ -42,6 +42,36 @@ export function dismissOnOutside(anchor: HTMLElement, close: () => void): () => 
   };
 }
 
+/**
+ * Calls `shown` at once and again each time `element` is shown: the tab comes back to the front (`visibilitychange`), or the element
+ * scrolls or opens into view. A skin of a control that reads something that changes meanwhile (the "Your data" control's record
+ * of tool calls) calls its view model's `refresh()` from it. Returns the stop.
+ */
+export function whenShown(element: Element, shown: () => void): () => void {
+  const doc = element.ownerDocument;
+  const onVisible = () => {
+    if (doc.visibilityState === "visible") shown();
+  };
+  doc.addEventListener("visibilitychange", onVisible);
+  let observer: IntersectionObserver | undefined;
+  if (typeof IntersectionObserver !== "undefined") {
+    let first = true; // the observer reports the state it starts in; the first call below covers that
+    observer = new IntersectionObserver((entries) => {
+      if (first) {
+        first = false;
+        return;
+      }
+      if (entries.some((e) => e.isIntersecting)) shown();
+    });
+    observer.observe(element);
+  }
+  shown();
+  return () => {
+    doc.removeEventListener("visibilitychange", onVisible);
+    observer?.disconnect();
+  };
+}
+
 const ITEMS = '[role="menuitem"]:not(:disabled), [role="menuitemradio"]:not(:disabled), [role="menuitemcheckbox"]:not(:disabled)';
 
 /**
