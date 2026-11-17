@@ -55,7 +55,10 @@ export type EndpointPlace = (typeof EndpointPlace)[keyof typeof EndpointPlace];
 
 /** What the check is to do. */
 export interface EndpointCheckOptions {
-  /** Also send a small green picture and ask for its colour; the model sees pictures only if the answer says "green" (optional; the person may set it instead). */
+  /**
+   * Also send a small green picture and ask for its colour; the model sees pictures only if the answer says "green". The
+   * connection wizard sets it for the model the person picked. Skipped where /models says what the model takes in.
+   */
   probeVision?: boolean;
   /** The context length the person set, which wins over what the server says. */
   contextLength?: number;
@@ -84,10 +87,15 @@ export interface EndpointReportData {
   chat: boolean | null;
   /** Whether a stream brought usage figures. */
   usage: boolean | null;
-  /** Whether the model calls tools; false means the agent can only talk. */
+  /** Whether the model calls tools; false means the agent can only talk; null when the probe could not tell (it ended on the length limit, or was not run). */
   toolCalls: boolean | null;
-  /** Whether the model saw a picture (its answer to a solid green one named "green"); false for any other answer, an empty one, a refusal or an API error; null when not probed. */
+  /** Whether the model saw a picture: what /models says it takes in, else its answer to a solid green picture named "green" (false for any other answer, an empty one, a refusal or an API error); null when not known. */
   vision: boolean | null;
+  /**
+   * Whether the model thinks although the dialect's off switch was sent (the tool probe sends `reasoning_effort: "none"` and
+   * saw reasoning anyway: gpt-oss). null: the dialect sends no switch, or the probe did not run. Reports saved before this field read as null.
+   */
+  thinksWhenOff: boolean | null;
   /** The context length that applies: the person's, else the server's running setting (Ollama: the model's `num_ctx`, else the loaded model's length in `/api/ps`), else null (unknown). */
   contextLength: number | null;
   /** The model's own maximum, where the server says (Ollama's model_info, vLLM's max_model_len). */
@@ -121,6 +129,7 @@ export class EndpointReport implements EndpointReportData {
   readonly usage: boolean | null;
   readonly toolCalls: boolean | null;
   readonly vision: boolean | null;
+  readonly thinksWhenOff: boolean | null;
   readonly contextLength: number | null;
   readonly modelContextLength: number | null;
   readonly pictures: boolean;
@@ -141,6 +150,7 @@ export class EndpointReport implements EndpointReportData {
     this.usage = data.usage;
     this.toolCalls = data.toolCalls;
     this.vision = data.vision;
+    this.thinksWhenOff = data.thinksWhenOff;
     this.contextLength = data.contextLength;
     this.modelContextLength = data.modelContextLength;
     this.pictures = data.pictures;
@@ -165,6 +175,7 @@ export class EndpointReport implements EndpointReportData {
       baseUrl: this.baseUrl, model: this.model, checkedAt: new Date(this.checkedAt).toISOString(), server: this.server,
       serverVersion: this.serverVersion, dialect: this.dialect, reachable: this.reachable, keyAccepted: this.keyAccepted,
       models: this.models, chat: this.chat, usage: this.usage, toolCalls: this.toolCalls, vision: this.vision,
+      thinksWhenOff: this.thinksWhenOff,
       contextLength: this.contextLength, modelContextLength: this.modelContextLength, pictures: this.pictures,
       watermark: { status: w.status, source: w.source, checked: w.checked, requested: w.requested, confirmed: w.confirmed },
       problems: this.problems,
@@ -198,6 +209,7 @@ export class EndpointReport implements EndpointReportData {
       usage: flag(r["usage"]),
       toolCalls: flag(r["toolCalls"]),
       vision: flag(r["vision"]),
+      thinksWhenOff: flag(r["thinksWhenOff"]),
       contextLength: count(r["contextLength"]),
       modelContextLength: count(r["modelContextLength"]),
       pictures: r["pictures"] === true,
@@ -280,15 +292,15 @@ export class EndpointCheck {
   }
 
   async run(options: EndpointCheckOptions = {}): Promise<EndpointReport> {
-    let endpoint = this.#endpoint;
+    const endpoint = this.#endpoint;
     const signal = options.signal;
     const dialect = endpoint.dialect ?? EndpointDialect.openAiCompatible;
-    let model = endpoint.model ?? "";
+    const model = endpoint.model ?? "";
     const problems: EndpointProblem[] = [];
     let server = byHost(endpoint.baseUrl) ?? byDialect(dialect);
     let report: EndpointReportData = {
       baseUrl: String(endpoint.baseUrl), model, checkedAt: Date.now(), server, serverVersion: null, dialect: dialect.name,
-      reachable: false, keyAccepted: null, models: [], chat: null, usage: null, toolCalls: null, vision: null,
+      reachable: false, keyAccepted: null, models: [], chat: null, usage: null, toolCalls: null, vision: null, thinksWhenOff: null,
       contextLength: null, modelContextLength: null, pictures: false,
       watermark: TextWatermarks.for(server, null, dialect.requestWatermark, null), problems: [],
     };
@@ -315,17 +327,14 @@ export class EndpointCheck {
       }
     }
 
-    // No model named yet (the wizard checks before the person picks one, F15): the first listed model stands in for the
-    // probes (the chat, the tools, the picture, the context lookup), and the report names it. .NET: the same block.
-    if (model.length === 0 && report.models.length > 0) {
-      model = report.models[0]!;
-      endpoint = { ...endpoint, model };
-      report = { ...report, model };
-    }
-
-    // The server's version where it says (vLLM's and SGLang's /version), for the watermark table.
+    // The server's version where it says (vLLM's and SGLang's /version), for the watermark table. It sends nothing to a model.
     let version: string | null = null;
     if (server === EndpointServer.Vllm || server === EndpointServer.Sglang) version = await versionOf(transport, signal);
+
+    // No model named yet (the wizard checks before the person picks one, F15, F3): nothing goes to a model the person did not
+    // pick. The check ends with what /models said (reachable, the key, the models, the server); chat, usage, tools and
+    // pictures stay unknown until a model is named. A server that lists no model goes on as before. .NET: the same block.
+    if (model.length === 0 && report.models.length > 0) return finish(report, problems, version);
 
     // 2. A one-token streamed chat: does it answer, do usage figures come back?
     let client = new DirectChatClient(endpoint, transport);
@@ -359,9 +368,11 @@ export class EndpointCheck {
       }
     }
 
-    // 3. The tool-call probe.
+    // 3. The tool-call probe. It sends the dialect's own off switch (never the "lowest level" stand-in), and notes whether the
+    // model reasoned anyway (thinksWhenOff).
     try {
-      report = { ...report, toolCalls: await probeTools(client, signal) };
+      const probe = await probeTools(client, dialect, endpoint, signal);
+      report = { ...report, toolCalls: probe.toolCalls, thinksWhenOff: probe.thinksWhenOff };
     } catch (e) {
       if (e instanceof FadenstackApiError && (e.status === 400 || e.status === 422 || e.status === 500)) {
         report = { ...report, toolCalls: false }; // "does not support tools"
@@ -371,8 +382,13 @@ export class EndpointCheck {
     }
     if (report.toolCalls === false) problems.push(EndpointProblem.NoToolCalls);
 
-    // 4. A picture, when asked for: only an answer that names the colour (green) counts; a model that cannot see answers anyway.
-    if (options.probeVision) {
+    // 4. Pictures. Where /models says what the model takes in (OpenRouter's `architecture.input_modalities`), that decides and no
+    // picture is sent. Otherwise, when asked for, a picture: only an answer that names the colour (green) counts; a model that
+    // cannot see answers anyway.
+    const modalities = inputModalitiesOf(listing, model);
+    if (modalities !== undefined) {
+      report = { ...report, vision: modalities.includes("image") };
+    } else if (options.probeVision) {
       try {
         const picture: ChatMessage = { role: "user", content: [
           { type: "text", text: VISION_QUESTION },
@@ -440,15 +456,36 @@ async function probeChat(client: DirectChatClient, signal: AbortSignal | undefin
   return { usage, confirmed };
 }
 
-async function probeTools(client: DirectChatClient, signal: AbortSignal | undefined): Promise<boolean> {
+/** Room for a model that cannot stop thinking to reason and still make the call (gpt-oss reasons for 256 tokens and more). */
+const TOOL_PROBE_MAX_TOKENS = 1024;
+
+/**
+ * The tool-call probe: `toolCalls` is true when the model calls the tool, false only when it finished its answer ("stop")
+ * without a call, null when that is not known (the answer ended on the length limit, or with no finish reason, for example
+ * while thinking). `thinksWhenOff` says whether reasoning came although the off switch (`reasoning_effort: "none"`) was sent;
+ * null when the dialect sends no switch.
+ */
+async function probeTools(chat: DirectChatClient, dialect: EndpointDialect, endpoint: ModelEndpoint, signal: AbortSignal | undefined):
+  Promise<{ toolCalls: boolean | null; thinksWhenOff: boolean | null }> {
   const options = withSignal({
     tools: [{ name: PROBE_TOOL, description: "Reports that the assistant is ready. Call it now.", parameters: { type: "object", properties: {} } }],
-    toolChoice: "required", maxTokens: 256, reasoningEffort: "none",
+    toolChoice: "required", maxTokens: TOOL_PROBE_MAX_TOKENS, reasoningEffort: "none",
   }, signal);
-  for await (const update of client.stream([{ role: "user", content: `Call the tool ${PROBE_TOOL} now, with no arguments.` }], options)) {
-    if (update.type === "tool_calls" && update.calls.some((c) => c.name === PROBE_TOOL)) return true;
+  let client = chat;
+  if (dialect.thinksWhenOff) {
+    // A dialect that already knows the model thinks would send "low" for "none": the probe asks with the real off switch.
+    const bare: ModelEndpoint = { ...endpoint, dialect: { ...dialect, thinksWhenOff: false } };
+    client = new DirectChatClient(bare, new EndpointTransport(bare));
   }
-  return false;
+  let called = false;
+  let finished = false;
+  let reasoned = false;
+  for await (const update of client.stream([{ role: "user", content: `Call the tool ${PROBE_TOOL} now, with no arguments.` }], options)) {
+    if (update.type === "tool_calls" && update.calls.some((c) => c.name === PROBE_TOOL)) called = true;
+    if (update.type === "finish" && update.reason === "stop") finished = true;
+    if (update.type === "reasoning" && update.text.trim().length > 0) reasoned = true;
+  }
+  return { toolCalls: called ? true : finished ? false : null, thinksWhenOff: dialect.thinking === "None" ? null : reasoned };
 }
 
 async function modelsWithRaw(transport: EndpointTransport, signal: AbortSignal | undefined): Promise<{ models: string[]; owner: string | undefined; raw: Json }> {
@@ -464,6 +501,21 @@ async function modelsWithRaw(transport: EndpointTransport, signal: AbortSignal |
     }
   }
   return { models, owner, raw: json };
+}
+
+/**
+ * What a model takes in, as /models says it (`architecture.input_modalities`, e.g. `["text", "image"]`); undefined where the
+ * listing does not say, so the probe decides.
+ */
+function inputModalitiesOf(listing: Json | undefined, model: string): string[] | undefined {
+  const data = listing?.["data"];
+  for (const entry of Array.isArray(data) ? data : []) {
+    if (!isObject(entry) || entry["id"] !== model) continue;
+    const architecture = entry["architecture"];
+    const modalities = isObject(architecture) ? architecture["input_modalities"] : undefined;
+    return Array.isArray(modalities) ? modalities.filter((m): m is string => typeof m === "string").map((m) => m.toLowerCase()) : undefined;
+  }
+  return undefined;
 }
 
 const isObject = (v: unknown): v is Json => v !== null && typeof v === "object" && !Array.isArray(v);

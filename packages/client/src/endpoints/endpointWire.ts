@@ -31,7 +31,9 @@ export function endpointRequest(
   delete body["reasoning_effort"];
   if (effort !== undefined) {
     if (dialect.thinking === "ReasoningEffort") {
-      body["reasoning_effort"] = effort === "xhigh" && !dialect.extraHighEffort ? "high" : effort;
+      // A model that thinks when told "none" (gpt-oss) has "low" as its lowest level: Off sends that.
+      body["reasoning_effort"] = effort === "none" && dialect.thinksWhenOff === true ? "low"
+        : effort === "xhigh" && !dialect.extraHighEffort ? "high" : effort;
     } else if (dialect.thinking === "ChatTemplateKwargs") {
       body["chat_template_kwargs"] = { enable_thinking: effort !== "none" };
     }

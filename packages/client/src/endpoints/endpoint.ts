@@ -110,6 +110,13 @@ export interface EndpointDialect {
    * sent for text people read (owner, 14 Nov; part of D18).
    */
   readonly watermarkSwitchOff: WatermarkSwitchOff;
+  /**
+   * The check found that the model thinks although the off switch was sent (gpt-oss ignores `reasoning_effort: "none"`; it knows
+   * only low, medium and high). With a `ReasoningEffort` switch, Off then sends `low`, the lowest level the model has; a
+   * `ChatTemplateKwargs` switch has no lower level and still sends the off switch. Set from the check's report
+   * (`EndpointReport.thinksWhenOff`); absent means no. .NET: `EndpointDialect.ThinksWhenOff`.
+   */
+  readonly thinksWhenOff?: boolean;
 }
 
 const dialect = (name: string, changes: Partial<EndpointDialect> = {}): EndpointDialect =>
