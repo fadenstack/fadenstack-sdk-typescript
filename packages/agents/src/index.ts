@@ -132,7 +132,7 @@ export {
   type ToolHookVerdict,
   type ToolPolicyDecision,
 } from "./hooks.js";
-export { attachmentData, isPicture, type MessageAttachment } from "./attachments.js";
+export { attachmentData, checkPicture, isPicture, pictureTypeOf, type CheckedPicture, type MessageAttachment, type PictureType, type RefusedPicture } from "./attachments.js";
 export { ContextBuilder, MAX_HISTORY_PICTURES, NO_TOOL_RESULT, toMessage, withAttachments } from "./contextBuilder.js";
 export {
   EntryTypes,

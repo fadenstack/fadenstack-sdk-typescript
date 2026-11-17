@@ -158,6 +158,8 @@ export interface FakeReply {
   toolCalls?: { name: string; arguments?: Record<string, unknown> | string; id?: string }[];
   /** Raw gateway events (`event: faden`) sent first, e.g. citations or a PII notice. */
   events?: Record<string, unknown>[];
+  /** The gateway refuses the request as malformed: a 400 `invalid_request_error` with this code (core 0.7.1 rc23: `picture_type_not_allowed`, `picture_missing`, `embeds_not_allowed`). */
+  badRequest?: { code: string; message?: string; param?: string };
   /** The gateway refuses: the prompt (422) or the answer (`faden.governance`, finish `content_filter`). */
   refuse?: { stage: "input" | "output"; message: string; decisionId?: string; category?: string };
   /**
@@ -1045,6 +1047,10 @@ export class FakeGateway {
       if (reply.rateLimit.retryAfterS !== undefined) headers["retry-after"] = String(reply.rateLimit.retryAfterS);
       return openAiError(429, reply.rateLimit.message ?? "Too many requests.", reply.rateLimit.code ?? "rate_limit_rpm",
         "rate_limit_error", headers);
+    }
+    if (reply.badRequest) {
+      return json(400, { error: { message: reply.badRequest.message ?? "The request was refused.", type: "invalid_request_error",
+        param: reply.badRequest.param ?? null, code: reply.badRequest.code } });
     }
     if (reply.refuse?.stage === "input") {
       const governance = this.#governance("prompt_blocked", "input", reply.refuse);

@@ -216,6 +216,12 @@ export interface UiStrings {
   /** Said when a picture is added for an agent whose model does not see pictures. */
   picturesNotSeen: string;
   pictureNotRead(name: string): string;
+  /** A picture that is not a PNG, JPEG, WebP or GIF (checked when it is attached; the gateway's `picture_type_not_allowed`). */
+  pictureTypeNotAllowed: string;
+  /** A picture without data (`picture_missing`). */
+  pictureMissing: string;
+  /** The gateway does not take pictures given as embeddings (`embeds_not_allowed`). */
+  embedsNotAllowed: string;
   // content made with AI, where an agent places it (@fadenstack/provenance)
   // approvals that last: grants, Bypass, Settings -> Approvals
   /** Why a card asks although the user let the agent work in a place: a link (a symbolic link, a junction) leads out of it; realPlace is where it really leads. */
@@ -1110,6 +1116,9 @@ export const englishStrings: UiStrings = {
   pastedPicture: "Pasted picture",
   picturesNotSeen: "This agent's model does not see pictures.",
   pictureNotRead: (name) => `${name} could not be read as a picture.`,
+  pictureTypeNotAllowed: "This picture's format can't be sent. Use a PNG, JPEG, WebP or GIF picture.",
+  pictureMissing: "A picture in your message was empty, so nothing was sent.",
+  embedsNotAllowed: "The server does not accept pictures in this form.",
   approvalLeadsOutside: (realPlace) => `This path leads through a link outside the places you let it work in: to ${realPlace}.`,
   allowMore: "More ways to allow",
   resetApprovalsHint: "Ask again before the tools you allowed for this chat or always",

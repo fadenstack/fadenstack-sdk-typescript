@@ -59,7 +59,33 @@ export const ErrorCodes = Object.freeze({
    * .NET: `ErrorCodes.AgentDisabled`.
    */
   agentDisabled: "agent_disabled",
+  /**
+   * 400 (core 0.7.1 rc23): a picture part whose first bytes are not a PNG, JPEG, WebP or GIF; `param` is the part's place in the
+   * messages. .NET: `ErrorCodes.PictureTypeNotAllowed`.
+   */
+  pictureTypeNotAllowed: "picture_type_not_allowed",
+  /** 400 (core 0.7.1 rc23): a picture part without data. .NET: `ErrorCodes.PictureMissing`. */
+  pictureMissing: "picture_missing",
+  /** 400 (core 0.7.1 rc23): an `image_embeds` or `audio_embeds` part. .NET: `ErrorCodes.EmbedsNotAllowed`. */
+  embedsNotAllowed: "embeds_not_allowed",
 } as const);
+
+/** Why the gateway refused a picture: `type` (`picture_type_not_allowed`), `missing` (`picture_missing`), `embeds` (`embeds_not_allowed`). */
+export type PictureRefusal = "type" | "missing" | "embeds";
+
+/**
+ * Whether `error` (or an error it was caused by) is the gateway's refusal of a picture part (a 400 with one of the three picture
+ * codes), and which. .NET: `FadenstackApiException.PictureRefusal`.
+ */
+export function pictureRefusalOf(error: unknown): PictureRefusal | undefined {
+  for (let e: unknown = error, depth = 0; e instanceof Error && depth < 8; e = e.cause, depth++) {
+    if (!(e instanceof FadenstackApiError) || e.status !== 400) continue;
+    if (e.code === ErrorCodes.pictureTypeNotAllowed) return "type";
+    if (e.code === ErrorCodes.pictureMissing) return "missing";
+    if (e.code === ErrorCodes.embedsNotAllowed) return "embeds";
+  }
+  return undefined;
+}
 
 /**
  * Whether `error` (or an error it was caused by) is the server's refusal of pictures: a 403 `images_disabled`. For an app that
