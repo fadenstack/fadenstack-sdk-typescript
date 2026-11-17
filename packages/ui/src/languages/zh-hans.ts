@@ -125,6 +125,7 @@ export const chineseSimplifiedStrings: UiStrings = {
   aboutServer: (address) => `服务器：${address}`,
   help: "帮助",
   developerDocs: "开发者文档",
+  helpAndContact: "帮助与联系",
   copyDetails: "复制详细信息",
   opensInNewTab: "（在新标签页中打开）",
   close: "关闭",

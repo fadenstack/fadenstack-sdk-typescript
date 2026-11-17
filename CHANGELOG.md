@@ -184,6 +184,8 @@ Fields added or changed since 0.2.x; no field is removed. A row marked Yes goes 
   `dispose()` stops the timer. The skins keep its live region in place, so the line is announced when it appears.
 - `EndpointReport.thinksWhenOff` and `EndpointDialect.thinksWhenOff`: the model thinks although the off switch was sent;
   `AgentChatViewModel.offersReasoning`; `EndpointChecker.check` takes `EndpointCheckOptions`.
+- About links to Fadenstack's *Help and contact* page (`https://fadenstack.com/support/`, `FADENSTACK_SUPPORT`), with `ref`
+  (`<app>-about`) and `v` like its other links, in the five languages (`UiStrings.helpAndContact`).
 
 ### Changed
 

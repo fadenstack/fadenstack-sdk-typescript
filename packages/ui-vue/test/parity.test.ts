@@ -219,7 +219,7 @@ describe("About and the Fadenstack link draw the same in both panels", () => {
     await panels.same();
     chat.setAboutOpen(true);
     await panels.same();
-    expect(document.querySelectorAll(".fdn-about a[href*='ref=office-about']")).toHaveLength(4);
+    expect(document.querySelectorAll(".fdn-about a[href*='ref=office-about']")).toHaveLength(6);
 
     const plain = await chatWith(() => ({ text: "ok" }), { branding: false, strings: germanStrings });
     const plainPanels = both(plain.chat);

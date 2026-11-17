@@ -129,6 +129,7 @@ export const germanStrings: UiStrings = {
   aboutServer: (address) => `Server: ${address}`,
   help: "Hilfe",
   developerDocs: "Entwicklerdokumentation",
+  helpAndContact: "Hilfe und Kontakt",
   copyDetails: "Details kopieren",
   opensInNewTab: "(öffnet in einem neuen Tab)",
   close: "Schließen",

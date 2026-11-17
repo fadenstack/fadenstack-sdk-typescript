@@ -378,7 +378,7 @@ describe("ChatPanel's About and links (Vue)", () => {
     expect(wrapper.find(".fdn-footer a").exists()).toBe(false);
     await button(wrapper, "Settings").trigger("click");
     await wrapper.findAll(".fdn-settings [role=menuitem]").find((b) => b.text() === "About")!.trigger("click");
-    expect(wrapper.findAll(".fdn-about a")).toHaveLength(3);
+    expect(wrapper.findAll(".fdn-about a")).toHaveLength(4);
 
     const alone = await panel(() => ({ text: "ok" }), { strings: { aiNotice: "" } });
     expect(alone.wrapper.find(".fdn-ai-notice").exists()).toBe(false);
@@ -418,6 +418,7 @@ describe("ChatPanel's About and links (Vue)", () => {
     expect(links.map((a) => [a.attributes("aria-label"), a.attributes("href"), a.attributes("target"), a.attributes("rel")])).toEqual([
       ["Help (opens in a new tab)", "https://faden.test/help/", "_blank", "noopener noreferrer"],
       ["Fadenstack (opens in a new tab)", `https://fadenstack.com/?ref=sdk-about&v=${sdkMinor}`, "_blank", "noopener noreferrer"],
+      ["Help and contact (opens in a new tab)", `https://fadenstack.com/support/?ref=sdk-about&v=${sdkMinor}`, "_blank", "noopener noreferrer"],
       ["Developer docs (opens in a new tab)", `https://developers.fadenstack.com/?ref=sdk-about&v=${sdkMinor}`, "_blank", "noopener noreferrer"],
     ]);
     await links[0]!.trigger("click");

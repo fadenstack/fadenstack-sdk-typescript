@@ -130,6 +130,7 @@ export const frenchStrings: UiStrings = {
   aboutServer: (address) => `Serveur : ${address}`,
   help: "Aide",
   developerDocs: "Documentation pour les développeurs",
+  helpAndContact: "Aide et contact",
   copyDetails: "Copier les détails",
   opensInNewTab: "(s'ouvre dans un nouvel onglet)",
   close: "Fermer",

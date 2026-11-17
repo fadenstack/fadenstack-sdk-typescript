@@ -154,6 +154,8 @@ export interface UiStrings {
   help: string;
   /** The link to the SDKs' documentation. */
   developerDocs: string;
+  /** The link to Fadenstack's help and contact page. */
+  helpAndContact: string;
   copyDetails: string;
   /** After a link's name, for screen readers: the panel's links open in a new tab. */
   opensInNewTab: string;
@@ -1072,6 +1074,7 @@ export const englishStrings: UiStrings = {
   aboutServer: (address) => `Server: ${address}`,
   help: "Help",
   developerDocs: "Developer docs",
+  helpAndContact: "Help and contact",
   copyDetails: "Copy details",
   opensInNewTab: "(opens in a new tab)",
   close: "Close",

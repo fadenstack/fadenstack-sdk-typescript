@@ -109,8 +109,11 @@ describe("aboutView", () => {
     expect(about.links).toEqual([
       { label: "Help", href: "https://ai.example.internal/help/" },
       { label: "Fadenstack", href: "https://fadenstack.com/?ref=office-about&v=0.2" },
+      { label: "Help and contact", href: "https://fadenstack.com/support/?ref=office-about&v=0.2" },
       { label: "Developer docs", href: "https://developers.fadenstack.com/?ref=office-about&v=0.2" },
     ]);
+    expect(about.links.find((l) => l.label === "Help and contact")!.href).toBe("https://fadenstack.com/support/?ref=office-about&v=0.2");
+    expect(aboutView(facts, germanStrings).links.some((l) => l.label === "Hilfe und Kontakt")).toBe(true);
     expect(about.text).toBe([
       "Contract helper", "Version 3", "Model: qwen3.8-27b-fp8", "Runs in Word add-in 1.4.0", "Fadenstack SDK 0.2.0-rc.3 (TypeScript)",
       "Server: https://ai.example.internal",
@@ -121,12 +124,14 @@ describe("aboutView", () => {
     const about = aboutView({ ...facts, agent: { ...facts.agent, draft: true, model: null }, app: undefined }, germanStrings);
     expect(about.agentDetails).toEqual(["Entwurf"]);
     expect(about.environment).toEqual(["Fadenstack SDK 0.2.0-rc.3 (TypeScript)", "Server: https://ai.example.internal"]);
-    expect(about.links.map((l) => l.label)).toEqual(["Hilfe", "Fadenstack", "Entwicklerdokumentation"]);
+    expect(about.links.map((l) => l.label)).toEqual(["Hilfe", "Fadenstack", "Hilfe und Kontakt", "Entwicklerdokumentation"]);
 
     const early = aboutView({ sdkVersion: "0.2.0" }, englishStrings);
     expect(early.agent).toBe("");
     expect(early.agentDetails).toEqual([]);
-    expect(early.links.map((l) => l.href)).toEqual(["https://fadenstack.com/?ref=sdk-about&v=0.2", "https://developers.fadenstack.com/?ref=sdk-about&v=0.2"]);
+    expect(early.links.map((l) => l.href)).toEqual([
+      "https://fadenstack.com/?ref=sdk-about&v=0.2", "https://fadenstack.com/support/?ref=sdk-about&v=0.2", "https://developers.fadenstack.com/?ref=sdk-about&v=0.2",
+    ]);
     expect(early.text).toBe("Fadenstack SDK 0.2.0 (TypeScript)");
   });
 
@@ -178,6 +183,7 @@ describe("AgentChatViewModel's About", () => {
     expect(about.links.map((l) => l.href)).toEqual([
       `${gateway.serverUrl}/help/`,
       `https://fadenstack.com/?ref=chrome-about&v=${sdkMinor}`,
+      `https://fadenstack.com/support/?ref=chrome-about&v=${sdkMinor}`,
       `https://developers.fadenstack.com/?ref=chrome-about&v=${sdkMinor}`,
     ]);
     expect(chat.footerLink!.href).toBe(`https://fadenstack.com/?ref=chrome-panel&v=${sdkMinor}`);
@@ -211,7 +217,8 @@ describe("AgentChatViewModel's About", () => {
     chat.setAboutOpen(true);
     expect(chat.isAboutOpen).toBe(true);
     expect(chat.about.links.map((l) => l.href).slice(1)).toEqual([
-      `https://fadenstack.com/?ref=sdk-about&v=${sdkMinor}`, `https://developers.fadenstack.com/?ref=sdk-about&v=${sdkMinor}`,
+      `https://fadenstack.com/?ref=sdk-about&v=${sdkMinor}`, `https://fadenstack.com/support/?ref=sdk-about&v=${sdkMinor}`,
+      `https://developers.fadenstack.com/?ref=sdk-about&v=${sdkMinor}`,
     ]);
     const plain = await chatWith();
     expect(plain.chat.footerLink).toEqual({ label: "Fadenstack", href: `https://fadenstack.com/?ref=sdk-panel&v=${sdkMinor}` });

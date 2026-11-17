@@ -345,9 +345,10 @@ describe("ChatPanel's About and links", () => {
     expect(links.map((a) => [a.getAttribute("aria-label"), a.getAttribute("href"), a.getAttribute("target"), a.getAttribute("rel")])).toEqual([
       ["Help (opens in a new tab)", "https://faden.test/help/", "_blank", "noopener noreferrer"],
       ["Fadenstack (opens in a new tab)", `https://fadenstack.com/?ref=sdk-about&v=${sdkMinor}`, "_blank", "noopener noreferrer"],
+      ["Help and contact (opens in a new tab)", `https://fadenstack.com/support/?ref=sdk-about&v=${sdkMinor}`, "_blank", "noopener noreferrer"],
       ["Developer docs (opens in a new tab)", `https://developers.fadenstack.com/?ref=sdk-about&v=${sdkMinor}`, "_blank", "noopener noreferrer"],
     ]);
-    fireEvent.click(links[2]!);
+    fireEvent.click(links[3]!);
     expect(opened).toEqual([`https://developers.fadenstack.com/?ref=sdk-about&v=${sdkMinor}`]);
     fireEvent.keyDown(screen.getByRole("button", { name: "Close" }), { key: "Escape" });
     expect(screen.queryByRole("dialog")).toBeNull();
@@ -379,7 +380,7 @@ describe("ChatPanel's About and links", () => {
     ]);
     fireEvent.click(screen.getByRole("button", { name: "Settings" }));
     fireEvent.click(screen.getByRole("menuitem", { name: "About" }));
-    expect(screen.getByRole("dialog", { name: "About" }).querySelectorAll("a")).toHaveLength(3);
+    expect(screen.getByRole("dialog", { name: "About" }).querySelectorAll("a")).toHaveLength(4);
   });
 
   it("speaks the panel's language, the brand name aside", async () => {
@@ -388,7 +389,7 @@ describe("ChatPanel's About and links", () => {
     fireEvent.click(screen.getByRole("menuitem", { name: "Info" }));
     const about = screen.getByRole("dialog", { name: "Info" }); // as the .NET panel and Microsoft's German software say it
     expect([...about.querySelectorAll("a")].map((a) => a.getAttribute("aria-label"))).toEqual([
-      "Hilfe (öffnet in einem neuen Tab)", "Fadenstack (öffnet in einem neuen Tab)", "Entwicklerdokumentation (öffnet in einem neuen Tab)",
+      "Hilfe (öffnet in einem neuen Tab)", "Fadenstack (öffnet in einem neuen Tab)", "Hilfe und Kontakt (öffnet in einem neuen Tab)", "Entwicklerdokumentation (öffnet in einem neuen Tab)",
     ]);
     expect(screen.getByRole("button", { name: "Details kopieren" })).toBeTruthy();
   });

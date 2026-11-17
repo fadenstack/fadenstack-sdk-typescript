@@ -450,7 +450,8 @@ setting `TellUnmarked`.
 The settings end with **About**. It opens over the panel, below the gear, and shows the agent (its name, `Version 3`
 or `Draft`, and its model), the app it runs in when you described it (`describeApp`), the SDK's version, and the
 server's address. Its links go to your organisation's Help on the agent's server (`<server>/help/`), to
-fadenstack.com, and to the developer docs. *Copy details* copies all of it as text lines, for a support request.
+fadenstack.com, to *Help and contact* (`https://fadenstack.com/support/`), and to the developer docs. *Copy details*
+copies all of it as text lines, for a support request.
 Escape, the close button or a press outside closes it.
 
 Under the AI notice, on a small line of its own, the panel shows a muted **Fadenstack** link to fadenstack.com.

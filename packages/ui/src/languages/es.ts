@@ -129,6 +129,7 @@ export const spanishStrings: UiStrings = {
   aboutServer: (address) => `Servidor: ${address}`,
   help: "Ayuda",
   developerDocs: "Documentación para desarrolladores",
+  helpAndContact: "Ayuda y contacto",
   copyDetails: "Copiar detalles",
   opensInNewTab: "(se abre en una pestaña nueva)",
   close: "Cerrar",

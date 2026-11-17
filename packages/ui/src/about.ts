@@ -14,6 +14,8 @@ export const FADENSTACK = "Fadenstack";
 export const FADENSTACK_WEBSITE = "https://fadenstack.com/";
 /** The SDKs' documentation. */
 export const FADENSTACK_DEVELOPERS = "https://developers.fadenstack.com/";
+/** Fadenstack's help and contact page. */
+export const FADENSTACK_SUPPORT = "https://fadenstack.com/support/";
 /** The `refSource` of a panel whose host names none, or names one that is not allowed. */
 export const DEFAULT_REF_SOURCE = "sdk";
 
@@ -42,7 +44,7 @@ export function majorMinor(version: string | null | undefined): string | undefin
 }
 
 /**
- * A page of Fadenstack's (`FADENSTACK_WEBSITE`, `FADENSTACK_DEVELOPERS`) with `?ref=<ref>&v=<major.minor>`, and
+ * A page of Fadenstack's (`FADENSTACK_WEBSITE`, `FADENSTACK_SUPPORT`, `FADENSTACK_DEVELOPERS`) with `?ref=<ref>&v=<major.minor>`, and
  * nothing else. `version` is this SDK's by default; `v` is left out for `null` or a version without a major.minor.
  * Throws for a `ref` that is not a plain tag.
  */
@@ -99,7 +101,7 @@ export interface AboutView {
   agentDetails: readonly string[];
   /** The app it runs in (when the host described it), the SDK, and the server's address. */
   environment: readonly string[];
-  /** Help (the organisation's), the website and the developer docs. */
+  /** Help (the organisation's), the website, Fadenstack's help and contact page, and the developer docs. */
   links: readonly PanelLink[];
   /** All of it as text lines, for "Copy details". */
   text: string;
@@ -126,6 +128,7 @@ export function aboutView(facts: AboutFacts, strings: UiStrings): AboutView {
   const links: PanelLink[] = [
     ...(help ? [{ label: strings.help, href: help }] : []),
     { label: FADENSTACK, href: fadenstackLink(FADENSTACK_WEBSITE, ref, sdkVersion) },
+    { label: strings.helpAndContact, href: fadenstackLink(FADENSTACK_SUPPORT, ref, sdkVersion) },
     { label: strings.developerDocs, href: fadenstackLink(FADENSTACK_DEVELOPERS, ref, sdkVersion) },
   ];
   const name = agent?.name ?? "";
