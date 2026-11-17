@@ -13,7 +13,11 @@
       "@fadenstack/ui-web": ["../ui-web/src/index.ts"],
       "@fadenstack/ui-react": ["../ui-react/src/index.ts"],
       "@fadenstack/ui-vue": ["./src/index.ts"],
-      "@fadenstack/testing": ["../testing/src/index.ts"]
+      "@fadenstack/testing": ["../testing/src/index.ts"],
+      "@fadenstack/testing/provenance": ["../testing/src/provenance.ts"],
+      "@fadenstack/provenance": ["../provenance/src/index.ts"],
+      "@fadenstack/skills": ["../skills/src/index.ts"],
+      "@fadenstack/mcp": ["../mcp/src/index.ts"]
     }
   },
   "include": ["src/**/*.ts", "src/**/*.vue", "test/**/*.ts", "test/**/*.vue"]
