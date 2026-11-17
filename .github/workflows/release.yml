@@ -209,5 +209,6 @@ jobs:
             base="${name#@}"                        # npm pack names @fadenstack/client's file fadenstack-client-<version>.tgz
             file="packed/${base//\//-}-$VERSION.tgz"
             [ -f "$file" ] || { echo "::error::$file is missing"; exit 1; }
-            npm publish "$file" --access public --tag "$dist_tag"
+            # "./": without it npm reads packed/<name>.tgz as a GitHub repository (owner/repo) and tries git over ssh.
+            npm publish "./$file" --access public --tag "$dist_tag"
           done
