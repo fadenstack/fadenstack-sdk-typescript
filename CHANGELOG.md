@@ -116,8 +116,8 @@ Fields added or changed since 0.2.x; no field is removed. A row marked Yes goes 
   `FadenstackApiError`), thrown where the plain errors were. `checkServer({ server })` asks `/api/health` within
   `SERVER_CHECK_TIMEOUT_MS` (15 s): `not_fadenstack` for an answer that is not a JSON object, `redirect` for a redirect,
   `FadenstackUnreachableError` for no answer. There is no certificate error: a browser does not say.
-- **The endpoint check names a model, and `EndpointCheck.placeOf`** (sdk/51 I15 §2, §3): an endpoint without a model is checked
-  with the first model `/models` lists, and the report names it. `EndpointCheck.placeOf(url)` says `EndpointPlace.ThisComputer`,
+- **The endpoint check names a model, and `EndpointCheck.placeOf`** (sdk/51 I15 §2, §3): an endpoint without a model lists the
+  models and sends nothing to any of them; chat, usage, tool calls and pictures stay unknown until a model is named. `EndpointCheck.placeOf(url)` says `EndpointPlace.ThisComputer`,
   `LocalNetwork` or `Internet` by the host's spelling (a browser cannot resolve names, as .NET's `PlaceOfAsync` does).
 - **`MachinePolicy`** ([Machine policy](docs/machine-policy.md)): one vocabulary for managed installs (`server`, `standalone`,
   `endpoints`, `plainHttp`, `mcp`, `skills`, `webSearch`, `timestamping`), read fail-closed (`MachinePolicy.from(object)`,
@@ -172,6 +172,19 @@ Fields added or changed since 0.2.x; no field is removed. A row marked Yes goes 
   (`PairingExport`, a secret for session storage only, never a log or a file) and made again, so the wait for an approval
   can go on in a side panel that was closed and opened again. The saved pages must be on the server's own origin.
 
+- **The host's own data in "Remove my data"** (`AgentBuilder.useHostData`, `HostData`): IndexedDB databases and
+  `localStorage` key prefixes by name, and a callback for the rest; the removal takes them for both scopes, after the SDK's
+  own, and `storesCleared` counts them. The web sample names its endpoint key store this way.
+- **Pictures are judged by their first bytes** (`checkPicture`, `pictureTypeOf` in `@fadenstack/agents`): PNG, JPEG, WebP and
+  GIF, as a Fadenstack gateway from 0.7.1 does. The gateway's refusals have names (`ErrorCodes.pictureTypeNotAllowed`,
+  `pictureMissing`, `embedsNotAllowed`; `pictureRefusalOf`), and the panel says them in plain words, in five languages.
+- `MyDataSettingsViewModel.refresh()`, which the React and Vue skins call each time the control is shown, and `whenShown`
+  in `@fadenstack/ui-web` for a skin of one's own.
+- `StopEverythingViewModel` clears its result line after `DEFAULT_STOP_RESULT_MS` (8 seconds; `clearAfterMs`, `clock`);
+  `dispose()` stops the timer. The skins keep its live region in place, so the line is announced when it appears.
+- `EndpointReport.thinksWhenOff` and `EndpointDialect.thinksWhenOff`: the model thinks although the off switch was sent;
+  `AgentChatViewModel.offersReasoning`; `EndpointChecker.check` takes `EndpointCheckOptions`.
+
 ### Changed
 
 - **Behaviour change:** `useHookContent()` now only means that the app *offers* content logging. The model hooks see message and
@@ -223,6 +236,24 @@ Fields added or changed since 0.2.x; no field is removed. A row marked Yes goes 
 
 ### Fixed
 
+- **The connection wizard sends nothing to a model the person did not pick.** Before the pick, the check only lists the
+  models; one model is taken and checked at once, several go to the pick, and only the picked model is checked. Before, the
+  first listed model was probed, on the person's bill, and on Ollama a large model was loaded (live matrix F3).
+- **Pictures work through the wizard.** The check of the picked model probes a picture, or reads what `/models` says the
+  model takes in (`architecture.input_modalities`, OpenRouter), and an agent on the person's own model whose picture support
+  is not known accepts a picture; only a known "no" refuses it (F2).
+- **A thinking model is no longer called one that "can only talk".** The tool probe allows 1,024 tokens, and one that ends
+  on the length limit without a call reads as not known, not as no tool calls (F9).
+- **"Off" for a model that cannot stop thinking** (gpt-oss ignores `reasoning_effort: "none"`): the check notes it, Off
+  then sends the model's lowest level, `low`, and the menu says "This model always thinks. Off uses its lowest level." (F10).
+  Where the dialect sends no thinking switch (`openai-compatible`, `lm-studio`, Mistral), the thinking menu is not shown (F7).
+- **A stop the person chose ends as stopped.** A turn that "Stop everything" ends (its stop leaves the chat's own signal
+  untouched, so the stream ends with an `AbortError`) shows "Stopped", not "Something went wrong" (F6).
+- "Your data" reads the record of tool calls each time it is shown, so its line is never stale (F5).
+- "Stop everything"'s result line clears itself, so it no longer squeezes a narrow header's title for good.
+- A mid-stream error's numeric `code` (OpenRouter sends `502`) is kept as its text (F8).
+- The web sample has one Settings gear: its "Your data in this browser" drawer opens from the panel's settings menu
+  (`settingsExtra`), and "Remove my data" removes its endpoint key store too (F1, F4).
 - **An approval answer lost on the way is sent once more.** Answering a call the gateway holds now waits 10 seconds for a
   word back, then sends the same answer once more when none came (no answer, the server unreachable, a proxy's 502, 503 or
   504). A Fadenstack gateway from 0.7.1 (`approvals.idempotent`) takes a repeated answer once; an older one answers the
@@ -237,5 +268,13 @@ Fields added or changed since 0.2.x; no field is removed. A row marked Yes goes 
 
 ### Security
 
+- A local MCP server's parameter schema reaches the model cleaned like its tool description: every `description`,
+  `title` and `$comment` text, at any depth, without the characters that hide text, cut at 1,024 characters (OWASP ASVS
+  5.0 V1).
+- A picture is sent only when its first bytes show a PNG, JPEG, WebP or GIF, with the type the bytes show, not the one its
+  data URL claims (OWASP ASVS 5.0 V5); the same check runs for pictures a host attaches itself.
+- Releases are built with core's shared supply chain: an SBOM per package (CycloneDX 1.6, BSI TR-03183-2), the OSV scan
+  with OpenVEX and CSAF, keyless cosign signatures and GitHub's attestations on the GitHub release, and npm publishes the same files with its provenance; a high-severity finding
+  without a VEX statement stops a release before anything is published.
 - No request follows a redirect, so a 307 or 308 can no longer send a request's body (chat text, a refresh token, a
   password, a pairing code) to another address (OWASP ASVS 5.0 V12).
