@@ -1238,10 +1238,10 @@ export class FadenstackAgent implements AgentSwitch {
     const principal = this.profile.principal;
     const hostSessionStoreLeft = this.settings.sessions !== undefined;
     const hostApprovalStoreLeft = this.settings.approvalStore !== undefined;
-    // The host's own data (`useHostData`) goes first, whichever the scope, and is counted with the SDK's own.
-    const hostCleared = await deleteHostData(this.settings.hostData, scope, signal);
-    const result = (storesCleared: number, extra: Pick<DataDeletion, "scope" | "otherApps" | "agentsKept">): DataDeletion => ({
-      storesCleared: storesCleared + hostCleared, hostSessionStoreLeft, hostApprovalStoreLeft, hostStoresLeft: hostSessionStoreLeft || hostApprovalStoreLeft,
+    // The host's own data (`useHostData`) goes after the SDK's, whichever the scope, so a host's removal that fails never keeps the
+    // SDK's data; it is counted with the SDK's own. .NET: the same order.
+    const result = async (storesCleared: number, extra: Pick<DataDeletion, "scope" | "otherApps" | "agentsKept">): Promise<DataDeletion> => ({
+      storesCleared: storesCleared + await deleteHostData(this.settings.hostData, scope, signal), hostSessionStoreLeft, hostApprovalStoreLeft, hostStoresLeft: hostSessionStoreLeft || hostApprovalStoreLeft,
       scope: extra.scope, otherApps: extra.otherApps, sharedDataKept: extra.otherApps.length > 0, agentsKept: extra.agentsKept,
     });
     if (scope === "allApps") return result(await this.#deleteEverything(principal), { scope, otherApps: [], agentsKept: [] });

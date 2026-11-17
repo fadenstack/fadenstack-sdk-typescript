@@ -383,6 +383,18 @@ describe("my data on this device", () => {
       expect(localStorage.getItem("host-key:x")).toBeNull();
     });
 
+    it("removes the SDK's data before the host's, so a host removal that fails never keeps it (GDPR Art. 17)", async () => {
+      const gateway = gatewayFor();
+      const anna = await agentFor(gateway, "anna@example.com", (b) => b.useHostData({ remove: () => Promise.reject(new Error("the host's store is locked")) }));
+      await chat(anna);
+      expect((await names()).length).toBeGreaterThan(0);
+
+      await expect(anna.deleteMyData()).rejects.toThrow("the host's store is locked");
+
+      expect(await names()).toEqual([]);
+      await anna.dispose();
+    });
+
     it("clears the shared databases of an older SDK from a gateway that names no user", async () => {
       const agent = await agentFor(gatewayFor({ principal: false }), "anna@example.com");
       await chat(agent);
