@@ -146,7 +146,7 @@ jobs:
       attestations: write
       packages: write
       actions: read
-    uses: fadenstack/fadenstack/.github/workflows/release-supply-chain.yml@6dd382f990c5c922154857cfdb5da3cdc6202c67
+    uses: fadenstack/fadenstack/.github/workflows/release-supply-chain.yml@f7c915a32ad64f725be51b3154484bfc81fbbec1
     with:
       product: fadenstack-sdk-typescript
       version: ${{ needs.build.outputs.version }}
@@ -159,7 +159,7 @@ jobs:
       signing: keyless
       attest: true
       dry_run: ${{ github.ref_type != 'tag' }}
-      tools_ref: 6dd382f990c5c922154857cfdb5da3cdc6202c67
+      tools_ref: f7c915a32ad64f725be51b3154484bfc81fbbec1
 
   publish:
     if: github.ref_type == 'tag'

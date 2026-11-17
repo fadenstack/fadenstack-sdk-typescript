@@ -1,6 +1,6 @@
 {
   "name": "@fadenstack/skills",
-  "version": "0.3.0-rc.3",
+  "version": "0.3.0-rc.4",
   "description": "Agent Skills on the device for a Fadenstack agent: load_skill and read_skill_resource, the faden.yaml pre-selection, the person's own skills in IndexedDB",
   "license": "Apache-2.0",
   "author": "Emagin8 UG (haftungsbeschränkt)",
@@ -38,7 +38,7 @@
     "access": "public"
   },
   "dependencies": {
-    "@fadenstack/agents": "0.3.0-rc.3",
-    "@fadenstack/client": "0.3.0-rc.3"
+    "@fadenstack/agents": "0.3.0-rc.4",
+    "@fadenstack/client": "0.3.0-rc.4"
   }
 }
