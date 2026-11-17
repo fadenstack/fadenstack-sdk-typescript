@@ -204,7 +204,7 @@ export {
   chatRetentionState, isValidRetentionChats, isValidRetentionDays, retentionLimits,
   type ChatRetentionChoice, type ChatRetentionControl, type ChatRetentionState, type ChatRetentionStore, type IndexedDbChatRetentionStoreOptions,
 } from "./chatRetention.js";
-export type { DataDeletion, ExportedSession, ExportScope, MyDataExport } from "./dataRights.js";
+export type { DataDeletion, ExportedSession, HostData, ExportScope, MyDataExport } from "./dataRights.js";
 // The person's record of tool calls (sdk/51 8.10): a hash-chained, sealed log; the chain's functions are public for the shared test vectors.
 export {
   ARGUMENTS_SHA256_FEATURE, AUDIT_VERSION, AUDIT_ZEROS, AuditDecisions, AuditKinds, AuditOutcomes, AuditProblems, AuditRetention, AuditScopes,

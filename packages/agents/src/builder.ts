@@ -31,6 +31,7 @@ import {
 } from "./approvals.js";
 import type { ApprovalStore } from "./approvalStore.js";
 import type { AuditLog } from "./audit.js";
+import type { HostData } from "./dataRights.js";
 import type { SecretProtector } from "./secretProtection.js";
 import type { StoreProblemHandler } from "./storeSupport.js";
 import type { SessionRetention, SessionStore } from "./sessionStore.js";
@@ -78,6 +79,8 @@ export interface AgentSettings {
   readonly approvalStore?: ApprovalStore;
   /** The record of tool calls the host passed (`useAuditLog`); undefined: the SDK's own, per person. */
   readonly auditLog?: AuditLog;
+  /** The host's own data that "Remove my data" takes too (`useHostData`); undefined: none. */
+  readonly hostData?: HostData;
   /** Who opens the second sign-in for Bypass; undefined: the approval handler when it is one (`FadenstackAgent.stepUpHandler`). */
   readonly stepUp?: StepUpHandler;
   /** Who draws the grant card; undefined: the approval handler when it does (`FadenstackAgent.grantHandler`). */
@@ -154,6 +157,7 @@ export class AgentBuilder {
   #sessions: SessionStore | undefined;
   #approvalStore: ApprovalStore | undefined;
   #auditLog: AuditLog | undefined;
+  #hostData: HostData | undefined;
   #stepUp: StepUpHandler | undefined;
   #grantHandler: GrantHandler | undefined;
   #permissionMode: PermissionMode = "ask";
@@ -281,6 +285,16 @@ export class AgentBuilder {
    */
   useAuditLog(log: AuditLog): this {
     this.#auditLog = log;
+    return this;
+  }
+
+  /**
+   * The host's own data that "Remove my data" (`deleteMyData`) removes with the SDK's: IndexedDB databases and `localStorage` key
+   * prefixes by name, and a callback for the rest. The removal's `storesCleared` counts it. Without this, what the page keeps itself
+   * (for example an endpoint key store) stays. .NET: `AgentBuilder.UseHostData`.
+   */
+  useHostData(data: HostData): this {
+    this.#hostData = data;
     return this;
   }
 
@@ -572,6 +586,7 @@ export class AgentBuilder {
       ...(this.#sessions ? { sessions: this.#sessions } : {}),
       ...(this.#approvalStore ? { approvalStore: this.#approvalStore } : {}),
       ...(this.#auditLog ? { auditLog: this.#auditLog } : {}),
+      ...(this.#hostData ? { hostData: this.#hostData } : {}),
       ...(this.#stepUp ? { stepUp: this.#stepUp } : {}),
       ...(this.#grantHandler ? { grantHandler: this.#grantHandler } : {}),
       permissionMode: this.#permissionMode,

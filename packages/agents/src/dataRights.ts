@@ -18,7 +18,7 @@ export interface DataDeletion {
   /**
    * How many of the person's things the SDK removed: their IndexedDB databases that existed (up to eight: sessions, "Allow always",
    * their key, preferences, provenance, skills, skill switches, MCP servers) and their `localStorage` keys (the panel's language
-   * and notice, the saved prompts; one count per key).
+   * and notice, the saved prompts; one count per key), plus what the host's own data held (`HostData`).
    */
   storesCleared: number;
   hostSessionStoreLeft: boolean;
@@ -36,6 +36,50 @@ export interface DataDeletion {
   sharedDataKept: boolean;
   /** This app's agents whose data stayed because another app uses the same agent. */
   agentsKept: string[];
+}
+
+/**
+ * The host's own data that "Remove my data" takes with the SDK's (`AgentBuilder.useHostData`): what the page keeps beside the SDK's
+ * stores, such as the sample's key store. The SDK removes it for both scopes (it is the host's own data, one app's), and the removal's
+ * `storesCleared` counts it like the SDK's own. A name that does not exist counts nothing. .NET: `AgentBuilder.UseHostData`
+ * (a callback only; the .NET SDK has no IndexedDB or `localStorage`).
+ */
+export interface HostData {
+  /** Names of IndexedDB databases to delete; one count per database that existed. Close the host's connections on `versionchange`. */
+  indexedDb?: readonly string[];
+  /** Prefixes of `localStorage` keys to delete; one count per key. */
+  localStoragePrefixes?: readonly string[];
+  /** The host's own removal, for what the lists above cannot name: returns how many things it removed. Runs after the lists. */
+  remove?(scope: DataScope, signal?: AbortSignal): Promise<number>;
+}
+
+/**
+ * Removes the host's data (`HostData`); how many things went. `factory` and `storage` default to the page's (where there is none, the
+ * lists remove nothing).
+ */
+export async function deleteHostData(
+  host: HostData | undefined, scope: DataScope, signal?: AbortSignal,
+  factory: IDBFactory | undefined = globalThis.indexedDB, storage: Storage | undefined = pageLocalStorage(),
+): Promise<number> {
+  if (!host) return 0;
+  let removed = 0;
+  if (factory) for (const name of host.indexedDb ?? []) if (await deleteDatabase(factory, name)) removed++;
+  if (storage) {
+    for (const prefix of host.localStoragePrefixes ?? []) {
+      if (!prefix) continue; // an empty prefix would take every key of the page
+      const names: string[] = [];
+      for (let i = 0; i < storage.length; i++) {
+        const name = storage.key(i);
+        if (name !== null && name.startsWith(prefix)) names.push(name);
+      }
+      for (const name of names) {
+        storage.removeItem(name);
+        removed++;
+      }
+    }
+  }
+  if (host.remove) removed += await host.remove(scope, signal);
+  return removed;
 }
 
 /** One session in an export. */
