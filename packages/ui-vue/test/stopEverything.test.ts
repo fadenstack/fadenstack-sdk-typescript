@@ -9,6 +9,7 @@ import { ChatPanel, StopEverythingButton } from "@fadenstack/ui-vue";
 import { FakeGateway } from "@fadenstack/testing";
 
 import { testServices, waitUntil } from "./helpers.js";
+import { ManualClock } from "../../ui/test/wizardFakes.js";
 
 // The same checks as @fadenstack/ui-react's stopEverything.test.tsx, on the Vue skin (parity), over the real view models.
 
@@ -66,7 +67,9 @@ describe.each(LANGUAGES)("in %s", (language) => {
 
     expect(button.attributes("title")).toBe(strings.stopEverythingTip);
     expect(wrapper.find(".fdn-stop-everything").attributes("lang")).toBe(strings.language);
-    expect(wrapper.find(".fdn-stop-everything-result").exists()).toBe(false); // nothing said before the first press
+    const line = wrapper.find(".fdn-stop-everything-result");
+    expect(line.text()).toBe(""); // nothing said before the first press, but the live region is there
+    expect([line.attributes("role"), line.attributes("aria-live")]).toEqual(["status", "polite"]);
 
     await button.trigger("click");
     await waitUntil(() => !model.isBusy && model.result !== undefined);
@@ -74,5 +77,19 @@ describe.each(LANGUAGES)("in %s", (language) => {
 
     expect(wrapper.find(".fdn-stop-everything-result").text()).toBe(strings.stopEverythingNothing);
     expect(wrapper.find('[role="alertdialog"]').exists()).toBe(false); // no confirmation
+  });
+
+  it("the result line clears itself and the region stays for the next one", async () => {
+    const clock = new ManualClock();
+    const model = new StopEverythingViewModel({ agents: () => [], strings: () => strings, clock, stop: () => Promise.resolve({ turnsStopped: 0, grantsEnded: 0, chatApprovalsEnded: 0, grantsNotTold: 0 }) });
+    const wrapper = mount(StopEverythingButton, { props: { stop: model }, attachTo: document.body });
+    wrappers.push(wrapper);
+    await wrapper.find(`button[aria-label="${strings.stopEverything}"]`).trigger("click");
+    await flushPromises();
+    expect(wrapper.find(".fdn-stop-everything-result").text()).toBe(strings.stopEverythingNothing);
+
+    clock.advance(8000);
+    await flushPromises();
+    expect(wrapper.find(".fdn-stop-everything-result").text()).toBe("");
   });
 });

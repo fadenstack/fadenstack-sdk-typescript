@@ -7,6 +7,7 @@ import {
 } from "@fadenstack/ui";
 import { FakeGateway, lastToolResults, type FakeModel } from "@fadenstack/testing";
 import { testServices } from "./services.js";
+import { ManualClock } from "./wizardFakes.js";
 
 // "Stop everything" and the chat of an agent the organisation turned off: the states, the result line and its five languages. The .NET
 // SDK's Fadenstack.UI.Tests.StopEverythingTests.
@@ -72,6 +73,67 @@ describe("the Stop everything control", () => {
     expect(vm.resultText).toBe("Stopped 1 chat and ended 2 grants.");
     expect(asked).toEqual([0]); // asked once, with no confirmation step
     expect(vm.canStop).toBe(true);
+  });
+
+  describe("the result line clears itself", () => {
+    const make = (results: StopAllResult[], options: { clearAfterMs?: number } = {}) => {
+      const clock = new ManualClock();
+      let n = 0;
+      const vm = new StopEverythingViewModel({ agents: () => [], clock, stop: () => Promise.resolve(results[n++]!), ...options });
+      return { vm, clock };
+    };
+
+    it("shows the line after the stop and clears it after 8 s", async () => {
+      const { vm, clock } = make([result(2, 3)]);
+      let changes = 0;
+      vm.subscribe(() => changes++);
+
+      await vm.stop();
+      expect(vm.resultText).toBe("Stopped 2 chats and ended 3 grants.");
+      expect(vm.hasResult).toBe(true);
+
+      clock.advance(7999);
+      expect(vm.hasResult).toBe(true);
+      const before = changes;
+      clock.advance(1);
+      expect(vm.resultText).toBe("");
+      expect(vm.hasResult).toBe(false);
+      expect(vm.result).toBeUndefined();
+      expect(changes).toBeGreaterThan(before); // the skin hears of it
+    });
+
+    it("shows the new result of a new press and starts the time again", async () => {
+      const { vm, clock } = make([result(0, 0), result(1, 0)]);
+      await vm.stop();
+      expect(vm.resultText).toBe("Nothing was running.");
+      clock.advance(5000);
+
+      await vm.stop();
+      expect(vm.resultText).toBe("Stopped 1 chat.");
+      clock.advance(5000); // 10 s after the first press, 5 s after the second
+      expect(vm.resultText).toBe("Stopped 1 chat.");
+      clock.advance(3000);
+      expect(vm.resultText).toBe("");
+      expect(clock.activeTimers).toBe(0);
+    });
+
+    it("takes the time from an option, keeps the line when it is 0, and stops its timer on dispose", async () => {
+      const short = make([result(0, 0)], { clearAfterMs: 1000 });
+      await short.vm.stop();
+      short.clock.advance(1000);
+      expect(short.vm.hasResult).toBe(false);
+
+      const kept = make([result(0, 0)], { clearAfterMs: 0 });
+      await kept.vm.stop();
+      kept.clock.advance(60_000);
+      expect(kept.vm.hasResult).toBe(true);
+
+      const gone = make([result(0, 0)]);
+      await gone.vm.stop();
+      expect(gone.clock.activeTimers).toBe(1);
+      gone.vm.dispose();
+      expect(gone.clock.activeTimers).toBe(0);
+    });
   });
 
   it("still ends when the stop itself fails after the local part", async () => {
