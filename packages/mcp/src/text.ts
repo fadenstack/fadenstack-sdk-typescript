@@ -16,6 +16,32 @@ function cut(text: string, max: number): string {
   return chars.length <= max ? text : `${chars.slice(0, max - 1).join("").trimEnd()}\u2026`;
 }
 
+/** What a description or title inside a tool's parameter schema carries at most, as the tool's own description. .NET: `McpText.MaxSchemaTextChars`. */
+export const MAX_SCHEMA_TEXT_CHARS = 1024;
+
+const SCHEMA_TEXT_KEYS: ReadonlySet<string> = new Set(["description", "title", "$comment"]);
+
+/**
+ * A tool's parameter schema for the model: every `description`, `title` and `$comment` text in it, at any depth, is cleaned like
+ * `cleanResult` and cut at `MAX_SCHEMA_TEXT_CHARS`, as the tool's own description is. Before, only the tool's description was
+ * cleaned, so a parameter's description could carry hidden text to the model. Names, types, enums and defaults stay as the server
+ * wrote them: a call must send them back exactly. Returns a copy; each key is defined as the copy's own property, so a
+ * `__proto__` key in a server's schema stays a plain key and never sets the copy's prototype. OWASP ASVS 5.0 V1 (encoding and
+ * sanitization). .NET: `McpText.CleanSchema`.
+ */
+export function cleanSchema<T>(schema: T): T {
+  if (Array.isArray(schema)) return schema.map((item: unknown) => cleanSchema(item)) as T;
+  if (schema === null || typeof schema !== "object") return schema;
+  const copy: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(schema as Record<string, unknown>)) {
+    const clean = SCHEMA_TEXT_KEYS.has(key) && typeof value === "string"
+      ? cut(cleanResult(value).trim(), MAX_SCHEMA_TEXT_CHARS)
+      : cleanSchema(value); // a property named "description" holds a schema, not text: it is walked
+    Object.defineProperty(copy, key, { value: clean, enumerable: true, writable: true, configurable: true });
+  }
+  return copy as T;
+}
+
 /** One line: hidden and control characters removed, white space made single spaces, cut at `max`. */
 export function oneLine(text: string | undefined, max: number): string {
   return cut(cleanResult(text ?? "").replace(/\s+/gu, " ").trim(), max);

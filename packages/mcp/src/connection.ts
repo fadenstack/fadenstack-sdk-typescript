@@ -2,7 +2,7 @@ import { Client, SdkErrorCode, StreamableHTTPClientTransport, type Tool } from "
 
 import { McpConnectError, type McpConnectFailure } from "./errors.js";
 import type { McpToolHints } from "./hints.js";
-import { cleanResult, fence, firstLine, oneLine } from "./text.js";
+import { cleanResult, cleanSchema, fence, firstLine, oneLine } from "./text.js";
 
 /** The name this client gives the server (`clientInfo`). */
 const CLIENT_NAME = "fadenstack-agent";
@@ -119,7 +119,8 @@ function toListed(tool: Tool): ListedTool {
   return {
     name: tool.name,
     description: description.length > 1024 ? `${description.slice(0, 1023)}\u2026` : description,
-    inputSchema: (tool.inputSchema ?? { type: "object", properties: {} }) as Record<string, unknown>,
+    // The parameters' words too, not only the tool's (release plan S2).
+    inputSchema: cleanSchema((tool.inputSchema ?? { type: "object", properties: {} }) as Record<string, unknown>),
     hints,
   };
 }

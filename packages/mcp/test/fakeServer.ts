@@ -16,6 +16,8 @@ export interface FakeToolSpec {
   readOnlyHint?: boolean;
   destructiveHint?: boolean;
   openWorldHint?: boolean;
+  /** The description of its one parameter, `text`; none by default. */
+  textDescription?: string;
   /** What it answers; the default echoes `text`. */
   answer?: (args: { text: string }) => string | Promise<string>;
 }
@@ -66,7 +68,7 @@ export class FakeMcpServer {
         spec.name,
         {
           description: spec.description ?? spec.name,
-          inputSchema: z.object({ text: z.string() }),
+          inputSchema: z.object({ text: spec.textDescription === undefined ? z.string() : z.string().describe(spec.textDescription) }),
           annotations: {
             ...(spec.readOnlyHint !== undefined ? { readOnlyHint: spec.readOnlyHint } : {}),
             ...(spec.destructiveHint !== undefined ? { destructiveHint: spec.destructiveHint } : {}),
