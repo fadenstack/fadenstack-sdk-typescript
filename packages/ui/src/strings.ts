@@ -1034,7 +1034,7 @@ export const englishStrings: UiStrings = {
   agentTurnedOff: "Your organisation turned this agent off.",
   agentTurnedOffCheckAgain: "Check again",
   stopEverything: "Stop everything",
-  stopEverythingTip: "Stop every running chat and ends every grant. What you allowed always stays.",
+  stopEverythingTip: "Stops every running chat and ends every grant. What you allowed always stays.",
   stopEverythingBusy: "Stopping...",
   stopEverythingNothing: "Nothing was running.",
   stopEverythingChats: (count) => (count === 1 ? "1 chat" : `${count} chats`),
