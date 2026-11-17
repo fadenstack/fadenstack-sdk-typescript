@@ -110,6 +110,8 @@ export function normalize(root: Element): string {
       let value = a.value;
       if (a.name === "style") value = value.split(";").map((d) => d.trim().replace(/\s*:\s*/, ":")).filter(Boolean).sort().join(";");
       if (a.name === "id") value = id(value);
+      // A reference to a generated id (React's useId and Vue's differ) is numbered as the id it names.
+      if (a.name === "aria-describedby" || a.name === "aria-labelledby") value = value.split(/\s+/).filter(Boolean).map(id).join(" ");
       if (a.name === "mask") value = value.replace(/url\(#([^)]+)\)/, (_, ref: string) => `url(#${id(ref)})`);
       return `${a.name}=${JSON.stringify(value)}`;
     });
