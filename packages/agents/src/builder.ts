@@ -292,7 +292,9 @@ export class AgentBuilder {
   /**
    * The host's own data that "Remove my data" (`deleteMyData`) removes with the SDK's: IndexedDB databases and `localStorage` key
    * prefixes by name, and a callback for the rest. The removal's `storesCleared` counts it. Without this, what the page keeps itself
-   * (for example an endpoint key store) stays. .NET: `AgentBuilder.UseHostData`.
+   * (for example an endpoint key store) stays. It runs on every call of `deleteMyData`, whoever makes it: an app that also calls it for
+   * something narrower (deleting the chats when the person signs out) removes its own data there too, so it runs that removal from
+   * its own "Remove my data" instead. .NET: `AgentBuilder.UseHostData`.
    */
   useHostData(data: HostData): this {
     this.#hostData = data;
