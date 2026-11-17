@@ -216,9 +216,18 @@ export function withAttachments(data: Data, options: { pictures?: boolean } = {}
       if (value) out += ` ${name}="${attr(value)}"`;
     }
     const content = picture ? "[A picture the user attached earlier; it is not sent again.]" : str(a, "content") ?? "";
-    out += `>\n${content}\n</attachment>\n\n`;
+    out += `>\n${contained(content)}\n</attachment>\n\n`;
   }
   return out + text;
+}
+
+/**
+ * An attachment's text cannot close its block, or open another: `<attachment` and `</attachment` (any case) lose their bracket, so a
+ * page or file the person attached cannot end its own block and speak outside it (OWASP ASVS 5.0 V1, injection into the prompt's
+ * structure). .NET: `ContextBuilder.Contained`.
+ */
+function contained(content: string): string {
+  return content.replace(/<(\/?attachment)/giu, "&lt;$1");
 }
 
 function attr(value: string | undefined): string {
