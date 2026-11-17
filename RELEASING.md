@@ -31,6 +31,19 @@ Scorecard, shown in the run's summary; nothing is signed, uploaded or published.
 A version can never be published twice, not even after it is removed. Rehearse with an rc version. If the
 workflow stops half-way, run it again: it skips the packages that are on npm already.
 
+## Checking a release's files
+
+Core's shared workflow signs and attests, so name its repository as the signer:
+
+```bash
+gh release download v0.3.0-rc.4 -R fadenstack/fadenstack-sdk-typescript -p "fadenstack-client-0.3.0-rc.4.tgz"
+gh attestation verify fadenstack-client-0.3.0-rc.4.tgz --repo fadenstack/fadenstack-sdk-typescript --signer-repo fadenstack/fadenstack
+```
+
+npm serves the same bytes (its `dist.integrity` is the file's SHA-512) and has its own provenance for each package the
+workflow published. Each file's SBOM (`.cdx.json`), its OpenVEX document and the cosign bundles (`.sigstore.json`) are
+next to it on the release.
+
 ## Before the first release (once)
 
 npm lets a package trust a workflow only after the package exists, so the first version of each package is
