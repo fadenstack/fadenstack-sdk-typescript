@@ -94,6 +94,46 @@ describe("the endpoint check", () => {
     expect(report.usable).toBe(true); // it can still talk
   });
 
+  it("the tool probe leaves a thinking model room: 1024 tokens", async () => {
+    const { check, fake } = make();
+    fake.answers.push(OpenAiFake.text("OK"), OpenAiFake.calls(["call-1", "report_ready", "{}"]));
+    await check.run();
+    const probe = fake.requests.find((r) => r.body.includes("report_ready"))!;
+    expect(probe.json()["max_tokens"]).toBe(1024);
+  });
+
+  it("a probe that reasons and ends on the length limit without a call is not known, not chat only (F9)", async () => {
+    const { check, fake } = make();
+    fake.answers.push(OpenAiFake.text("OK"), OpenAiFake.ended("length", undefined, "I should call the tool, but first let me think about it for a long time"));
+
+    const report = await check.run();
+
+    expect(report.toolCalls).toBeNull();
+    expect(report.chatOnly).toBe(false);
+    expect(report.problems).not.toContain(EndpointProblem.NoToolCalls);
+    expect(report.usable).toBe(true);
+  });
+
+  it("a probe that ends with no finish reason and no call is not known", async () => {
+    const { check, fake } = make();
+    fake.answers.push(OpenAiFake.text("OK"), OpenAiFake.ended("", "..."));
+    const report = await check.run();
+    expect(report.toolCalls).toBeNull();
+    expect(report.problems).not.toContain(EndpointProblem.NoToolCalls);
+  });
+
+  it("a finished answer without a call is false, and a call after reasoning is true", async () => {
+    const said = make();
+    said.fake.answers.push(OpenAiFake.text("OK"), OpenAiFake.text("I am ready.", "thinking"));
+    const no = await said.check.run();
+    expect(no.toolCalls).toBe(false);
+    expect(no.problems).toContain(EndpointProblem.NoToolCalls);
+
+    const called = make();
+    called.fake.answers.push(OpenAiFake.text("OK"), { ...OpenAiFake.calls(["call-1", "report_ready", "{}"]), reasoning: "thinking" });
+    expect((await called.check.run()).toolCalls).toBe(true);
+  });
+
   it("a model the server says has no tools is chat only", async () => {
     const { check, fake } = make();
     fake.intercept = (r) => (r.body.includes("report_ready")
@@ -343,7 +383,7 @@ describe("the endpoint check", () => {
     const json = JSON.parse(report.toJson()) as Record<string, unknown>;
     expect(Object.keys(json)).toEqual([
       "baseUrl", "model", "checkedAt", "server", "serverVersion", "dialect", "reachable", "keyAccepted", "models", "chat", "usage",
-      "toolCalls", "vision", "contextLength", "modelContextLength", "pictures", "watermark", "problems",
+      "toolCalls", "vision", "thinksWhenOff", "contextLength", "modelContextLength", "pictures", "watermark", "problems",
     ]);
     expect(json["server"]).toBe("Ollama");
     expect(json["dialect"]).toBe("ollama");
@@ -364,6 +404,99 @@ describe("the endpoint check", () => {
     expect(report.chatOnly).toBe(true);
     expect(report.problems).toEqual([EndpointProblem.NoToolCalls, EndpointProblem.OllamaDefaultContext]);
     expect(report.checkedAt).toBe(Date.parse("2026-11-14T10:20:30.123Z"));
+    expect(report.thinksWhenOff).toBeNull(); // a report saved without the field
+  });
+
+  it("thinksWhenOff round trips and a report without it reads as null (F10)", async () => {
+    const { check, fake } = make();
+    fake.answers.push(OpenAiFake.text("OK"), { ...OpenAiFake.calls(["call-1", "report_ready", "{}"]), reasoning: "hmm" });
+    const report = await check.run();
+    expect(report.thinksWhenOff).toBe(true);
+    expect(JSON.parse(report.toJson())["thinksWhenOff"]).toBe(true);
+    expect(EndpointReport.fromJson(report.toJson()).thinksWhenOff).toBe(true);
+    const without = JSON.parse(report.toJson()) as Record<string, unknown>;
+    delete without["thinksWhenOff"];
+    expect(EndpointReport.fromJson(JSON.stringify(without)).thinksWhenOff).toBeNull();
+  });
+});
+
+describe("thinking under the off switch (F10)", () => {
+  const toolProbe = (r: { body: string }) => r.body.includes("report_ready");
+
+  it("a probe stream that reasons under \"none\" gives thinksWhenOff true, and the probe sent \"none\"", async () => {
+    const { check, fake } = make();
+    fake.reasoningField = "reasoning";
+    fake.answers.push(OpenAiFake.text("OK"), { ...OpenAiFake.calls(["call-1", "report_ready", "{}"]), reasoning: "The user wants a call." });
+    const report = await check.run();
+    expect(report.thinksWhenOff).toBe(true);
+    expect(fake.requests.find(toolProbe)!.json()["reasoning_effort"]).toBe("none");
+  });
+
+  it("a probe with no reasoning gives false", async () => {
+    const { check, fake } = make();
+    fake.answers.push(OpenAiFake.text("OK"), OpenAiFake.calls(["call-1", "report_ready", "{}"]));
+    expect((await check.run()).thinksWhenOff).toBe(false);
+  });
+
+  it("a dialect with no switch gives null, even when reasoning came", async () => {
+    const { check, fake } = make("http://localhost:1234/v1", EndpointDialect.lmStudio);
+    fake.answers.push(OpenAiFake.text("OK"), { ...OpenAiFake.calls(["call-1", "report_ready", "{}"]), reasoning: "hmm" });
+    const report = await check.run();
+    expect(report.thinksWhenOff).toBeNull();
+    expect(fake.requests.find(toolProbe)!.json()["reasoning_effort"]).toBeUndefined();
+  });
+
+  it("a chat-template dialect sends its off switch and notes the reasoning too", async () => {
+    const { check, fake } = make("http://localhost:8000/v1", EndpointDialect.vllm);
+    fake.answers.push(OpenAiFake.text("OK"), { ...OpenAiFake.calls(["call-1", "report_ready", "{}"]), reasoning: "hmm" });
+    const report = await check.run();
+    expect(report.thinksWhenOff).toBe(true);
+    expect(fake.requests.find(toolProbe)!.json()["chat_template_kwargs"]).toEqual({ enable_thinking: false });
+  });
+
+  it("the probe keeps the real off switch when the dialect already knows the model thinks", async () => {
+    const fake = new OpenAiFake();
+    fake.answers.push(OpenAiFake.text("OK"), OpenAiFake.calls(["call-1", "report_ready", "{}"]));
+    const check = new EndpointCheck({ baseUrl: "http://localhost:11434/v1", model: "m", dialect: { ...EndpointDialect.ollama, thinksWhenOff: true }, fetch: fake.fetch });
+    await check.run();
+    expect(fake.requests.find(toolProbe)!.json()["reasoning_effort"]).toBe("none");
+  });
+});
+
+describe("pictures: what /models says, else the probe (F2)", () => {
+  const withListing = (fields: Record<string, unknown>, answers: Parameters<OpenAiFake["answers"]["push"]>) => {
+    const fake = new OpenAiFake();
+    fake.models = ["vision-model"];
+    fake.modelFields["vision-model"] = fields;
+    fake.answers.push(...answers);
+    const check = new EndpointCheck({ baseUrl: "https://openrouter.ai/api/v1", model: "vision-model", dialect: EndpointDialect.openRouter, fetch: fake.fetch });
+    return { check, fake };
+  };
+  const calls = [OpenAiFake.text("OK"), OpenAiFake.calls(["call-1", "report_ready", "{}"])];
+
+  it("input_modalities with an image gives vision true and no picture is sent", async () => {
+    const { check, fake } = withListing({ architecture: { input_modalities: ["text", "image"] } }, calls);
+    const report = await check.run({ probeVision: true });
+    expect(report.vision).toBe(true);
+    expect(fake.requests.some((r) => r.body.includes("image_url"))).toBe(false);
+  });
+
+  it("input_modalities with text only gives vision false and no picture is sent", async () => {
+    const { check, fake } = withListing({ architecture: { input_modalities: ["text"] } }, calls);
+    const report = await check.run({ probeVision: true });
+    expect(report.vision).toBe(false);
+    expect(fake.requests.some((r) => r.body.includes("image_url"))).toBe(false);
+  });
+
+  it("the listing decides even when the check was not asked to probe", async () => {
+    const { check } = withListing({ architecture: { input_modalities: ["image", "text"] } }, calls);
+    expect((await check.run()).vision).toBe(true);
+  });
+
+  it("a listing that does not say leaves it to the probe", async () => {
+    const { check, fake } = withListing({ architecture: {} }, [...calls, OpenAiFake.text("Green")]);
+    expect((await check.run({ probeVision: true })).vision).toBe(true);
+    expect(fake.requests.some((r) => r.body.includes("image_url"))).toBe(true);
   });
 });
 
@@ -389,23 +522,45 @@ describe("the presets and the versions", () => {
 });
 
 describe("no model named yet, and where an address points", () => {
-  it("probes with the first listed model when the endpoint names none, and the report says which", async () => {
+  it("sends nothing to a model before the pick: with no model named only /models is asked (F3)", async () => {
     const fake = new OpenAiFake();
     fake.models = ["llama3:8b", "qwen3:14b"];
-    fake.answers.push(OpenAiFake.text("OK"), OpenAiFake.calls(["call-1", "report_ready", "{}"]));
     const check = new EndpointCheck({ baseUrl: "http://localhost:11434/v1", model: "", dialect: EndpointDialect.ollama, fetch: fake.fetch });
-    fake.ollamaShow = { model_info: { "llama.context_length": 8192 }, parameters: "num_ctx 4096" };
 
     const report = await check.run({ probeVision: true });
 
-    expect(report.model).toBe("llama3:8b");
-    expect(report.chat).toBe(true);
-    expect(report.toolCalls).toBe(true);
-    expect(report.contextLength).toBe(4096);
+    expect(fake.requests).toHaveLength(1);
+    expect(fake.requests[0]!.url.pathname).toBe("/v1/models");
+    expect(fake.requests.some(isChat)).toBe(false);
+    expect(report.reachable).toBe(true);
+    expect(report.keyAccepted).toBe(true);
+    expect(report.models).toEqual(["llama3:8b", "qwen3:14b"]);
+    expect(report.server).toBe(EndpointServer.Ollama);
+    expect(report.model).toBe("");
+    expect(report.chat).toBeNull();
+    expect(report.usage).toBeNull();
+    expect(report.toolCalls).toBeNull();
+    expect(report.vision).toBeNull();
+    expect(report.usable).toBe(false);
+  });
+
+  it("before the pick a vLLM server's version is still read (it sends nothing to a model), and after the pick the probes go to the picked model only", async () => {
+    const fake = new OpenAiFake();
+    fake.models = ["a", "b"];
+    fake.vllmVersion = "0.31.0";
+    const open = new EndpointCheck({ baseUrl: "http://localhost:8000/v1", dialect: EndpointDialect.vllm, fetch: fake.fetch });
+    const before = await open.run();
+    expect(before.serverVersion).toBe("0.31.0");
+    expect(fake.requests.map((r) => r.url.pathname)).toEqual(["/v1/models", "/version"]);
+
+    const picked = new EndpointCheck({ baseUrl: "http://localhost:8000/v1", model: "b", dialect: EndpointDialect.vllm, fetch: fake.fetch });
+    fake.answers.push(OpenAiFake.text("OK"), OpenAiFake.calls(["call-1", "report_ready", "{}"]), OpenAiFake.text("Green"));
+    const after = await picked.run({ probeVision: true });
+    expect(after.model).toBe("b");
+    expect(after.chat).toBe(true);
     const chats = fake.requests.filter(isChat);
-    expect(chats.length).toBeGreaterThan(2);
-    expect(chats.every((r) => r.json()["model"] === "llama3:8b")).toBe(true);
-    expect(fake.requests.find((r) => r.url.pathname.endsWith("/api/show"))!.json()["model"]).toBe("llama3:8b");
+    expect(chats).toHaveLength(3);
+    expect(chats.every((r) => r.json()["model"] === "b")).toBe(true);
   });
 
   it("keeps a model the endpoint names", async () => {

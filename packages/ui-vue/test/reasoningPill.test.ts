@@ -3,10 +3,13 @@ import { flushPromises, mount, type VueWrapper } from "@vue/test-utils";
 import { afterEach, describe, expect, it } from "vitest";
 import { nextTick } from "vue";
 
-import type { TurnLease } from "@fadenstack/ui";
+import { EndpointDialect } from "@fadenstack/client";
+import { AgentDefinition, FadenstackAgent, MemoryApprovalStore, MemorySessionStore } from "@fadenstack/agents";
+import { ApprovalBroker, AgentChatViewModel, immediateScheduler, type TurnLease } from "@fadenstack/ui";
+import { OpenAiFake } from "@fadenstack/testing";
 import { ChatPanel } from "@fadenstack/ui-vue";
 
-import { chatWith, waitUntil } from "./helpers.js";
+import { chatWith, testServices, waitUntil } from "./helpers.js";
 
 // The thinking pill and its menu in the Vue skin (the React skin's test is the same list).
 
@@ -169,5 +172,33 @@ describe("waiting for a free slot (Vue)", () => {
     expect(wrapper.find(".fdn-status").text()).toContain("Wartet auf einen freien Platz");
     chat.stop();
     await sending;
+  });
+});
+
+describe("the thinking pill on a standalone agent (Vue, F7)", () => {
+  async function standalonePanel(dialect: EndpointDialect) {
+    const fake = new OpenAiFake();
+    const agent = FadenstackAgent.createBuilder()
+      .useEndpoint({ baseUrl: "http://localhost:11434/v1", model: "m", dialect, fetch: fake.fetch })
+      .useLocalProfile(AgentDefinition.fromJson({ slug: "local", name: "Local", version: { instructions: "Hi.", host_tool_contract: [], ui: {} } }))
+      .useSessionStore(new MemorySessionStore()).useApprovalStore(new MemoryApprovalStore()).build();
+    const approvals = new ApprovalBroker();
+    const chat = new AgentChatViewModel(agent, approvals, { ...testServices(), scheduler: immediateScheduler, automaticLanguage: "en" });
+    await chat.initialize();
+    const wrapper = mount(ChatPanel, { props: { chat }, attachTo: document.body });
+    wrappers.push(wrapper);
+    return wrapper;
+  }
+  const thinking = (w: VueWrapper) => w.findAll("button").filter((b) => /^Thinking: /.test(b.attributes("aria-label") ?? ""));
+
+  it("is not shown where the dialect sends no thinking switch, and the header keeps the tool mode", async () => {
+    const w = await standalonePanel(EndpointDialect.openAiCompatible);
+    expect(thinking(w)).toHaveLength(0);
+    expect(w.findAll("button").filter((b) => /^Tool mode: /.test(b.attributes("aria-label") ?? ""))).toHaveLength(1);
+  });
+
+  it("is shown on Ollama", async () => {
+    const w = await standalonePanel(EndpointDialect.ollama);
+    expect(thinking(w)).toHaveLength(1);
   });
 });

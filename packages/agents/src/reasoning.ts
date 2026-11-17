@@ -67,20 +67,32 @@ const RANK: Record<ReasoningEffort, number> = { none: 0, minimal: 1, low: 2, med
  * The levels an agent offers: always Auto and Off, and Low, Medium and High up to the maximum the server may set in the
  * agent's profile, `ui.reasoning` (`{"max": "low"}`; the gateway's scale none, minimal, low, medium, high, xhigh or max:
  * `minimal` caps at none, the nearest level the SDK can pick, and `max` sets no cap). Without a maximum, or with one that is
- * not readable, all five are offered and Auto sends no field. With one, Auto means the maximum. .NET: `ReasoningChoices`.
+ * not readable, all five are offered and Auto sends no field. With one, Auto means the maximum. `ui.reasoning.offered: false`
+ * (a standalone agent on a dialect with no thinking switch, F7) offers no level at all. `ui.reasoning.thinks_when_off`
+ * (`"lowest"`: Off sends the model's lowest level; `"always"`: the model thinks even when Off, F10) only changes what the Off item
+ * says. .NET: `ReasoningChoices`.
  */
 export class ReasoningChoices {
   /** All five levels and no maximum: what an agent offers when its profile says nothing usable. */
   static readonly everything: ReasoningChoices = new ReasoningChoices(REASONING_LEVELS, undefined);
 
+  /** No level: the agent's dialect sends no thinking switch, so a pick would change nothing (F7). */
+  static readonly none: ReasoningChoices = new ReasoningChoices([], undefined);
+
   /** The levels offered, in menu order. */
   readonly levels: readonly ReasoningLevel[];
   /** The most the server lets the agent think; undefined when it sets none. */
   readonly max: ReasoningEffort | undefined;
+  /**
+   * The model thinks although Off is sent (the check found it, F10): `lowest` when Off then sends the model's lowest level,
+   * `always` when it thinks even with the off switch (a chat template has no lower level). undefined when Off turns it off.
+   */
+  readonly thinksWhenOff: "lowest" | "always" | undefined;
 
-  private constructor(levels: readonly ReasoningLevel[], max: ReasoningEffort | undefined) {
+  private constructor(levels: readonly ReasoningLevel[], max: ReasoningEffort | undefined, thinksWhenOff?: "lowest" | "always") {
     this.levels = levels;
     this.max = max;
+    this.thinksWhenOff = thinksWhenOff;
   }
 
   offers(level: ReasoningLevel): boolean {
@@ -95,15 +107,19 @@ export class ReasoningChoices {
   /** Reads `ui.reasoning.max` out of a profile's `ui`; never throws on what a server wrote there. */
   static fromUi(ui: unknown): ReasoningChoices {
     const node = ui && typeof ui === "object" ? (ui as Record<string, unknown>)["reasoning"] : undefined;
-    const raw = node && typeof node === "object" ? (node as Record<string, unknown>)["max"] : undefined;
-    if (typeof raw !== "string") return ReasoningChoices.everything;
+    const fields = node && typeof node === "object" ? (node as Record<string, unknown>) : undefined;
+    if (fields?.["offered"] === false) return ReasoningChoices.none;
+    const when = fields?.["thinks_when_off"];
+    const thinks = when === "lowest" || when === "always" ? when : undefined;
+    const raw = fields?.["max"];
+    if (typeof raw !== "string") return thinks ? new ReasoningChoices(REASONING_LEVELS, undefined, thinks) : ReasoningChoices.everything;
     const name = raw.trim().toLowerCase();
     // "max" is the top of the gateway's scale: the server lets the agent think as long as it likes.
     // "minimal" lies between none and low; the SDK's levels have no such step, so the cap is the level below it.
     const cap: ReasoningEffort | undefined = name === "none" || name === "minimal" ? "none"
       : name === "low" || name === "medium" || name === "high" || name === "xhigh" ? name : undefined;
-    if (cap === undefined) return ReasoningChoices.everything;
-    return new ReasoningChoices(REASONING_LEVELS.filter((l) => { const e = reasoningEffort(l); return e === undefined || RANK[e] <= RANK[cap]; }), cap);
+    if (cap === undefined) return thinks ? new ReasoningChoices(REASONING_LEVELS, undefined, thinks) : ReasoningChoices.everything;
+    return new ReasoningChoices(REASONING_LEVELS.filter((l) => { const e = reasoningEffort(l); return e === undefined || RANK[e] <= RANK[cap]; }), cap, thinks);
   }
 }
 

@@ -173,6 +173,10 @@ export interface UiStrings {
   reasoningLabel: Record<ReasoningLevel, string>;
   /** What a level means, in one line (.NET `Reasoning_<Level>_Description`). */
   reasoningDescription: Record<ReasoningLevel, string>;
+  /** Off's line when the check found the model thinks anyway and Off sends its lowest level (.NET `ReasoningOffLowestDescription`). */
+  reasoningOffLowest: string;
+  /** Off's line when the model thinks even with the off switch sent (a chat template; .NET `ReasoningOffStillThinksDescription`). */
+  reasoningOffStillThinks: string;
   showEarlier: string;
   copy: string;
   copyCode: string;
@@ -1081,6 +1085,8 @@ export const englishStrings: UiStrings = {
     medium: "Thinks for a while.",
     high: "Thinks longest.",
   },
+  reasoningOffLowest: "This model always thinks. Off uses its lowest level.",
+  reasoningOffStillThinks: "This model thinks even when Off.",
   showEarlier: "Show earlier messages",
   copy: "Copy",
   copyCode: "Copy code",

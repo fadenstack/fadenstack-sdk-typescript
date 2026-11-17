@@ -5,6 +5,8 @@ export interface FakeOpenAiAnswer {
   content?: string;
   reasoning?: string;
   toolCalls?: { id: string; name: string; arguments: string }[];
+  /** The finish reason the answer ends on (default: `tool_calls` with calls, else `stop`); `length` plays a model that ran out of tokens. */
+  finishReason?: string;
 }
 
 /** A request the fake endpoint got. */
@@ -32,6 +34,8 @@ export class OpenAiFake {
   readonly requests: OpenAiFakeRequest[] = [];
   readonly answers: FakeOpenAiAnswer[] = [];
   models: string[] = ["qwen3:14b"];
+  /** More fields of a model's `/models` entry, by id (OpenRouter's `architecture`, vLLM's `max_model_len`). */
+  readonly modelFields: Record<string, Record<string, unknown>> = {};
   /** `reasoning_content` (most servers) or `reasoning` (vLLM's newer name). */
   reasoningField = "reasoning_content";
   /** Tool call chunks without `index`, as some servers send them. */
@@ -57,6 +61,11 @@ export class OpenAiFake {
 
   static text(content: string, reasoning?: string): FakeOpenAiAnswer {
     return reasoning === undefined ? { content } : { content, reasoning };
+  }
+
+  /** An answer that ends on `finishReason` (for example `length`) with `reasoning` and `content`. */
+  static ended(finishReason: string, content?: string, reasoning?: string): FakeOpenAiAnswer {
+    return { finishReason, ...(content === undefined ? {} : { content }), ...(reasoning === undefined ? {} : { reasoning }) };
   }
 
   static calls(...calls: [id: string, name: string, args: string][]): FakeOpenAiAnswer {
@@ -109,7 +118,7 @@ export class OpenAiFake {
     if (intercepted) return intercepted;
     const path = url.pathname;
     if (request.method === "GET" && path.endsWith("/models")) {
-      return OpenAiFake.json({ object: "list", data: this.models.map((id) => ({ id, object: "model", owned_by: "fake" })) });
+      return OpenAiFake.json({ object: "list", data: this.models.map((id) => ({ id, object: "model", owned_by: "fake", ...this.modelFields[id] })) });
     }
     if (request.method === "POST" && path.endsWith("/chat/completions")) return this.#chat(request);
     if (request.method === "POST" && path.endsWith("/images/generations")) {
@@ -136,7 +145,7 @@ export class OpenAiFake {
       }
       response = OpenAiFake.json({
         id: "chatcmpl-1", object: "chat.completion", model,
-        choices: [{ index: 0, message, finish_reason: calls.length > 0 ? "tool_calls" : "stop" }],
+        choices: [{ index: 0, message, finish_reason: answer.finishReason ?? (calls.length > 0 ? "tool_calls" : "stop") }],
         usage,
       });
     } else {
@@ -171,7 +180,7 @@ export class OpenAiFake {
       chunk({ tool_calls: [call(c.id, c.name, c.arguments.slice(0, half))] });
       chunk({ tool_calls: [call(null, null, c.arguments.slice(half))] });
     });
-    chunk({}, calls.length > 0 ? "tool_calls" : "stop");
+    chunk({}, answer.finishReason ?? (calls.length > 0 ? "tool_calls" : "stop"));
     if (usage) {
       text += `data: ${JSON.stringify({ id: "chatcmpl-1", object: "chat.completion.chunk", model, choices: [], usage: { prompt_tokens: 11, completion_tokens: 3, total_tokens: 14 } })}\n\n`;
     }

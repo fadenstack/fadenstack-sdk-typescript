@@ -559,9 +559,15 @@ export class AgentChatViewModel extends Observable implements TurnHost {
     }
   }
 
-  /** The agent's model sees pictures: a picture can go with a message (`attachPicture`). */
+  /**
+   * The agent's model sees pictures: a picture can go with a message (`attachPicture`). An agent on the person's own model
+   * (standalone) whose vision is not known (null: a connection saved before the check looked at pictures) lets a picture
+   * through; only a "no" (false) refuses. With a Fadenstack server the server's word stands: only a "yes" does.
+   */
   get canAttachPictures(): boolean {
-    return this.#agent.isStarted && this.#agent.profile.vision === true;
+    if (!this.#agent.isStarted) return false;
+    const vision = this.#agent.profile.vision;
+    return vision === true || (vision === null && this.#agent.connection === "standalone");
   }
 
   get isEmpty(): boolean {
@@ -768,6 +774,14 @@ export class AgentChatViewModel extends Observable implements TurnHost {
   // -- how long the agent thinks (.NET `AgentChatViewModel.Reasoning*`) ----------------------------------
 
   /**
+   * Whether the thinking pill and its menu show: not for an agent that offers no level (a standalone agent whose dialect sends no
+   * thinking switch, so a pick would change nothing). Before the agent started the pill shows, as before.
+   */
+  get offersReasoning(): boolean {
+    return !this.#agent.isStarted || this.#agent.reasoningChoices.levels.length > 0;
+  }
+
+  /**
    * The levels of thinking the agent offers (Auto, Off, and Low, Medium and High up to the maximum its profile's
    * `ui.reasoning` sets); empty until it started. Each carries its text in the panel's language.
    */
@@ -846,7 +860,10 @@ export class AgentChatViewModel extends Observable implements TurnHost {
 
   #reasoningOption(level: ReasoningLevel, selected: boolean): ReasoningOption {
     const s = this.strings;
-    return { level, label: s.reasoningLabel[level], description: s.reasoningDescription[level], selected };
+    // The check found the model thinks although Off is sent (F10): Off says what it really does.
+    const thinks = level === "off" ? this.#agent.reasoningChoices.thinksWhenOff : undefined;
+    const description = thinks === "lowest" ? s.reasoningOffLowest : thinks === "always" ? s.reasoningOffStillThinks : s.reasoningDescription[level];
+    return { level, label: s.reasoningLabel[level], description, selected };
   }
 
   // -- actions --------------------------------------------------------------------------------------

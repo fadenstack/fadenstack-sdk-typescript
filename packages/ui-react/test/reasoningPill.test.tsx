@@ -2,13 +2,13 @@
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, describe, expect, it } from "vitest";
 
-import { FadenstackClient, loginWithPassword } from "@fadenstack/client";
-import { FadenstackAgent, MemorySessionStore } from "@fadenstack/agents";
+import { EndpointDialect, FadenstackClient, loginWithPassword } from "@fadenstack/client";
+import { AgentDefinition, FadenstackAgent, MemoryApprovalStore, MemorySessionStore } from "@fadenstack/agents";
 import {
   AgentChatViewModel, ApprovalBroker, immediateScheduler, type AgentChatOptions, type TurnLease,
 } from "@fadenstack/ui";
 import { ChatPanel } from "@fadenstack/ui-react";
-import { FakeGateway } from "@fadenstack/testing";
+import { FakeGateway, OpenAiFake } from "@fadenstack/testing";
 import { testServices } from "./services.js";
 
 // The thinking pill and its menu in the React skin (.NET ReasoningPillTests drives the same view model).
@@ -158,5 +158,30 @@ describe("waiting for a free slot (React)", () => {
     await waitFor(() => expect(entered).toBe(true));
     await waitFor(() => expect(document.querySelector(".fdn-status")!.textContent).toContain("Wartet auf einen freien Platz"));
     act(() => chat.stop());
+  });
+});
+
+describe("the thinking pill on a standalone agent (React, F7)", () => {
+  async function standalonePanel(dialect: EndpointDialect) {
+    const fake = new OpenAiFake();
+    const agent = FadenstackAgent.createBuilder()
+      .useEndpoint({ baseUrl: "http://localhost:11434/v1", model: "m", dialect, fetch: fake.fetch })
+      .useLocalProfile(AgentDefinition.fromJson({ slug: "local", name: "Local", version: { instructions: "Hi.", host_tool_contract: [], ui: {} } }))
+      .useSessionStore(new MemorySessionStore()).useApprovalStore(new MemoryApprovalStore()).build();
+    const approvals = new ApprovalBroker();
+    const chat = new AgentChatViewModel(agent, approvals, { ...testServices(), scheduler: immediateScheduler, automaticLanguage: "en" });
+    await act(() => chat.initialize());
+    render(<ChatPanel chat={chat} />);
+  }
+
+  it("is not shown where the dialect sends no thinking switch, and the header keeps the tool mode and the history", async () => {
+    await standalonePanel(EndpointDialect.openAiCompatible);
+    expect(screen.queryByRole("button", { name: /^Thinking: / })).toBeNull();
+    expect(screen.getAllByRole("button", { name: /^Tool mode: / })).toHaveLength(1);
+  });
+
+  it("is shown on Ollama", async () => {
+    await standalonePanel(EndpointDialect.ollama);
+    expect(screen.getByRole("button", { name: /^Thinking: / })).toBeTruthy();
   });
 });

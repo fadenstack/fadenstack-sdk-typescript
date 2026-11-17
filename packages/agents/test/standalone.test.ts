@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
   EndpointDialect,
+  EndpointReport,
   FadenstackClient,
   StaticTokenProvider,
   loginWithPassword,
@@ -548,3 +549,61 @@ describe("the endpoint's watermark, recorded per answer (F10)", () => {
     this.closed++;
   }
 }
+
+describe("the thinking menu of a standalone agent (F7, F10)", () => {
+  const reportWith = (thinksWhenOff: boolean | null, dialect: string) => new EndpointReport({
+    baseUrl: LOCAL, model: "gpt-oss:20b", checkedAt: 0, server: "Ollama", serverVersion: null, dialect, reachable: true, keyAccepted: true,
+    models: ["gpt-oss:20b"], chat: true, usage: true, toolCalls: true, vision: null, thinksWhenOff, contextLength: null, modelContextLength: null,
+    pictures: false, watermark: { status: "Unknown", source: null, checked: null, requested: false, confirmed: null }, problems: [],
+  });
+  const withDialect = (dialect: EndpointDialect, report?: EndpointReport) => {
+    const fake = new OpenAiFake();
+    const builder = FadenstackAgent.createBuilder()
+      .useEndpoint({ baseUrl: LOCAL, model: "gpt-oss:20b", dialect, fetch: fake.fetch }, report)
+      .useLocalProfile(AgentDefinition.fromJson(DEFINITION))
+      .useSessionStore(new MemorySessionStore()).useApprovalStore(new MemoryApprovalStore());
+    return { agent: builder.build(), fake };
+  };
+  const levels = async (dialect: EndpointDialect) => {
+    const { agent } = withDialect(dialect);
+    await agent.start();
+    return agent.reasoningChoices.levels;
+  };
+
+  it.each([[EndpointDialect.openAiCompatible], [EndpointDialect.lmStudio], [EndpointDialect.mistral]])(
+    "a dialect with no thinking switch (%j) offers no level", async (dialect) => {
+      expect(await levels(dialect)).toEqual([]);
+    });
+
+  it.each([[EndpointDialect.ollama], [EndpointDialect.openRouter], [EndpointDialect.vllm], [EndpointDialect.openAi]])(
+    "a dialect with a switch (%j) keeps its five levels", async (dialect) => {
+      expect(await levels(dialect)).toEqual(["auto", "off", "low", "medium", "high"]);
+    });
+
+  it("with thinksWhenOff true, Off sends the lowest level (low) on a reasoning_effort dialect", async () => {
+    const { agent, fake } = withDialect(EndpointDialect.ollama, reportWith(true, "ollama"));
+    await agent.start();
+    expect(agent.reasoningChoices.thinksWhenOff).toBe("lowest");
+    await agent.setReasoning("off");
+    await (await agent.startSession()).send("Hi");
+    expect(chats(fake).at(-1)!.json()["reasoning_effort"]).toBe("low");
+  });
+
+  it("without the flag, Off still sends none", async () => {
+    const { agent, fake } = withDialect(EndpointDialect.ollama, reportWith(false, "ollama"));
+    await agent.start();
+    expect(agent.reasoningChoices.thinksWhenOff).toBeUndefined();
+    await agent.setReasoning("off");
+    await (await agent.startSession()).send("Hi");
+    expect(chats(fake).at(-1)!.json()["reasoning_effort"]).toBe("none");
+  });
+
+  it("a chat-template dialect keeps the off switch and says the model thinks anyway", async () => {
+    const { agent, fake } = withDialect(EndpointDialect.vllm, reportWith(true, "vllm"));
+    await agent.start();
+    expect(agent.reasoningChoices.thinksWhenOff).toBe("always");
+    await agent.setReasoning("off");
+    await (await agent.startSession()).send("Hi");
+    expect(chats(fake).at(-1)!.json()["chat_template_kwargs"]).toEqual({ enable_thinking: false });
+  });
+});

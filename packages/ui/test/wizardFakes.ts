@@ -4,6 +4,7 @@ import {
   EndpointReport,
   EndpointServer,
   StaticTokenProvider,
+  type EndpointCheckOptions,
   type EndpointProblem,
   type EndpointReportData,
   type ModelEndpoint,
@@ -140,7 +141,7 @@ const WATERMARK = { status: "Unknown", source: null, checked: null, requested: f
 export function makeReport(baseUrl: string | URL, over: Partial<EndpointReportData> = {}): EndpointReport {
   return new EndpointReport({
     baseUrl: String(baseUrl), model: "m1", checkedAt: 0, server: EndpointServer.Unknown, serverVersion: null, dialect: "openai-compatible",
-    reachable: true, keyAccepted: true, models: ["m1"], chat: true, usage: true, toolCalls: true, vision: null, contextLength: null,
+    reachable: true, keyAccepted: true, models: ["m1"], chat: true, usage: true, toolCalls: true, vision: null, thinksWhenOff: null, contextLength: null,
     modelContextLength: null, pictures: false, watermark: { ...WATERMARK }, problems: [], ...over,
   });
 }
@@ -258,8 +259,12 @@ export class FakeEndpointChecker implements EndpointChecker {
     return this.asyncPlace ? Promise.resolve(place) : place;
   }
 
-  check(endpoint: ModelEndpoint, signal: AbortSignal): Promise<EndpointReport> {
+  /** The options each check was asked with (the wizard asks for the picture probe). */
+  readonly checkOptions: (EndpointCheckOptions | undefined)[] = [];
+
+  check(endpoint: ModelEndpoint, signal: AbortSignal, options?: EndpointCheckOptions): Promise<EndpointReport> {
     this.checked.push(endpoint);
+    this.checkOptions.push(options);
     return this.report.hasScript ? this.report.next(signal) : Promise.resolve(usableReport(endpoint.baseUrl, endpoint.model || "m1"));
   }
 }

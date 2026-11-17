@@ -149,6 +149,8 @@ export const frenchStrings: UiStrings = {
     medium: "Réfléchit un moment.",
     high: "Réfléchit le plus longtemps.",
   },
+  reasoningOffLowest: "Ce modèle réfléchit toujours. « Désactivée » utilise son niveau le plus bas.",
+  reasoningOffStillThinks: "Ce modèle réfléchit même avec « Désactivée ».",
   showEarlier: "Afficher les messages précédents",
   copy: "Copier",
   copyCode: "Copier le code",

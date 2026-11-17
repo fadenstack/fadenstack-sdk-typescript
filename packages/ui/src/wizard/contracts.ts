@@ -402,7 +402,7 @@ export interface EndpointChecker {
    */
   placeOf(baseUrl: URL, signal: AbortSignal): EndpointPlace | Promise<EndpointPlace>;
   /** The endpoint check (F03). */
-  check(endpoint: ModelEndpoint, signal: AbortSignal): Promise<EndpointReport>;
+  check(endpoint: ModelEndpoint, signal: AbortSignal, options?: EndpointCheckOptions): Promise<EndpointReport>;
 }
 
 /** What the app declares, and what the wizard needs to run (F15). Every field is optional; the defaults are .NET's. .NET: `WizardOptions`. */
