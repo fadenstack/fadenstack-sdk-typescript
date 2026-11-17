@@ -8,6 +8,7 @@ import { AgentChatViewModel, ApprovalBroker, StopEverythingViewModel, builtInStr
 import { ChatPanel, StopEverythingButton } from "@fadenstack/ui-react";
 import { FakeGateway } from "@fadenstack/testing";
 import { testServices } from "./services.js";
+import { ManualClock } from "../../ui/test/wizardFakes.js";
 
 // "Stop everything" and the notice of an agent the organisation turned off, in the React skin, over the real view models. The Vue skin's
 // stopEverything.test.ts says the same.
@@ -59,11 +60,26 @@ describe.each(LANGUAGES)("in %s", (language) => {
 
     expect(button.title).toBe(strings.stopEverythingTip);
     expect(view.container.querySelector(".fdn-stop-everything")!.getAttribute("lang")).toBe(strings.language);
-    expect(view.container.querySelector(".fdn-stop-everything-result")).toBeNull(); // nothing said before the first press
+    const line = view.container.querySelector(".fdn-stop-everything-result")!;
+    expect(line.textContent).toBe(""); // nothing said before the first press, but the live region is there
+    expect([line.getAttribute("role"), line.getAttribute("aria-live")]).toEqual(["status", "polite"]);
 
     await act(async () => { fireEvent.click(button); });
 
     await waitFor(() => expect(view.container.querySelector(".fdn-stop-everything-result")!.textContent).toBe(strings.stopEverythingNothing));
     expect(screen.queryByRole("alertdialog")).toBeNull(); // no confirmation
+  });
+
+  it("the result line clears itself and the region stays for the next one", async () => {
+    const clock = new ManualClock();
+    const model = new StopEverythingViewModel({ agents: () => [], strings: () => strings, clock, stop: () => Promise.resolve({ turnsStopped: 0, grantsEnded: 0, chatApprovalsEnded: 0, grantsNotTold: 0 }) });
+    const view = render(<StopEverythingButton stop={model} />);
+    await act(async () => { fireEvent.click(screen.getByRole("button", { name: strings.stopEverything })); });
+    const line = view.container.querySelector(".fdn-stop-everything-result")!;
+    expect(line.textContent).toBe(strings.stopEverythingNothing);
+
+    await act(async () => { clock.advance(8000); });
+    expect(view.container.querySelector(".fdn-stop-everything-result")).toBe(line); // the same live region
+    expect(line.textContent).toBe("");
   });
 });

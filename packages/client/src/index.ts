@@ -13,6 +13,8 @@ export {
   FadenstackBadCredentialsError,
   ErrorCodes,
   isImagesDisabled,
+  pictureRefusalOf,
+  type PictureRefusal,
   isAgentDisabled,
   isAbortError,
 } from "./errors.js";

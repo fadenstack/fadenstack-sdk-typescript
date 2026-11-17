@@ -1193,6 +1193,15 @@
   max-width: 320px;
 }
 
+/* Empty (the line cleared itself): out of the layout, so a narrow header keeps its title, but still a live region. */
+.fdn-stop-everything-result:empty {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+}
+
 /* While content logging is on (8.1): the warning look, because prompts and answers are being written to the logs. */
 .fdn-content-logging-band {
   border-color: var(--fdn-warning);

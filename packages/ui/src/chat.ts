@@ -1,7 +1,8 @@
 import type {
   AgentEvent, ChatSession, FadenstackAgent, HostCommandResult, MarkedCopy, MessageAttachment, ReasoningLevel, TranscriptEntry,
 } from "@fadenstack/agents";
-import { FadenstackSignInRequiredError, TOOL_MODES, narrowestMode, type SkillOption, type ToolMode } from "@fadenstack/client";
+import { checkPicture, isPicture } from "@fadenstack/agents";
+import { FadenstackSignInRequiredError, TOOL_MODES, isAbortError, narrowestMode, pictureRefusalOf, type PictureRefusal, type SkillOption, type ToolMode } from "@fadenstack/client";
 
 import { aboutView, footerLink, refSource, type AboutView, type PanelLink } from "./about.js";
 import type { ApprovalBroker, PendingApproval } from "./approvalBroker.js";
@@ -1024,7 +1025,7 @@ export class AgentChatViewModel extends Observable implements TurnHost {
     } catch (error) {
       if (turn) {
         const active = turn;
-        this.#batcher.enqueue(() => stop.signal.aborted ? active.stop() : active.fail(error instanceof Error ? error.message : String(error)));
+        this.#batcher.enqueue(() => this.#choseToStop(stop.signal, error) ? active.stop() : active.fail(this.#errorText(error)));
       } else if (!stop.signal.aborted) this.#error = error instanceof Error ? error.message : String(error);
       if (error instanceof FadenstackSignInRequiredError) this.#signInRequired = true;
     } finally {
@@ -1396,21 +1397,40 @@ export class AgentChatViewModel extends Observable implements TurnHost {
       this.notify();
       return false;
     }
+    // The data's first bytes decide whether it is a picture the gateway takes, and which type it is: not what the URL claims. Nothing is
+    // attached, and nothing sent, for a picture that would be refused (OWASP ASVS 5.0 V5, file handling).
+    const checked = checkPicture(picture.dataUrl);
+    if (!checked.ok) {
+      this.#error = this.#pictureSentence(checked.reason);
+      this.notify();
+      return false;
+    }
     const title = picture.title?.trim() || this.strings.pastedPicture;
     const attachment: MessageAttachment = {
       title,
-      content: picture.dataUrl,
+      content: checked.dataUrl,
       kind: picture.kind ?? "picture",
-      mediaType: /^data:(image\/[\w.+-]+)[;,]/.exec(picture.dataUrl)?.[1] ?? "image/png",
+      mediaType: checked.mediaType,
     };
     this.addAttachment(new AttachmentViewModel({
       title,
       subtitle: this.strings.picture,
-      image: picture.dataUrl,
+      image: checked.dataUrl,
       resolve: () => Promise.resolve(attachment),
     }));
     this.requestComposerFocus();
     return true;
+  }
+
+  /** The sentence for a refused picture, in the panel's language. */
+  #pictureSentence(reason: PictureRefusal | "missing" | "type"): string {
+    return reason === "missing" ? this.strings.pictureMissing : reason === "embeds" ? this.strings.embedsNotAllowed : this.strings.pictureTypeNotAllowed;
+  }
+
+  /** What a failed turn says: a refused picture in plain words, in the panel's language; otherwise the error's own message. */
+  #errorText(error: unknown): string {
+    const refusal = pictureRefusalOf(error);
+    return refusal ? this.#pictureSentence(refusal) : error instanceof Error ? error.message : String(error);
   }
 
   /** Says that a file the user added could not be read as a picture (`error`). */
@@ -1516,7 +1536,17 @@ export class AgentChatViewModel extends Observable implements TurnHost {
       for (const a of attached) {
         try {
           const resolved = await a.resolve(signal);
-          if (resolved) attachments.push(resolved);
+          if (resolved && isPicture(resolved)) {
+            // Whatever put a picture on the chip (the host's own attachment included): the same check as `attachPicture`, before it is sent.
+            const checked = checkPicture(resolved.content);
+            if (!checked.ok) {
+              const title = a.title;
+              const message = this.#pictureSentence(checked.reason);
+              this.#batcher.enqueue(() => turn.addPart(NoticePart.localized(this.#context, "warning", (s) => ({ title: s.notAttached(title), message }))));
+              continue;
+            }
+            attachments.push({ ...resolved, content: checked.dataUrl, mediaType: checked.mediaType });
+          } else if (resolved) attachments.push(resolved);
         } catch (error) {
           if (signal.aborted) throw error;
           const title = a.title;
@@ -1533,7 +1563,9 @@ export class AgentChatViewModel extends Observable implements TurnHost {
       const picked = skills.map((s) => ({ slug: s.slug, name: s.name }));
       for await (const event of this.#session.stream(text, { attachments, skills: picked, signal })) this.#apply(turn, event);
     } catch (error) {
-      if (signal.aborted) {
+      if (this.#choseToStop(signal, error)) {
+        // A stop the person chose ends as stopped, never as "Something went wrong": Stop, Esc, or "Stop everything" (which stops the
+        // session without this chat's signal) alike.
         this.#batcher.enqueue(() => turn.stop());
       } else if (error instanceof FadenstackSignInRequiredError) {
         this.#batcher.enqueue(() => {
@@ -1542,9 +1574,17 @@ export class AgentChatViewModel extends Observable implements TurnHost {
           this.notify();
         });
       } else {
-        this.#batcher.enqueue(() => turn.fail(error instanceof Error ? error.message : String(error)));
+        this.#batcher.enqueue(() => turn.fail(this.#errorText(error)));
       }
     }
+  }
+
+  /**
+   * Whether a turn's error is the person's own stop: this chat's Stop (its signal), or a stop of the session from outside ("Stop
+   * everything", `ChatSession.stop()`), which ends the stream with an `AbortError` while this chat's signal is untouched.
+   */
+  #choseToStop(signal: AbortSignal, error: unknown): boolean {
+    return signal.aborted || isAbortError(error);
   }
 
   #apply(turn: TurnViewModel, e: AgentEvent): void {

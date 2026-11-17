@@ -1,12 +1,13 @@
-import { useId, useRef, type KeyboardEvent, type ReactElement } from "react";
+import { useEffect, useId, useRef, type KeyboardEvent, type ReactElement } from "react";
 
 import type { MyDataSettingsViewModel } from "@fadenstack/ui";
+import { whenShown } from "@fadenstack/ui-web";
 
 import { useViewModel } from "./hooks.js";
 import { Actions, Button, Shell, Title, useFirstFocus, type SkillViewProps } from "./SkillParts.js";
 
 export interface MyDataSettingsProps extends SkillViewProps {
-  /** The control's view model (`new MyDataSettingsViewModel({ agent })`). Call its `load()` once when the page opens; handle its `onSaveRequest`. */
+  /** The control's view model (`new MyDataSettingsViewModel({ agent })`). Call its `load()` once when the page opens (the skin calls `refresh()` each time it is shown); handle its `onSaveRequest`. */
   settings: MyDataSettingsViewModel;
 }
 
@@ -23,6 +24,8 @@ export function MyDataSettings(props: MyDataSettingsProps): ReactElement {
   const id = useId();
   const column = useRef<HTMLDivElement>(null);
   useFirstFocus(column, [props.settings, vm.phase]);
+  // The record of tool calls grows as the agents work: read it each time the control is shown.
+  useEffect(() => (column.current ? whenShown(column.current, () => { void props.settings.refresh(); }) : undefined), [props.settings]);
 
   const onKeyDown = (e: KeyboardEvent) => {
     if (e.key === "Escape" && vm.showConfirm) {

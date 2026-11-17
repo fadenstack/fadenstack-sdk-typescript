@@ -11,6 +11,7 @@ export {
   picturesIn,
   readPicture,
   stickToBottom,
+  whenShown,
   type ComposerAction,
   type ReadPicture,
 } from "./dom.js";

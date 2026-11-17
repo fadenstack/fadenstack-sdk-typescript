@@ -6,9 +6,10 @@
  * it affects. Then a result line. The texts, the checks and the buttons' state are the view model's. Parity with `@fadenstack/ui-react`'s
  * `MyDataSettings`.
  */
-import { computed, ref, useId } from "vue";
+import { computed, onBeforeUnmount, onMounted, ref, useId } from "vue";
 
 import type { MyDataSettingsViewModel } from "@fadenstack/ui";
+import { whenShown } from "@fadenstack/ui-web";
 
 import { useViewModel } from "./composables.js";
 import SkillShell from "./SkillShell.vue";
@@ -16,7 +17,7 @@ import { useFirstFocus } from "./skills.js";
 import type { ChatTheme } from "./types.js";
 
 const props = withDefaults(defineProps<{
-  /** The control's view model (`new MyDataSettingsViewModel({ agent })`). Call its `load()` once when the page opens; handle its `onSaveRequest`. */
+  /** The control's view model (`new MyDataSettingsViewModel({ agent })`). Call its `load()` once when the page opens (the skin calls `refresh()` each time it is shown); handle its `onSaveRequest`. */
   settings: MyDataSettingsViewModel;
   /** `system` (default) follows the browser's light or dark setting. */
   theme?: ChatTheme;
@@ -27,6 +28,14 @@ const s = computed(() => vm.value.strings);
 const id = useId();
 const root = ref<InstanceType<typeof SkillShell> | null>(null);
 useFirstFocus(root, () => vm.value.phase);
+
+// The record of tool calls grows as the agents work: read it each time the control is shown.
+let stopShown: (() => void) | undefined;
+onMounted(() => {
+  const el = root.value?.$el as Element | undefined;
+  if (el) stopShown = whenShown(el, () => { void vm.value.refresh(); });
+});
+onBeforeUnmount(() => stopShown?.());
 
 function onKeydown(e: KeyboardEvent): void {
   if (e.key === "Escape" && vm.value.showConfirm) {

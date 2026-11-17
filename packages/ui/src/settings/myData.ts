@@ -79,6 +79,7 @@ export class MyDataSettingsViewModel extends Observable {
   #deletion: DataDeletion | undefined;
   #audit: AuditVerification | undefined;
   #auditUnreadable = false;
+  #loaded = false;
 
   constructor(options: MyDataSettingsOptions) {
     super();
@@ -93,9 +94,22 @@ export class MyDataSettingsViewModel extends Observable {
     return this.#strings();
   }
 
-  /** Starts the agent and reads the apps that use the person's data. */
+  /** Starts the agent and reads the apps that use the person's data. Call it once when the page opens; `refresh()` does the rest. */
   async load(): Promise<void> {
     await this.#source.start();
+    this.#loaded = true;
+    await this.#readApps();
+    await this.#readAudit();
+    this.notify();
+  }
+
+  /**
+   * Reads the apps and the record of tool calls again, so the control shows what is true now (the record grows as the agents work).
+   * The skins call it whenever the control is shown: when it mounts, when it becomes visible again, when the settings page opens.
+   * Cheap; does nothing before `load()` has started the source, nor while an action works. .NET: `RefreshAsync`.
+   */
+  async refresh(): Promise<void> {
+    if (!this.#loaded || this.#phase === "busy") return;
     await this.#readApps();
     await this.#readAudit();
     this.notify();

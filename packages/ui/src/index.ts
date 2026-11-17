@@ -198,7 +198,7 @@ export {
 export {
   MyDataSettingsViewModel, type MyDataPhase, type MyDataAuditSource, type MyDataSaveRequest, type MyDataSettingsOptions, type MyDataSource,
 } from "./settings/myData.js";
-export { StopEverythingViewModel, describeStopResult, type StopEverythingOptions } from "./settings/stopEverything.js";
+export { DEFAULT_STOP_RESULT_MS, StopEverythingViewModel, describeStopResult, type StopEverythingOptions } from "./settings/stopEverything.js";
 export {
   ContentLoggingBandViewModel,
   ContentLoggingSettingsViewModel,

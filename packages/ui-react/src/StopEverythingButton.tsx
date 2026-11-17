@@ -25,7 +25,9 @@ export function StopEverythingButton(props: StopEverythingButtonProps): ReactEle
         aria-busy={vm.isBusy} onClick={() => { void vm.stop(); }}>
         <Icon name="stop" size={16} />
       </button>
-      {vm.hasResult && <span className="fdn-stop-everything-result" role="status" dir="auto">{vm.resultText}</span>}
+      {/* The live region is always there and only its text comes and goes, so a screen reader announces the line politely when it
+          appears (WCAG 4.1.3 status messages); empty, it takes no room. */}
+      <span className="fdn-stop-everything-result" role="status" aria-live="polite" dir="auto">{vm.resultText}</span>
     </div>
   );
 }

@@ -29,6 +29,8 @@ const s = computed(() => vm.value.strings);
       :aria-busy="vm.isBusy" @click="vm.stop()">
       <Icon name="stop" :size="16" />
     </button>
-    <span v-if="vm.hasResult" class="fdn-stop-everything-result" role="status" dir="auto">{{ vm.resultText }}</span>
+    <!-- The live region is always there and only its text comes and goes, so a screen reader announces the line politely when it
+         appears (WCAG 4.1.3 status messages); empty, it takes no room. -->
+    <span class="fdn-stop-everything-result" role="status" aria-live="polite" dir="auto">{{ vm.resultText }}</span>
   </div>
 </template>

@@ -162,6 +162,27 @@ describe("AgentChatViewModel", () => {
     expect(turn.parts.map((p) => p.kind)).toEqual(["markdown"]);
   });
 
+  it("ends a turn that Stop everything stopped as stopped, not as an error", async () => {
+    const { vm, agent } = await chat({ model: () => ({ text: "a slow answer, word by word", delayMs: 15 }) });
+    const sending = vm.send("Go");
+    await new Promise((r) => setTimeout(r, 40));
+    await FadenstackAgent.stopAll([agent]); // stops the session; this chat's own signal is not touched
+    await sending;
+    const turn = vm.turns[0]!;
+    expect(turn.state).toBe("stopped");
+    expect(turn.statusText).toBe("Stopped");
+    expect(turn.errorMessage).toBeFalsy();
+    expect(turn.statusText).not.toBe("Something went wrong");
+    expect(vm.error).toBeFalsy();
+  });
+
+  it("still shows an error for a turn that fails for another reason", async () => {
+    const { vm } = await chat({ model: () => { throw new Error("model exploded"); } });
+    await vm.send("Go");
+    expect(vm.turns[0]!.state).toBe("failed");
+    expect(vm.turns[0]!.statusText).toBe("Something went wrong");
+  });
+
   it("stops a running turn", async () => {
     const { vm } = await chat({ model: () => ({ text: "a slow answer, word by word", delayMs: 15 }) });
     const sending = vm.send("Go");

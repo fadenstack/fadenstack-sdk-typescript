@@ -99,6 +99,35 @@ describe("the record of tool calls in the Your data control", () => {
     expect([vm.phase, vm.statusText]).toEqual(["idle", ""]);
   });
 
+  it("reads the record again each time the control is shown: an entry added after load() is counted", async () => {
+    const { vm, source } = model((s) => { s.verification = { intact: true, entries: 0 }; });
+    await vm.refresh(); // before load() nothing is read
+    expect(vm.auditLine).toBe("");
+    await vm.load();
+    expect(vm.auditLine).toBe("Record of tool calls: no entries yet");
+
+    source.verification = { intact: true, entries: 1, firstSeq: 1, firstTime: "2026-08-01T10:00:00.000Z" }; // a tool call was recorded meanwhile
+    let changes = 0;
+    vm.subscribe(() => changes++);
+    await vm.refresh();
+
+    expect(vm.auditLine).toBe(`Record of tool calls: 1 entry since ${since()}, intact`);
+    expect(changes).toBeGreaterThan(0);
+  });
+
+  it("does not read while an action works", async () => {
+    const { vm, source } = model();
+    await vm.load();
+    let release!: () => void;
+    source.gate = new Promise<void>((r) => { release = r; });
+    const exporting = vm.exportThisApp();
+    const before = source.calls.filter((c) => c === "audit").length;
+    await vm.refresh();
+    expect(source.calls.filter((c) => c === "audit")).toHaveLength(before);
+    release();
+    await exporting;
+  });
+
   it.each(LANGUAGES)("has its texts in %s, and the name of the button says what the button says", async (language) => {
     const strings = builtInStrings[language]!;
     const texts = [strings.myDataAuditIntact("12", "1.8.2026"), strings.myDataAuditIntactOne("1.8.2026"), strings.myDataAuditDamaged("8"), strings.myDataAuditEmpty,
