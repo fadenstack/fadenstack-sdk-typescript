@@ -29,6 +29,11 @@ await chat.initialize();
 createRoot(document.getElementById("chat")!).render(<ChatPanel chat={chat} />);
 ```
 
+On a page with other React roots, give the panel's root its own prefix (`createRoot(element, { identifierPrefix:
+"fadenstack-agent-" })`): the panel links labels and descriptions to ids from React's `useId()` (the AI notice is the
+message field's description), and ids from two roots could otherwise meet, so a screen reader would read the other
+root's text.
+
 React and React DOM 18.2 or later are peer dependencies. The package is an ES module with type declarations.
 
 - Documentation: <https://developers.fadenstack.com/sdk/typescript/chat-panel/>

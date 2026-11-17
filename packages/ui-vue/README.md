@@ -42,6 +42,16 @@ In a template, the host's own controls go into slots:
 </ChatPanel>
 ```
 
+On a page with other Vue apps (Nextcloud, a portal), give the app its own id prefix. The panel links labels and
+descriptions to ids from Vue's `useId()` (the AI notice is the message field's description), and every Vue app counts
+from `v-` unless told otherwise, so two apps' ids could meet and a screen reader read the other app's text:
+
+```ts
+const app = createApp({ render: () => h(ChatPanel, { chat }) });
+app.config.idPrefix = "fadenstack-agent";
+app.mount("#chat");
+```
+
 Vue 3.5 or later is a peer dependency. The package is an ES module with type declarations.
 
 - Documentation: <https://developers.fadenstack.com/sdk/typescript/chat-panel/>
