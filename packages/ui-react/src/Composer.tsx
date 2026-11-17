@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useRef, type ClipboardEvent, type DragEvent, type ReactElement, type ReactNode } from "react";
+import { useEffect, useId, useLayoutEffect, useRef, type ClipboardEvent, type DragEvent, type ReactElement, type ReactNode } from "react";
 
 import type { AgentChatViewModel, AttachmentViewModel, SkillPickerViewModel, UiStrings } from "@fadenstack/ui";
 import { composerKey, fitToContent, focusAtEnd, picturesIn, readPicture } from "@fadenstack/ui-web";
@@ -21,6 +21,10 @@ export function Composer({ chat, accessory, placeholder }: {
   useViewModel(picker);
   const strings = chat.strings;
   const box = useRef<HTMLTextAreaElement>(null);
+  // The AI notice is the field's description, so a screen reader says it when the field gets focus: at the first interaction
+  // (AI Act Art. 50(5)). Before, Narrator read it only six or seven items after the field. The notice under the field stays.
+  const noticeId = useId();
+  const notice = strings.aiNotice;
 
   useEffect(() => chat.onComposerFocus(() => {
     if (box.current) focusAtEnd(box.current);
@@ -87,6 +91,7 @@ export function Composer({ chat, accessory, placeholder }: {
         value={chat.input}
         placeholder={placeholder ?? strings.composerPlaceholder}
         aria-label={placeholder ?? strings.composerPlaceholder}
+        aria-describedby={notice ? noticeId : undefined}
         aria-controls={open ? listId : undefined}
         aria-activedescendant={open && picker.entries.length > 0 ? `${picker.key}-${picker.activeIndex}` : undefined}
         onChange={(e) => chat.setInput(e.target.value)}
@@ -103,6 +108,7 @@ export function Composer({ chat, accessory, placeholder }: {
           else picker.close();
         }}
       />
+      {notice && <span id={noticeId} hidden>{notice}</span>}
       <div className="fdn-composer-bar">
         <div className="fdn-composer-accessory">{accessory}</div>
         {chat.isBusy ? (

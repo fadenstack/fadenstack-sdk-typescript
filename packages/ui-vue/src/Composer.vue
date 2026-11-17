@@ -4,7 +4,7 @@
  * opens the skills to pick for the message; a pasted or dropped picture goes with it, for a model that sees
  * pictures. The default slot holds the host's controls under the text (attach the page, the selection).
  */
-import { computed, onMounted, useTemplateRef, watch } from "vue";
+import { computed, onMounted, useId, useTemplateRef, watch } from "vue";
 
 import type { AgentChatViewModel } from "@fadenstack/ui";
 import { composerKey, fitToContent, focusAtEnd, picturesIn, readPicture } from "@fadenstack/ui-web";
@@ -19,6 +19,9 @@ defineSlots<{ default?(): unknown }>();
 const chat = useViewModel(() => props.chat);
 const picker = useViewModel(() => props.chat.skillPicker);
 const box = useTemplateRef<HTMLTextAreaElement>("box");
+// The AI notice is the field's description, so a screen reader says it when the field gets focus: at the first interaction
+// (AI Act Art. 50(5)). Before, Narrator read it only six or seven items after the field. The notice under the field stays.
+const noticeId = useId();
 
 const listId = computed(() => `${picker.value.key}-list`);
 const open = computed(() => picker.value.isOpen && chat.value.canPick);
@@ -101,12 +104,14 @@ function onDrop(e: DragEvent): void {
       :value="chat.input"
       :placeholder="placeholder ?? chat.strings.composerPlaceholder"
       :aria-label="placeholder ?? chat.strings.composerPlaceholder"
+      :aria-describedby="chat.strings.aiNotice ? noticeId : undefined"
       :aria-controls="open ? listId : undefined"
       :aria-activedescendant="active"
       @input="chat.setInput(($event.target as HTMLTextAreaElement).value)"
       @paste="onPaste"
       @keydown="onKey"
     />
+    <span v-if="chat.strings.aiNotice" :id="noticeId" hidden>{{ chat.strings.aiNotice }}</span>
     <div class="fdn-composer-bar">
       <div class="fdn-composer-accessory"><slot /></div>
       <button
