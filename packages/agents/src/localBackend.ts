@@ -1,5 +1,6 @@
 import {
   EndpointCheck,
+  EndpointDialect,
   EndpointServer,
   TextWatermarks,
   bytesSha256,
@@ -70,6 +71,22 @@ export interface LocalBackendSettings {
 
 const LANGUAGE = /^[\p{L}\p{N}-]{1,35}$/u;
 
+const isRecord = (v: unknown): v is Record<string, unknown> => v !== null && typeof v === "object" && !Array.isArray(v);
+
+/**
+ * What the endpoint's dialect says about the thinking menu, for the profile's `ui.reasoning`: no level where the dialect sends no
+ * thinking switch (F7); a note on Off where the check found the model thinks anyway (F10). Undefined: nothing to say, or a
+ * host's own streamer (no dialect).
+ */
+function reasoningUi(dialect: EndpointDialect | undefined, report: EndpointReport | undefined): Record<string, unknown> | undefined {
+  if (!dialect) return undefined;
+  if (dialect.thinking === "None") return { offered: false };
+  if (dialect.thinksWhenOff === true || report?.thinksWhenOff === true) {
+    return { thinks_when_off: dialect.thinking === "ReasoningEffort" ? "lowest" : "always" };
+  }
+  return undefined;
+}
+
 /**
  * The standalone backend (sdk/51 F02 §3, I02 commit 14): no server at all. The profile comes from the app's agent definition
  * (F03) and the endpoint check; there are no events, no grants, no Bypass, no step-up and no server checks; the user's language
@@ -127,6 +144,8 @@ export class LocalBackend implements AgentBackend {
     const url = this.endpointUrl;
     const residency = url === undefined || hostScope(url.hostname) === "public" ? "external" : "private";
     const ui: Record<string, unknown> = { ...(definition.ui ?? {}), model_residency: residency };
+    const thinking = reasoningUi(endpoint ? (endpoint.dialect ?? EndpointDialect.openAiCompatible) : undefined, report);
+    if (thinking) ui["reasoning"] = { ...(isRecord(ui["reasoning"]) ? ui["reasoning"] : {}), ...thinking };
     return {
       principal: { ...this.#principal },
       id: definition.slug,

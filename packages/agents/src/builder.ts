@@ -1,5 +1,6 @@
 import {
   DirectChatClient,
+  EndpointDialect,
   FadenstackClient,
   type ChatStreamer,
   type EndpointReport,
@@ -514,6 +515,10 @@ export class AgentBuilder {
       let endpoint = this.#endpoint && this.#logger && !this.#endpoint.logger ? { ...this.#endpoint, logger: this.#logger } : this.#endpoint;
       // Plain http forbidden: the person's opt-in is taken away, and the transport says why (loopback stays).
       if (endpoint && policy.plainHttp !== PolicyAccess.Allowed) endpoint = { ...endpoint, allowPlainHttpInLan: false, plainHttpForbidden: true };
+      // The check found that the model thinks although the off switch was sent: Off sends its lowest level (F10).
+      if (endpoint && this.#endpointReport?.thinksWhenOff === true) {
+        endpoint = { ...endpoint, dialect: { ...(endpoint.dialect ?? EndpointDialect.openAiCompatible), thinksWhenOff: true } };
+      }
       // What the person turned on, under the policy: never more.
       const local: LocalProfileOptions = {
         ...this.#localOptions,
