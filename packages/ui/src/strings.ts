@@ -173,9 +173,9 @@ export interface UiStrings {
   reasoningLabel: Record<ReasoningLevel, string>;
   /** What a level means, in one line (.NET `Reasoning_<Level>_Description`). */
   reasoningDescription: Record<ReasoningLevel, string>;
-  /** Off's line when the check found the model thinks anyway and Off sends its lowest level (.NET `Reasoning_Off_Lowest_Description`). */
+  /** Off's line when the check found the model thinks anyway and Off sends its lowest level (.NET `ReasoningOffLowestDescription`). */
   reasoningOffLowest: string;
-  /** Off's line when the model thinks even with the off switch sent (a chat template; .NET `Reasoning_Off_StillThinks_Description`). */
+  /** Off's line when the model thinks even with the off switch sent (a chat template; .NET `ReasoningOffStillThinksDescription`). */
   reasoningOffStillThinks: string;
   showEarlier: string;
   copy: string;
