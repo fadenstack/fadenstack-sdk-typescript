@@ -1,7 +1,7 @@
 import type {
   AgentEvent, ChatSession, FadenstackAgent, HostCommandResult, MarkedCopy, MessageAttachment, ReasoningLevel, TranscriptEntry,
 } from "@fadenstack/agents";
-import { FadenstackSignInRequiredError, TOOL_MODES, narrowestMode, type SkillOption, type ToolMode } from "@fadenstack/client";
+import { FadenstackSignInRequiredError, TOOL_MODES, isAbortError, narrowestMode, type SkillOption, type ToolMode } from "@fadenstack/client";
 
 import { aboutView, footerLink, refSource, type AboutView, type PanelLink } from "./about.js";
 import type { ApprovalBroker, PendingApproval } from "./approvalBroker.js";
@@ -1007,7 +1007,7 @@ export class AgentChatViewModel extends Observable implements TurnHost {
     } catch (error) {
       if (turn) {
         const active = turn;
-        this.#batcher.enqueue(() => stop.signal.aborted ? active.stop() : active.fail(error instanceof Error ? error.message : String(error)));
+        this.#batcher.enqueue(() => this.#choseToStop(stop.signal, error) ? active.stop() : active.fail(error instanceof Error ? error.message : String(error)));
       } else if (!stop.signal.aborted) this.#error = error instanceof Error ? error.message : String(error);
       if (error instanceof FadenstackSignInRequiredError) this.#signInRequired = true;
     } finally {
@@ -1516,7 +1516,9 @@ export class AgentChatViewModel extends Observable implements TurnHost {
       const picked = skills.map((s) => ({ slug: s.slug, name: s.name }));
       for await (const event of this.#session.stream(text, { attachments, skills: picked, signal })) this.#apply(turn, event);
     } catch (error) {
-      if (signal.aborted) {
+      if (this.#choseToStop(signal, error)) {
+        // A stop the person chose ends as stopped, never as "Something went wrong": Stop, Esc, or "Stop everything" (which stops the
+        // session without this chat's signal) alike.
         this.#batcher.enqueue(() => turn.stop());
       } else if (error instanceof FadenstackSignInRequiredError) {
         this.#batcher.enqueue(() => {
@@ -1528,6 +1530,14 @@ export class AgentChatViewModel extends Observable implements TurnHost {
         this.#batcher.enqueue(() => turn.fail(error instanceof Error ? error.message : String(error)));
       }
     }
+  }
+
+  /**
+   * Whether a turn's error is the person's own stop: this chat's Stop (its signal), or a stop of the session from outside ("Stop
+   * everything", `ChatSession.stop()`), which ends the stream with an `AbortError` while this chat's signal is untouched.
+   */
+  #choseToStop(signal: AbortSignal, error: unknown): boolean {
+    return signal.aborted || isAbortError(error);
   }
 
   #apply(turn: TurnViewModel, e: AgentEvent): void {
