@@ -187,6 +187,9 @@ Fields added or changed since 0.2.x; no field is removed. A row marked Yes goes 
 
 ### Changed
 
+- **For a host's own tests:** "Stop everything" keeps an empty `role="status"` region in place (so its line is announced when it
+  appears), and the composer has a hidden copy of the AI notice that its `aria-describedby` names. An unscoped
+  `getByRole("status")` or `getByText(<the notice>)` now finds two elements; scope it to the part you mean.
 - **Behaviour change:** `useHookContent()` now only means that the app *offers* content logging. The model hooks see message and
   answer text only while the person has switched content logging on (`startContentLogging`). A development setup calls
   `startContentLogging` itself.
