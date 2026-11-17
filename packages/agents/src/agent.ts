@@ -24,7 +24,7 @@ import {
 import type { PermissionMode } from "./approvals.js";
 import { type ApprovalStore, type StoredApproval } from "./approvalStore.js";
 import { ARGUMENTS_SHA256_FEATURE, AuditRetention, MemoryAuditLog, type AuditExportFormat, type AuditLog, type AuditVerification } from "./audit.js";
-import { DefaultStores, buildExport, deleteUserDatabases, deleteUserLocalStorage, userDatabaseNames, type DataDeletion, type MyDataExport } from "./dataRights.js";
+import { DefaultStores, buildExport, deleteHostData, deleteUserDatabases, deleteUserLocalStorage, userDatabaseNames, type DataDeletion, type MyDataExport } from "./dataRights.js";
 import {
   IndexedDbAppRecords, MemoryAppRecords, appNameOf, listMyDataApps, planMyData,
   type AppRecords, type DataScope, type MyDataApp, type MyDataOptions, type MyDataPlan,
@@ -1238,8 +1238,10 @@ export class FadenstackAgent implements AgentSwitch {
     const principal = this.profile.principal;
     const hostSessionStoreLeft = this.settings.sessions !== undefined;
     const hostApprovalStoreLeft = this.settings.approvalStore !== undefined;
-    const result = (storesCleared: number, extra: Pick<DataDeletion, "scope" | "otherApps" | "agentsKept">): DataDeletion => ({
-      storesCleared, hostSessionStoreLeft, hostApprovalStoreLeft, hostStoresLeft: hostSessionStoreLeft || hostApprovalStoreLeft,
+    // The host's own data (`useHostData`) goes after the SDK's, whichever the scope, so a host's removal that fails never keeps the
+    // SDK's data; it is counted with the SDK's own. .NET: the same order.
+    const result = async (storesCleared: number, extra: Pick<DataDeletion, "scope" | "otherApps" | "agentsKept">): Promise<DataDeletion> => ({
+      storesCleared: storesCleared + await deleteHostData(this.settings.hostData, scope, signal), hostSessionStoreLeft, hostApprovalStoreLeft, hostStoresLeft: hostSessionStoreLeft || hostApprovalStoreLeft,
       scope: extra.scope, otherApps: extra.otherApps, sharedDataKept: extra.otherApps.length > 0, agentsKept: extra.agentsKept,
     });
     if (scope === "allApps") return result(await this.#deleteEverything(principal), { scope, otherApps: [], agentsKept: [] });

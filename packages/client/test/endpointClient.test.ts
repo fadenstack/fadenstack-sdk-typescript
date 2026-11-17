@@ -232,6 +232,20 @@ describe("what a plain endpoint does that the gateway does not", () => {
     expect((e as Error).message).toBe(message);
   });
 
+  it.each([
+    ["data: {\"error\":{\"message\":\"upstream down\",\"code\":502}}\n\n", "502"], // OpenRouter sends a number
+    ["data: {\"error\":{\"message\":\"upstream down\",\"code\":\"internal\"}}\n\n", "internal"],
+    ["data: {\"error\":{\"message\":\"upstream down\",\"code\":null}}\n\n", undefined],
+  ])("an error inside the stream keeps its code as text: %s", async (sse, code) => {
+    const { client, fake } = make();
+    fake.intercept = () => new Response(sse, { headers: { "content-type": "text/event-stream" } });
+
+    const e = await failure(() => streamed(client));
+
+    expect(e).toBeInstanceOf(FadenstackStreamError);
+    expect((e as FadenstackStreamError).code).toBe(code);
+  });
+
   it("a line longer than the limit ends the stream", async () => {
     const limits: SseLimits = { maxLineChars: 64, maxEventChars: 128, maxTotalChars: 1024 };
     const tooLarge = async (text: string) => {

@@ -19,9 +19,20 @@ import { PAGE_CONTRACT, Pages } from "./helpers.js";
 
 /** Data rights (F2: export and delete my data) and retention (F3), with the stores encrypted. Port of the .NET DataRights tests. */
 describe("my data on this device", () => {
+  /** The page's `localStorage` for the host-data tests (Node has none). */
+  class FakeStorage {
+    readonly #map = new Map<string, string>();
+    get length(): number { return this.#map.size; }
+    key(i: number): string | null { return [...this.#map.keys()][i] ?? null; }
+    getItem(k: string): string | null { return this.#map.get(k) ?? null; }
+    setItem(k: string, v: string): void { this.#map.set(k, v); }
+    removeItem(k: string): void { this.#map.delete(k); }
+  }
+
   beforeEach(() => {
     vi.stubGlobal("indexedDB", new IDBFactory());
     vi.stubGlobal("IDBKeyRange", IDBKeyRange);
+    vi.stubGlobal("localStorage", new FakeStorage());
   });
   afterEach(() => {
     vi.unstubAllGlobals();
@@ -329,6 +340,59 @@ describe("my data on this device", () => {
       const agent = await agentFor(gatewayFor(), "anna@example.com", (b) => b.useSessionStore(sessions));
       await agent.deleteMyData();
       expect((await sessions.list("docs")).length).toBe(1);
+    });
+
+    it("takes the host's own databases, localStorage keys and callback with it, and counts them (useHostData)", async () => {
+      const gateway = gatewayFor();
+      const host = (name: string): Promise<void> => new Promise<void>((resolve, reject) => {
+        const open = globalThis.indexedDB.open(name, 1);
+        open.onsuccess = () => { open.result.close(); resolve(); };
+        open.onerror = () => reject(open.error);
+      });
+      await host("host-keys");
+      localStorage.setItem("host-key:https://a", "sealed");
+      localStorage.setItem("host-key:https://b", "sealed");
+      localStorage.setItem("other", "stays");
+      const scopes: string[] = [];
+      const anna = await agentFor(gateway, "anna@example.com", (b) => b.useHostData({
+        indexedDb: ["host-keys", "host-missing"], localStoragePrefixes: ["host-key:"], remove: (scope) => { scopes.push(scope); return Promise.resolve(2); },
+      }));
+      await chat(anna);
+
+      const result = await anna.deleteMyData();
+
+      expect(result.storesCleared).toBe(5 + 1 + 2 + 2); // the SDK's own, one database, two keys, the callback's two
+      expect(scopes).toEqual(["thisApp"]);
+      expect((await names()).includes("host-keys")).toBe(false);
+      expect([localStorage.getItem("host-key:https://a"), localStorage.getItem("host-key:https://b"), localStorage.getItem("other")]).toEqual([null, null, "stays"]);
+      await anna.dispose();
+    });
+
+    it("takes the host's data with a removal of all the person's data too, and nothing without useHostData", async () => {
+      const gateway = gatewayFor();
+      localStorage.setItem("host-key:x", "sealed");
+      const plain = await agentFor(gateway, "anna@example.com");
+      await plain.deleteMyData({ scope: "allApps" });
+      expect(localStorage.getItem("host-key:x")).toBe("sealed");
+
+      const scopes: string[] = [];
+      const anna = await agentFor(gateway, "anna@example.com", (b) => b.useHostData({ localStoragePrefixes: ["host-key:", ""], remove: (scope) => { scopes.push(scope); return Promise.resolve(0); } }));
+      const result = await anna.deleteMyData({ scope: "allApps" });
+      expect(result.storesCleared).toBeGreaterThanOrEqual(1);
+      expect(scopes).toEqual(["allApps"]);
+      expect(localStorage.getItem("host-key:x")).toBeNull();
+    });
+
+    it("removes the SDK's data before the host's, so a host removal that fails never keeps it (GDPR Art. 17)", async () => {
+      const gateway = gatewayFor();
+      const anna = await agentFor(gateway, "anna@example.com", (b) => b.useHostData({ remove: () => Promise.reject(new Error("the host's store is locked")) }));
+      await chat(anna);
+      expect((await names()).length).toBeGreaterThan(0);
+
+      await expect(anna.deleteMyData()).rejects.toThrow("the host's store is locked");
+
+      expect(await names()).toEqual([]);
+      await anna.dispose();
     });
 
     it("clears the shared databases of an older SDK from a gateway that names no user", async () => {

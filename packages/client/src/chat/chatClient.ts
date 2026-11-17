@@ -167,6 +167,12 @@ const str = (o: unknown, key: string): string | undefined => {
   return typeof v === "string" ? v : undefined;
 };
 
+/** An error's `code` as text: a string as it is, a number as its digits (OpenRouter sends `502`); anything else is no code. */
+const codeText = (o: unknown): string | undefined => {
+  const v = o && typeof o === "object" ? (o as Json)["code"] : undefined;
+  return typeof v === "string" ? v : typeof v === "number" && Number.isFinite(v) ? String(v) : undefined;
+};
+
 export function toFadenstackEvent(raw: Json): FadenstackEvent {
   const event: FadenstackEvent = { type: str(raw, "type") ?? "", raw };
   const name = str(raw, "name");
@@ -321,7 +327,7 @@ export class StreamAssembler {
     if (error !== undefined && error !== null && choices.length === 0) {
       // OpenAI's {"error": {...}}; Ollama's {"error": "..."}
       if (typeof error === "string") throw new FadenstackStreamError(error || "The answer broke off.");
-      if (typeof error === "object") throw new FadenstackStreamError(str(error, "message") ?? "The answer broke off.", str(error, "code"));
+      if (typeof error === "object") throw new FadenstackStreamError(str(error, "message") ?? "The answer broke off.", codeText(error));
     }
     if (!this.#gateway && str(root, "object") === "error" && choices.length === 0) {
       // vLLM's and SGLang's {"object": "error", "message": ...}

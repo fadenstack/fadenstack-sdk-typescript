@@ -235,6 +235,7 @@ const agent = FadenstackAgent.createBuilder()
 | `useApprovals(handler)` | Who decides on tool calls that need approval. Without one, every such call is declined. |
 | `useSessionStore(store)` | Where sessions live. By default the signed-in user's own IndexedDB database in a browser and memory elsewhere. See [Sessions on the device](sessions.md). |
 | `useApprovalStore(store)` | Where "Allow always" is kept. By default the signed-in user's own IndexedDB database in a browser and memory elsewhere. See [Tools and approvals](tools.md#allow-always). |
+| `useHostData({ indexedDb, localStoragePrefixes, remove })` | Your own data that "Remove my data" (`deleteMyData`) takes too: IndexedDB databases and `localStorage` key prefixes by name, and a callback `remove(scope)` for the rest that returns how many things it removed. `storesCleared` counts them. Without it, what your page keeps itself (for example an endpoint key store) stays. |
 | `useSessionRetention({ maxSessions, maxAgeDays })` | How many sessions, and how old, the default store keeps (50 and 90 days); the server's `local_retention` can only lower them. See [Retention](sessions.md#retention). |
 | `useSecretProtector(protector)` | What encrypts the default stores: by default a non-extractable WebCrypto key per user in a browser, none elsewhere. See [Encryption](sessions.md#encryption). |
 | `useStoreProblemHandler(handler)` | Told of a stored record that does not decrypt (the store and the kind, never contents). |

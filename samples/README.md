@@ -31,4 +31,4 @@ Pull a model that calls tools (`ollama pull qwen3:14b`) and use the Ollama prese
 
 **LM Studio.** Load a model, open the Developer tab, turn on "Enable CORS", and start the server (`http://localhost:1234/v1`).
 
-Then try "Save a note: buy milk". `save_note` is a write tool, so the chat shows a card and asks first; the note lands in the page's own list only after you allow it. The Copy button under an answer marks the copy as AI-generated. The stop button in the header is Stop everything; the gear opens "Your data in this browser".
+Then try "Save a note: buy milk". `save_note` is a write tool, so the chat shows a card and asks first; the note lands in the page's own list only after you allow it. The Copy button under an answer marks the copy as AI-generated. The stop button in the header is Stop everything; the one gear (Settings) has "Your data in this browser" in its menu.

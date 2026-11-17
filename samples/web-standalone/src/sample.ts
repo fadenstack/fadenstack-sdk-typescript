@@ -89,6 +89,8 @@ export function buildSampleAgent(options: SampleOptions): FadenstackAgent {
     .addTools(saveNote)
     .useApprovals(options.approvals)
     .use(provenanceModule())
+    // "Remove my data" takes the page's own key store too (the SDK knows only its own stores).
+    .useHostData({ indexedDb: [KEY_DATABASE], localStoragePrefixes: [KEY_PREFIX] })
     .build();
 }
 
@@ -120,7 +122,9 @@ export class PageConnectionStore implements ConnectionStore {
   }
 }
 
-const KEY_PREFIX = "fadenstack-sample-key:";
+/** The `localStorage` keys that hold the sealed endpoint keys (one per endpoint origin), and the IndexedDB database of the seal key. */
+export const KEY_PREFIX = "fadenstack-sample-key:";
+export const KEY_DATABASE = "fadenstack-sample-keys";
 
 /**
  * The key store for the endpoint's key, with the SDK's own protection: the key is sealed with the SDK's WebCrypto secret
@@ -133,7 +137,7 @@ export class BrowserKeyStore implements EndpointKeyStore {
   readonly #protector: SecretProtector | undefined;
 
   constructor(protector?: SecretProtector) {
-    this.#protector = protector ?? browserSecretProtector("fadenstack-sample-keys")?.protector;
+    this.#protector = protector ?? browserSecretProtector(KEY_DATABASE)?.protector;
   }
 
   async save(endpoint: URL, key: string): Promise<TokenProvider> {

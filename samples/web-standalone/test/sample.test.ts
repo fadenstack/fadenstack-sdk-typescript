@@ -5,14 +5,24 @@ import { EndpointDialect } from "@fadenstack/client";
 import { ApprovalDecision, type ApprovalRequest } from "@fadenstack/agents";
 import { OpenAiFake } from "@fadenstack/testing";
 
-import { DEFINITION, Notes, buildSampleAgent } from "../src/sample.js";
+import { BrowserKeyStore, DEFINITION, KEY_DATABASE, KEY_PREFIX, Notes, buildSampleAgent } from "../src/sample.js";
 
 // The sample page builds its agent against the testing package's fakes: no network. The page itself (main.tsx) only wires
 // this to the SDK's React skin.
 describe("the standalone web sample's agent", () => {
+  class FakeStorage {
+    readonly #map = new Map<string, string>();
+    get length(): number { return this.#map.size; }
+    key(i: number): string | null { return [...this.#map.keys()][i] ?? null; }
+    getItem(k: string): string | null { return this.#map.get(k) ?? null; }
+    setItem(k: string, v: string): void { this.#map.set(k, v); }
+    removeItem(k: string): void { this.#map.delete(k); }
+  }
+
   beforeEach(() => {
     vi.stubGlobal("indexedDB", new IDBFactory());
     vi.stubGlobal("IDBKeyRange", IDBKeyRange);
+    vi.stubGlobal("localStorage", new FakeStorage());
   });
   afterEach(() => {
     vi.unstubAllGlobals();
@@ -58,5 +68,20 @@ describe("the standalone web sample's agent", () => {
     const { notes } = await run(() => ApprovalDecision.deny());
 
     expect(notes.items).toEqual([]);
+  });
+
+  it("removes the sample's own key store with the person's data: the sealed key and its seal database", async () => {
+    const { agent } = await run(() => ApprovalDecision.approve());
+    const endpoint = new URL("http://localhost:11434/v1");
+    await new BrowserKeyStore().save(endpoint, "sk-test-key");
+    const keyName = KEY_PREFIX + endpoint.origin;
+    expect(localStorage.getItem(keyName)).not.toBeNull();
+    expect((await indexedDB.databases()).map((d) => d.name)).toContain(KEY_DATABASE);
+
+    const result = await agent.deleteMyData();
+
+    expect(localStorage.getItem(keyName)).toBeNull();
+    expect((await indexedDB.databases()).map((d) => d.name)).not.toContain(KEY_DATABASE);
+    expect(result.storesCleared).toBeGreaterThanOrEqual(2); // counted: the seal database and the key
   });
 });

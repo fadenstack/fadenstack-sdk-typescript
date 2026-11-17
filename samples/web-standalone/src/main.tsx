@@ -1,11 +1,10 @@
 // The standalone sample page: a person picks their own model endpoint with the SDK's connection wizard, then chats with an
 // agent that has one tool. The tool saves a note into the page's own list and asks first (Ask mode), content marking is on,
-// "Stop everything" sits in the header, and "Your data in this browser" is in the settings drawer.
+// "Stop everything" sits in the header, and "Your data in this browser" opens from the panel's settings menu.
 // Run it: `npm run sample:web`. See samples/README.md for Ollama and LM Studio.
-import { useEffect, useState, useSyncExternalStore, type ReactElement } from "react";
+import { useEffect, useState, type ReactElement } from "react";
 import { createRoot } from "react-dom/client";
 
-import { FadenstackAgent } from "@fadenstack/agents";
 import {
   AgentChatViewModel,
   ApprovalBroker,
@@ -15,18 +14,12 @@ import {
   WizardOutcome,
   stringsFor,
 } from "@fadenstack/ui";
-import { ChatPanel, ConnectionWizard, Icon, MyDataSettings, StopEverythingButton } from "@fadenstack/ui-react";
+import { ConnectionWizard } from "@fadenstack/ui-react";
 import { browserChatServices, browserSaveFile } from "@fadenstack/ui-web";
 import "@fadenstack/ui-web/styles.css";
 
+import { Page, type Running } from "./page.js";
 import { BrowserKeyStore, Notes, PageConnectionStore, buildSampleAgent } from "./sample.js";
-
-interface Running {
-  agent: FadenstackAgent;
-  chat: AgentChatViewModel;
-  stop: StopEverythingViewModel;
-  myData: MyDataSettingsViewModel;
-}
 
 const notes = new Notes();
 const strings = stringsFor(navigator.language);
@@ -69,42 +62,9 @@ function App(): ReactElement {
     void wizard.start();
     return off;
   }, []);
-  if (running) return <Page running={running} />;
+  if (running) return <Page running={running} notes={notes} />;
   if (failed) return <p role="alert">The page could not start the agent. Reload it and try again.</p>;
   return <ConnectionWizard wizard={wizard} appName="Standalone sample" />;
-}
-
-function Page({ running }: { running: Running }): ReactElement {
-  const [drawer, setDrawer] = useState(false);
-  const items = useSyncExternalStore(notes.subscribe, notes.getSnapshot);
-  const s = running.chat.strings;
-  const header = (
-    <>
-      <StopEverythingButton stop={running.stop} />
-      <button type="button" className="fdn-icon-button" aria-label={s.settings} title={s.settings} aria-expanded={drawer} onClick={() => setDrawer((open) => !open)}>
-        <Icon name="settings" size={16} />
-      </button>
-    </>
-  );
-  return (
-    <div style={{ display: "flex", height: "100vh" }} onKeyDown={(e) => { if (e.key === "Escape" && drawer) setDrawer(false); }}>
-      <div style={{ flex: "1 1 0", minWidth: 0 }}>
-        <ChatPanel chat={running.chat} headerExtra={header} />
-      </div>
-      <aside style={{ width: 260, padding: 12, overflow: "auto", borderInlineStart: "1px solid var(--fdn-border, #8884)" }} aria-label="Notes">
-        <h2 style={{ fontSize: 14, margin: "0 0 8px" }}>Notes</h2>
-        {items.length === 0 ? <p>No notes yet. Ask the assistant to save one.</p> : (
-          <ul>{items.map((note, i) => <li key={i} dir="auto">{note}</li>)}</ul>
-        )}
-      </aside>
-      {drawer && (
-        <aside role="dialog" aria-label={s.settings} style={{ width: 340, padding: 12, overflow: "auto", borderInlineStart: "1px solid var(--fdn-border, #8884)" }}>
-          <button type="button" className="fdn-button" onClick={() => setDrawer(false)}>{s.close}</button>
-          <MyDataSettings settings={running.myData} />
-        </aside>
-      )}
-    </div>
-  );
 }
 
 createRoot(document.getElementById("root")!).render(<App />);
