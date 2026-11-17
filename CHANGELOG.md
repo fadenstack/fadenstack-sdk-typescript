@@ -252,6 +252,8 @@ Fields added or changed since 0.2.x; no field is removed. A row marked Yes goes 
 - "Your data" reads the record of tool calls each time it is shown, so its line is never stale (F5).
 - "Stop everything"'s result line clears itself, so it no longer squeezes a narrow header's title for good.
 - A mid-stream error's numeric `code` (OpenRouter sends `502`) is kept as its text (F8).
+- The AI notice is also the message field's accessible description, so a screen reader says it when the field gets focus,
+  at the first interaction (AI Act Art. 50(5)); before, Narrator reached it only six or seven items after the field.
 - The web sample has one Settings gear: its "Your data in this browser" drawer opens from the panel's settings menu
   (`settingsExtra`), and "Remove my data" removes its endpoint key store too (F1, F4).
 - **An approval answer lost on the way is sent once more.** Answering a call the gateway holds now waits 10 seconds for a
@@ -268,6 +270,8 @@ Fields added or changed since 0.2.x; no field is removed. A row marked Yes goes 
 
 ### Security
 
+- An attachment's text cannot close its block: `<attachment` and `</attachment` inside it lose their bracket, as in .NET, so a
+  page or file the person attached cannot end its block and speak outside it (OWASP ASVS 5.0 V1).
 - A local MCP server's parameter schema reaches the model cleaned like its tool description: every `description`,
   `title` and `$comment` text, at any depth, without the characters that hide text, cut at 1,024 characters (OWASP ASVS
   5.0 V1).
