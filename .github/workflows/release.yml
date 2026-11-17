@@ -4,6 +4,20 @@ name: Release
 # (scripts/version.mjs sets it), and the tag must name it. A version with a suffix (v0.2.0-rc.1) is published
 # under the dist-tag `next`, so `npm install` keeps getting the latest release.
 #
+# The jobs, in order:
+#   build           checks, tests and builds, then packs each package once (`packed/*.tgz`, the run's artifact
+#                   `packages`). A version already on npm (a package's first version is published by hand; a rerun) is
+#                   fetched from npm instead, so every file here is the bytes npm serves.
+#   github-release  a GitHub release for the tag, holding those files.
+#   supply-chain    core's shared release workflow (fadenstack/fadenstack, pinned by commit): an SBOM per package to BSI
+#                   TR-03183-2, the OSV scan with OpenVEX and CSAF (.vex/openvex.json holds this repository's statements),
+#                   the OpenSSF Scorecard, keyless cosign signatures and GitHub's attestations, all added to the release.
+#   publish         npm, the same files, only after the supply chain passed: a high-severity finding without a VEX
+#                   statement stops the release before anything is published (CRA Annex I part II).
+#
+# Run by hand (workflow_dispatch) it is a dry run: build and the supply chain's SBOMs, scan and Scorecard only, shown in
+# the run's summary; nothing is signed, uploaded or published.
+#
 # npm trusts this workflow (trusted publishing): npm trades the job's GitHub OIDC token for a short-lived
 # credential, so no token is stored. Each package's trusted publisher names this file (release.yml) and the
 # environment `npm`. From a public repository, npm adds a provenance statement.
@@ -11,6 +25,7 @@ name: Release
 on:
   push:
     tags: ["v*"]
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -20,12 +35,140 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  release:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24
+          registry-url: https://registry.npmjs.org
+
+      - name: npm 11
+        run: npm install --global npm@11
+
+      - name: The version (a tag names it)
+        id: version
+        run: |
+          set -euo pipefail
+          if [ "$GITHUB_REF_TYPE" = tag ]; then
+            node scripts/version.mjs --check "${GITHUB_REF_NAME#v}"
+          else
+            node scripts/version.mjs --check
+          fi
+          echo "version=$(node -p "require('./packages/client/package.json').version")" >> "$GITHUB_OUTPUT"
+
+      - run: npm ci
+      - name: Third-party notices are current
+        run: node scripts/third-party-notices.mjs --check
+      - run: npm run typecheck
+      - run: npm test
+
+      # The injection suite runs inside the test step above too; this step names it, so a failure says what broke. It never needs a
+      # network or a model: injected content runs through every untrusted channel against a scripted endpoint.
+      - name: Injection suite (sdk/51 7.1)
+        run: npx vitest run packages/agents/test/injection packages/ui-vue/test/injectionImages.test.ts
+      - run: npm run build
+
+      - name: Pack
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          set -euo pipefail
+          mkdir -p packed
+          for dir in $(node -p "require('./package.json').workspaces.join(' ')"); do
+            name=$(node -p "require('./$dir/package.json').name")
+            if [ -n "$(npm view "$name@$VERSION" version 2>/dev/null)" ]; then
+              echo "$name@$VERSION is on npm already: its file is fetched from npm"
+              npm pack "$name@$VERSION" --pack-destination packed
+            else
+              npm pack --workspace "$dir" --pack-destination packed
+            fi
+          done
+          ls -l packed
+
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: packages
+          path: packed/*.tgz
+          if-no-files-found: error
+
+  github-release:
+    if: github.ref_type == 'tag'
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write # creates the release
+    steps:
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: packages
+          path: packed
+
+      # A rerun finds the release already made and replaces its files with this run's.
+      - name: Create the release with the packages
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.ref_name }}
+          VERSION: ${{ needs.build.outputs.version }}
+        run: |
+          set -euo pipefail
+          mapfile -t files < <(find packed -type f -name '*.tgz' | sort)
+          [ "${#files[@]}" -gt 0 ] || { echo "::error::No packages in the artifact"; exit 1; }
+          if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" > /dev/null 2>&1; then
+            gh release upload "$TAG" --repo "$GITHUB_REPOSITORY" --clobber "${files[@]}"
+            exit 0
+          fi
+          prerelease=()
+          case "$VERSION" in *-*) prerelease=(--prerelease) ;; esac
+          gh release create "$TAG" --repo "$GITHUB_REPOSITORY" --verify-tag "${prerelease[@]}" \
+            --title "Fadenstack TypeScript SDK $VERSION" \
+            --notes "The packages of this release, the same files npm serves. What changed is in CHANGELOG.md. The supply-chain job adds an SBOM per package (CycloneDX, BSI TR-03183-2), the vulnerability report (OpenVEX, CSAF), cosign signatures and the build provenance; npm has its own provenance statement for each package it got from this workflow." \
+            "${files[@]}"
+
+  supply-chain:
+    needs: [build, github-release]
+    # On a tag after the GitHub release; run by hand, a dry run without one.
+    if: ${{ !cancelled() && needs.build.result == 'success' && (needs.github-release.result == 'success' || (github.ref_type != 'tag' && needs.github-release.result == 'skipped')) }}
+    # The called workflow asks for more than read on its publish job, and a caller must grant that ceiling or the run does
+    # not start. A dry run never uses the write grants: that job is skipped. No secrets are passed: keyless signing in a
+    # public repository needs none.
+    permissions:
+      contents: write
+      id-token: write
+      attestations: write
+      packages: write
+      actions: read
+    uses: fadenstack/fadenstack/.github/workflows/release-supply-chain.yml@6dd382f990c5c922154857cfdb5da3cdc6202c67
+    with:
+      product: fadenstack-sdk-typescript
+      version: ${{ needs.build.outputs.version }}
+      release_tag: ${{ github.ref_type == 'tag' && github.ref_name || '' }}
+      supplier_name: Emagin8 UG (haftungsbeschränkt)
+      supplier_url: https://fadenstack.com
+      licence: Apache-2.0
+      files_artifact: packages
+      files: "*.tgz"
+      signing: keyless
+      attest: true
+      dry_run: ${{ github.ref_type != 'tag' }}
+      tools_ref: 6dd382f990c5c922154857cfdb5da3cdc6202c67
+
+  publish:
+    if: github.ref_type == 'tag'
+    needs: [build, supply-chain]
     runs-on: ubuntu-latest
     environment: npm
     permissions:
       contents: read
-      id-token: write
+      id-token: write # trusted publishing and provenance on npm
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -40,35 +183,31 @@ jobs:
       - name: npm 11
         run: npm install --global npm@11
 
-      - name: The tag names the version
-        run: node scripts/version.mjs --check "${GITHUB_REF_NAME#v}"
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: packages
+          path: packed
 
-      - run: npm ci
-      - name: Third-party notices are current
-        run: node scripts/third-party-notices.mjs --check
-      - run: npm run typecheck
-      - run: npm test
-
-      # The injection suite runs inside the test step above too; this step names it, so a failure says what broke. It never needs a
-      # network or a model: injected content runs through every untrusted channel against a scripted endpoint.
-      - name: Injection suite (sdk/51 7.1)
-        run: npx vitest run packages/agents/test/injection packages/ui-vue/test/injectionImages.test.ts
-      - run: npm run build
-
-      # In the workspaces' order, which is the order they depend on each other. A package already on npm at this
-      # version is skipped, so a rerun finishes a release that stopped half-way; a version can never be replaced.
+      # In the workspaces' order, which is the order they depend on each other, each package's file from the build job: the
+      # bytes the supply chain scanned and signed. A package already on npm at this version is skipped, so a rerun finishes a
+      # release that stopped half-way; a version can never be replaced.
       - name: Publish
+        env:
+          VERSION: ${{ needs.build.outputs.version }}
         run: |
-          version="${GITHUB_REF_NAME#v}"
-          case "$version" in
+          set -euo pipefail
+          case "$VERSION" in
             *-*) dist_tag=next ;;
             *) dist_tag=latest ;;
           esac
           for dir in $(node -p "require('./package.json').workspaces.join(' ')"); do
             name=$(node -p "require('./$dir/package.json').name")
-            if [ -n "$(npm view "$name@$version" version 2>/dev/null)" ]; then
-              echo "$name@$version is on npm already"
+            if [ -n "$(npm view "$name@$VERSION" version 2>/dev/null)" ]; then
+              echo "$name@$VERSION is on npm already"
               continue
             fi
-            npm publish --workspace "$dir" --access public --tag "$dist_tag"
+            base="${name#@}"                        # npm pack names @fadenstack/client's file fadenstack-client-<version>.tgz
+            file="packed/${base//\//-}-$VERSION.tgz"
+            [ -f "$file" ] || { echo "::error::$file is missing"; exit 1; }
+            npm publish "$file" --access public --tag "$dist_tag"
           done
