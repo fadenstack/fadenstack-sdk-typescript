@@ -148,6 +148,8 @@ export const germanStrings: UiStrings = {
     medium: "Denkt eine Weile nach.",
     high: "Denkt am längsten nach.",
   },
+  reasoningOffLowest: "Dieses Modell denkt immer nach. Aus nutzt seine niedrigste Stufe.",
+  reasoningOffStillThinks: "Dieses Modell denkt auch bei Aus nach.",
   showEarlier: "Frühere Nachrichten anzeigen",
   copy: "Kopieren",
   copyCode: "Code kopieren",

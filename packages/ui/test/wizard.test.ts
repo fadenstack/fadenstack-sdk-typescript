@@ -1,5 +1,6 @@
-import { PolicyAccess } from "@fadenstack/agents";
+import { AgentDefinition, FadenstackAgent, MemoryApprovalStore, MemorySessionStore, PolicyAccess } from "@fadenstack/agents";
 import {
+  EndpointCheck,
   EndpointPlace,
   EndpointPreset,
   FadenstackApiError,
@@ -36,6 +37,7 @@ import {
   type WizardCommandAvailability,
   type WizardOptions,
 } from "@fadenstack/ui";
+import { OpenAiFake } from "@fadenstack/testing";
 import { afterEach, describe, expect, it } from "vitest";
 
 import {
@@ -1653,6 +1655,104 @@ describe("wizard: §3 path B", () => {
     expect(rig.vm.can.continue).toBe(true);
     await rig.press("back");
     expect(rig.vm.step).toBe(WizardStep.OwnResult);
+  });
+});
+
+// =====================================================================================================================
+// The check before the pick sends nothing to a model (F3), and the check after it looks at pictures (F2)
+// =====================================================================================================================
+
+describe("wizard: the check and the model pick", () => {
+  const isChat = (r: { url: URL }) => r.url.pathname.endsWith("/chat/completions");
+
+  /** The wizard over the real check, against a scripted Ollama that lists `models`. */
+  async function overRealCheck(models: string[]) {
+    const fake = new OpenAiFake();
+    fake.models = models;
+    const rig = await ownPick();
+    rig.checker.check = (endpoint, signal, options) => new EndpointCheck({ ...endpoint, fetch: fake.fetch }).run({ ...options, signal });
+    await pick(rig, EndpointPreset.ollama);
+    return { rig, fake };
+  }
+  const script = (fake: OpenAiFake, vision: string) =>
+    fake.answers.push(OpenAiFake.text("OK"), OpenAiFake.calls(["call-1", "report_ready", "{}"]), OpenAiFake.text(vision));
+
+  it("with several models, the check before the pick sends exactly one request (/models) and nothing to /chat/completions", async () => {
+    const { rig, fake } = await overRealCheck(["m1", "m2"]);
+    await useEndpoint(rig);
+    expect(rig.vm.step).toBe(WizardStep.OwnModel);
+    expect(rig.vm.models).toEqual(["m1", "m2"]);
+    expect(rig.vm.selectedModel).toBeUndefined();
+    expect(fake.requests).toHaveLength(1);
+    expect(fake.requests[0]!.url.pathname).toBe("/v1/models");
+    expect(fake.requests.some(isChat)).toBe(false);
+  });
+
+  it("after the pick, the probes go to the picked model only, and vision is probed", async () => {
+    const { rig, fake } = await overRealCheck(["m1", "m2"]);
+    await useEndpoint(rig);
+    script(fake, "Green");
+    rig.vm.selectedModel = "m2";
+    await rig.press("continue");
+    expect(rig.vm.step).toBe(WizardStep.OwnResult);
+    const chats = fake.requests.filter(isChat);
+    expect(chats).toHaveLength(3); // one chat probe, one tool probe, one vision probe
+    expect(chats.every((r) => r.json()["model"] === "m2")).toBe(true);
+    expect(chats.some((r) => r.body.includes("image_url"))).toBe(true);
+    expect(rig.vm.report!.model).toBe("m2");
+    expect(rig.vm.report!.vision).toBe(true);
+    await rig.press("continue");
+    expect(rig.store.saved).toHaveLength(1);
+    expect(rig.store.saved[0]!.endpoint!.model).toBe("m2");
+    expect(rig.store.saved[0]!.report!.vision).toBe(true);
+  });
+
+  it("with one model, it is taken and checked at once (the model step is skipped)", async () => {
+    const { rig, fake } = await overRealCheck(["only"]);
+    script(fake, "Green");
+    await useEndpoint(rig);
+    expect(rig.vm.step).toBe(WizardStep.OwnResult);
+    expect(rig.vm.selectedModel).toBe("only");
+    expect(fake.requests.filter(isChat).every((r) => r.json()["model"] === "only")).toBe(true);
+    expect(rig.vm.report!.chat).toBe(true);
+    expect(rig.vm.report!.vision).toBe(true);
+  });
+
+  it("the standalone profile built from the saved connection has vision true for a model that answers green", async () => {
+    const { rig, fake } = await overRealCheck(["only"]);
+    script(fake, "Green");
+    await useEndpoint(rig);
+    await rig.press("continue");
+    const saved = rig.store.saved[0]!;
+    const agent = FadenstackAgent.createBuilder()
+      .useEndpoint({ ...saved.endpoint!, fetch: fake.fetch }, saved.report)
+      .useLocalProfile(AgentDefinition.fromJson({ slug: "a", name: "A", version: { instructions: "Hi.", host_tool_contract: [], ui: {} } }))
+      .useSessionStore(new MemorySessionStore()).useApprovalStore(new MemoryApprovalStore()).build();
+    await agent.start();
+    expect(agent.profile.vision).toBe(true);
+  });
+
+  it("a listing that says the model takes images decides without a picture request", async () => {
+    const { rig, fake } = await overRealCheck(["only"]);
+    fake.modelFields["only"] = { architecture: { input_modalities: ["text", "image"] } };
+    fake.answers.push(OpenAiFake.text("OK"), OpenAiFake.calls(["call-1", "report_ready", "{}"]));
+    await useEndpoint(rig);
+    expect(rig.vm.report!.vision).toBe(true);
+    expect(fake.requests.some((r) => r.body.includes("image_url"))).toBe(false);
+  });
+
+  it("every check the wizard runs asks for the picture probe", async () => {
+    const rig = await ownPick();
+    await pick(rig, EndpointPreset.ollama);
+    await useEndpoint(rig);
+    expect(rig.checker.checkOptions).toEqual([{ probeVision: true }]);
+  });
+
+  it("back from the pick goes to the address step when no model was checked yet", async () => {
+    const { rig } = await overRealCheck(["m1", "m2"]);
+    await useEndpoint(rig);
+    await rig.press("back");
+    expect(rig.vm.step).toBe(WizardStep.OwnPick);
   });
 });
 

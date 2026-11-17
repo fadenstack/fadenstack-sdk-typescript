@@ -21,7 +21,7 @@ const chat = useViewModel(() => props.chat);
   <header class="fdn-header">
     <div class="fdn-header-title" :title="chat.title" dir="auto">{{ chat.title }}</div>
     <ModeMenu :chat="chat" />
-    <ReasoningMenu :chat="chat" />
+    <ReasoningMenu v-if="chat.offersReasoning" :chat="chat" />
     <HistoryMenu :chat="chat" />
     <button
       type="button"

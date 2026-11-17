@@ -742,7 +742,8 @@ export class ConnectionWizardViewModel extends Observable {
         this.#openPick();
         break;
       case WizardStep.OwnModel:
-        this.#go(WizardStep.OwnResult);
+        if (this.#report?.model) this.#go(WizardStep.OwnResult);
+        else this.#openPick(); // the models were listed without a check of any: nothing to show
         break;
     }
   }
@@ -1293,10 +1294,19 @@ export class ConnectionWizardViewModel extends Observable {
       this.#go(WizardStep.OwnPick);
       return;
     }
+    await this.#checkEndpoint(endpoint, run);
+  }
+
+  /**
+   * The check itself. With no model named it lists the models and sends nothing to any of them (F3): one model is taken and
+   * checked at once, several go to the pick, and the picked model's check (chat, tools, a picture, the context) comes after.
+   */
+  async #checkEndpoint(endpoint: ModelEndpoint, run: AbortController): Promise<void> {
     this.#go(WizardStep.OwnChecking);
     let report: EndpointReport;
     try {
-      report = await this.#checker.check(endpoint, run.signal);
+      // The check of the model the person picked also looks at pictures (F2): one small request.
+      report = await this.#checker.check(endpoint, run.signal, { probeVision: true });
     } catch {
       if (this.#isCurrent(run)) {
         this.#problem = EndpointProblem.Failed;
@@ -1306,6 +1316,21 @@ export class ConnectionWizardViewModel extends Observable {
     }
     if (!this.#isCurrent(run)) return;
     this.#report = report;
+    if (!endpoint.model && !report.model && report.reachable && report.keyAccepted !== false && report.models.length > 0) {
+      this.#problem = undefined;
+      this.#models = [...report.models];
+      if (report.models.length === 1) {
+        // One model: it is taken (the model step is skipped) and checked at once.
+        const only = report.models[0]!;
+        this.#pending = { ...this.#pending!, model: only };
+        this.#selectedModel = only;
+        await this.#checkEndpoint({ ...endpoint, model: only }, run);
+        return;
+      }
+      this.#selectedModel = undefined;
+      this.#go(WizardStep.OwnModel); // several: the person picks, then the picked model is checked
+      return;
+    }
     if (!report.usable) {
       this.#problem = BLOCKING.find((p) => report.problems.includes(p)) ?? EndpointProblem.Failed;
       this.#go(WizardStep.OwnFailed);
@@ -1313,7 +1338,7 @@ export class ConnectionWizardViewModel extends Observable {
     }
     this.#problem = undefined;
     this.#models = report.models.length > 0 ? [...report.models] : report.model ? [report.model] : [];
-    this.#pending = { ...this.#pending, model: report.model };
+    this.#pending = { ...this.#pending!, model: report.model };
     this.#selectedModel = report.model;
     this.#go(WizardStep.OwnResult);
   }

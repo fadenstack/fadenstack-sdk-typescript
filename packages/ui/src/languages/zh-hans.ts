@@ -144,6 +144,8 @@ export const chineseSimplifiedStrings: UiStrings = {
     medium: "思考一段时间。",
     high: "思考最久。",
   },
+  reasoningOffLowest: "该模型始终会思考。“关闭”使用它的最低级别。",
+  reasoningOffStillThinks: "该模型即使在“关闭”时也会思考。",
   showEarlier: "显示更早的消息",
   copy: "复制",
   copyCode: "复制代码",

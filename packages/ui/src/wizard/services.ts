@@ -180,7 +180,7 @@ export function createEndpointChecker(options?: EndpointCheckOptions): EndpointC
   return {
     findLocal: () => Promise.resolve([]),
     placeOf: (baseUrl) => EndpointCheck.placeOf(baseUrl),
-    check: (endpoint, signal) => new EndpointCheck(endpoint).run({ ...options, signal }),
+    check: (endpoint, signal, more) => new EndpointCheck(endpoint).run({ ...options, ...more, signal }),
   };
 }
 

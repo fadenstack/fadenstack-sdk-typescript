@@ -20,7 +20,7 @@ export function ChatHeader({ chat, extra, settingsExtra }: { chat: AgentChatView
     <header className="fdn-header">
       <div className="fdn-header-title" title={chat.title} dir="auto">{chat.title}</div>
       <ModeMenu chat={chat} />
-      <ReasoningMenu chat={chat} />
+      {chat.offersReasoning && <ReasoningMenu chat={chat} />}
       <HistoryMenu chat={chat} />
       <button type="button" className="fdn-icon-button" title={s.newChat} aria-label={s.newChat} disabled={!chat.isReady || chat.isBusy}
         onClick={() => chat.newChat()}>

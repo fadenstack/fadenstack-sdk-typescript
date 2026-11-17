@@ -148,6 +148,8 @@ export const spanishStrings: UiStrings = {
     medium: "Piensa durante un rato.",
     high: "Piensa durante más tiempo.",
   },
+  reasoningOffLowest: "Este modelo siempre piensa. Desactivado usa su nivel más bajo.",
+  reasoningOffStillThinks: "Este modelo piensa incluso con Desactivado.",
   showEarlier: "Mostrar mensajes anteriores",
   copy: "Copiar",
   copyCode: "Copiar código",
