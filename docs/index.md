@@ -1,6 +1,6 @@
 # TypeScript SDK
 
-Build agents that run in a browser, a web page or Node and are governed by a Fadenstack server.
+Build agents that run in a browser, a web page or Node. They are governed by a Fadenstack server, or run on the person's own AI server in [standalone mode](standalone.md).
 
 !!! note "Server version"
     This version of the SDK (0.3.0) is built against Fadenstack server 0.7.1. Agents need a server 0.4.2 or later;
@@ -35,6 +35,8 @@ The SDK also powers Fadenstack's browser agent.
 | `@fadenstack/ui-vue` | The Vue skin for the same view models: the same chat panel | `Fadenstack.UI.Wpf`, `Fadenstack.UI.Avalonia` |
 | `@fadenstack/testing` | A fake Fadenstack server for tests and demos | — |
 | `@fadenstack/provenance` | Marks content the agent's tools place as made with AI: `place()`, markers for the hosts, signed records and placement reports | `Fadenstack.Provenance` |
+| `@fadenstack/skills` | Agent Skills on the device: `load_skill` and `read_skill_resource`, the person's own skills in IndexedDB, the `faden.yaml` pre-selection | `Fadenstack.Skills` |
+| `@fadenstack/mcp` | Local MCP servers over HTTP: the person's servers in IndexedDB, the hint rule, import and the policy | `Fadenstack.Mcp` |
 
 The packages follow the [.NET SDK](../dotnet/index.md): the same concepts, the same tool classes and modes, and the
 same transcript format for sessions. [Libraries](libraries.md) says what each package is for, and the
@@ -60,11 +62,13 @@ too, and allow it to this machine (`localhost`, `127.0.0.1`, `::1`).
 | `@fadenstack/client` | Nothing |
 | `@fadenstack/agents` | `@fadenstack/client` |
 | `@fadenstack/ui` | `@fadenstack/agents`, `@fadenstack/client`, and `marked` for Markdown |
-| `@fadenstack/ui-web` | `@fadenstack/ui` |
+| `@fadenstack/ui-web` | `@fadenstack/ui` and `@fadenstack/agents` |
 | `@fadenstack/ui-react` | The four packages above, with React and React DOM 18.2 or later as peer dependencies |
 | `@fadenstack/ui-vue` | `@fadenstack/ui`, `@fadenstack/ui-web` and the two below them, with Vue 3.5 or later as a peer dependency |
-| `@fadenstack/testing` | `@fadenstack/client` |
-| `@fadenstack/provenance` | `@fadenstack/agents`, `@fadenstack/client`, and `@fadenstack/ui` for its texts |
+| `@fadenstack/testing` | `@fadenstack/client`; `@fadenstack/agents` and `@fadenstack/provenance` as optional peer dependencies |
+| `@fadenstack/provenance` | `@fadenstack/agents`, `@fadenstack/client` |
+| `@fadenstack/skills` | `@fadenstack/agents`, `@fadenstack/client` |
+| `@fadenstack/mcp` | `@fadenstack/agents`, `@fadenstack/client`, and `@modelcontextprotocol/client` |
 
 ## Install
 

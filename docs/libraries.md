@@ -1,6 +1,6 @@
 # Libraries
 
-This page covers the SDK's eight packages: what each is for, what it needs, and which to add for what you build. All of them are released together with one version; keep them on the same version.
+This page covers the SDK's ten packages: what each is for, what it needs, and which to add for what you build. All of them are released together with one version; keep them on the same version.
 
 ## What each package is for
 
@@ -14,6 +14,8 @@ This page covers the SDK's eight packages: what each is for, what it needs, and 
 | `@fadenstack/ui-vue` | Put the same chat panel in a Vue application. | `ChatPanel`, `useViewModel` |
 | `@fadenstack/testing` | Test an agent without a server: a fake server with a scripted model, a fake for grants, helpers to run a tool by hand. Add it as a development dependency. | `FakeGateway`, `FakeGrants`, `toolContext` |
 | `@fadenstack/provenance` | Mark what the agent's tools write as made with AI: `place()`, markers for the places the content lands, signed records, placement reports. Added to the builder as a module. | `provenanceModule`, `Provenance`, `provenanceOf`, `ProvenanceReader` |
+| `@fadenstack/skills` | Give the agent the person's own skills and the app's bundled ones: `load_skill` and `read_skill_resource`, the person's skills in IndexedDB. Added to the builder as a module. See [Skills](skills.md). | `skillsModule`, `SkillsOptions`, `IndexedDbSkillStore` |
+| `@fadenstack/mcp` | Let the person attach their own MCP servers over HTTP, under the SDK's rules. Added to the builder as a module. See [Local MCP servers](local-mcp.md). | `mcpModule`, `McpModule`, `McpToolsCatalog` |
 
 [Testing without a server](testing.md) covers `@fadenstack/testing`, and [Marking AI-generated content](provenance.md)
 covers `@fadenstack/provenance`. `@fadenstack/testing` has a second entry, `@fadenstack/testing/provenance`, for the
@@ -23,9 +25,9 @@ fake provenance.
 
 - `agents` builds on `client`.
 - `ui` builds on `agents` and `client`.
-- `ui-web` builds on `ui`; `ui-react` and `ui-vue` build on `ui-web`, `ui`, `agents` and `client`.
-- `provenance` builds on `agents`, `client` and `ui` (for its texts).
-- `testing` builds on `client`, and has `agents` and `provenance` as peer dependencies.
+- `ui-web` builds on `ui` and `agents`; `ui-react` and `ui-vue` build on `ui-web`, `ui`, `agents` and `client`.
+- `provenance`, `skills` and `mcp` build on `agents` and `client`; `mcp` also needs `@modelcontextprotocol/client`.
+- `testing` builds on `client`, and has `agents` and `provenance` as optional peer dependencies.
 
 `@fadenstack/ui` also needs `marked` for Markdown. `@fadenstack/ui-react` has React and React DOM 18.2 or later as peer
 dependencies, and `@fadenstack/ui-vue` has Vue 3.5 or later. The table in the [overview](index.md#dependencies) lists
@@ -39,6 +41,8 @@ every dependency.
 | A page or an extension with a chat panel | `client`, `agents`, `ui`, `ui-web`, and `ui-react` or `ui-vue` |
 | A chat in another framework | `client`, `agents`, `ui`, `ui-web`, and your own skin |
 | An agent whose tools write content people read | the above, and `provenance` |
+| An agent that uses the person's own skills, or their own MCP servers | the above, and `skills` or `mcp` |
+| An agent on the person's own AI server, with no Fadenstack server | `client`, `agents`; see [Standalone mode](standalone.md) |
 | Tests | `testing`, as a development dependency |
 | Plain chat completions without an agent | `client` only; see [Plain chat completions](plain-api.md) |
 
