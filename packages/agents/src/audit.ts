@@ -392,10 +392,14 @@ function cells(e: AuditEntry): string[] {
     e.outcome, e.argumentsSha256 ?? "", e.prev, e.hash, e.seal];
 }
 
-/** A CSV cell: quoted when it needs it, and never read as a formula by a spreadsheet (a leading `= + - @`, tab or CR). */
+/**
+ * A CSV cell: quoted when it needs it (a `,`, `;`, quote, CR or LF), and never read as a formula by a spreadsheet: a
+ * `'` goes before a `= + - @`, tab, CR or NUL at the start of the field and right after a `;` or `,` inside it.
+ * .NET: `AuditExport.Cell`; the table download of `@fadenstack/ui` (`csvField`) follows the same rule.
+ */
 export function csvCell(value: string): string {
-  if (value.length > 0 && "=+-@\t\r".includes(value[0]!)) value = `'${value}`;
-  return /[,"\r\n]/.test(value) ? `"${value.replaceAll('"', '""')}"` : value;
+  value = value.replace(/(^|[;,])(?=[=+\-@\t\r\0])/g, "$1'");
+  return /[;,"\r\n]/.test(value) ? `"${value.replaceAll('"', '""')}"` : value;
 }
 
 function row(values: readonly string[]): string {

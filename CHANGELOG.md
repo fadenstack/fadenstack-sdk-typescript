@@ -4,6 +4,12 @@ All notable changes to the Fadenstack TypeScript SDK (every `@fadenstack/*` pack
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the packages follow [Semantic Versioning](https://semver.org/):
 before 1.0, a minor version may break the API, and this file says where it does.
 
+## [0.3.1] - Unreleased
+
+### Security
+
+- The CSV of a table download (`@fadenstack/ui`) and the CSV export of the record of tool calls (`@fadenstack/agents`) now put a cell with a semicolon in quotes, and put a leading apostrophe before `=`, `+`, `-`, `@`, tab or carriage return not only at the start of a cell but also after a `;` or `,` inside it. Excel in a German, French or Spanish locale splits a double-clicked CSV at `;`, so text after one could start a cell with `=` and run as a formula. OWASP ASVS 5.0 V1 (output encoding, 1.2.10).
+
 ## [0.3.0] - 2026-11-18
 
 ### Data fields

@@ -83,3 +83,28 @@ describe("a Markdown part's table download", () => {
     expect(germanStrings.downloadCsv).toBe("CSV herunterladen");
   });
 });
+
+/** The shared table of CSV cases: the same inputs and outputs are in `@fadenstack/agents` (`csvCell`) and the .NET tests. */
+describe("csvField: the shared table of cases (semicolon, formula after a separator)", () => {
+  const cases: readonly (readonly [string, string])[] = [
+    ["plain", "plain"],
+    ["", ""],
+    ["a=b", "a=b"],
+    ["a,b", '"a,b"'],
+    ["a;b", '"a;b"'],
+    ["=cmd", "'=cmd"],
+    ["a;=b", `"a;'=b"`],
+    ["=1;=2", `"'=1;'=2"`],
+    ["x,=y", `"x,'=y"`],
+    ["x;-5", `"x;'-5"`],
+    ["a;;@b", `"a;;'@b"`],
+    ['say "hi"; ok', '"say ""hi""; ok"'],
+    ['"a";=b', `"""a"";'=b"`],
+    ["two\nlines", '"two\nlines"'],
+  ];
+  for (const [input, expected] of cases) {
+    it(`writes ${JSON.stringify(input)} as ${JSON.stringify(expected)}`, () => {
+      expect(csvField(input)).toBe(expected);
+    });
+  }
+});

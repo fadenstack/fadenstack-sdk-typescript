@@ -4,20 +4,25 @@ import { tableCellText } from "./markdown/serialize.js";
 /** The byte order mark that tells Excel a CSV file is UTF-8, so umlauts and other letters open correctly. */
 export const CSV_BOM = String.fromCharCode(0xfeff);
 
-/** What starts a cell a spreadsheet would read as a formula: `=`, `+`, `-`, `@`, tab, carriage return and NUL. */
-const FORMULA_START = /^[=+\-@\t\r\0]/;
+/**
+ * Where a spreadsheet could start a formula cell: at the start of the field and right after a `;` or `,` inside it
+ * (Excel in a German, French or Spanish locale splits a double-clicked CSV at `;`), before `=`, `+`, `-`, `@`, tab,
+ * carriage return or NUL.
+ */
+const FORMULA_START = /(^|[;,])(?=[=+\-@\t\r\0])/g;
 
 /**
- * One CSV field: protected against formula injection, then quoted as RFC 4180 asks (a field with a comma, a double
- * quote, CR or LF is wrapped in double quotes and its quotes are doubled).
+ * One CSV field: protected against formula injection, then quoted as RFC 4180 asks (a field with a comma, a
+ * semicolon, a double quote, CR or LF is wrapped in double quotes and its quotes are doubled).
  *
  * OWASP ASVS 5.0 1.2.10: a cell whose first character is `=`, `+`, `-`, `@`, tab, carriage return or NUL gets a
- * leading single quote, so a spreadsheet shows it as text instead of running it. This also changes a plain negative
- * number such as `-5` to `'-5`: the standard lists `-`, and the file is for reading, not for calculating.
+ * leading single quote, so a spreadsheet shows it as text instead of running it; so does any part that follows a `;`
+ * or `,` inside the field (`a;=b` becomes `"a;'=b"`). This also changes a plain negative number such as `-5` to
+ * `'-5`: the standard lists `-`, and the file is for reading, not for calculating.
  */
 export function csvField(text: string): string {
-  const safe = FORMULA_START.test(text) ? `'${text}` : text;
-  return /[",\r\n]/.test(safe) ? `"${safe.replace(/"/g, '""')}"` : safe;
+  const safe = text.replace(FORMULA_START, "$1'");
+  return /[;",\r\n]/.test(safe) ? `"${safe.replace(/"/g, '""')}"` : safe;
 }
 
 /** Rows of text as CSV (RFC 4180): fields as `csvField` writes them, CRLF between records, no mark. */
