@@ -97,12 +97,21 @@ export interface AgentPrincipal {
   deviceId: string | null;
 }
 
+/**
+ * What a governed server's user id gets in front when the person would share the standalone person's stores: the tenant
+ * and the user are both `standalone`, the standalone principal's own pair (the person's own AI keeps its chats, keys and
+ * skills under it). `userStoreName` of `@fadenstack/agents` keeps an id with this start apart from every other name.
+ */
+export const GOVERNED_USER_MARKER = "governed:";
+
 /** Verified response fields only. Missing identity remains unavailable. */
 export function toAgentPrincipal(value: unknown): AgentPrincipal | undefined {
   const p = obj(value);
   if (!str(p["tenant_id"]) || !str(p["user_id"]) || !str(p["agent_id"])) return undefined;
-  return { tenantId: str(p["tenant_id"])!, userId: str(p["user_id"])!, agentId: str(p["agent_id"])!,
-    deviceId: str(p["device_id"]) ?? null };
+  const tenantId = str(p["tenant_id"])!;
+  const user = str(p["user_id"])!;
+  const userId = tenantId === "standalone" && user === "standalone" ? GOVERNED_USER_MARKER + user : user;
+  return { tenantId, userId, agentId: str(p["agent_id"])!, deviceId: str(p["device_id"]) ?? null };
 }
 
 /** What every client of a user shares (`user` in the profile; `AgentResource.setUserLanguage` changes it). */

@@ -1,4 +1,4 @@
-import type { AgentPrincipal } from "@fadenstack/client";
+import { GOVERNED_USER_MARKER, type AgentPrincipal } from "@fadenstack/client";
 
 /** Who the stores are kept for: the tenant and the user of the profile's principal. */
 export type StorePrincipal = Pick<AgentPrincipal, "tenantId" | "userId">;
@@ -10,7 +10,16 @@ export type StorePrincipal = Pick<AgentPrincipal, "tenantId" | "userId">;
  * (39 F10; sdk/46 F1.)
  */
 export function userStoreName(base: string, principal: StorePrincipal | undefined): string {
-  return principal ? `${base}:${encodeURIComponent(principal.tenantId)}:${encodeURIComponent(principal.userId)}` : base;
+  return principal ? `${base}:${encodeURIComponent(principal.tenantId)}:${userSegment(principal.userId)}` : base;
+}
+
+/**
+ * The user's part of a store name. A user id that starts with `GOVERNED_USER_MARKER` (the client gives it to a governed person
+ * whose tenant and user are both `standalone`, the standalone principal's own pair) keeps the marker's colon unescaped,
+ * and `encodeURIComponent` always escapes a colon: no other id can make the same name, `standalone` included.
+ */
+function userSegment(userId: string): string {
+  return userId.startsWith(GOVERNED_USER_MARKER) ? GOVERNED_USER_MARKER + encodeURIComponent(userId.slice(GOVERNED_USER_MARKER.length)) : encodeURIComponent(userId);
 }
 
 /** The standalone principal (`LocalBackend`'s): the person of an app without a Fadenstack server. Its data is apart from any governed person's. */

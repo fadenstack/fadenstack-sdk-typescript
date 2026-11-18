@@ -88,6 +88,7 @@ export {
 } from "./chat/types.js";
 export { isRefusal, readNotice, type ChatOutcome, type GovernanceNotice } from "./governance.js";
 export {
+  GOVERNED_USER_MARKER,
   toAgentProfile,
   toLocalRetention,
   toWireEvent,

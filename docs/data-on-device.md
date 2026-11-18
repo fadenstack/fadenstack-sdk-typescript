@@ -23,7 +23,7 @@ Each person's data is in databases of their own, so two people in one browser pr
 A database's name is its base name, the tenant and the user, each escaped (`userStoreName`):
 
 - **Standalone** (`useEndpoint`, `useChatStreamer`): the standalone principal, tenant and user `standalone`, as in
-  `fadenstack-sessions:standalone:standalone`; apart from any governed person's.
+  `fadenstack-sessions:standalone:standalone`; apart from any governed person's. A governed server that names both tenant and user `standalone` gets `fadenstack-sessions:standalone:governed:standalone`: the client puts `governed:` in front of that user id, and the colon stays unescaped, which no other id can make (`encodeURIComponent` escapes a colon).
 - **Governed:** the tenant and the user the server names in the agent's profile (`profile.principal`), as in
   `fadenstack-sessions:<tenant>:<user>`.
 - **A server that names no user:** the base name alone (`fadenstack-sessions`), shared, as an older SDK kept it.
