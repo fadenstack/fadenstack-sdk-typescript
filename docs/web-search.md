@@ -2,7 +2,7 @@
 
 ## Pictures
 
-In governed mode the agent makes pictures through the organisation's server, which marks them: signed metadata and a watermark. In standalone mode the SDK offers no picture tools in 0.3.0. The device cannot yet add both kinds of mark on its own, and the AI Act's marking rules expect them. Pictures the person attaches for the model to see are not affected. The Chrome agent makes no pictures in 0.3.0.
+In governed mode the agent makes pictures through the organisation's server, which marks them: signed metadata and a watermark. In standalone mode the SDK offers no picture tools in 0.3.0. The device cannot yet add both kinds of mark on its own, and the AI Act's marking rules expect them. Pictures the person attaches for the model to see are not affected. The Chrome agent makes no pictures in 0.3.0. See [Tools that make pictures](tools.md#tools-that-make-pictures) for how an app declares a picture tool.
 
 ## The web search tool
 
