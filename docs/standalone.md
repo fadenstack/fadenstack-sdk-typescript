@@ -6,7 +6,7 @@ The agent's definition, its tools, its approvals and its chats all stay on the d
 ([Parity](parity.md#standalone-mode)).
 
 ```ts
-import { EndpointDialect, StaticTokenProvider } from "@fadenstack/client";
+import { EndpointDialect } from "@fadenstack/client";
 import { AgentDefinition, FadenstackAgent } from "@fadenstack/agents";
 
 const agent = FadenstackAgent.createBuilder()
