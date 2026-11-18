@@ -468,7 +468,7 @@ const chat = new AgentChatViewModel(agent, approvals, {
 
 **What a link sends.** A link to fadenstack.com carries two values and nothing else: `ref`, where the click came from
 (`<refSource>-panel` or `<refSource>-about`), and `v`, the SDK's major.minor version. For example
-`https://fadenstack.com/?ref=sdk-panel&v=0.2`. Nothing about the user, the organisation, the server or the agent is in
+`https://fadenstack.com/?ref=sdk-panel&v=0.3`. Nothing about the user, the organisation, the server or the agent is in
 it. The link has `rel="noopener noreferrer"`, so the browser sends no Referer and internal addresses stay inside. The
 Help link goes to your own server and carries nothing. The server's address in About is only shown, never sent.
 
