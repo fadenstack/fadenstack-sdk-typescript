@@ -237,7 +237,7 @@ For an agent on the person's own endpoint (`useEndpoint`) the module chooses the
   device.
 ### The endpoint's watermark
 
-Part of D18 (owner, 14 Nov): the endpoint's text watermark is used, never switched off for text people read, and recorded.
+The endpoint's text watermark is used, never switched off for text people read, and recorded.
 
 - **Never off for text people read.** A request asks SGLang for its mark (`watermark: {"enabled": true}`), and nothing in
   `ChatOptions.extra` can send a `watermarking` or `watermark` field of the app's own. Only a call whose answer no person
@@ -267,7 +267,7 @@ else await writeClipboard(clipboard, { text: copied.text, html: copied.html }); 
 ```
 
 - **What lands on the clipboard.** The answer's Markdown as plain text, exactly as it was, and the same answer as HTML. The HTML carries the mark (`<span data-ai-generated="<record id>" title="AI-generated <record id>">`, see [The built-in markers](#the-built-in-markers)). The plain text carries nothing: only the opt-in invisible-text marker could put a mark in it, and it is left off.
-- **Which targets keep the mark.** Measured so far: TinyMCE and CKEditor 5 keep the `data-ai-generated` attribute, and Gmail drops it and keeps the `title`, through to the recipient (the record's report then says `html-title`). How Word, Outlook and other desktop programs treat the marks on paste is not measured yet (the robustness kit, M-18 and M-19); they may keep the formatting and drop the attributes. A program that takes no formatting gets the plain text and so no mark. On the web the HTML goes as `text/html` of the browser's clipboard (`browserClipboard`); a clipboard without `setContent` gets the text only.
+- **Which targets keep the mark.** Checked so far: TinyMCE and CKEditor 5 keep the `data-ai-generated` attribute, and Gmail drops it and keeps the `title`, through to the recipient (the record's report then says `html-title`). How Word, Outlook and other desktop programs treat the marks on paste is not checked yet; they may keep the formatting and drop the attributes. A program that takes no formatting gets the plain text and so no mark. On the web the HTML goes as `text/html` of the browser's clipboard (`browserClipboard`); a clipboard without `setContent` gets the text only.
 - **The record.** The sink is `clipboard`, which carries `html-attribute` only; the media type is `text/html` (`text/markdown` when only text is given); the edit kind is `Generated`; the record is linked to the receipt of the turn the answer came from. It is signed by the server (governed) or by the device (standalone), as a tool's records are. The report and the transcript's `provenance.placed` entry name the tool `copy` and never hold the copied text.
 - **Exempt content.** Code (a code block's Copy), and whatever the policy exempts, is copied as it is and recorded as exempt. The reason is `MarkedCopy.exemptBecause`.
 - **The policy `refuse`.** A copy that cannot get a layer it needs (the HTML's mark, or the receipt's watermark) is not copied: `MarkedCopy.refused`, and the chat says "Not copied: this answer could not be marked as AI-generated, and your organisation requires it." Standalone, the device signs (`LocalProvenanceBackend`), so a copy works offline; governed with the server unreachable, the policy decides as it does for a tool. A marking that fails on its own (not the policy) lets the copy go on as it was.

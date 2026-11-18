@@ -73,7 +73,7 @@ Without options, the gateway serves one agent, `test-agent`, to one user, `user@
 | `users` | The users it knows. Default: `user@example.com` with the password `secret`. |
 | `model` | The scripted model. See below. |
 | `serverUrl` | The address the in-process `fetch` answers for. Default `https://faden.test`. |
-| `accessTtlSeconds` | How long an access token lasts. Default 300, the longest core 0.7.1 (rc21) issues; the SDKs refresh from `expires_in` and assume no lifetime. |
+| `accessTtlSeconds` | How long an access token lasts. Default 300, the longest core 0.7.1 issues; the SDKs refresh from `expires_in` and assume no lifetime. |
 | `refreshTtlSeconds` | How long a refresh token lasts. Default 86 400. |
 | `chunkSize` | Characters per streamed piece of text. Default 6. |
 | `models` | The models `GET /v1/models` lists. Default `["fake-model"]`. |
@@ -254,14 +254,14 @@ answers.)
 
 Four gates hold for every case and channel: the content reaches the model only inside one fence of ours (G1); a call the content
 asks for meets the rules any call meets and never runs without approval where the rules say ask (G2); below `auto` an open-world
-call to an address from the content asks (G3, and in `auto` it runs today: a known limit until the tainted-turn marker, sdk/51
-item 8.4); a remote image in an answer is never loaded (G4: the Markdown model has an `image` inline that no skin draws as an
+call to an address from the content asks (G3, and in `auto` it runs today: a known limit until the tainted-turn marker is
+there); a remote image in an answer is never loaded (G4: the Markdown model has an `image` inline that no skin draws as an
 `<img>`). It lives in `packages/agents/test/injection` (and `packages/ui-vue/test/injectionImages.test.ts` for the Vue skin) and
-runs as its own step, "Injection suite (sdk/51 7.1)", in the release workflow:
+runs as its own step in the release workflow:
 
 ```
 node node_modules/vitest/vitest.mjs run packages/agents/test/injection packages/ui-vue/test/injectionImages.test.ts
 ```
 
 The README beside the corpus says what each kind tests and how to add a case. What is not done: the live run with promptfoo
-against a real model endpoint (0.3.1). See also [Fencing content you did not write](tools.md#fencing-content-you-did-not-write).
+against a real model endpoint. See also [Fencing content you did not write](tools.md#fencing-content-you-did-not-write).

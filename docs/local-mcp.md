@@ -53,7 +53,7 @@ The person's list reaches the agent at the start of its next turn.
 ## Where a server may be reached
 
 - **https** goes anywhere.
-- **Plain http to this computer** (`localhost`, 127.0.0.0/8, `::1`) is fine. A header value goes over plain http only to `localhost`, `127.0.0.1` or `::1` exactly, as F03's rule for an endpoint's key.
+- **Plain http to this computer** (`localhost`, 127.0.0.0/8, `::1`) is fine. A header value goes over plain http only to `localhost`, `127.0.0.1` or `::1` exactly, as for an endpoint's key ([Standalone mode](standalone.md#keys)).
 - **Plain http to the local network** goes only when all of these hold:
   - the server's switch "Allow plain http on the local network" is on;
   - the agent's profile says `local_mcp.plain_http: allow` (absent or anything else is deny, and developer mode does not override it);

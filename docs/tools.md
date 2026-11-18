@@ -359,7 +359,7 @@ hidden. If a call is refused anyway, the agent:
 2. raises one notice per turn: outcome `images_disabled`, stage `tool`, category `images`;
 3. sets `imagesAvailable` to false, so the picture tools are hidden from the next round on.
 
-The chat panel shows that notice with the title "Image generation is off" and the owner's note, in the person's language
+The chat panel shows that notice with the title "Image generation is off" and a note, in the person's language
 (English, German, French, Spanish, Simplified Chinese), instead of the server's message:
 "Image generation is turned off in this version. From 2 December 2026 the EU AI Act (Article 5) requires safeguards against
 generating harmful images, and this version does not have them yet. Image generation will return in a later version, with
@@ -377,7 +377,7 @@ in a browser and memory elsewhere unless you pass your own to `useApprovalStore`
 never see each other's. It is checked at every call: a tool that became `destructive` or `unknown`, or that an
 administrator's rule now covers, asks again. A tool of the same name from another source or server is asked about on
 its own, so a new MCP server bringing a tool of that name inherits no "always"; Allow for this chat works the same way.
-An approval kept before 0.3.0 has no source and answers nothing: the person is asked once more (sdk/51 F08).
+An approval kept before 0.3.0 has no source and answers nothing: the person is asked once more.
 
 In IndexedDB each approval is sealed with the person's WebCrypto key, bound to the database, the agent and the tool, so a
 record copied to another agent or person cannot be read. Plain records from an earlier SDK are sealed once, at the first
