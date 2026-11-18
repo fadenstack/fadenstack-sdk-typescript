@@ -4,7 +4,7 @@ All notable changes to the Fadenstack TypeScript SDK (every `@fadenstack/*` pack
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the packages follow [Semantic Versioning](https://semver.org/):
 before 1.0, a minor version may break the API, and this file says where it does.
 
-## [0.3.0] - Unreleased
+## [0.3.0] - 2026-11-18
 
 ### Data fields
 
