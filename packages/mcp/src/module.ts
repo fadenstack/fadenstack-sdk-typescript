@@ -322,7 +322,9 @@ export class McpModule implements FadenstackModule, ChangingToolSource {
       source,
       state,
       warning_version: on ? warningVersion!.trim() : null,
-      person: principal === STANDALONE || principal.userId === STANDALONE.userId ? "standalone" : `${principal.tenantId}/${principal.userId}`,
+      person: principal === STANDALONE || (principal.tenantId === STANDALONE.tenantId && principal.userId === STANDALONE.userId)
+        ? "standalone"
+        : `${principal.tenantId}/${principal.userId}`,
     });
     this.#plainHttpChanges.push({ type: "local_mcp.plain_http", source, state });
     if (this.#context) await this.#sendPlainHttpChanges(this.#context);
