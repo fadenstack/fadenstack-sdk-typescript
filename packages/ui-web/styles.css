@@ -1609,6 +1609,35 @@
   gap: 6px;
 }
 
+/* Report a problem: a sheet like About. The preview is the mail's own text in a read-only box; the buttons wrap in narrow panels. */
+.fdn-report {
+  min-width: min(340px, calc(100vw - 16px));
+}
+
+.fdn-report-goes {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.fdn-report-preview {
+  box-sizing: border-box;
+  width: 100%;
+  max-height: 260px;
+  padding: 6px 8px;
+  border: 1px solid var(--fdn-border);
+  border-radius: var(--fdn-radius);
+  background: transparent;
+  color: inherit;
+  font: 12px/1.4 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  resize: vertical;
+}
+
+.fdn-report-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
 /* Tools: an overlay like About, read only. Descriptions are server-written, so they are plain text and clamped. */
 .fdn-tools {
   display: flex;

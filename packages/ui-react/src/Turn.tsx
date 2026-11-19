@@ -56,6 +56,7 @@ export const TurnView = memo(function TurnView({ turn, strings, renderers }: {
             {turn.isRunning && <Spinner />}
             <span>{turn.statusText}</span>
             {turn.errorMessage && <span className="fdn-error-text">{turn.errorMessage}</span>}
+            {turn.canReportProblem && <button type="button" className="fdn-link" aria-haspopup="dialog" onClick={() => turn.reportProblem()}>{strings.reportProblem}</button>}
           </div>
         )}
         {done && !turn.isPromptBlocked && (

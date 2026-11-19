@@ -92,10 +92,16 @@ export function AboutPanel({ chat, onClose }: { chat: AgentChatViewModel; onClos
       <div className="fdn-about-links">
         {about.links.map((link) => <ExternalLink key={link.href} chat={chat} link={link} className="fdn-about-link" />)}
       </div>
-      <button type="button" className="fdn-button" onClick={copy}>
-        <Icon name={copied ? "check" : "copy"} size={14} />
-        <span>{copied ? s.copied : s.copyDetails}</span>
-      </button>
+      <div className="fdn-report-actions">
+        <button type="button" className="fdn-button" onClick={copy}>
+          <Icon name={copied ? "check" : "copy"} size={14} />
+          <span>{copied ? s.copied : s.copyDetails}</span>
+        </button>
+        <button type="button" className="fdn-button" aria-haspopup="dialog" onClick={() => chat.openReportProblem()}>
+          <Icon name="warning" size={14} />
+          <span>{s.reportProblem}</span>
+        </button>
+      </div>
     </div>
   );
 }

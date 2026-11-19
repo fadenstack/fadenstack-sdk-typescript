@@ -7,6 +7,7 @@ import { ApprovalsSection } from "./Grants.js";
 import { useDismiss, useViewModel } from "./hooks.js";
 import { Icon } from "./icons.js";
 import { ReasoningMenu } from "./ReasoningMenu.js";
+import { ReportProblemSheet } from "./ReportProblem.js";
 import { ToolsPanel } from "./Tools.js";
 
 /**
@@ -90,14 +91,20 @@ function SettingsMenu({ chat, extra }: { chat: AgentChatViewModel; extra?: React
     chat.setAboutOpen(false);
     if (returnFocus) gear.current?.focus();
   }, [chat]);
+  const dismissReport = useCallback(() => chat.closeReportProblem(), [chat]);
+  const closeReport = useCallback((returnFocus: boolean) => {
+    chat.closeReportProblem();
+    if (returnFocus) gear.current?.focus();
+  }, [chat]);
   useDismiss(chat.isSettingsOpen, close, ref);
   useDismiss(chat.isAboutOpen, dismissAbout, ref);
   useDismiss(chat.isToolsOpen, dismissTools, ref);
+  useDismiss(chat.isReportProblemOpen, dismissReport, ref);
   const s = chat.strings;
   const languages = chat.canChangeLanguage || chat.isLanguageLocked;
   return (
     <div className="fdn-menu-anchor" ref={ref}>
-      <button ref={gear} type="button" className={chat.isAboutOpen || chat.isToolsOpen ? "fdn-icon-button fdn-open" : "fdn-icon-button"} title={s.settings}
+      <button ref={gear} type="button" className={chat.isAboutOpen || chat.isToolsOpen || chat.isReportProblemOpen ? "fdn-icon-button fdn-open" : "fdn-icon-button"} title={s.settings}
         aria-label={s.settings} aria-haspopup="menu" aria-expanded={chat.isSettingsOpen} onClick={() => chat.setSettingsOpen(!chat.isSettingsOpen)}>
         <Icon name="settings" />
       </button>
@@ -143,6 +150,7 @@ function SettingsMenu({ chat, extra }: { chat: AgentChatViewModel; extra?: React
       )}
       {chat.isAboutOpen && <AboutPanel chat={chat} onClose={closeAbout} />}
       {chat.isToolsOpen && <ToolsPanel chat={chat} onClose={closeTools} />}
+      {chat.isReportProblemOpen && <ReportProblemSheet chat={chat} onClose={closeReport} />}
     </div>
   );
 }
