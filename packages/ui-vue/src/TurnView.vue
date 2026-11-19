@@ -50,6 +50,7 @@ function savePrompt(): void {
         <Spinner v-if="turn.isRunning" />
         <span>{{ turn.statusText }}</span>
         <span v-if="turn.errorMessage" class="fdn-error-text">{{ turn.errorMessage }}</span>
+        <button v-if="turn.canReportProblem" type="button" class="fdn-link" aria-haspopup="dialog" @click="turn.reportProblem()">{{ strings.reportProblem }}</button>
       </div>
       <div v-if="!turn.isRunning && !turn.isPromptBlocked" class="fdn-turn-actions">
         <button v-if="turn.answerText" type="button" class="fdn-icon-button fdn-small" :title="strings.copy" :aria-label="strings.copy" @click="turn.copy()">

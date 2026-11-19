@@ -64,9 +64,15 @@ function copy(): void {
     <div class="fdn-about-links">
       <ExternalLink v-for="link in about.links" :key="link.href" :chat="chat" :link="link" link-class="fdn-about-link" />
     </div>
-    <button type="button" class="fdn-button" @click="copy">
-      <Icon :name="copied ? 'check' : 'copy'" :size="14" />
-      <span>{{ copied ? chat.strings.copied : chat.strings.copyDetails }}</span>
-    </button>
+    <div class="fdn-report-actions">
+      <button type="button" class="fdn-button" @click="copy">
+        <Icon :name="copied ? 'check' : 'copy'" :size="14" />
+        <span>{{ copied ? chat.strings.copied : chat.strings.copyDetails }}</span>
+      </button>
+      <button type="button" class="fdn-button" aria-haspopup="dialog" @click="chat.openReportProblem()">
+        <Icon name="warning" :size="14" />
+        <span>{{ chat.strings.reportProblem }}</span>
+      </button>
+    </div>
   </div>
 </template>

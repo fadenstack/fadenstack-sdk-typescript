@@ -11,6 +11,7 @@ import AboutPanel from "./AboutPanel.vue";
 import ApprovalsSection from "./ApprovalsSection.vue";
 import { useDismiss, useViewModel } from "./composables.js";
 import Icon from "./Icon.vue";
+import ReportProblemSheet from "./ReportProblemSheet.vue";
 import ToolsPanel from "./ToolsPanel.vue";
 
 const props = defineProps<{ chat: AgentChatViewModel }>();
@@ -22,6 +23,7 @@ const gear = useTemplateRef<HTMLButtonElement>("gear");
 useDismiss(() => chat.value.isSettingsOpen, () => chat.value.setSettingsOpen(false), anchor);
 useDismiss(() => chat.value.isAboutOpen, () => chat.value.setAboutOpen(false), anchor);
 useDismiss(() => chat.value.isToolsOpen, () => chat.value.setToolsOpen(false), anchor);
+useDismiss(() => chat.value.isReportProblemOpen, () => chat.value.closeReportProblem(), anchor);
 const languages = computed(() => chat.value.canChangeLanguage || chat.value.isLanguageLocked);
 
 function closeTools(returnFocus: boolean): void {
@@ -33,6 +35,11 @@ function closeAbout(returnFocus: boolean): void {
   chat.value.setAboutOpen(false);
   if (returnFocus) gear.value?.focus();
 }
+
+function closeReport(returnFocus: boolean): void {
+  chat.value.closeReportProblem();
+  if (returnFocus) gear.value?.focus();
+}
 </script>
 
 <template>
@@ -40,7 +47,7 @@ function closeAbout(returnFocus: boolean): void {
     <button
       ref="gear"
       type="button"
-      :class="chat.isAboutOpen || chat.isToolsOpen ? 'fdn-icon-button fdn-open' : 'fdn-icon-button'"
+      :class="chat.isAboutOpen || chat.isToolsOpen || chat.isReportProblemOpen ? 'fdn-icon-button fdn-open' : 'fdn-icon-button'"
       :title="chat.strings.settings"
       :aria-label="chat.strings.settings"
       aria-haspopup="menu"
@@ -99,5 +106,6 @@ function closeAbout(returnFocus: boolean): void {
     </div>
     <AboutPanel v-if="chat.isAboutOpen" :chat="chat" @close="closeAbout" />
     <ToolsPanel v-if="chat.isToolsOpen" :chat="chat" @close="closeTools" />
+    <ReportProblemSheet v-if="chat.isReportProblemOpen" :chat="chat" @close="closeReport" />
   </div>
 </template>

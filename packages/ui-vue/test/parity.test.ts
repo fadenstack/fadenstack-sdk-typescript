@@ -233,6 +233,32 @@ describe("About and the Fadenstack link draw the same in both panels", () => {
   });
 });
 
+describe("Report a problem draws the same in both panels", () => {
+  it("opened from About, with a policy address, without one, with an error from a failed turn, and in German", async () => {
+    const { chat } = await chatWith(() => ({ text: "ok" }), { supportEmail: "unused@app.example" });
+    const panels = both(chat);
+    chat.setAboutOpen(true);
+    await panels.same(); // About with its second button
+    chat.openReportProblem();
+    await panels.same(); // governed without the key: IT to ask, the Help link, no mail
+    expect(document.querySelectorAll('[role="dialog"][aria-label="Report a problem"]')).toHaveLength(2); // one per panel
+    expect(document.querySelectorAll('textarea[readonly][aria-label="This report contains:"]')).toHaveLength(2);
+
+    const failed = await chatWith(() => ({ badRequest: { code: "picture_type_not_allowed", message: "x" } }));
+    const failedPanels = both(failed.chat);
+    await failed.chat.send("Hi");
+    await failedPanels.same(); // the link on the error
+    expect(document.querySelectorAll(".fdn-status .fdn-link")).toHaveLength(2);
+    failed.chat.turns[0]!.reportProblem();
+    await failedPanels.same();
+
+    const german = await chatWith(() => ({ text: "ok" }), { strings: germanStrings });
+    const germanPanels = both(german.chat);
+    german.chat.openReportProblem({ code: "agent_disabled", requestId: "req-1" });
+    await germanPanels.same();
+  });
+});
+
 describe("the thinking pill and the slot line draw the same in both panels", () => {
   it("closed, with its menu open, after a pick, under a maximum, and in German", async () => {
     const { chat } = await chatWith(() => ({ text: "ok" }));
