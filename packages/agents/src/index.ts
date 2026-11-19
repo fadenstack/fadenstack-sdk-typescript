@@ -186,6 +186,7 @@ export {
   type StepUpRequest,
   type StepUpStage,
 } from "./stepUp.js";
+export { DEFAULT_SUPPORT_EMAIL, SUPPORT_EMAIL_MAX_LENGTH, isSupportEmail } from "./supportEmail.js";
 export { BrowserLog, BROWSER_LOG_DATABASE, teeLoggers, type BrowserLogOptions, type StoredLogEntry } from "./browserLog.js";
 export { STANDALONE_PRINCIPAL, userLocalKey, userStoreName, type StorePrincipal } from "./userData.js";
 export {

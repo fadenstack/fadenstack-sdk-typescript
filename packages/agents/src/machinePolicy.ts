@@ -2,6 +2,7 @@ import { FadenstackError } from "@fadenstack/client";
 
 import { AuditRetention } from "./audit.js";
 import { DEFAULT_CHAT_RETENTION, chatRetentionChoice, isValidRetentionChats, isValidRetentionDays, type ChatRetentionChoice } from "./chatRetention.js";
+import { isSupportEmail } from "./supportEmail.js";
 
 /** A machine policy's word on a feature: allowed, forbidden, or allowed only for the listed items. The strings are .NET's `PolicyAccess` names. */
 export const PolicyAccess = Object.freeze({
@@ -71,11 +72,12 @@ export interface MachinePolicyInit {
   chatRetention?: ChatRetentionChoice | undefined;
   contentLogging?: PolicyAccess;
   auditRetentionDays?: number | undefined;
+  supportEmail?: string | undefined;
   locked?: readonly string[];
   warnings?: readonly string[];
 }
 
-const KEYS: readonly string[] = Object.freeze(["server", "standalone", "endpoints", "plainHttp", "mcp", "skills", "webSearch", "timestamping", "chatRetention", "contentLogging", "auditRetentionDays"]);
+const KEYS: readonly string[] = Object.freeze(["server", "standalone", "endpoints", "plainHttp", "mcp", "skills", "webSearch", "timestamping", "chatRetention", "contentLogging", "auditRetentionDays", "supportEmail"]);
 
 /**
  * What IT set for this machine (sdk/51 F09, D6, R3-8): one vocabulary for every app, read from the app's managed location
@@ -134,6 +136,12 @@ export class MachinePolicy {
    * days. A value out of bounds or not a whole number is reported and becomes 180. .NET: `MachinePolicy.AuditRetentionDays`.
    */
   readonly auditRetentionDays: number | undefined;
+  /**
+   * The address "Report a problem" writes to (`supportEmail`, sdk/0.3.1): one plain mail address, in both modes, and in governed mode the
+   * only one the sheet uses. A value that is not one plain address (a `?`, `&`, `%`, `,`, a space, a line break, two addresses, over 254
+   * characters) is reported in `warnings` (never the value) and counts as absent. Undefined: absent. .NET: `MachinePolicy.SupportEmail`.
+   */
+  readonly supportEmail: string | undefined;
   /** The keys the policy set itself (the app locks them in its UI and never writes them into the person's settings). */
   readonly locked: readonly string[];
   /** What was ignored or narrowed while reading: unknown keys, unknown values (never a value itself). */
@@ -151,6 +159,7 @@ export class MachinePolicy {
     this.chatRetention = init.chatRetention;
     this.contentLogging = init.contentLogging ?? PolicyAccess.Allowed;
     this.auditRetentionDays = init.auditRetentionDays;
+    this.supportEmail = isSupportEmail(init.supportEmail) ? init.supportEmail : undefined;
     this.locked = Object.freeze([...(init.locked ?? [])]);
     this.warnings = Object.freeze([...(init.warnings ?? [])]);
     Object.freeze(this);
@@ -234,6 +243,7 @@ export class MachinePolicy {
       chatRetention: values.has("chatRetention") ? retention(values.get("chatRetention"), warnings) : undefined,
       contentLogging: access(values, "contentLogging", PolicyAccess.Allowed, warnings),
       auditRetentionDays: values.has("auditRetentionDays") ? auditDays(values.get("auditRetentionDays"), warnings) : undefined,
+      supportEmail: values.has("supportEmail") ? supportAddress(values.get("supportEmail"), warnings) : undefined,
       locked,
       warnings,
     });
@@ -291,6 +301,13 @@ function auditDays(value: unknown, warnings: string[]): number {
   if (typeof value === "number" && AuditRetention.isValid(value)) return value;
   warnings.push(`'auditRetentionDays' is not a whole number from ${AuditRetention.minDays} to ${AuditRetention.maxDays}: the default (${AuditRetention.defaultDays}).`);
   return AuditRetention.defaultDays;
+}
+
+/** One plain mail address, or nothing: a value that is not one is reported (never itself) and counts as absent (OWASP ASVS 5.0 V1). */
+function supportAddress(value: unknown, warnings: string[]): string | undefined {
+  if (isSupportEmail(value)) return value;
+  warnings.push("'supportEmail' is not one plain mail address: ignored.");
+  return undefined;
 }
 
 function retention(value: unknown, warnings: string[]): ChatRetentionChoice {

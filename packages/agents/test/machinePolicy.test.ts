@@ -40,7 +40,8 @@ describe("reading", () => {
     const policy = MachinePolicy.fromJson(`
       {"server":"https://ai.example.test","standalone":"allowed","endpoints":["http://localhost:11434","https://llm.example.test/v1"],
        "plainHttp":"forbidden","mcp":["notes-db"],"skills":"allowed","webSearch":"forbidden","timestamping":"off",
-       "chatRetention":{"autoDelete":false,"maxAgeDays":30,"maxSessions":100},"contentLogging":"forbidden","auditRetentionDays":90}`);
+       "chatRetention":{"autoDelete":false,"maxAgeDays":30,"maxSessions":100},"contentLogging":"forbidden","auditRetentionDays":90,"supportEmail":"it-help@corp.example"}`);
+    expect(policy.supportEmail).toBe("it-help@corp.example");
 
     expect(policy.contentLogging).toBe(PolicyAccess.Forbidden);
     expect(policy.server?.href).toBe("https://ai.example.test/");
@@ -132,6 +133,21 @@ describe("reading", () => {
     expect(MachinePolicy.from({ endpoints: ["https://llm.example.test", 5, ""] }).endpoints).toEqual(["https://llm.example.test"]);
     expect(MachinePolicy.from({ server: "ftp://ai.example.test" }).server).toBeUndefined();
     expect(MachinePolicy.from({ server: "not a url" }).warnings).toContain("'server' is not an http(s) address: ignored.");
+  });
+
+  it("supportEmail is one plain address; anything else is reported without its value and counts as absent", () => {
+    expect(MachinePolicy.from({ supportEmail: "a.b+c@sub.example.org" }).supportEmail).toBe("a.b+c@sub.example.org");
+    expect(MachinePolicy.none.supportEmail).toBeUndefined();
+    expect(MachinePolicy.from({}).supportEmail).toBeUndefined();
+    const bad = ["a@b.example?bcc=x@y.example", "a@b.example,c@d.example", "a b@c.example", "a@b.example\n", "100%@b.example", "x".repeat(250) + "@b.example", 42, null, ["a@b.example"]];
+    for (const value of bad) {
+      const policy = MachinePolicy.from({ supportEmail: value });
+      expect(policy.supportEmail, JSON.stringify(value)).toBeUndefined();
+      expect(policy.warnings).toEqual(["'supportEmail' is not one plain mail address: ignored."]);
+      expect(policy.warnings.join()).not.toContain("bcc"); // the value is never reported
+      expect(policy.locked).toContain("supportEmail"); // the key is IT's: the app does not offer its own
+    }
+    expect(MachinePolicy.unreadable.supportEmail).toBeUndefined();
   });
 
   it("an unknown key is ignored and reported", () => {
