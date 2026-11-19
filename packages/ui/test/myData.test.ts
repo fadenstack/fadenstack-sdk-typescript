@@ -33,10 +33,10 @@ describe("the Your data control", () => {
     const { vm, source } = model("others");
     await vm.askRemoveThisApp();
     expect([vm.phase, vm.confirmsAll, vm.showActions]).toEqual(["confirmThisApp", false, false]);
-    expect(vm.confirmTitle).toBe(`Remove your data from ${APP_A}?`);
+    expect(vm.confirmTitle).toBe(`Remove your data from the app "${APP_A}"?`);
     expect(vm.confirmLines).toEqual([
       expect.stringContaining(APP_A),
-      `Your skills, MCP servers, keys and provenance records stay, because they are also used by ${APP_B} and excel-assistant.`,
+      `Your skills, MCP servers, keys and provenance records stay, because they are also used by "${APP_B}" and "excel-assistant".`,
     ]);
     expect(vm.confirmLabel).toBe("Remove");
     expect(source.calls).toEqual([]); // nothing yet
@@ -77,7 +77,7 @@ describe("the Your data control", () => {
     await vm.confirm();
     expect(source.calls).toEqual(["remove:thisApp"]);
     expect(vm.phase).toBe("done");
-    expect(vm.statusText).toBe(`Your data was removed from ${APP_A}. Skills, MCP servers, keys and provenance records stayed, because they are also used by ${APP_B} and excel-assistant.`);
+    expect(vm.statusText).toBe(`Your data was removed from the app "${APP_A}". Skills, MCP servers, keys and provenance records stayed, because they are also used by "${APP_B}" and "excel-assistant".`);
     expect(vm.apps.map((a) => a.name)).toEqual([APP_B, "excel-assistant"]); // read again
   });
 
@@ -86,7 +86,7 @@ describe("the Your data control", () => {
     await vm.askRemoveAll();
     expect([vm.phase, vm.confirmsAll]).toEqual(["confirmAll", true]);
     expect(vm.confirmTitle).toBe("Remove all your Fadenstack data in this browser?");
-    expect(vm.confirmLines[1]).toBe(`These apps are affected: ${APP_A}, ${APP_B}, and excel-assistant.`);
+    expect(vm.confirmLines[1]).toBe(`These apps are affected: "${APP_A}", "${APP_B}", and "excel-assistant".`);
     expect(vm.confirmLabel).toBe("Remove everything");
     await vm.confirm();
     expect(source.calls).toEqual(["remove:allApps"]);
@@ -139,7 +139,7 @@ describe("the Your data control", () => {
     source.hostStoresLeft = true;
     await vm.askRemoveThisApp();
     await vm.confirm();
-    expect(vm.statusText).toBe(`Your data was removed from ${APP_A}. ${englishStrings.myDataHostStoresLeft}`);
+    expect(vm.statusText).toBe(`Your data was removed from the app "${APP_A}". ${englishStrings.myDataHostStoresLeft}`);
   });
 
   it("says its texts again in a new language on retext()", async () => {
@@ -152,7 +152,7 @@ describe("the Your data control", () => {
     language = germanStrings;
     vm.retext();
     expect(told).toBe(1);
-    expect(vm.confirmTitle).toBe(`Ihre Daten aus ${APP_A} entfernen?`);
+    expect(vm.confirmTitle).toBe(`Ihre Daten aus der App „${APP_A}“ entfernen?`);
     expect(vm.confirmLines[1]).toContain("Skills, MCP-Server, Schlüssel und Herkunftsnachweise bleiben erhalten");
   });
 

@@ -1,4 +1,4 @@
-import { planMyData, type AuditVerification, type DataDeletion, type DataScope, type FadenstackAgent, type MyDataApp, type MyDataExport } from "@fadenstack/agents";
+import { appDisplayName, planMyData, type AppDisplayNames, type AuditVerification, type DataDeletion, type DataScope, type FadenstackAgent, type MyDataApp, type MyDataExport } from "@fadenstack/agents";
 
 import { formatNumber } from "../format.js";
 import { Observable } from "../observable.js";
@@ -22,6 +22,8 @@ export interface MyDataSource {
   readonly audit?: MyDataAuditSource;
   /** This app's name for the person's data (what the host described, else the agent's slug). */
   readonly appName: string;
+  /** This app's names in the panel's languages (`describeApp`'s `displayNames`), for the texts only. */
+  readonly appDisplayNames?: AppDisplayNames | undefined;
   /** Gets ready (an agent starts). */
   start(): Promise<void>;
   /** The apps that use the person's data, this app first. */
@@ -177,6 +179,11 @@ export class MyDataSettingsViewModel extends Observable {
     return this.#source.appName;
   }
 
+  /** This app's name as the texts say it: its display name in the texts' language, else `appName`. */
+  get appLabel(): string {
+    return appDisplayName(this.appName, this.#source.appDisplayNames, this.strings.language);
+  }
+
   get phase(): MyDataPhase {
     return this.#phase;
   }
@@ -225,7 +232,7 @@ export class MyDataSettingsViewModel extends Observable {
   get confirmTitle(): string {
     const s = this.strings;
     switch (this.#phase) {
-      case "confirmThisApp": return s.myDataConfirmThisAppTitle(this.appName);
+      case "confirmThisApp": return s.myDataConfirmThisAppTitle(this.appLabel);
       case "confirmAll": return s.myDataConfirmAllTitle;
       default: return "";
     }
@@ -236,8 +243,8 @@ export class MyDataSettingsViewModel extends Observable {
     const s = this.strings;
     if (this.#phase === "confirmThisApp") {
       const others = this.otherApps;
-      const lines = [s.myDataConfirmThisApp(this.appName)];
-      if (others.length > 0) lines.push(s.myDataConfirmKept(this.#list(others)));
+      const lines = [s.myDataConfirmThisApp(this.appLabel)];
+      if (others.length > 0) lines.push(s.myDataConfirmKept(this.#appList(others)));
       else lines.push(s.myDataConfirmNoOtherApps);
       const kept = this.agentsKept;
       if (kept.length > 0) lines.push(s.myDataConfirmAgentsKept(this.#list(kept)));
@@ -245,7 +252,7 @@ export class MyDataSettingsViewModel extends Observable {
     }
     if (this.#phase === "confirmAll") {
       const apps = this.affectedApps;
-      return [s.myDataConfirmAll, apps.length > 0 ? s.myDataConfirmAllApps(this.#list(apps)) : s.myDataConfirmAllNoApps];
+      return [s.myDataConfirmAll, apps.length > 0 ? s.myDataConfirmAllApps(this.#appList(apps)) : s.myDataConfirmAllNoApps];
     }
     return [];
   }
@@ -269,9 +276,9 @@ export class MyDataSettingsViewModel extends Observable {
       case "removeFailed": return s.myDataRemoveFailed;
       case "removedAll": return [s.myDataRemovedAll, ...this.#hostNote()].join(" ");
       case "removedThisApp": {
-        const parts = [s.myDataRemoved(this.appName)];
+        const parts = [s.myDataRemoved(this.appLabel)];
         const deletion = this.#deletion;
-        if (deletion && deletion.otherApps.length > 0) parts.push(s.myDataRemovedKept(this.#list(deletion.otherApps)));
+        if (deletion && deletion.otherApps.length > 0) parts.push(s.myDataRemovedKept(this.#appList(deletion.otherApps)));
         if (deletion && deletion.agentsKept.length > 0) parts.push(s.myDataRemovedAgentsKept(this.#list(deletion.agentsKept)));
         return [...parts, ...this.#hostNote()].join(" ");
       }
@@ -400,6 +407,15 @@ export class MyDataSettingsViewModel extends Observable {
     return `fadenstack-my-data-${slug}-${day}.json`;
   }
 
+  /** The apps' names, each in the texts' language and quotation marks, as "A, B and C". */
+  #appList(names: readonly string[]): string {
+    const s = this.strings;
+    return this.#list(names.map((name) => {
+      const app = this.#apps.find((a) => a.name === name);
+      return s.appQuoted(app ? appDisplayName(app.name, app.displayNames, s.language) : name);
+    }));
+  }
+
   /** "A, B and C" in the texts' language. */
   #list(names: readonly string[]): string {
     try {
@@ -419,6 +435,9 @@ function agentSource(agent: FadenstackAgent): MyDataSource {
   return {
     get appName() {
       return agent.appName;
+    },
+    get appDisplayNames() {
+      return agent.appDisplayNames;
     },
     start: () => agent.start(),
     apps: () => agent.myDataApps(),

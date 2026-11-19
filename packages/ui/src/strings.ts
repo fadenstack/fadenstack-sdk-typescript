@@ -148,6 +148,8 @@ export interface UiStrings {
   aboutModel(model: string): string;
   /** The app the agent runs in, as the host described it: "Word add-in 1.4". */
   aboutApp(app: string): string;
+  /** An app's name as it stands in a list of apps, in the language's quotation marks (the name stays as the app wrote it). */
+  appQuoted(app: string): string;
   /** The server's address: shown, never sent. */
   aboutServer(address: string): string;
   /** The link to the organisation's own Help, on its server. */
@@ -1109,7 +1111,8 @@ export const englishStrings: UiStrings = {
   aboutVersion: (version) => `Version ${version}`,
   aboutDraft: "Draft",
   aboutModel: (model) => `Model: ${model}`,
-  aboutApp: (app) => `Runs in ${app}`,
+  aboutApp: (app) => `Runs in the app "${app}"`,
+  appQuoted: (app) => `"${app}"`,
   aboutServer: (address) => `Server: ${address}`,
   help: "Help",
   developerDocs: "Developer docs",
@@ -1856,8 +1859,8 @@ export const englishStrings: UiStrings = {
   myDataExportAllName: "Export all my Fadenstack data (every app)",
   myDataRemoveAll: "Remove all my Fadenstack data in this browser…",
   myDataRemoveAllName: "Remove all my Fadenstack data in this browser… (every app)",
-  myDataConfirmThisAppTitle: (app) => `Remove your data from ${app}?`,
-  myDataConfirmThisApp: (app) => `This removes the chats, the "Allow always" approvals and the settings of ${app} in this browser. It cannot be undone.`,
+  myDataConfirmThisAppTitle: (app) => `Remove your data from the app "${app}"?`,
+  myDataConfirmThisApp: (app) => `This removes the chats, the "Allow always" approvals and the settings of the app "${app}" in this browser. It cannot be undone.`,
   myDataConfirmKept: (apps) => `Your skills, MCP servers, keys and provenance records stay, because they are also used by ${apps}.`,
   myDataConfirmAgentsKept: (agents) => `The chats and approvals of ${agents} stay, because another app uses them too.`,
   myDataConfirmNoOtherApps: "No other Fadenstack app uses your data in this browser, so your skills, MCP servers, keys and provenance records are removed too.",
@@ -1873,7 +1876,7 @@ export const englishStrings: UiStrings = {
   myDataCancelName: "Cancel: keep my data",
   myDataWorking: "Working…",
   myDataExported: (file) => `Your data was exported as ${file}.`,
-  myDataRemoved: (app) => `Your data was removed from ${app}.`,
+  myDataRemoved: (app) => `Your data was removed from the app "${app}".`,
   myDataRemovedKept: (apps) => `Skills, MCP servers, keys and provenance records stayed, because they are also used by ${apps}.`,
   myDataRemovedAgentsKept: (agents) => `The chats and approvals of ${agents} stayed, because another app uses them too.`,
   myDataRemovedAll: "All your Fadenstack data in this browser was removed.",

@@ -25,6 +25,8 @@ export interface MyDataOptions {
  */
 export interface MyDataApp {
   name: string;
+  /** The name in the panel's languages, when the app gave them (`describeApp`); only the panel's texts use it. */
+  displayNames?: AppDisplayNames;
   agents: string[];
   /** ISO 8601, UTC; absent for an app that never recorded itself. */
   lastSeen?: string;
@@ -46,15 +48,48 @@ export interface MyDataPlan {
 /** The small record each agent start keeps per person and app: names and times, no content. .NET: `apps/<app>.json`. */
 export interface AppRecord {
   app: string;
+  /** The app's display names (`describeApp`), so another app that lists the apps shows this one in its language. */
+  displayNames?: AppDisplayNames;
   agents: string[];
   firstSeen: string;
   lastSeen: string;
 }
 
+/** The languages the panel's texts come in. */
+export type AppLanguage = "en" | "de" | "fr" | "es" | "zh-Hans";
+
+/** An app's name as the panel's texts say it, per language (`AppDescription.displayNames`); any may be missing. */
+export type AppDisplayNames = Partial<Record<AppLanguage, string>>;
+
+const APP_LANGUAGES: readonly AppLanguage[] = ["en", "de", "fr", "es", "zh-Hans"];
+const MAX_DISPLAY_NAME = 200;
+
+/** The display names with only the known languages and non-blank text (trimmed, cut to 200 characters); undefined when none is left. */
+export function cleanDisplayNames(value: unknown): AppDisplayNames | undefined {
+  if (!value || typeof value !== "object") return undefined;
+  const out: AppDisplayNames = {};
+  for (const language of APP_LANGUAGES) {
+    const text = (value as Record<string, unknown>)[language];
+    if (typeof text === "string" && text.trim()) out[language] = text.trim().slice(0, MAX_DISPLAY_NAME);
+  }
+  return Object.keys(out).length > 0 ? out : undefined;
+}
+
+/**
+ * The app's name for the panel's texts in `language` ("de", "zh-Hans"; a region such as "de-AT" counts as "de"): its display name
+ * in that language, else its `name`. The manifest, the records and the record of tool calls keep `name`.
+ */
+export function appDisplayName(name: string, displayNames: AppDisplayNames | undefined, language: string): string {
+  if (!displayNames) return name;
+  const wanted = language.toLowerCase();
+  const key = APP_LANGUAGES.find((l) => l.toLowerCase() === wanted) ?? APP_LANGUAGES.find((l) => wanted.startsWith(`${l.toLowerCase()}-`));
+  return (key && displayNames[key]) || name;
+}
+
 /** Where the app records live. */
 export interface AppRecords {
   /** Records that `app` ran `agent` for the person (a new record, or the agent added and the time moved). */
-  record(app: string, agent: string, now: string): Promise<void>;
+  record(app: string, agent: string, now: string, displayNames?: AppDisplayNames): Promise<void>;
   list(): Promise<AppRecord[]>;
   /** Forgets the app's record; whether there was one. */
   remove(app: string): Promise<boolean>;
@@ -64,14 +99,14 @@ export interface AppRecords {
 export class MemoryAppRecords implements AppRecords {
   readonly #records = new Map<string, AppRecord>();
 
-  record(app: string, agent: string, now: string): Promise<void> {
+  record(app: string, agent: string, now: string, displayNames?: AppDisplayNames): Promise<void> {
     const old = this.#records.get(app);
-    this.#records.set(app, merged(old, app, agent, now));
+    this.#records.set(app, merged(old, app, agent, now, displayNames));
     return Promise.resolve();
   }
 
   list(): Promise<AppRecord[]> {
-    return Promise.resolve([...this.#records.values()].map((r) => ({ ...r, agents: [...r.agents] })));
+    return Promise.resolve([...this.#records.values()].map((r) => ({ ...r, ...(r.displayNames ? { displayNames: { ...r.displayNames } } : {}), agents: [...r.agents] })));
   }
 
   remove(app: string): Promise<boolean> {
@@ -79,10 +114,11 @@ export class MemoryAppRecords implements AppRecords {
   }
 }
 
-function merged(old: AppRecord | undefined, app: string, agent: string, now: string): AppRecord {
+function merged(old: AppRecord | undefined, app: string, agent: string, now: string, displayNames?: AppDisplayNames): AppRecord {
   const agents = old && Array.isArray(old.agents) ? old.agents.filter((a): a is string => typeof a === "string") : [];
   if (!agents.includes(agent)) agents.push(agent);
-  return { app, agents, firstSeen: typeof old?.firstSeen === "string" ? old.firstSeen : now, lastSeen: now };
+  const names = cleanDisplayNames(displayNames); // the latest start says what the app calls itself now
+  return { app, ...(names ? { displayNames: names } : {}), agents, firstSeen: typeof old?.firstSeen === "string" ? old.firstSeen : now, lastSeen: now };
 }
 
 const APPS = "apps";
@@ -111,14 +147,14 @@ export class IndexedDbAppRecords implements AppRecords {
     this.#factory = factory;
   }
 
-  async record(app: string, agent: string, now: string): Promise<void> {
+  async record(app: string, agent: string, now: string, displayNames?: AppDisplayNames): Promise<void> {
     const db = await this.#open();
     // Read and write in one transaction, so two apps starting together never lose each other's agent.
     await new Promise<void>((resolve, reject) => {
       const tx = db.transaction([APPS], "readwrite");
       const store = tx.objectStore(APPS);
       const read = store.get(app);
-      read.onsuccess = () => { store.put(merged(read.result as AppRecord | undefined, app, agent, now)); };
+      read.onsuccess = () => { store.put(merged(read.result as AppRecord | undefined, app, agent, now, displayNames)); };
       tx.oncomplete = () => resolve();
       tx.onerror = () => reject(tx.error ?? new Error("IndexedDB transaction failed."));
       tx.onabort = () => reject(tx.error ?? new Error("IndexedDB transaction aborted."));
@@ -138,8 +174,10 @@ export class IndexedDbAppRecords implements AppRecords {
       const r = (row ?? {}) as Partial<AppRecord>;
       if (typeof r.app !== "string") continue;
       // A damaged record still names its app, with no agents.
+      const displayNames = cleanDisplayNames(r.displayNames);
       records.push({
         app: r.app,
+        ...(displayNames ? { displayNames } : {}),
         agents: Array.isArray(r.agents) ? r.agents.filter((a): a is string => typeof a === "string") : [],
         firstSeen: typeof r.firstSeen === "string" ? r.firstSeen : "",
         lastSeen: typeof r.lastSeen === "string" ? r.lastSeen : "",
@@ -215,7 +253,8 @@ export function appNameOf(describedName: string | undefined, slug: string): stri
  * The apps that use the person's data, this app first: the records, then each agent with data that no record names (an app on an
  * older SDK writes no record: it is known by an agent's data, named by that agent). .NET: `MyDataApps.List`.
  */
-export function listMyDataApps(records: readonly AppRecord[], agentsWithData: readonly string[], thisApp: string, thisAgent: string): MyDataApp[] {
+export function listMyDataApps(records: readonly AppRecord[], agentsWithData: readonly string[], thisApp: string, thisAgent: string,
+  thisDisplayNames?: AppDisplayNames): MyDataApp[] {
   const apps: MyDataApp[] = [];
   const named = new Set<string>();
   const ordered = [...records].sort((a, b) => (a.app === thisApp ? 0 : 1) - (b.app === thisApp ? 0 : 1) || (a.app < b.app ? -1 : a.app > b.app ? 1 : 0));
@@ -223,11 +262,13 @@ export function listMyDataApps(records: readonly AppRecord[], agentsWithData: re
     const isThis = record.app === thisApp;
     const agents = isThis && !record.agents.includes(thisAgent) ? [...record.agents, thisAgent] : [...record.agents];
     for (const agent of agents) named.add(agent);
-    apps.push({ name: record.app, agents, ...(record.lastSeen ? { lastSeen: record.lastSeen } : {}), isThisApp: isThis, recorded: true });
+    const displayNames = isThis ? cleanDisplayNames(thisDisplayNames) ?? record.displayNames : record.displayNames; // this app's own, current
+    apps.push({ name: record.app, ...(displayNames ? { displayNames } : {}), agents, ...(record.lastSeen ? { lastSeen: record.lastSeen } : {}), isThisApp: isThis, recorded: true });
   }
   if (!records.some((r) => r.app === thisApp)) {
     named.add(thisAgent);
-    apps.unshift({ name: thisApp, agents: [thisAgent], isThisApp: true, recorded: false });
+    const displayNames = cleanDisplayNames(thisDisplayNames);
+    apps.unshift({ name: thisApp, ...(displayNames ? { displayNames } : {}), agents: [thisAgent], isThisApp: true, recorded: false });
   }
   for (const agent of [...new Set(agentsWithData)].filter((a) => !named.has(a)).sort()) {
     apps.push({ name: agent, agents: [agent], isThisApp: false, recorded: false });

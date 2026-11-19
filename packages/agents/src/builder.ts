@@ -33,6 +33,7 @@ import {
 import type { ApprovalStore } from "./approvalStore.js";
 import type { AuditLog } from "./audit.js";
 import type { HostData } from "./dataRights.js";
+import type { AppDisplayNames } from "./myData.js";
 import type { SecretProtector } from "./secretProtection.js";
 import { BrowserLog, teeLoggers, type BrowserLogOptions } from "./browserLog.js";
 import type { StoreProblemHandler } from "./storeSupport.js";
@@ -121,6 +122,12 @@ export const UNDESCRIBED_APP_NAME = "Fadenstack SDK app";
 export interface AppDescription {
   /** "Chrome extension", "Word add-in". */
   name: string;
+  /**
+   * The name as the panel's texts say it, per language (`en`, `de`, `fr`, `es`, `zh-Hans`; any may be missing, then `name` is
+   * used). Only the panel's texts use it ("Remove your data from the app ..."); the manifest, the records and the record of tool calls
+   * keep `name`. It is kept with the shared app list, so another app that lists the apps shows this one in its language.
+   */
+  displayNames?: AppDisplayNames;
   version?: string;
   /** What the app offers the agent to read, by id. */
   context?: ManifestContext[];

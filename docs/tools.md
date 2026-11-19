@@ -173,6 +173,19 @@ reporting is off, and a manifest the server cannot take never fails the start.
 `agent.app` returns what you described (undefined without `describeApp`). The chat panel's About shows the name and
 version.
 
+**The name in the panel's texts.** `name` stays English on purpose: it goes into the manifest, the app's record and the record of tool
+calls. The panel's texts put it after a noun and in quotation marks, so that any name reads correctly in every language: *Remove your
+data from the app "Chrome extension"?*, *Ihre Daten aus der App „Chrome extension“ entfernen?*, *Runs in the app "Word add-in"*. A
+name that translates ("Chrome-Erweiterung") can be given per language, for the texts only:
+
+```ts
+.describeApp({ name: "Chrome extension", displayNames: { de: "Chrome-Erweiterung", "zh-Hans": "Chrome 扩展" } })
+```
+
+The keys are `en`, `de`, `fr`, `es` and `zh-Hans`; a language with none uses `name`. The display names are kept in the app's record in
+`fadenstack-apps` (not in the manifest), so another app that lists the apps ("these apps share your data") shows this one in its
+language too.
+
 ### What your app reports about the device
 
 The manifest also carries a `device` block, per device (`PUT /v1/agents/{agent}/manifest`; `AppManifest.device`,

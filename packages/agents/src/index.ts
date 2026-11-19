@@ -215,8 +215,8 @@ export {
   type AuditAnchor, type AuditEntry, type AuditHead, type AuditExportFormat, type AuditLog, type AuditRecord, type AuditVerification, type IndexedDbAuditLogOptions,
 } from "./audit.js";
 export {
-  IndexedDbAppRecords, MemoryAppRecords, appNameOf, listMyDataApps, planMyData,
-  type AppRecord, type AppRecords, type DataScope, type MyDataApp, type MyDataOptions, type MyDataPlan,
+  IndexedDbAppRecords, MemoryAppRecords, appDisplayName, appNameOf, cleanDisplayNames, listMyDataApps, planMyData,
+  type AppDisplayNames, type AppLanguage, type AppRecord, type AppRecords, type DataScope, type MyDataApp, type MyDataOptions, type MyDataPlan,
 } from "./myData.js";
 // What the skill editor and the skills module share (sdk/51 F04): the contracts, the limits and the strict SKILL.md reader and writer.
 export {

@@ -26,8 +26,8 @@ import { type ApprovalStore, type StoredApproval } from "./approvalStore.js";
 import { ARGUMENTS_SHA256_FEATURE, AuditRetention, MemoryAuditLog, type AuditExportFormat, type AuditLog, type AuditVerification } from "./audit.js";
 import { DefaultStores, buildExport, deleteHostData, deleteUserDatabases, deleteUserLocalStorage, userDatabaseNames, type DataDeletion, type MyDataExport } from "./dataRights.js";
 import {
-  IndexedDbAppRecords, MemoryAppRecords, appNameOf, listMyDataApps, planMyData,
-  type AppRecords, type DataScope, type MyDataApp, type MyDataOptions, type MyDataPlan,
+  IndexedDbAppRecords, MemoryAppRecords, appNameOf, cleanDisplayNames, listMyDataApps, planMyData,
+  type AppDisplayNames, type AppRecords, type DataScope, type MyDataApp, type MyDataOptions, type MyDataPlan,
 } from "./myData.js";
 import { deleteDatabase, deletesAgents, listsAgents } from "./storeSupport.js";
 import { DEFAULT_RETENTION, withinServerRetention, type PrunesSessions, type SessionRetention, type SessionStore } from "./sessionStore.js";
@@ -1194,10 +1194,15 @@ export class FadenstackAgent implements AgentSwitch {
     return appNameOf(this.app?.name, this.slug);
   }
 
+  /** The app's names in the panel's languages (`describeApp`'s `displayNames`), for the panel's texts only; undefined when it gave none. */
+  get appDisplayNames(): AppDisplayNames | undefined {
+    return cleanDisplayNames(this.app?.displayNames);
+  }
+
   async #myDataApps(): Promise<MyDataApp[]> {
-    if (!this.profile.principal) return [{ name: this.appName, agents: [this.slug], isThisApp: true, recorded: false }];
+    if (!this.profile.principal) return [{ name: this.appName, ...(this.appDisplayNames ? { displayNames: this.appDisplayNames } : {}), agents: [this.slug], isThisApp: true, recorded: false }];
     const records = await this.#appRecords?.list().catch(() => []) ?? [];
-    return listMyDataApps(records, await this.#agentsWithData(), this.appName, this.slug);
+    return listMyDataApps(records, await this.#agentsWithData(), this.appName, this.slug, this.appDisplayNames);
   }
 
   async #myDataPlan(): Promise<MyDataPlan> {
@@ -1227,7 +1232,7 @@ export class FadenstackAgent implements AgentSwitch {
   async #recordApp(principal: AgentPrincipal | undefined): Promise<void> {
     if (!principal || (this.settings.sessions && this.settings.approvalStore)) return;
     try {
-      await this.#appRecords?.record(this.appName, this.slug, new Date(this.clock()).toISOString());
+      await this.#appRecords?.record(this.appName, this.slug, new Date(this.clock()).toISOString(), this.appDisplayNames);
     } catch {
       // inferred from its data instead
     }

@@ -251,7 +251,7 @@ const agent = FadenstackAgent.createBuilder()
 | `useEventReporting(enabled)` | Whether the agent reports its tool runs, approvals and the app's manifest to the server. Default on. |
 | `useLogging(logger)` | Where the SDK logs: a `FadenstackLogger`. Names, ids, counts and durations, never content. Nowhere by default. See [Logging](#logging). |
 | `requireHostToolPolicyChecks()` | Refuses to start against a server that does not offer the fresh policy check for host tools. See [Host commands and central policy](host-commands.md#requiring-the-check). |
-| `describeApp(app)` | The application the agent runs in, for the manifest. See [Tools and approvals](tools.md#the-app-manifest). |
+| `describeApp(app)` | The application the agent runs in, for the manifest. `displayNames` (`{ de?, fr?, es?, "zh-Hans"?, en? }`) is the name the panel's texts say in each language; `name` stays English for the manifest, the records and the record of tool calls. See [Tools and approvals](tools.md#the-app-manifest). |
 | `describePlugins(plugins)` | The plugins the app has loaded (name, version, SHA-256), for the device report. See [What your app reports about the device](tools.md#what-your-app-reports-about-the-device). |
 | `addChatStage(order, wrap)` | Wraps the chat, for example to mask what goes out. |
 | `addToolStage(order, stage)` | Wraps each tool call: sees the arguments before and the result after. |

@@ -31,7 +31,7 @@ This table is for SDK 0.3.0, against Fadenstack server 0.7.1. TypeScript names a
 | Stopping a turn | A `CancellationToken` | An `AbortSignal` | |
 | Attachments, pictures, skills | `MessageAttachment`, `SendOptions` | `MessageAttachment`, `SendOptions` | |
 | Model rounds, history budget | `UseMaxRounds`, `UseHistoryBudget` | `useMaxRounds`, `useHistoryBudget` | |
-| Reporting to the server | `UseEventReporting`, `DescribeApp` | `useEventReporting`, `describeApp` | |
+| Reporting to the server | `UseEventReporting`, `DescribeApp` | `useEventReporting`, `describeApp` (`displayNames` per language, for the panel's texts only; kept in the app record) | The app's name is quoted after "the app" in the panel's texts in every language (0.3.1). |
 | What the app reports about the device (manifest `device`) | `DescribePlugins`, `ManifestDevice`, `ManifestPlugin`, `ManifestMcpProgram`, `DeviceLimits` | `describePlugins`, `ManifestDevice`, `ManifestPlugin`, `ManifestMcpProgram`, `DEVICE_LIMITS` | `os` is the runtime's (TS: the browser's platform or Node's); TS never lists MCP programs: a browser starts none. |
 | Pin a local MCP server's program | `McpProgramPin`, `McpServerEntry.ProgramPin`, `McpHost.ConfirmNewProgramAsync` | none | The browser starts no program (http only). |
 | Outcomes, notices and errors | `AgentResult`, `FadenstackException` and its subclasses | `AgentResult`, `FadenstackError` and its subclasses | |

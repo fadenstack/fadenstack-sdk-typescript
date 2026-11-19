@@ -1,4 +1,5 @@
 import { SDK_VERSION } from "@fadenstack/client";
+import { appDisplayName, type AppDisplayNames } from "@fadenstack/agents";
 
 import type { UiStrings } from "./strings.js";
 
@@ -84,7 +85,7 @@ export interface AboutFacts {
   /** The agent, once it started. */
   agent?: { name: string; version: number | null; draft: boolean; model: string | null } | undefined;
   /** The app the agent runs in, when the host described it (`describeApp`). */
-  app?: { name: string; version?: string | undefined } | undefined;
+  app?: { name: string; version?: string | undefined; displayNames?: AppDisplayNames | undefined } | undefined;
   /** The agent's server. */
   server?: string | URL | undefined;
   /** The host's `refSource`; `sdk` by default. */
@@ -117,7 +118,7 @@ export function aboutView(facts: AboutFacts, strings: UiStrings): AboutView {
 
   const sdkVersion = facts.sdkVersion ?? SDK_VERSION;
   const environment: string[] = [];
-  const app = facts.app && [facts.app.name.trim(), facts.app.version?.trim()].filter(Boolean).join(" ");
+  const app = facts.app && [appDisplayName(facts.app.name.trim(), facts.app.displayNames, strings.language), facts.app.version?.trim()].filter(Boolean).join(" ");
   if (app) environment.push(strings.aboutApp(app));
   environment.push(sdkName(sdkVersion));
   const server = facts.server === undefined ? undefined : safely(() => serverAddress(facts.server!));
