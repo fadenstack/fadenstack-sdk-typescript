@@ -1,6 +1,6 @@
 {
   "name": "@fadenstack/provenance",
-  "version": "0.3.0",
+  "version": "0.3.1-rc.1",
   "description": "Marks content a Fadenstack agent places as made with AI: signed records, host marks, placement reports",
   "license": "Apache-2.0",
   "author": "Emagin8 UG (haftungsbeschränkt)",
@@ -39,7 +39,7 @@
     "access": "public"
   },
   "dependencies": {
-    "@fadenstack/agents": "0.3.0",
-    "@fadenstack/client": "0.3.0"
+    "@fadenstack/agents": "0.3.1-rc.1",
+    "@fadenstack/client": "0.3.1-rc.1"
   }
 }
