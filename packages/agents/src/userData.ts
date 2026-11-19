@@ -68,7 +68,9 @@ export function personalLocalEntries(storage: Pick<Storage, "length" | "key" | "
       let name: string | undefined;
       let shared = false;
       if (suffix !== undefined) {
-        if (key.endsWith(suffix) && key.length > prefix.length + suffix.length) name = key.slice(prefix.length, key.length - suffix.length);
+        // A name never holds a colon, so the rest is exactly the person's ":<tenant>:<user>". A suffix match alone is not
+        // enough: a marked user's key `...:standalone:governed:standalone` also ends in the tenant `governed`'s `:governed:standalone`.
+        if (key.endsWith(suffix) && key.length > prefix.length + suffix.length && !key.slice(prefix.length, key.length - suffix.length).includes(":")) name = key.slice(prefix.length, key.length - suffix.length);
         else if (isStandalone(principal) && SHARED_LOCAL_NAMES.includes(key.slice(prefix.length))) { name = key.slice(prefix.length); shared = true; }
       } else if (SHARED_LOCAL_NAMES.includes(key.slice(prefix.length))) {
         name = key.slice(prefix.length);

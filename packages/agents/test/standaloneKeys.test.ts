@@ -59,4 +59,17 @@ describe("the standalone person's stores", () => {
     expect(deletePersonalLocalEntries(storage, governed("standalone", "standalone"))).toBe(1);
     expect(storage.keys()).toEqual(["fadenstack.language:standalone:standalone"]);
   });
+
+  it("keep a marked person's entries from a tenant named governed, whose key ends the same way", () => {
+    const storage = fakeStorage({
+      "fadenstack.prompts:standalone:governed:standalone": "the marked person's",
+      "fadenstack.prompts:governed:standalone": "tenant governed's",
+    });
+    const other = governed("governed", "standalone");
+    expect(userLocalKey("prompts", other)).toBe("fadenstack.prompts:governed:standalone");
+    expect(personalLocalEntries(storage, other).map((e) => [e.name, e.value])).toEqual([["prompts", "tenant governed's"]]);
+    expect(deletePersonalLocalEntries(storage, other)).toBe(1);
+    expect(storage.keys()).toEqual(["fadenstack.prompts:standalone:governed:standalone"]);
+    expect(personalLocalEntries(storage, governed("standalone", "standalone")).map((e) => e.value)).toEqual(["the marked person's"]);
+  });
 });
