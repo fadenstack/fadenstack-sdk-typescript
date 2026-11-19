@@ -6,6 +6,10 @@ before 1.0, a minor version may break the API, and this file says where it does.
 
 ## [0.3.1] - Unreleased
 
+### Added
+
+- A small log in the browser (`@fadenstack/agents`): `AgentBuilder.useBrowserLog({ maxEntries, maxAgeDays, minLevel })` keeps the SDK's own log entries in the signed-in person's IndexedDB database `fadenstack-log:<tenant>:<user>`, at most 500 entries and 7 days by default, the oldest dropped first, written in batches without blocking the agent, and counted in `dropped` when the database fails (.NET: `FadenstackFileLoggerProvider`). It holds the `LogEvent` and its time and nothing else, never a prompt, an answer, an argument or a result; it is the agent's and the client's logger beside one set with `useLogging`. The class `BrowserLog` (`entries()`, `clear()`, `flush()`, `dropped`) is exported for a host that builds its own; in Node the entries stay in memory. "Export my data" lists it (`databases.log`), "Remove my data" deletes it, and "Remove all my Fadenstack data" also deletes the log kept before anybody signed in.
+
 ### Security
 
 - The CSV of a table download (`@fadenstack/ui`) and the CSV export of the record of tool calls (`@fadenstack/agents`) now put a cell with a semicolon in quotes, and put a leading apostrophe before `=`, `+`, `-`, `@`, tab or carriage return not only at the start of a cell but also after a `;` or `,` inside it. Excel in a German, French or Spanish locale splits a double-clicked CSV at `;`, so text after one could start a cell with `=` and run as a formula. OWASP ASVS 5.0 V1 (output encoding, 1.2.10).

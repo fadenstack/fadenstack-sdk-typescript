@@ -506,6 +506,26 @@ The agent's events are the `AgentLog` entries of `@fadenstack/agents`; the clien
 `@fadenstack/client`. The .NET events about files on a disk (data export, adoption) have no use in a browser and are not
 here.
 
+## A log in the browser
+
+A browser has no folder to write a log file to. `useBrowserLog()` keeps the SDK's own log entries on the device instead, in a small database of the signed-in person's own, so a person or a support desk can read what the SDK did when something went wrong:
+
+```ts
+const builder = FadenstackAgent.createBuilder().useClient(client).useBrowserLog({ maxEntries: 500, maxAgeDays: 7, minLevel: "information" });
+const agent = builder.build();
+// later, for a support page:
+const entries = await builder.browserLog!.entries(); // StoredLogEntry[]: the LogEvent plus `at` (ISO time)
+```
+
+- **Bounded.** At most `maxEntries` entries (default 500) and none older than `maxAgeDays` days (default 7); the oldest go first. Both limits are checked as the log writes. `minLevel` (default `information`) leaves out the lower levels.
+- **Content-free.** An entry is the SDK's `LogEvent` as it is (`category`, `eventId`, `eventName`, `level`, `message`, `fields`, `scope`) and the time, `at`. Nothing else: the SDK's events hold names, ids, counts, durations and outcomes, never a prompt, an answer, an argument or a result, and the log adds nothing to them. Content logging does not write to it.
+- **Cheap and safe.** Entries are queued and written in batches (50 entries, or one second), never one transaction each. A write that fails drops its entries and counts them (`dropped`; .NET: `FadenstackFileLoggerProvider.Dropped`); the log never blocks or fails a turn or a request.
+- **Beside your own logger.** The log is the agent's and the client's logger. A logger set with `useLogging` gets every entry too.
+- **Per person.** The database is `fadenstack-log:<tenant>:<user>`, like the other stores ([Data on the device](data-on-device.md)). Entries written before the person is known (the first request of the client) go to `fadenstack-log` and are not moved. "Remove my data" deletes the person's database, and "Remove all my Fadenstack data" the one without a person too; "Export my data" holds the entries (`databases.log.entries`).
+- **Node.** Without IndexedDB the entries stay in memory, with the same limits.
+
+A host that builds its own uses the class: `new BrowserLog(options)`, `log(event)`, `entries()`, `clear()`, `flush()`, `dropped`, and `usePrincipal(principal)` to say whose database it writes to. The log of a Chrome extension or a Nextcloud app lives in that page's own origin.
+
 ## What the agent reports
 
 With event reporting on, the agent tells the server what happened on the device: tool runs, approval decisions and

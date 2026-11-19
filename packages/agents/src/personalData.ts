@@ -11,6 +11,7 @@ import { userStoreName, type StorePrincipal } from "./userData.js";
  * - `fadenstack-provenance`: the `records` and the `placements` log, never the `keys` store (the device's signing key);
  * - `fadenstack-mcp`: the `servers` without their sealed header values and with each field named below only, and the `audit` log;
  * - `fadenstack-web-search`: the provider and the SearXNG address, never the `key` store (the sealed Brave key);
+ * - `fadenstack-log`: the `entries` (the SDK's own log entries, `AgentBuilder.useBrowserLog`);
  * - `fadenstack-keys`: never.
  *
  * Nothing that is not plain JSON data goes in (a `CryptoKey`, a `Uint8Array`, a `Blob`, a `Date`): such a record is counted as
@@ -44,6 +45,7 @@ const ALLOWED: readonly Allowed[] = [
   { base: "fadenstack-skill-switches", as: "skill-switches", stores: "*" },
   { base: "fadenstack-provenance", as: "provenance", stores: { records: null, placements: null } }, // never `keys`
   { base: "fadenstack-mcp", as: "mcp", stores: { servers: mcpServer, audit: null } },
+  { base: "fadenstack-log", as: "log", stores: { entries: null } }, // the SDK's own entries: names, ids, counts and times, no content
   { base: "fadenstack-web-search", as: "web-search", stores: { settings: null } }, // never `key` (the sealed Brave key)
 ];
 

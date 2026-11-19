@@ -34,6 +34,7 @@ import type { ApprovalStore } from "./approvalStore.js";
 import type { AuditLog } from "./audit.js";
 import type { HostData } from "./dataRights.js";
 import type { SecretProtector } from "./secretProtection.js";
+import { BrowserLog, teeLoggers, type BrowserLogOptions } from "./browserLog.js";
 import type { StoreProblemHandler } from "./storeSupport.js";
 import type { SessionRetention, SessionStore } from "./sessionStore.js";
 import { isStepUpHandler, type StepUpHandler } from "./stepUp.js";
@@ -99,6 +100,8 @@ export interface AgentSettings {
   readonly reasoningStore?: ReasoningStore;
   /** Where the agent and its sessions log; undefined: nowhere. */
   readonly logger?: FadenstackLogger;
+  /** The browser log the agent keeps (`AgentBuilder.useBrowserLog`); it is told whose database to write to once the person is known. */
+  readonly browserLog?: BrowserLog;
   /** The app the agent runs in, for the manifest it reports when it starts. */
   readonly app: AppDescription;
   /** The plugins the app declared (`describePlugins`), for the manifest's device block. */
@@ -171,6 +174,7 @@ export class AgentBuilder {
   #reasoning: ReasoningEffort | undefined;
   #reasoningStore: ReasoningStore | undefined;
   #logger: FadenstackLogger | undefined;
+  #browserLog: BrowserLog | undefined;
   #app: AppDescription = { name: UNDESCRIBED_APP_NAME };
   #plugins: ManifestPlugin[] = [];
   #sessionRetention: SessionRetention | undefined;
@@ -390,6 +394,23 @@ export class AgentBuilder {
   }
 
   /**
+   * Keeps the SDK's own log entries on the device: a small log in the signed-in person's IndexedDB database (`fadenstack-log`), at most
+   * `maxEntries` (500) and `maxAgeDays` (7) old, the oldest dropped first, written in batches and never blocking the agent. It is the
+   * agent's and the client's logger, beside one set with `useLogging` (both get every entry). The entries are the SDK's events as they
+   * are, with the time: never a prompt, an answer, an argument or a result. Where there is no IndexedDB (Node) they stay in memory.
+   * "Remove my data" deletes the database. Read it with `browserLog.entries()`. .NET: `FadenstackFileLoggerProvider`.
+   */
+  useBrowserLog(options?: BrowserLogOptions): this {
+    this.#browserLog = new BrowserLog(options);
+    return this;
+  }
+
+  /** The log `useBrowserLog` set up, to read its entries (a settings page, a support export); undefined before. */
+  get browserLog(): BrowserLog | undefined {
+    return this.#browserLog;
+  }
+
+  /**
    * Where the level of thinking a person picked is kept, per person and agent (`FadenstackAgent.setReasoning`). By default
    * the signed-in user's own IndexedDB database in a browser -- unless the host keeps both the sessions and the approvals
    * itself, which leaves the pick in memory for the run.
@@ -500,6 +521,8 @@ export class AgentBuilder {
 
   build(): FadenstackAgent {
     const standalone = this.#endpoint !== undefined || this.#streamer !== undefined;
+    // The host's logger and the browser log both get every entry.
+    const logger = this.#browserLog ? teeLoggers(this.#logger, this.#browserLog) : this.#logger;
     if (standalone && (this.#client || this.#options)) {
       throw new Error("An agent talks to a Fadenstack server (useServer, useClient) or to an endpoint (useEndpoint, useChatStreamer), never both.");
     }
@@ -528,7 +551,7 @@ export class AgentBuilder {
       }
       this.#assertNoDuplicateTools();
       // The builder's logger is the endpoint's unless it has its own.
-      let endpoint = this.#endpoint && this.#logger && !this.#endpoint.logger ? { ...this.#endpoint, logger: this.#logger } : this.#endpoint;
+      let endpoint = this.#endpoint && logger && !this.#endpoint.logger ? { ...this.#endpoint, logger } : this.#endpoint;
       // Plain http forbidden: the person's opt-in is taken away, and the transport says why (loopback stays).
       if (endpoint && policy.plainHttp !== PolicyAccess.Allowed) endpoint = { ...endpoint, allowPlainHttpInLan: false, plainHttpForbidden: true };
       // The check found that the model thinks although the off switch was sent: Off sends its lowest level (F10).
@@ -546,7 +569,7 @@ export class AgentBuilder {
         report: this.#endpointReport, options: local });
       // Marking by default as far as the layering allows (sdk/51 F10, owner, 14 Nov): this package cannot load the provenance
       // module, so it says so once, here, when a standalone agent goes without it.
-      if (!this.#modules.includes(PROVENANCE_MODULE_NAME)) writeLog(this.#logger, AgentLog.noProvenanceModule, { Agent: agent });
+      if (!this.#modules.includes(PROVENANCE_MODULE_NAME)) writeLog(logger, AgentLog.noProvenanceModule, { Agent: agent });
       // D7: the person's own instructions come after the definition's.
       instructions = [definition.instructions, this.#ownInstructions?.trim()].filter((part) => part).join("\n\n") || undefined;
     } else {
@@ -570,7 +593,7 @@ export class AgentBuilder {
     // The server offers Bypass only to a client that names the whole flow, so it is named only where the app can open the
     // second sign-in. (The backend does it to the client, a host's own included, as the builder always did.)
     server?.applyTransportRules({
-      logger: this.#logger,
+      logger,
       announcesBypass: !!(this.#stepUp ?? (isStepUpHandler(this.#approvals) ? this.#approvals : undefined)),
     });
     return FadenstackAgent.create({
@@ -605,7 +628,8 @@ export class AgentBuilder {
       report: this.#report,
       reasoning: this.#reasoning,
       ...(this.#reasoningStore ? { reasoningStore: this.#reasoningStore } : {}),
-      ...(this.#logger ? { logger: this.#logger } : {}),
+      ...(logger ? { logger } : {}),
+      ...(this.#browserLog ? { browserLog: this.#browserLog } : {}),
       app: this.#app,
       plugins: [...this.#plugins],
       ...(this.#sessionRetention ? { sessionRetention: this.#sessionRetention } : {}),

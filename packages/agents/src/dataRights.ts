@@ -1,3 +1,4 @@
+import { BROWSER_LOG_DATABASE } from "./browserLog.js";
 import { MemoryApprovalStore, IndexedDbApprovalStore, type ApprovalStore, type StoredApproval } from "./approvalStore.js";
 import { IndexedDbAuditLog, MemoryAuditLog, type AuditLog, type AuditVerification } from "./audit.js";
 import { IndexedDbSessionStore } from "./indexedDbSessionStore.js";
@@ -242,7 +243,7 @@ function ownDatabases(all: PersonalDatabases, scope: ExportScope): PersonalDatab
  * The names of the databases a user has on this device: sessions, "Allow always", their key, their preferences and their provenance key and log (the
  * thinking level picked per agent, `reasoningStoreName`).
  */
-export function userDatabaseNames(principal: StorePrincipal | undefined): { sessions: string; approvals: string; keys: string; preferences: string; provenance: string; skills: string; skillSwitches: string; mcp: string; webSearch: string; apps: string; audit: string } {
+export function userDatabaseNames(principal: StorePrincipal | undefined): { sessions: string; approvals: string; keys: string; preferences: string; provenance: string; skills: string; skillSwitches: string; mcp: string; webSearch: string; apps: string; audit: string; log: string } {
   return {
     sessions: userStoreName("fadenstack-sessions", principal),
     approvals: userStoreName("fadenstack-approvals", principal),
@@ -261,6 +262,8 @@ export function userDatabaseNames(principal: StorePrincipal | undefined): { sess
     apps: userStoreName("fadenstack-apps", principal),
     // The person's record of tool calls (sdk/51 8.10): shared by every app of the browser, so it goes with the person's whole data.
     audit: userStoreName("fadenstack-audit", principal),
+    // The small log of the SDK's own entries on the device (`AgentBuilder.useBrowserLog`): names, ids, counts, no content; it goes with the person's data.
+    log: userStoreName(BROWSER_LOG_DATABASE, principal),
   };
 }
 
@@ -272,7 +275,7 @@ export async function deleteUserDatabases(principal: StorePrincipal | undefined,
   if (!factory) return 0;
   const names = userDatabaseNames(principal);
   let removed = 0;
-  for (const name of [names.sessions, names.approvals, names.keys, names.preferences, names.provenance, names.skills, names.skillSwitches, names.mcp, names.webSearch, names.apps, names.audit]) if (await deleteDatabase(factory, name)) removed++;
+  for (const name of [names.sessions, names.approvals, names.keys, names.preferences, names.provenance, names.skills, names.skillSwitches, names.mcp, names.webSearch, names.apps, names.audit, names.log]) if (await deleteDatabase(factory, name)) removed++;
   return removed;
 }
 

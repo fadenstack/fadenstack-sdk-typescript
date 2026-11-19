@@ -29,7 +29,7 @@ import {
   IndexedDbAppRecords, MemoryAppRecords, appNameOf, listMyDataApps, planMyData,
   type AppRecords, type DataScope, type MyDataApp, type MyDataOptions, type MyDataPlan,
 } from "./myData.js";
-import { deletesAgents, listsAgents } from "./storeSupport.js";
+import { deleteDatabase, deletesAgents, listsAgents } from "./storeSupport.js";
 import { DEFAULT_RETENTION, withinServerRetention, type PrunesSessions, type SessionRetention, type SessionStore } from "./sessionStore.js";
 import {
   IndexedDbChatRetentionStore, MemoryChatRetentionStore, chatRetentionChoice, chatRetentionFromApp, chatRetentionState, retentionLimits,
@@ -743,6 +743,7 @@ export class FadenstackAgent implements AgentSwitch {
   #settleStores(principal: AgentPrincipal | undefined): void {
     const key = principal ? `${principal.tenantId}\n${principal.userId}` : "";
     if (this.#storesFor === key) return;
+    this.settings.browserLog?.usePrincipal(principal); // the log goes to the person's own database from here on
     this.#defaults?.close();
     (this.#appRecords as { close?: () => void } | undefined)?.close?.();
     (this.#reasoningStore as { close?: () => void } | undefined)?.close?.();
@@ -1244,7 +1245,7 @@ export class FadenstackAgent implements AgentSwitch {
       storesCleared: storesCleared + await deleteHostData(this.settings.hostData, scope, signal), hostSessionStoreLeft, hostApprovalStoreLeft, hostStoresLeft: hostSessionStoreLeft || hostApprovalStoreLeft,
       scope: extra.scope, otherApps: extra.otherApps, sharedDataKept: extra.otherApps.length > 0, agentsKept: extra.agentsKept,
     });
-    if (scope === "allApps") return result(await this.#deleteEverything(principal), { scope, otherApps: [], agentsKept: [] });
+    if (scope === "allApps") return result(await this.#deleteEverything(principal, true), { scope, otherApps: [], agentsKept: [] });
     if (!principal) {
       return result(await this.#deleteOwn(this.#noUserPlan()), { scope, otherApps: [], agentsKept: [] });
     }
@@ -1254,17 +1255,21 @@ export class FadenstackAgent implements AgentSwitch {
   }
 
   /** The whole of the person's data: their databases (their key with them) and their `localStorage` keys. */
-  async #deleteEverything(principal: AgentPrincipal | undefined): Promise<number> {
+  async #deleteEverything(principal: AgentPrincipal | undefined, unattributed = false): Promise<number> {
     // The SDK's own preferences store goes too (a host's own reasoning store stays the host's): closed first, an open
     // database blocks its deletion.
     if (!this.settings.reasoningStore) (this.#reasoningStore as { close?: () => void } | undefined)?.close?.();
     (this.#retentionStore as { close?: () => void } | undefined)?.close?.();
+    // The browser log: what is queued is dropped, not written after the removal; its connection is closed so its database can go.
+    await this.settings.browserLog?.release();
     await this.#defaults?.closeAsync();
     await (this.#appRecords as { closeAsync?: () => Promise<void> } | undefined)?.closeAsync?.();
     let storesCleared = 0;
     try {
       storesCleared = await deleteUserDatabases(principal);
       storesCleared += deleteUserLocalStorage(principal); // the panel's language and notice, the saved prompts
+      // All of the person's data on the device: the log kept before anybody signed in has no person; it is the device's, and goes too.
+      if (unattributed && principal && globalThis.indexedDB && await deleteDatabase(globalThis.indexedDB, userDatabaseNames(undefined).log)) storesCleared++;
     } finally {
       this.#storesFor = undefined; // new, empty stores (and a new key) at the next use
       this.#settleStores(principal);

@@ -135,7 +135,8 @@ This table is for SDK 0.3.0, against Fadenstack server 0.7.1. TypeScript names a
 | The logger | `UseLogging(ILoggerFactory)` | `useLogging(FadenstackLogger)` | |
 | Event ids and names | `Fadenstack.Client` 1000 to 1099, `Fadenstack.Agents` 2000 to 2099 | The same ids, names and fields | |
 | Content in logs | Never | Never | |
-| A log file | `FadenstackFileLoggerProvider` | — | A browser has no folder to write to: forward the events to your own logger. |
+| A log file | `FadenstackFileLoggerProvider` | — | A browser has no folder to write to: forward the events to your own logger, or keep a small log on the device (next row). |
+| A log on the device | `FadenstackFileLoggerProvider` (`MaxTotalBytes`, `MaxAge`, `Dropped`) | `useBrowserLog({ maxEntries, maxAgeDays, minLevel })`, `BrowserLog` (`entries()`, `clear()`, `dropped`) | An IndexedDB database of the signed-in person (`fadenstack-log`), 500 entries and 7 days by default, content-free, deleted with "Remove my data"; in memory in Node. Counts entries, not bytes. |
 | Traces and metrics | `FadenstackTelemetry` | — | |
 
 ## Tests and samples
