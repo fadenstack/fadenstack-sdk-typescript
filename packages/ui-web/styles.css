@@ -1183,13 +1183,29 @@
   gap: 8px;
 }
 
+/* The control's root also carries .fdn-chat (for the theme tokens), which is a column that fills its parent with the panel's
+   background. In a host's header it must be a row with nothing of its own, so the result line sits beside the button. */
+.fdn-chat.fdn-stop-everything {
+  flex-direction: row;
+  height: auto;
+  min-height: 0;
+  background: transparent;
+}
+
+.fdn-stop-everything-button {
+  flex: none;
+}
+
 .fdn-stop-everything-button {
   color: var(--fdn-danger);
 }
 
 .fdn-stop-everything-result {
   font-size: 12.5px;
-  overflow-wrap: anywhere;
+  /* Breaks between words only, never letter by letter; a narrow header shrinks the line, it does not shred it. */
+  overflow-wrap: normal;
+  word-break: normal;
+  min-width: 0;
   max-width: 320px;
 }
 

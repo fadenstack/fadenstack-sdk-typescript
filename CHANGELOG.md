@@ -16,6 +16,10 @@ before 1.0, a minor version may break the API, and this file says where it does.
 
 - The text of the content-logging setting (`contentLoggingIntro`, in English, German, French, Spanish and Simplified Chinese) now says that prompts and answers written while it was on stay in the app's logs until the app deletes them, and that "Remove my data" removes them where the app keeps its logs with the SDK. `docs/interop.md#content-logging` tells hosts to keep such content no longer than their logs' retention and to delete it with "Remove my data".
 
+### Fixed
+
+- "Stop everything" (`@fadenstack/ui-web/styles.css`, used by `StopEverythingButton` in `@fadenstack/ui-react` and `@fadenstack/ui-vue`) lays out as a row in a host's header: the root no longer takes the column, the full height and the panel's background of `.fdn-chat`, so the result line sits beside the button and does not grow the header; the line breaks only between words, no longer letter by letter in a narrow header.
+
 ### Security
 
 - The CSV of a table download (`@fadenstack/ui`) and the CSV export of the record of tool calls (`@fadenstack/agents`) now put a cell with a semicolon in quotes, and put a leading apostrophe before `=`, `+`, `-`, `@`, tab or carriage return not only at the start of a cell but also after a `;` or `,` inside it. Excel in a German, French or Spanish locale splits a double-clicked CSV at `;`, so text after one could start a cell with `=` and run as a formula. OWASP ASVS 5.0 V1 (output encoding, 1.2.10).

@@ -30,7 +30,10 @@ and then tells the servers; the result is the sum (`addStopResults`).
 has `stop()`, `isBusy` and `resultText`: "Stopped 2 chats and ended 3 grants.", "Nothing was running." or "Stopped. The server could not be
 told about 1 grant; it ends at its time." There is **no confirmation**: it is the emergency stop. `StopEverythingButton` in
 `@fadenstack/ui-react` and `@fadenstack/ui-vue` is an icon button named "Stop everything" with a tooltip, and the result line, in en, de,
-fr, es and zh-Hans.
+fr, es and zh-Hans. In a host's header the control is a row (the button, then the line beside it) with no height or background of
+its own, and the line breaks only between words; the root also carries `fdn-chat` for the theme tokens, and
+`.fdn-chat.fdn-stop-everything` in `@fadenstack/ui-web/styles.css` sets `flex-direction: row`, `height: auto`, `min-height: 0` and
+`background: transparent`. A host that sets the same rules itself loses nothing.
 
 ### A refused sign-in ends the turn
 
