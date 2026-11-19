@@ -210,9 +210,39 @@ export function reportTime(date: Date): string {
   return `${date.toISOString().slice(0, 16).replace("T", " ")} UTC`;
 }
 
-/** The browser log's last `RECENT_LOG_ENTRIES` entries (oldest first) as lines: `<at> <level> <category> <eventId> <message>`. */
-export function recentLogLines(entries: readonly { at: string; level: string; category: string; eventId: number; message: string }[]): string[] {
-  return entries.slice(-RECENT_LOG_ENTRIES).map((e) => `${e.at} ${e.level} ${e.category} ${e.eventId} ${e.message}`);
+/**
+ * The log fields whose values are names somebody chose (a tool, an MCP server or tool source, a skill), and what replaces each value in
+ * the message. Taken from the SDK's log events (`agents/src/log.ts`, `client/src/logging.ts`, `mcp/src/log.ts`, `skills/src/log.ts`):
+ * `Tool` (tool names), `Label` (an MCP server's label), `Skill` (a skill's name), `Source` (a tool source) and `Winner` (the server or
+ * source that already has a tool's name). The others (`Agent`, `Route`, `Reason`, counts, outcomes, ...) are left as they are.
+ */
+export const MASKED_LOG_FIELDS: Readonly<Record<string, string>> = Object.freeze({
+  Tool: "[tool]", Label: "[server]", Skill: "[skill]", Source: "[name]", Winner: "[name]",
+});
+
+const escapeRegExp = (text: string) => text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
+/** The message with the values of `MASKED_LOG_FIELDS` replaced (whole words, longest value first); everything else stays. */
+function maskedMessage(message: string, fields: Readonly<Record<string, unknown>> | undefined): string {
+  const values: [string, string][] = [];
+  for (const [name, mask] of Object.entries(MASKED_LOG_FIELDS)) {
+    const value = fields?.[name];
+    if (typeof value === "string" && value.length > 0) values.push([value, mask]);
+  }
+  values.sort((a, b) => b[0].length - a[0].length);
+  let out = message;
+  for (const [value, mask] of values) out = out.replace(new RegExp(`(?<![\\w-])${escapeRegExp(value)}(?![\\w-])`, "g"), () => mask);
+  return out;
+}
+
+/**
+ * The browser log's last `RECENT_LOG_ENTRIES` entries (oldest first) as lines: `<at> <level> <category> <eventId> <message>`. The entry's
+ * event and outcome stay; the names of tools, MCP servers, tool sources and skills in the message are masked (`MASKED_LOG_FIELDS`), because
+ * the report never names a tool.
+ */
+export function recentLogLines(entries: readonly { at: string; level: string; category: string; eventId: number; message: string;
+  fields?: Readonly<Record<string, unknown>> | undefined }[]): string[] {
+  return entries.slice(-RECENT_LOG_ENTRIES).map((e) => `${e.at} ${e.level} ${e.category} ${e.eventId} ${maskedMessage(e.message, e.fields)}`);
 }
 
 /** What the environment says of itself, for `describeSystem`; a test passes its own. */

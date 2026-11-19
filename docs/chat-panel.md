@@ -513,8 +513,11 @@ It opens through `openLink`, like About's links; a host that cannot open `mailto
 
 **Copy details** copies the address and the subject, an empty line, and the body with LF line breaks. When the agent keeps a
 [browser log](agent.md#a-log-in-the-browser) (`useBrowserLog`), it adds a `-- ` line and the log's last 50 entries after *Recent log:*, one per line
-(`<time> <level> <category> <event id> <message>`); the log never goes into the mail. The log's entries are the SDK's own and are copied as they
-are: a line such as `Tool lookup (read, host) ended ok` names a tool.
+(`<time> <level> <category> <event id> <message>`); the log never goes into the mail. The entries keep their event and outcome, but the
+names somebody chose are masked in the message, because the report never names a tool: the values of the log fields `Tool` become
+`[tool]`, `Label` (an MCP server's label) `[server]`, `Skill` `[skill]`, and `Source` (a tool source) and `Winner` (the server or source
+that already has a tool's name) `[name]`. So `Tool crm_lookup (read, host) ended ok` is copied as `Tool [tool] (read, [name]) ended ok`.
+Everything else (agent, route, reason, counts, outcome) stays.
 
 ```ts
 const chat = new AgentChatViewModel(agent, approvals, {

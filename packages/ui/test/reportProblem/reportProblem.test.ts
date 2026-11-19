@@ -94,7 +94,8 @@ describe("the shared table of mails", () => {
     const mail = buildReport({ address: firstOver!.address ?? undefined, labels: labelsOf("en"), facts: firstOver!.facts });
     expect(mail.mailBody).not.toContain("Error:"); // the error goes first, then the time
     expect(mail.mailBody).not.toContain("Time:");
-    expect(mail.mailBody).toContain("Server:");
+    expect(mail.mailBody).not.toContain("Server:");
+    expect(mail.mailBody).toContain("Mode: Organisation");
     expect(mail.copy).toContain("Error: picture_type_not_allowed (req-8f3a21)"); // the copy keeps every line
   });
 
@@ -250,6 +251,33 @@ describe("a failed turn's error", () => {
 });
 
 describe("the time and the log lines", () => {
+  const entry = (eventId: number, message: string, fields: Record<string, unknown>) =>
+    ({ at: "2026-11-19T10:00:00.000Z", level: "information", category: "Fadenstack.Agents", eventId, message, fields });
+
+  it("masks the names of tools, MCP servers, tool sources and skills, and leaves the event and outcome", () => {
+    const lines = recentLogLines([
+      entry(2020, "Tool crm_lookup (read, host) ended ok in 2 ms, approval none", { Tool: "crm_lookup", ToolClass: "read", Source: "host", Outcome: "ok" }),
+      entry(3000, "MCP server Payroll DB (stdio) attached with 4 tools on 2025-06-18", { Label: "Payroll DB", Transport: "stdio", ToolCount: 4 }),
+      entry(3003, "MCP server Payroll DB brought a tool whose name MCP server files already brings", { Label: "Payroll DB", Winner: "files" }),
+      entry(3102, "Skill contract-check was skipped: too large", { Skill: "contract-check", Reason: "too large" }),
+      entry(2000, "Agent page loaded: version 1", { Agent: "page" }),
+    ]);
+    expect(lines).toEqual([
+      "2026-11-19T10:00:00.000Z information Fadenstack.Agents 2020 Tool [tool] (read, [name]) ended ok in 2 ms, approval none",
+      "2026-11-19T10:00:00.000Z information Fadenstack.Agents 3000 MCP server [server] (stdio) attached with 4 tools on 2025-06-18",
+      "2026-11-19T10:00:00.000Z information Fadenstack.Agents 3003 MCP server [server] brought a tool whose name MCP server [name] already brings",
+      "2026-11-19T10:00:00.000Z information Fadenstack.Agents 3102 Skill [skill] was skipped: too large",
+      "2026-11-19T10:00:00.000Z information Fadenstack.Agents 2000 Agent page loaded: version 1",
+    ]);
+    expect(lines.join("\n")).not.toMatch(/crm_lookup|Payroll|contract-check/);
+  });
+
+  it("masks whole words only, and an entry without fields as it is", () => {
+    expect(recentLogLines([entry(1, "Tool ab ended; table abc", { Tool: "ab" })])[0]).toContain("Tool [tool] ended; table abc");
+    const bare = { at: "t", level: "information", category: "c", eventId: 1, message: "Tool x" };
+    expect(recentLogLines([bare])).toEqual(["t information c 1 Tool x"]);
+  });
+
   it("says the time in UTC to the minute", () => {
     expect(reportTime(new Date("2026-11-19T10:42:59.999Z"))).toBe("2026-11-19 10:42 UTC");
   });

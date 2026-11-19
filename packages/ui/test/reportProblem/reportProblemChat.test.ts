@@ -122,7 +122,7 @@ describe("governed", () => {
     const preview = lines(view.preview);
     expect(preview.slice(0, 5)).toEqual(["What happened:", "", "", "-- ", "App: Word add-in 1.2.0"]);
     expect(preview).toContain(`SDK: Fadenstack SDK ${SDK_VERSION} (TypeScript)`);
-    expect(preview).toContain("Mode: Governed");
+    expect(preview).toContain("Mode: Organisation");
     expect(preview).toContain("Agent: Page assistant, Version 1, Model: fake-model");
     expect(preview).toContain(`Server: ${gateway.serverUrl}`);
     expect(preview.some((l) => l.startsWith("System: "))).toBe(true);
@@ -188,7 +188,7 @@ describe("governed", () => {
     expect(view.close).toBe("Schließen");
     const preview = lines(view.preview);
     expect(preview[0]).toBe("Was ist passiert:");
-    expect(preview).toContain("Modus: Verwaltet");
+    expect(preview).toContain("Modus: Organisation");
     expect(preview).toContain("Agent: Page assistant, Version 1, Modell: fake-model");
     expect(decoded(view.mailto!)).toContain("subject=Problem mit Word-Add-in 1.2.0 (Fadenstack SDK");
   });
@@ -258,10 +258,11 @@ describe("what is never in the report", () => {
     for (const secret of [SECRET_PROMPT, SECRET_ARGUMENT, SECRET_RESULT, SECRET_ANSWER, SECRET_REASONING, SECRET_FILE, "payroll", "user@example.com", "hunter2"]) {
       for (const text of texts) expect(text, secret).not.toContain(secret);
     }
-    // The SDK's own log line "Tool lookup (read, host) ended ok" names the tool: the copy carries the log's entries as they are (the spec),
-    // so a tool's name can be in the copy after "Recent log:"; the mail never has it.
-    for (const text of [view.preview, view.mailto!, decoded(view.mailto!), opened.join("\n")]) expect(text).not.toContain("lookup");
-    expect(clipboard.lastText!.split("\n-- \nRecent log:\n")[0]).not.toContain("lookup");
+    // The SDK's own log line "Tool lookup (read, host) ended ok" names the tool: in the copy the entry stays (event, outcome) and the
+    // name is masked; the mail never has the log.
+    for (const text of [...texts, ...texts.map(decoded)]) expect(text).not.toContain("lookup");
+    const copied = clipboard.lastText!;
+    expect(copied).toMatch(/Fadenstack\.Agents 2020 Tool \[tool\] \(read, \[name\]\) ended ok in \d+ ms, approval none/);
     expect(decoded(view.mailto!).startsWith("mailto:it@corp.example?subject=Problem with Word add-in 1.2.0")).toBe(true);
     expect(await builder.browserLog!.entries()).not.toHaveLength(0); // the log has entries, so the copy below is a real check
   });
