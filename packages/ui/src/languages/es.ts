@@ -825,7 +825,7 @@ export const spanishStrings: UiStrings = {
   chatRetentionPolicyFixed: "Lo establece la directiva de su organización en este equipo.",
   contentLoggingTitle: "Registro de contenido",
   contentLoggingBand: (time) => `El registro de contenido está activado hasta ${time}. Los prompts y las respuestas se escriben en los registros de la aplicación.`,
-  contentLoggingIntro: "Mientras está activado, los prompts y las respuestas se escriben en los registros de esta aplicación. Se desactiva solo al terminar el tiempo y al reiniciar la aplicación.",
+  contentLoggingIntro: "Mientras está activado, los prompts y las respuestas se escriben en los registros de esta aplicación. Se desactiva solo al terminar el tiempo y al reiniciar la aplicación. Lo que se escribió permanece en los registros de la aplicación hasta que ella lo elimine; «Eliminar mis datos» lo elimina allí donde la aplicación guarda sus registros con el SDK.",
   contentLoggingDuration: "Activar durante",
   contentLoggingOneHour: "1 hora",
   contentLoggingFourHours: "4 horas",

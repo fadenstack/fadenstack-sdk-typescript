@@ -825,7 +825,7 @@ export const germanStrings: UiStrings = {
   chatRetentionPolicyFixed: "Von der Richtlinie Ihrer Organisation auf diesem Computer festgelegt.",
   contentLoggingTitle: "Inhalte protokollieren",
   contentLoggingBand: (time) => `Die Inhaltsprotokollierung ist bis ${time} eingeschaltet. Prompts und Antworten werden in die Protokolle der App geschrieben.`,
-  contentLoggingIntro: "Solange sie eingeschaltet ist, werden Prompts und Antworten in die Protokolle dieser App geschrieben. Sie schaltet sich von selbst aus, wenn die Zeit abgelaufen ist, und beim Neustart der App.",
+  contentLoggingIntro: "Solange sie eingeschaltet ist, werden Prompts und Antworten in die Protokolle dieser App geschrieben. Sie schaltet sich von selbst aus, wenn die Zeit abgelaufen ist, und beim Neustart der App. Was geschrieben wurde, bleibt in den Protokollen der App, bis die App es löscht; „Meine Daten entfernen“ entfernt es dort, wo die App ihre Protokolle mit dem SDK führt.",
   contentLoggingDuration: "Einschalten für",
   contentLoggingOneHour: "1 Stunde",
   contentLoggingFourHours: "4 Stunden",

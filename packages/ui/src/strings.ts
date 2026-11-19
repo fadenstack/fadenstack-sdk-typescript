@@ -1770,7 +1770,7 @@ export const englishStrings: UiStrings = {
   chatRetentionPolicyFixed: "Set by your organisation's policy on this computer.",
   contentLoggingTitle: "Content logging",
   contentLoggingBand: (time) => `Content logging is on until ${time}. Prompts and answers are written to the app's logs.`,
-  contentLoggingIntro: "While it is on, prompts and answers are written to this app's logs. It switches off by itself when the time is up, and when the app restarts.",
+  contentLoggingIntro: "While it is on, prompts and answers are written to this app's logs. It switches off by itself when the time is up, and when the app restarts. What was written stays in the app's logs until the app deletes it; \"Remove my data\" removes it where the app keeps its logs with the SDK.",
   contentLoggingDuration: "Switch on for",
   contentLoggingOneHour: "1 hour",
   contentLoggingFourHours: "4 hours",
