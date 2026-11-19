@@ -4,7 +4,7 @@ import { computed, useTemplateRef } from "vue";
 
 import type { AgentChatViewModel } from "@fadenstack/ui";
 
-import { useDismiss, useViewModel } from "./composables.js";
+import { useDismiss, useViewModel, vKeepInside } from "./composables.js";
 import Icon from "./Icon.vue";
 
 const props = defineProps<{ chat: AgentChatViewModel }>();
@@ -30,7 +30,7 @@ const current = computed(() => chat.value.toolModes.find((o) => o.mode === chat.
       <span>{{ current?.label }}</span>
       <Icon name="chevron" :size="14" />
     </button>
-    <div v-if="chat.isModeMenuOpen" class="fdn-menu" role="menu" :aria-label="chat.strings.toolMode">
+    <div v-if="chat.isModeMenuOpen" v-keep-inside class="fdn-menu" role="menu" :aria-label="chat.strings.toolMode">
       <button
         v-for="o in chat.toolModes"
         :key="o.mode"

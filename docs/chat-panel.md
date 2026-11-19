@@ -680,7 +680,9 @@ A turn's `state` is `running`, `waiting_for_approval`, `completed`, `blocked`, `
 
 A new skin draws the classes of `@fadenstack/ui-web/styles.css` and takes the rest from `@fadenstack/ui-web`:
 `iconPaths` for the icons, `agentAvatar()` for the avatar as SVG data, `stickToBottom`, `dismissOnOutside`,
-`fitToContent` and `composerKey` for the behaviours, and `toolBadges`, `toolStatusIcon`, `noticeIcon` and the others
+`fitToContent`, `composerKey` and `keepMenuInside` (opens a menu towards the side of its anchor that has room inside the panel, and
+narrows it if the panel is narrower than the menu; the React and Vue skins call it for the tool-mode, thinking, settings and history
+menus) for the behaviours, and `toolBadges`, `toolStatusIcon`, `noticeIcon` and the others
 for how parts look. The React and Vue skins are the examples.
 
 ## Host commands

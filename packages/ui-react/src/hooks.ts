@@ -1,7 +1,7 @@
 import { useEffect, useLayoutEffect, useRef, useSyncExternalStore } from "react";
 
 import type { Observable } from "@fadenstack/ui";
-import { dismissOnOutside, stickToBottom } from "@fadenstack/ui-web";
+import { dismissOnOutside, keepMenuInside, stickToBottom } from "@fadenstack/ui-web";
 
 /** Re-renders when `vm` changes; returns it. Each view watches its own view model, so one change re-renders one view. */
 export function useViewModel<T extends Observable>(vm: T): T {
@@ -38,4 +38,11 @@ export function useDismiss(open: boolean, close: () => void, ref: React.RefObjec
     if (!open || !ref.current) return;
     return dismissOnOutside(ref.current, close);
   }, [open, close, ref]);
+}
+
+/** Keeps an open menu inside its panel (it opens to the side that has room); measured after each render while it is open. */
+export function useKeepInside(open: boolean, ref: React.RefObject<HTMLElement | null>): void {
+  useLayoutEffect(() => {
+    if (open && ref.current) keepMenuInside(ref.current);
+  });
 }

@@ -9,7 +9,7 @@ import { nextTick, useTemplateRef, watch } from "vue";
 import type { AgentChatViewModel } from "@fadenstack/ui";
 import { focusCurrentItem, menuKey } from "@fadenstack/ui-web";
 
-import { useDismiss, useViewModel } from "./composables.js";
+import { useDismiss, useViewModel, vKeepInside } from "./composables.js";
 import Icon from "./Icon.vue";
 
 const props = defineProps<{ chat: AgentChatViewModel }>();
@@ -55,7 +55,7 @@ function pick(level: Parameters<AgentChatViewModel["selectReasoning"]>[0]): void
       <span>{{ chat.reasoningPillText }}</span>
       <Icon name="chevron" :size="14" />
     </button>
-    <div v-if="chat.isReasoningMenuOpen" ref="menu" class="fdn-menu fdn-reasoning" role="menu" :aria-label="chat.strings.reasoningMenu" @keydown="onKeyDown">
+    <div v-if="chat.isReasoningMenuOpen" ref="menu" v-keep-inside class="fdn-menu fdn-reasoning" role="menu" :aria-label="chat.strings.reasoningMenu" @keydown="onKeyDown">
       <div class="fdn-menu-heading">{{ chat.strings.reasoningMenu }}</div>
       <button
         v-for="o in chat.reasoningOptions"

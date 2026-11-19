@@ -19,6 +19,7 @@ before 1.0, a minor version may break the API, and this file says where it does.
 ### Fixed
 
 - "Stop everything" (`@fadenstack/ui-web/styles.css`, used by `StopEverythingButton` in `@fadenstack/ui-react` and `@fadenstack/ui-vue`) lays out as a row in a host's header: the root no longer takes the column, the full height and the panel's background of `.fdn-chat`, so the result line sits beside the button and does not grow the header; the line breaks only between words, no longer letter by letter in a narrow header.
+- The tool-mode, thinking, settings and history menus stay inside a narrow panel (`@fadenstack/ui-web`, `@fadenstack/ui-react`, `@fadenstack/ui-vue`): when a menu opened towards the start edge from a button near it would run past the panel (the tool mode at Chrome's 420 px), it opens towards the other side, and is narrowed to the panel's width if needed (new `keepMenuInside` in `@fadenstack/ui-web`; it sets inline styles only). `.fdn-menu-check` is `flex: none`, so the text of every entry starts at one x however long a description is.
 
 ### Security
 

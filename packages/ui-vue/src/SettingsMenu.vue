@@ -9,7 +9,7 @@ import type { AgentChatViewModel } from "@fadenstack/ui";
 
 import AboutPanel from "./AboutPanel.vue";
 import ApprovalsSection from "./ApprovalsSection.vue";
-import { useDismiss, useViewModel } from "./composables.js";
+import { useDismiss, useViewModel, vKeepInside } from "./composables.js";
 import Icon from "./Icon.vue";
 import ReportProblemSheet from "./ReportProblemSheet.vue";
 import ToolsPanel from "./ToolsPanel.vue";
@@ -56,7 +56,7 @@ function closeReport(returnFocus: boolean): void {
     >
       <Icon name="settings" />
     </button>
-    <div v-if="chat.isSettingsOpen" class="fdn-menu fdn-settings" role="menu" :aria-label="chat.strings.settings">
+    <div v-if="chat.isSettingsOpen" v-keep-inside class="fdn-menu fdn-settings" role="menu" :aria-label="chat.strings.settings">
       <div v-if="languages" role="group" :aria-label="chat.strings.languageMenu">
         <div class="fdn-menu-heading">{{ chat.strings.languageMenu }}</div>
         <button

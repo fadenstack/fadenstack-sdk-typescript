@@ -7,6 +7,7 @@ export {
   fitToContent,
   focusAtEnd,
   focusCurrentItem,
+  keepMenuInside,
   menuKey,
   picturesIn,
   readPicture,

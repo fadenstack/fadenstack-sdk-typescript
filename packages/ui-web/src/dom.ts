@@ -43,6 +43,44 @@ export function dismissOnOutside(anchor: HTMLElement, close: () => void): () => 
 }
 
 /**
+ * Keeps an open menu inside its panel. A menu opens towards the start edge from its anchor (`inset-inline-end: 0`); a button near the
+ * panel's start edge (the tool mode in a narrow panel) would push it out. This measures the menu against the nearest `.fdn-chat` (or
+ * the window) and, if it does not fit, opens it towards the other side, caps its width to the panel's, and as a last resort shifts it.
+ * It sets inline styles only, so a host's own rule for the menu is the fallback, and calling it again re-measures from the start.
+ */
+export function keepMenuInside(menu: HTMLElement, margin = 8): void {
+  const style = menu.style;
+  style.insetInlineStart = "";
+  style.insetInlineEnd = "";
+  style.maxWidth = "";
+  style.minWidth = "";
+  style.transform = "";
+  const panel = menu.closest<HTMLElement>(".fdn-chat");
+  const view = menu.ownerDocument.defaultView;
+  const area = panel ? panel.getBoundingClientRect() : { left: 0, right: view?.innerWidth ?? 0, width: view?.innerWidth ?? 0 };
+  const room = area.width - 2 * margin;
+  if (!(room > 0)) return; // nothing is laid out (a hidden panel)
+  if (room < 340) {
+    style.maxWidth = `${room}px`;
+    if (room < 260) style.minWidth = `${room}px`;
+  }
+  const low = area.left + margin;
+  const high = area.right - margin;
+  const fits = (): boolean => {
+    const r = menu.getBoundingClientRect();
+    return r.left >= low - 0.5 && r.right <= high + 0.5;
+  };
+  if (fits()) return;
+  style.insetInlineStart = "0";
+  style.insetInlineEnd = "auto";
+  if (fits()) return;
+  // Neither side has room (the anchor is mid-panel and the menu is wide): shift it.
+  const r = menu.getBoundingClientRect();
+  const dx = r.left < low ? low - r.left : high - r.right;
+  style.transform = `translateX(${dx}px)`;
+}
+
+/**
  * Calls `shown` at once and again each time `element` is shown: the tab comes back to the front (`visibilitychange`), or the element
  * scrolls or opens into view. A skin of a control that reads something that changes meanwhile (the "Your data" control's record
  * of tool calls) calls its view model's `refresh()` from it. Returns the stop.

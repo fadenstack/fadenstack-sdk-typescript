@@ -4,7 +4,7 @@ import { useTemplateRef } from "vue";
 
 import type { AgentChatViewModel } from "@fadenstack/ui";
 
-import { useDismiss, useViewModel } from "./composables.js";
+import { useDismiss, useViewModel, vKeepInside } from "./composables.js";
 import Icon from "./Icon.vue";
 
 const props = defineProps<{ chat: AgentChatViewModel }>();
@@ -27,7 +27,7 @@ useDismiss(() => chat.value.isHistoryOpen, () => chat.value.setHistoryOpen(false
     >
       <Icon name="history" />
     </button>
-    <div v-if="chat.isHistoryOpen" class="fdn-menu fdn-history" role="menu" :aria-label="chat.strings.history">
+    <div v-if="chat.isHistoryOpen" v-keep-inside class="fdn-menu fdn-history" role="menu" :aria-label="chat.strings.history">
       <div v-if="chat.sessions.length === 0" class="fdn-menu-note">{{ chat.strings.noHistory }}</div>
       <div v-for="session in chat.sessions" :key="session.id" :class="session.isCurrent ? 'fdn-history-item fdn-current' : 'fdn-history-item'">
         <button type="button" role="menuitem" class="fdn-history-open" :disabled="chat.isBusy" @click="chat.openSession(session.id)">

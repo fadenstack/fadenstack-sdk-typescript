@@ -1,7 +1,7 @@
-import { onBeforeUnmount, onMounted, shallowRef, toRaw, toValue, triggerRef, watch, type MaybeRefOrGetter, type Ref, type ShallowRef } from "vue";
+import { onBeforeUnmount, onMounted, shallowRef, toRaw, toValue, triggerRef, watch, type MaybeRefOrGetter, type Directive, type Ref, type ShallowRef } from "vue";
 
 import type { Observable } from "@fadenstack/ui";
-import { dismissOnOutside, stickToBottom } from "@fadenstack/ui-web";
+import { dismissOnOutside, keepMenuInside, stickToBottom } from "@fadenstack/ui-web";
 
 /**
  * A view model as a ref that changes whenever the view model does: read it in a template or a `computed`, and the
@@ -35,3 +35,9 @@ export function useDismiss(open: () => boolean, close: () => void, anchor: Reado
     if (isOpen && element) onCleanup(dismissOnOutside(element, close));
   }, { immediate: true, flush: "post" });
 }
+
+/** `v-keep-inside` on a menu: keeps it inside its panel (it opens to the side that has room), measured when it opens and after each update. */
+export const vKeepInside: Directive<HTMLElement> = {
+  mounted: (el) => keepMenuInside(el),
+  updated: (el) => keepMenuInside(el),
+};

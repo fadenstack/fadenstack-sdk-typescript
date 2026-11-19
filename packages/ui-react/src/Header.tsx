@@ -4,7 +4,7 @@ import type { AgentChatViewModel } from "@fadenstack/ui";
 
 import { AboutPanel } from "./About.js";
 import { ApprovalsSection } from "./Grants.js";
-import { useDismiss, useViewModel } from "./hooks.js";
+import { useDismiss, useKeepInside, useViewModel } from "./hooks.js";
 import { Icon } from "./icons.js";
 import { ReasoningMenu } from "./ReasoningMenu.js";
 import { ReportProblemSheet } from "./ReportProblem.js";
@@ -37,6 +37,8 @@ function ModeMenu({ chat }: { chat: AgentChatViewModel }): ReactElement {
   const ref = useRef<HTMLDivElement>(null);
   const close = useCallback(() => chat.setModeMenuOpen(false), [chat]);
   useDismiss(chat.isModeMenuOpen, close, ref);
+  const menu = useRef<HTMLDivElement>(null);
+  useKeepInside(chat.isModeMenuOpen, menu);
   const current = chat.toolModes.find((o) => o.mode === chat.toolMode);
   return (
     <div className="fdn-menu-anchor" ref={ref}>
@@ -49,7 +51,7 @@ function ModeMenu({ chat }: { chat: AgentChatViewModel }): ReactElement {
         <Icon name="chevron" size={14} />
       </button>
       {chat.isModeMenuOpen && (
-        <div className="fdn-menu" role="menu" aria-label={chat.strings.toolMode}>
+        <div className="fdn-menu" role="menu" aria-label={chat.strings.toolMode} ref={menu}>
           {chat.toolModes.map((o) => (
             <button key={o.mode} type="button" role="menuitemradio" aria-checked={o.mode === chat.toolMode} disabled={!o.available}
               className="fdn-menu-item" onClick={() => chat.selectToolMode(o.mode)}>
@@ -97,6 +99,8 @@ function SettingsMenu({ chat, extra }: { chat: AgentChatViewModel; extra?: React
     if (returnFocus) gear.current?.focus();
   }, [chat]);
   useDismiss(chat.isSettingsOpen, close, ref);
+  const menu = useRef<HTMLDivElement>(null);
+  useKeepInside(chat.isSettingsOpen, menu);
   useDismiss(chat.isAboutOpen, dismissAbout, ref);
   useDismiss(chat.isToolsOpen, dismissTools, ref);
   useDismiss(chat.isReportProblemOpen, dismissReport, ref);
@@ -109,7 +113,7 @@ function SettingsMenu({ chat, extra }: { chat: AgentChatViewModel; extra?: React
         <Icon name="settings" />
       </button>
       {chat.isSettingsOpen && (
-        <div className="fdn-menu fdn-settings" role="menu" aria-label={s.settings}>
+        <div className="fdn-menu fdn-settings" role="menu" aria-label={s.settings} ref={menu}>
           {languages && (
             <div role="group" aria-label={s.languageMenu}>
               <div className="fdn-menu-heading">{s.languageMenu}</div>
@@ -159,6 +163,8 @@ function HistoryMenu({ chat }: { chat: AgentChatViewModel }): ReactElement {
   const ref = useRef<HTMLDivElement>(null);
   const close = useCallback(() => chat.setHistoryOpen(false), [chat]);
   useDismiss(chat.isHistoryOpen, close, ref);
+  const menu = useRef<HTMLDivElement>(null);
+  useKeepInside(chat.isHistoryOpen, menu);
   const s = chat.strings;
   return (
     <div className="fdn-menu-anchor" ref={ref}>
@@ -167,7 +173,7 @@ function HistoryMenu({ chat }: { chat: AgentChatViewModel }): ReactElement {
         <Icon name="history" />
       </button>
       {chat.isHistoryOpen && (
-        <div className="fdn-menu fdn-history" role="menu" aria-label={s.history}>
+        <div className="fdn-menu fdn-history" role="menu" aria-label={s.history} ref={menu}>
           {chat.sessions.length === 0 && <div className="fdn-menu-note">{s.noHistory}</div>}
           {chat.sessions.map((session) => (
             <div key={session.id} className={`fdn-history-item${session.isCurrent ? " fdn-current" : ""}`}>

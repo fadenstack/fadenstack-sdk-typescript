@@ -313,6 +313,8 @@
   inset-inline-end: 0;
   min-width: 260px;
   max-width: min(340px, calc(100vw - 16px));
+  /* Opens towards the start edge from its anchor; the skins measure it against the panel when it opens and open it towards the
+     other side (or narrow it) if it does not fit (keepMenuInside in @fadenstack/ui-web). */
   padding: 6px;
   border-radius: var(--fdn-radius);
   background: var(--fdn-surface);
@@ -342,6 +344,7 @@
 }
 
 .fdn-menu-check {
+  flex: none; /* a long description must not squeeze the check column: every entry's text starts at one x */
   width: 16px;
   padding-top: 2px;
   color: var(--fdn-accent);

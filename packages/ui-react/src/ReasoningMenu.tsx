@@ -3,7 +3,7 @@ import { useCallback, useEffect, useRef, type KeyboardEvent, type ReactElement }
 import type { AgentChatViewModel } from "@fadenstack/ui";
 import { focusCurrentItem, menuKey } from "@fadenstack/ui-web";
 
-import { useDismiss, useViewModel } from "./hooks.js";
+import { useDismiss, useKeepInside, useViewModel } from "./hooks.js";
 import { Icon } from "./icons.js";
 
 /**
@@ -19,6 +19,7 @@ export function ReasoningMenu({ chat }: { chat: AgentChatViewModel }): ReactElem
   const open = chat.isReasoningMenuOpen;
   const close = useCallback(() => chat.setReasoningMenuOpen(false), [chat]);
   useDismiss(open, close, anchor);
+  useKeepInside(open, menu);
   useEffect(() => {
     if (open && menu.current) focusCurrentItem(menu.current);
   }, [open]);
