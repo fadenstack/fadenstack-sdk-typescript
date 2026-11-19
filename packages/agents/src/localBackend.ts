@@ -118,6 +118,12 @@ export class LocalBackend implements AgentBackend {
     return base === undefined ? undefined : base instanceof URL ? base : new URL(String(base));
   }
 
+  /** The name of the endpoint's dialect (`ollama`, `vllm`, `openai-compatible` where none was given); undefined for a host's own streamer. */
+  get dialectName(): string | undefined {
+    const endpoint = this.#settings.endpoint;
+    return endpoint ? (endpoint.dialect ?? EndpointDialect.openAiCompatible).name : undefined;
+  }
+
   /** The kind of server: the check's word, else by the endpoint's host and dialect; unknown for a host's own streamer. */
   get server(): EndpointServer {
     const { endpoint, report } = this.#settings;

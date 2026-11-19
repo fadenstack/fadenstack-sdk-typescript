@@ -44,6 +44,7 @@ import {
 
 import { MachinePolicy, PolicyAccess } from "./machinePolicy.js";
 import { AgentBuilder, UNDESCRIBED_APP_NAME, type AgentSettings, type AppDescription } from "./builder.js";
+import type { BrowserLog } from "./browserLog.js";
 import { ServerBackend, type AgentBackend, type AgentConnection, type AgentSwitch } from "./backend.js";
 import { ContentLogging } from "./contentLogging.js";
 import { HookRunner } from "./hooks.js";
@@ -355,6 +356,19 @@ export class FadenstackAgent implements AgentSwitch {
    */
   get endpointUrl(): URL | undefined {
     return this.settings.backend instanceof LocalBackend ? this.settings.backend.endpointUrl : undefined;
+  }
+
+  /**
+   * The name of a standalone agent's endpoint dialect (`ollama`, `vllm`, `openai-compatible`); undefined with a Fadenstack server or a
+   * host's own streamer. For "Report a problem", which names the kind of server and never its address. .NET: `EndpointDialectName`.
+   */
+  get endpointDialectName(): string | undefined {
+    return this.settings.backend instanceof LocalBackend ? this.settings.backend.dialectName : undefined;
+  }
+
+  /** The browser log `useBrowserLog` set up; undefined without one. "Copy details" of "Report a problem" adds its last entries. */
+  get browserLog(): BrowserLog | undefined {
+    return this.settings.browserLog;
   }
 
   /**

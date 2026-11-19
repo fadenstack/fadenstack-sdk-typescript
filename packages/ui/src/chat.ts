@@ -1,10 +1,10 @@
 import type {
   AgentEvent, ChatSession, FadenstackAgent, HostCommandResult, MarkedCopy, MessageAttachment, ReasoningLevel, TranscriptEntry,
 } from "@fadenstack/agents";
-import { checkPicture, isPicture } from "@fadenstack/agents";
-import { FadenstackSignInRequiredError, TOOL_MODES, isAbortError, narrowestMode, pictureRefusalOf, type PictureRefusal, type SkillOption, type ToolMode } from "@fadenstack/client";
+import { checkPicture, isPicture, isSupportEmail } from "@fadenstack/agents";
+import { EndpointCheck, EndpointPlace, FadenstackSignInRequiredError, SDK_VERSION, TOOL_MODES, isAbortError, narrowestMode, pictureRefusalOf, type PictureRefusal, type SkillOption, type ToolMode } from "@fadenstack/client";
 
-import { aboutView, footerLink, refSource, type AboutView, type PanelLink } from "./about.js";
+import { aboutView, footerLink, helpLink, refSource, sdkName, serverAddress, type AboutView, type PanelLink } from "./about.js";
 import type { ApprovalBroker, PendingApproval } from "./approvalBroker.js";
 import { AttachmentViewModel, type AttachmentChip } from "./attachments.js";
 import { chatFileName, chatToMarkdown } from "./export.js";
@@ -22,6 +22,10 @@ import { GrantsViewModel } from "./grants.js";
 import { ContentLoggingBandViewModel } from "./settings/contentLogging.js";
 import { period } from "./period.js";
 import { followsPerson } from "./person.js";
+import {
+  buildReport, describeSystem, errorForReport, recentLogLines, reportLabels, reportTime, supportAddress,
+  type ReportMail, type ReportProblemView, type ReportedError,
+} from "./reportProblem.js";
 import { MAX_PROMPTS, MAX_PROMPT_LENGTH, PromptStoreError, type PromptStore, type SavedPrompt } from "./prompts.js";
 import { SkillPickerViewModel, skillToken } from "./skills.js";
 import { withStrings, type UiStrings } from "./strings.js";
@@ -120,6 +124,13 @@ export interface AgentChatOptions extends ChatHostServices {
   /** The muted "Fadenstack" link on the line under the composer (default true). False hides it; About stays. */
   branding?: boolean;
   /**
+   * The address "Report a problem" writes to when the agent is standalone (the app's own support), one plain mail address
+   * (`^[A-Za-z0-9._+-]+@[A-Za-z0-9-]+(\.[A-Za-z0-9-]+)+$`, at most 254 characters). Without it the report goes to support@fadenstack.com.
+   * The machine policy's `supportEmail` comes first, and in governed mode only the policy's key counts, never this. Anything else
+   * than one plain address throws a `TypeError` here, so a value cannot add a recipient or a body to the draft. .NET: `SupportEmail`.
+   */
+  supportEmail?: string;
+  /**
    * Your app in the links to fadenstack.com (`ref=<refSource>-panel`, `-about`): lower-case letters and digits in
    * words joined by hyphens, at most 20 characters ("my-crm"). `sdk` by default, and for anything else.
    */
@@ -143,6 +154,14 @@ export interface AgentChatOptions extends ChatHostServices {
  * `IDisposable`. No `Symbol.dispose` form: the packages target ES2022, whose library does not have it.
  */
 export type TurnLease = { dispose(): void } | (() => void);
+
+function safely<T>(make: () => T): T | undefined {
+  try {
+    return make();
+  } catch {
+    return undefined;
+  }
+}
 
 function releaseLease(lease: TurnLease | undefined): void {
   try {
@@ -277,6 +296,7 @@ export class AgentChatViewModel extends Observable implements TurnHost {
   readonly #promptStore: PromptStore | undefined;
   readonly #openTools: (() => void) | undefined;
   readonly #openLink: (url: string) => void;
+  readonly #supportEmail: string | undefined;
   // Approvals arrive twice: as an event, in order with the turn's other events, and as the broker's request,
   // which carries the answer. Whichever comes second adds the card, so it sits where the event put it.
   readonly #waitingForEvent = new Map<string, PendingApproval>();
@@ -302,6 +322,8 @@ export class AgentChatViewModel extends Observable implements TurnHost {
   #settingsOpen = false;
   #aboutOpen = false;
   #toolsOpen = false;
+  #reportOpen = false;
+  #reportError: ReportedError | undefined;
   readonly #untitled = new Set<string>();
   #turns: readonly TurnViewModel[] = [];
   #attachments: readonly AttachmentViewModel[] = [];
@@ -360,6 +382,10 @@ export class AgentChatViewModel extends Observable implements TurnHost {
     this.#refSource = refSource(options.refSource);
     this.#footerLink = options.branding === false ? undefined : footerLink(this.#refSource);
     this.#openLink = options.openLink;
+    if (options.supportEmail !== undefined && !isSupportEmail(options.supportEmail)) {
+      throw new TypeError("supportEmail must be one plain mail address (no spaces, line breaks, query, several addresses) of at most 254 characters.");
+    }
+    this.#supportEmail = options.supportEmail;
     this.skillPicker = new SkillPickerViewModel({
       load: (signal) => agent.listSkills(undefined, signal),
       onPick: (skill) => this.#pickSkill(skill),
@@ -496,6 +522,71 @@ export class AgentChatViewModel extends Observable implements TurnHost {
       server: agent.serverClient?.transport.serverUrl,
       refSource: this.#refSource,
     }, this.strings);
+  }
+
+  /** "Report a problem" is open: the sheet over the panel (About's button, or a failed turn's link). */
+  get isReportProblemOpen(): boolean {
+    return this.#reportOpen;
+  }
+
+  /**
+   * The "Report a problem" sheet, in the panel's language: to whom the report goes, and the lines the mail will contain. Nothing is sent by
+   * the SDK; "Write mail" hands a `mailto:` link to the host's `openLink`, "Copy details" puts the text on the clipboard.
+   */
+  get reportProblem(): ReportProblemView {
+    const s = this.strings;
+    const mail = this.#reportMail();
+    const server = this.#agent.serverClient?.transport.serverUrl;
+    const helpHref = mail.to === undefined && server !== undefined ? safely(() => helpLink(server)) : undefined;
+    return {
+      title: s.reportProblem,
+      goesTo: mail.to === undefined ? s.reportAskIt : s.reportGoesTo(mail.to),
+      address: mail.to,
+      canWriteMail: mail.mailto !== undefined,
+      help: helpHref ? { label: s.help, href: helpHref } : undefined,
+      contains: s.reportContains,
+      preview: mail.mailBody.replace(/\r\n/g, "\n"),
+      noChats: s.reportNoChats,
+      writeMail: s.reportWriteMail,
+      copyDetails: s.copyDetails,
+      close: s.close,
+      mailto: mail.mailto,
+    };
+  }
+
+  /**
+   * The report as it is now: the facts of the agent, the app and the machine, never anything of the chats. `log` is the browser log's
+   * last entries, for the copy only.
+   */
+  #reportMail(log?: readonly string[]): ReportMail {
+    const agent = this.#agent;
+    const s = this.strings;
+    const about = this.about;
+    const governed = agent.connection === "governed";
+    const app = agent.app && [agent.app.name.trim(), agent.app.version?.trim()].filter(Boolean).join(" ");
+    const server = governed ? agent.serverClient?.transport.serverUrl : undefined;
+    const url = governed ? undefined : agent.endpointUrl;
+    const dialect = governed ? undefined : agent.endpointDialectName;
+    const place = url === undefined ? undefined : safely(() => EndpointCheck.placeOf(url));
+    const where = place === EndpointPlace.ThisComputer ? s.reportPlaceThisComputer
+      : place === EndpointPlace.LocalNetwork ? s.reportPlaceLocalNetwork : place === EndpointPlace.Internet ? s.reportPlaceInternet : undefined;
+    return buildReport({
+      address: supportAddress(governed, agent.machinePolicy.supportEmail, this.#supportEmail),
+      labels: reportLabels(s),
+      facts: {
+        app: app || undefined,
+        sdkVersion: SDK_VERSION,
+        sdk: sdkName(),
+        system: describeSystem(),
+        mode: governed ? s.reportModeGoverned : s.reportModeOwnAi,
+        agent: [about.agent, ...about.agentDetails].filter(Boolean).join(", ") || undefined,
+        server: server === undefined ? undefined : safely(() => serverAddress(server)),
+        endpoint: dialect && where ? `${dialect}, ${where}` : undefined,
+        time: reportTime(this.#context.now()),
+        error: this.#reportError,
+      },
+      log,
+    });
   }
 
   /** The muted "Fadenstack" link on the AI-notice line; undefined when the host turned `branding` off. */
@@ -970,7 +1061,7 @@ export class AgentChatViewModel extends Observable implements TurnHost {
           stop.signal.throwIfAborted();
         } catch (error) {
           const waiting = turn;
-          this.#batcher.enqueue(() => stop.signal.aborted ? waiting.stop() : waiting.fail(error instanceof Error ? error.message : String(error)));
+          this.#batcher.enqueue(() => stop.signal.aborted ? waiting.stop() : waiting.fail(error instanceof Error ? error.message : String(error), errorForReport(error)));
           await this.#batcher.whenFlushed();
           return;
         } finally {
@@ -1025,7 +1116,7 @@ export class AgentChatViewModel extends Observable implements TurnHost {
     } catch (error) {
       if (turn) {
         const active = turn;
-        this.#batcher.enqueue(() => this.#choseToStop(stop.signal, error) ? active.stop() : active.fail(this.#errorText(error)));
+        this.#batcher.enqueue(() => this.#choseToStop(stop.signal, error) ? active.stop() : active.fail(this.#errorText(error), errorForReport(error)));
       } else if (!stop.signal.aborted) this.#error = error instanceof Error ? error.message : String(error);
       if (error instanceof FadenstackSignInRequiredError) this.#signInRequired = true;
     } finally {
@@ -1141,6 +1232,7 @@ export class AgentChatViewModel extends Observable implements TurnHost {
     this.#settingsOpen = open;
     if (open) {
       this.#aboutOpen = false;
+      this.#reportOpen = false;
       this.#closeTools();
       void this.grants.load().catch(() => undefined); // Settings -> Approvals as it is now
     }
@@ -1149,10 +1241,11 @@ export class AgentChatViewModel extends Observable implements TurnHost {
 
   /** Opens or closes About; opening it closes the settings it is picked from. */
   setAboutOpen(open: boolean): void {
-    if (this.#aboutOpen === open && !(open && this.#settingsOpen)) return;
+    if (this.#aboutOpen === open && !(open && (this.#settingsOpen || this.#reportOpen))) return;
     this.#aboutOpen = open;
     if (open) {
       this.#settingsOpen = false;
+      this.#reportOpen = false;
       this.#reasoningMenuOpen = false;
       this.#closeTools();
     }
@@ -1175,11 +1268,12 @@ export class AgentChatViewModel extends Observable implements TurnHost {
 
   /** Opens or closes Tools; opening closes the settings it is picked from (and About) and reads the server's list. */
   setToolsOpen(open: boolean): void {
-    if (this.#toolsOpen === open && !(open && (this.#settingsOpen || this.#aboutOpen))) return;
+    if (this.#toolsOpen === open && !(open && (this.#settingsOpen || this.#aboutOpen || this.#reportOpen))) return;
     if (open) {
       this.#toolsOpen = true;
       this.#settingsOpen = false;
       this.#aboutOpen = false;
+      this.#reportOpen = false;
       this.#reasoningMenuOpen = false;
       void this.tools.load();
     } else {
@@ -1202,6 +1296,57 @@ export class AgentChatViewModel extends Observable implements TurnHost {
     } catch {
       return false;
     }
+  }
+
+  /**
+   * Opens "Report a problem": About's button, or a failed turn's link (`error`: its code, and the server's request id where the error has
+   * one). Opening it closes the settings, About and Tools it was picked from.
+   */
+  openReportProblem(error?: ReportedError): void {
+    this.#reportError = error && (error.code || error.requestId) ? { code: error.code, requestId: error.requestId } : undefined;
+    this.#reportOpen = true;
+    this.#settingsOpen = false;
+    this.#aboutOpen = false;
+    this.#reasoningMenuOpen = false;
+    this.#closeTools();
+    this.notify();
+  }
+
+  /** Closes "Report a problem"; the error it was opened for is forgotten. */
+  closeReportProblem(): void {
+    if (!this.#reportOpen) return;
+    this.#reportOpen = false;
+    this.#reportError = undefined;
+    this.notify();
+  }
+
+  /**
+   * Copies the report as text: the address and the subject (no address line in governed mode without the policy's key), the mail's
+   * lines, and, where the agent has a browser log (`useBrowserLog`), after them its last 50 entries. False when the clipboard refused.
+   * The mail never carries log entries.
+   */
+  async copyReportDetails(): Promise<boolean> {
+    try {
+      let log: string[] | undefined;
+      try {
+        const entries = await this.#agent.browserLog?.entries();
+        if (entries) log = recentLogLines(entries);
+      } catch {
+        // an unreadable log: the copy goes without it
+      }
+      await this.#context.clipboard.setText(this.#reportMail(log).copy);
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  /** "Write mail": hands the `mailto:` link to the host's `openLink`. False where there is no address (governed without the policy's key). */
+  writeReportMail(): boolean {
+    const link = this.reportProblem.mailto;
+    if (link === undefined) return false;
+    this.#openLink(link);
+    return true;
   }
 
   /** Opens one of the panel's links through the host's `openLink`. */
@@ -1570,11 +1715,11 @@ export class AgentChatViewModel extends Observable implements TurnHost {
       } else if (error instanceof FadenstackSignInRequiredError) {
         this.#batcher.enqueue(() => {
           this.#signInRequired = true;
-          turn.fail(error.message);
+          turn.fail(error.message, errorForReport(error));
           this.notify();
         });
       } else {
-        this.#batcher.enqueue(() => turn.fail(this.#errorText(error)));
+        this.#batcher.enqueue(() => turn.fail(this.#errorText(error), errorForReport(error)));
       }
     }
   }

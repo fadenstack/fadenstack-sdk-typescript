@@ -5,6 +5,7 @@ import type { PendingApproval } from "./approvalBroker.js";
 import type { AttachmentChip } from "./attachments.js";
 import { formatDuration, formatNumber } from "./format.js";
 import { Observable } from "./observable.js";
+import type { ReportedError } from "./reportProblem.js";
 import {
   ApprovalPart,
   MarkdownPart,
@@ -31,6 +32,8 @@ export interface TurnHost {
   /** The chat has a prompt store: a message can be saved as a prompt. */
   readonly canSavePrompts?: boolean;
   savePrompt?(text: string): Promise<{ saved: boolean; message: string }>;
+  /** Opens "Report a problem" for a failed turn, with its error (the code, and the request id where the error has one). */
+  openReportProblem?(error?: ReportedError): void;
 }
 
 type ToolStarted = Extract<AgentEvent, { type: "tool_started" }>;
@@ -58,6 +61,7 @@ export class TurnViewModel extends Observable {
   #state: TurnState;
   #outcome: ChatOutcome | undefined;
   #error: string | undefined;
+  #errorReport: ReportedError | undefined;
   #tokens: number | undefined;
   #durationText = "";
   /** A model call of the turn ended with nothing (`empty_answer`): Retry is offered, as for a failed turn. */
@@ -126,6 +130,16 @@ export class TurnViewModel extends Observable {
 
   get errorMessage(): string | undefined {
     return this.#error;
+  }
+
+  /** The turn failed and the chat can open "Report a problem" for it: the link next to the error. */
+  get canReportProblem(): boolean {
+    return this.#state === "failed" && this.#host?.openReportProblem !== undefined;
+  }
+
+  /** Opens "Report a problem" with this turn's error code (and request id, where the error has one) added. Nothing of the turn's text goes with it. */
+  reportProblem(): void {
+    if (this.canReportProblem) this.#host?.openReportProblem?.(this.#errorReport);
   }
 
   get usageText(): string {
@@ -311,8 +325,9 @@ export class TurnViewModel extends Observable {
   }
 
   /** @internal */
-  fail(message: string): void {
+  fail(message: string, report?: ReportedError): void {
     this.#error = message;
+    this.#errorReport = report;
     this.#finish("failed");
   }
 
