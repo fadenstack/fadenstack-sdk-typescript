@@ -118,8 +118,8 @@ export function aboutView(facts: AboutFacts, strings: UiStrings): AboutView {
 
   const sdkVersion = facts.sdkVersion ?? SDK_VERSION;
   const environment: string[] = [];
-  const app = facts.app && [appDisplayName(facts.app.name.trim(), facts.app.displayNames, strings.language), facts.app.version?.trim()].filter(Boolean).join(" ");
-  if (app) environment.push(strings.aboutApp(app));
+  const appName = facts.app && appDisplayName(facts.app.name.trim(), facts.app.displayNames, strings.language);
+  if (appName) environment.push(strings.aboutApp(appName, facts.app?.version?.trim() || undefined));
   environment.push(sdkName(sdkVersion));
   const server = facts.server === undefined ? undefined : safely(() => serverAddress(facts.server!));
   if (server) environment.push(strings.aboutServer(server));

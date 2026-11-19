@@ -94,9 +94,10 @@ describe("an app's display names in the panel's texts", () => {
 
   it("About says 'Runs in the app' with the display name in the panel's language", () => {
     const facts = { app: { name: CHROME, version: "1.3.0", displayNames: CHROME_NAMES } };
-    expect(aboutView(facts, de).environment[0]).toBe("Läuft in der App „Chrome-Erweiterung 1.3.0“");
-    expect(aboutView(facts, zh).environment[0]).toBe("运行于应用“Chrome 扩展 1.3.0”");
-    expect(aboutView({ app: { name: WORD, version: "2" } }, de).environment[0]).toBe("Läuft in der App „Word add-in 2“");
+    expect(aboutView(facts, de).environment[0]).toBe("Läuft in der App „Chrome-Erweiterung“ 1.3.0");
+    expect(aboutView(facts, zh).environment[0]).toBe("运行于应用“Chrome 扩展” 1.3.0");
+    expect(aboutView({ app: { name: WORD } }, de).environment[0]).toBe("Läuft in der App „Word add-in“");
+    expect(aboutView({ app: { name: WORD, version: "2" } }, de).environment[0]).toBe("Läuft in der App „Word add-in“ 2");
   });
 
   it("the manifest, the records and the app's name keep the English name; the display names go with the record", async () => {

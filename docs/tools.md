@@ -175,7 +175,7 @@ version.
 
 **The name in the panel's texts.** `name` stays English on purpose: it goes into the manifest, the app's record and the record of tool
 calls. The panel's texts put it after a noun and in quotation marks, so that any name reads correctly in every language: *Remove your
-data from the app "Chrome extension"?*, *Ihre Daten aus der App „Chrome extension“ entfernen?*, *Runs in the app "Word add-in"*. A
+data from the app "Chrome extension"?*, *Ihre Daten aus der App „Chrome extension“ entfernen?*, *Runs in the app "Word add-in" 2.1* (the version, when there is one, after the quoted name). A
 name that translates ("Chrome-Erweiterung") can be given per language, for the texts only:
 
 ```ts

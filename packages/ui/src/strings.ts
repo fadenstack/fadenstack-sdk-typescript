@@ -147,7 +147,8 @@ export interface UiStrings {
   aboutDraft: string;
   aboutModel(model: string): string;
   /** The app the agent runs in, as the host described it: "Word add-in 1.4". */
-  aboutApp(app: string): string;
+  /** "Runs in the app "Name" 1.2": the name in quotation marks, the version (when there is one) after it. */
+  aboutApp(app: string, version?: string): string;
   /** An app's name as it stands in a list of apps, in the language's quotation marks (the name stays as the app wrote it). */
   appQuoted(app: string): string;
   /** The server's address: shown, never sent. */
@@ -1111,7 +1112,7 @@ export const englishStrings: UiStrings = {
   aboutVersion: (version) => `Version ${version}`,
   aboutDraft: "Draft",
   aboutModel: (model) => `Model: ${model}`,
-  aboutApp: (app) => `Runs in the app "${app}"`,
+  aboutApp: (app, version) => `Runs in the app "${app}"${version ? ` ${version}` : ""}`,
   appQuoted: (app) => `"${app}"`,
   aboutServer: (address) => `Server: ${address}`,
   help: "Help",
@@ -1480,7 +1481,7 @@ export const englishStrings: UiStrings = {
   wizardSignOutTitle: "Sign out on this computer?",
   wizardSignOutBody: "The sign-in ends at the server and on this computer.",
   wizardRemoveTitle: "Remove this AI from this computer?",
-  wizardRemoveBody: "Its key is deleted from this computer's key store.",
+  wizardRemoveBody: "Its key is deleted from this device.",
   wizardDeleteChats: "Also delete the chats kept on this computer",
   // the skill library, the editor and "Draft from this chat" (sdk/51 F04)
   skillLibraryTitle: "Skills on this device",
@@ -1771,7 +1772,7 @@ export const englishStrings: UiStrings = {
   webSearchUrlHelp: "The address of your SearXNG instance, with its JSON format turned on.",
   webSearchUrlMissing: "Enter the address of your SearXNG instance.",
   webSearchUrlRefused: "Use an https address, or http on this computer only, without a user name or password.",
-  webSearchKeptStore: "The key is kept encrypted in this device’s key store and is never shown again.",
+  webSearchKeptStore: "The key is kept encrypted on this device and is never shown again.",
   webSearchPrivacy: "A search sends the words of the query outside your organisation. The assistant asks first, unless it is set to Auto.",
   webSearchSave: "Save",
   webSearchCancel: "Cancel",

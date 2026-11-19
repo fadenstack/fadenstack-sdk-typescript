@@ -105,7 +105,7 @@ describe("aboutView", () => {
     const about = aboutView(facts, englishStrings);
     expect(about.agent).toBe("Contract helper");
     expect(about.agentDetails).toEqual(["Version 3", "Model: qwen3.8-27b-fp8"]);
-    expect(about.environment).toEqual(["Runs in the app \"Word add-in 1.4.0\"", "Fadenstack SDK 0.2.0-rc.3 (TypeScript)", "Server: https://ai.example.internal"]);
+    expect(about.environment).toEqual(["Runs in the app \"Word add-in\" 1.4.0", "Fadenstack SDK 0.2.0-rc.3 (TypeScript)", "Server: https://ai.example.internal"]);
     expect(about.links).toEqual([
       { label: "Help", href: "https://ai.example.internal/help/" },
       { label: "Fadenstack", href: "https://fadenstack.com/?ref=office-about&v=0.2" },
@@ -115,7 +115,7 @@ describe("aboutView", () => {
     expect(about.links.find((l) => l.label === "Help and contact")!.href).toBe("https://fadenstack.com/support/?ref=office-about&v=0.2");
     expect(aboutView(facts, germanStrings).links.some((l) => l.label === "Hilfe und Kontakt")).toBe(true);
     expect(about.text).toBe([
-      "Contract helper", "Version 3", "Model: qwen3.8-27b-fp8", "Runs in the app \"Word add-in 1.4.0\"", "Fadenstack SDK 0.2.0-rc.3 (TypeScript)",
+      "Contract helper", "Version 3", "Model: qwen3.8-27b-fp8", "Runs in the app \"Word add-in\" 1.4.0", "Fadenstack SDK 0.2.0-rc.3 (TypeScript)",
       "Server: https://ai.example.internal",
     ].join("\n"));
   });
@@ -179,7 +179,7 @@ describe("AgentChatViewModel's About", () => {
     const about = chat.about;
     expect(about.agent).toBe("Page assistant");
     expect(about.agentDetails).toEqual(["Version 4", "Model: qwen3.8-27b-fp8"]);
-    expect(about.environment).toEqual(["Runs in the app \"Chrome extension 1.3.0\"", `Fadenstack SDK ${SDK_VERSION} (TypeScript)`, `Server: ${gateway.serverUrl}`]);
+    expect(about.environment).toEqual(["Runs in the app \"Chrome extension\" 1.3.0", `Fadenstack SDK ${SDK_VERSION} (TypeScript)`, `Server: ${gateway.serverUrl}`]);
     expect(about.links.map((l) => l.href)).toEqual([
       `${gateway.serverUrl}/help/`,
       `https://fadenstack.com/?ref=chrome-about&v=${sdkMinor}`,
@@ -203,7 +203,7 @@ describe("AgentChatViewModel's About", () => {
     const { chat, clipboard, gateway } = await chatWith({}, { name: "Word add-in", version: "1.4.0" });
     await chat.initialize();
     expect(await chat.copyAboutDetails()).toBe(true);
-    expect(clipboard.lastText).toBe(["Page assistant", "Version 1", "Model: fake-model", "Runs in the app \"Word add-in 1.4.0\"",
+    expect(clipboard.lastText).toBe(["Page assistant", "Version 1", "Model: fake-model", "Runs in the app \"Word add-in\" 1.4.0",
       `Fadenstack SDK ${SDK_VERSION} (TypeScript)`, `Server: ${gateway.serverUrl}`].join("\n"));
     const refusing: Clipboard = { setText: () => Promise.reject(new Error("No focus.")) };
     const second = await chatWith({ clipboard: refusing });
