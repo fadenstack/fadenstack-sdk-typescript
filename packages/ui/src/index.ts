@@ -34,6 +34,27 @@ export {
   type AboutView,
   type PanelLink,
 } from "./about.js";
+export {
+  MAILTO_MAX_LENGTH,
+  RECENT_LOG_ENTRIES,
+  buildReport,
+  currentSystem,
+  describeSystem,
+  encodeComponent,
+  errorForReport,
+  recentLogLines,
+  reportLabels,
+  reportTime,
+  supportAddress,
+  type ReportFacts,
+  type ReportInput,
+  type ReportLabels,
+  type ReportMail,
+  type ReportProblemView,
+  type ReportedError,
+  type SystemEnvironment,
+} from "./reportProblem.js";
+export { DEFAULT_SUPPORT_EMAIL, isSupportEmail } from "@fadenstack/agents";
 export { CSV_BOM, csvField, csvFileName, rowsToCsv, tableToCsv } from "./csv.js";
 export { chatFileName, chatToMarkdown, type ChatExportInput } from "./export.js";
 export type { FileToSave, SaveFile } from "./files.js";

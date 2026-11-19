@@ -157,6 +157,45 @@ export interface UiStrings {
   /** The link to Fadenstack's help and contact page. */
   helpAndContact: string;
   copyDetails: string;
+  // Report a problem (0.3.1): the sheet, the mail's labels and its subject; values in the mail are never translated
+  /** The sheet's title, About's button and the failed turn's link. */
+  reportProblem: string;
+  /** "This goes to support@fadenstack.com." */
+  reportGoesTo(address: string): string;
+  /** Governed without a support address: no mail is offered. */
+  reportAskIt: string;
+  /** Above the preview of what the report holds. */
+  reportContains: string;
+  reportNoChats: string;
+  reportWriteMail: string;
+  /** The subject with the app named: "Problem with Word add-in 1.2.0" (the SDK's name follows in brackets). */
+  reportSubject(app: string): string;
+  /** The subject when the host did not describe its app: "Problem with Fadenstack SDK 0.3.1". */
+  reportSubjectNoApp(version: string): string;
+  reportWhatHappened: string;
+  reportApp: string;
+  reportSdk: string;
+  reportSystem: string;
+  reportMode: string;
+  reportAgent: string;
+  reportServer: string;
+  reportEndpoint: string;
+  reportTime: string;
+  reportError: string;
+  /** The first line of "Copy details": the address. */
+  reportTo: string;
+  /** The second line of "Copy details": the subject. */
+  reportSubjectLabel: string;
+  /** The heading of the browser log's last entries in "Copy details". */
+  reportRecentLog: string;
+  /** The mail's Mode line for an agent on an organisation's server. */
+  reportModeGoverned: string;
+  /** The mail's Mode line for an agent on the person's own AI. */
+  reportModeOwnAi: string;
+  /** Where the own endpoint is, after its kind: "ollama, on this computer". */
+  reportPlaceThisComputer: string;
+  reportPlaceLocalNetwork: string;
+  reportPlaceInternet: string;
   /** After a link's name, for screen readers: the panel's links open in a new tab. */
   opensInNewTab: string;
   close: string;
@@ -1076,6 +1115,32 @@ export const englishStrings: UiStrings = {
   developerDocs: "Developer docs",
   helpAndContact: "Help and contact",
   copyDetails: "Copy details",
+  reportProblem: "Report a problem",
+  reportGoesTo: (address) => `This goes to ${address}.`,
+  reportAskIt: "Ask your organisation's IT for help. You can copy the details below for them.",
+  reportContains: "This report contains:",
+  reportNoChats: "Nothing from your chats is included.",
+  reportWriteMail: "Write mail",
+  reportSubject: (app) => `Problem with ${app}`,
+  reportSubjectNoApp: (version) => `Problem with Fadenstack SDK ${version}`,
+  reportWhatHappened: "What happened",
+  reportApp: "App",
+  reportSdk: "SDK",
+  reportSystem: "System",
+  reportMode: "Mode",
+  reportAgent: "Agent",
+  reportServer: "Server",
+  reportEndpoint: "Endpoint",
+  reportTime: "Time",
+  reportError: "Error",
+  reportTo: "To",
+  reportSubjectLabel: "Subject",
+  reportRecentLog: "Recent log",
+  reportModeGoverned: "Governed",
+  reportModeOwnAi: "Own AI",
+  reportPlaceThisComputer: "on this computer",
+  reportPlaceLocalNetwork: "in the local network",
+  reportPlaceInternet: "on the internet",
   opensInNewTab: "(opens in a new tab)",
   close: "Close",
   send: "Send",
