@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { EndpointDialect, FadenstackClient, loginWithPassword } from "@fadenstack/client";
 import {
-  AgentDefinition, ApprovalDecision, FadenstackAgent, IndexedDbAppRecords, STANDALONE_PRINCIPAL, userStoreName,
+  AgentDefinition, ApprovalDecision, BROWSER_LOG_DATABASE, FadenstackAgent, IndexedDbAppRecords, STANDALONE_PRINCIPAL, userStoreName,
   type DataDeletion,
 } from "@fadenstack/agents";
 import { FakeGateway, OpenAiFake } from "@fadenstack/testing";
@@ -114,6 +114,29 @@ describe("my data per app", () => {
     expect(deletion.scope).toBe("thisApp");
     expect(deletion.otherApps).toEqual([APP_B]);
     expect((await b.listSessions()).length).toBe(1);
+  });
+
+  it("this app's removal takes the person's browser log too, while the shared data stays for the other app", async () => {
+    const gw = gateway();
+    const { client, tokens } = FadenstackClient.forAgent({ serverUrl: gw.serverUrl, agent: AGENT_A, fetch: gw.fetch });
+    await tokens.signIn(await loginWithPassword({ apiUrl: gw.serverUrl, email: "anna@example.com", password: "secret", fetch: gw.fetch }));
+    const builder = FadenstackAgent.createBuilder().useClient(client).useApprovals(() => Promise.resolve(ApprovalDecision.approveAlways()))
+      .describeApp({ name: APP_A }).useBrowserLog();
+    const log = builder.browserLog!;
+    const a = builder.build();
+    const b = await app(gw, AGENT_B, APP_B);
+    await seedOwn(a, "A's chat");
+    await seedOwn(b, "B's chat");
+    await seedShared();
+    await a.flush();
+    await log.flush();
+    expect(await has(db(BROWSER_LOG_DATABASE))).toBe(true);
+
+    const deletion = await a.deleteMyData();
+
+    expect(deletion).toMatchObject({ scope: "thisApp", otherApps: [APP_B], sharedDataKept: true });
+    expect(await has(db(BROWSER_LOG_DATABASE))).toBe(false);
+    for (const name of SHARED) expect(await has(name)).toBe(true);
   });
 
   it("by default the removal takes this app's data and leaves the other app and the shared data", async () => {

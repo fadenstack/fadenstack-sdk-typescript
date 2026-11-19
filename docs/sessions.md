@@ -105,7 +105,7 @@ clears the shared databases of an older SDK. The result:
 
 | Field | What it is |
 |---|---|
-| `storesCleared` | How many of the SDK's IndexedDB databases existed and were removed (at most nine), plus the person's `localStorage` keys removed. Stores in memory are simply dropped. The .NET SDK reports folders (`FoldersRemoved`). |
+| `storesCleared` | How many of the SDK's IndexedDB databases existed and were removed (at most twelve), plus the person's `localStorage` keys removed. Stores in memory are simply dropped. The .NET SDK reports folders (`FoldersRemoved`). |
 | `hostSessionStoreLeft`, `hostApprovalStoreLeft` | A store you passed with `useSessionStore` / `useApprovalStore` is **not** deleted: it may hold other people's data. The flag says it was left. |
 | `hostStoresLeft` | Either of them: the person's data may still be in a store the host keeps. Delete their part there. |
 

@@ -1247,11 +1247,20 @@ export class FadenstackAgent implements AgentSwitch {
     });
     if (scope === "allApps") return result(await this.#deleteEverything(principal, true), { scope, otherApps: [], agentsKept: [] });
     if (!principal) {
-      return result(await this.#deleteOwn(this.#noUserPlan()), { scope, otherApps: [], agentsKept: [] });
+      return result(await this.#deleteOwn(this.#noUserPlan()) + await this.#deleteLog(undefined), { scope, otherApps: [], agentsKept: [] });
     }
     const plan = await this.#myDataPlan();
-    const cleared = plan.sharedGoes ? await this.#deleteEverything(principal) : await this.#deleteOwn(plan, true);
+    const cleared = plan.sharedGoes ? await this.#deleteEverything(principal) : await this.#deleteOwn(plan, true) + await this.#deleteLog(principal);
     return result(cleared, { scope, otherApps: plan.otherApps.map((a) => a.name), agentsKept: plan.keptAgents });
+  }
+
+  /**
+   * The person's browser log (`useBrowserLog`), with every removal, this app's too: it records what this person's agents did and holds
+   * nothing anyone needs back. Its connection is closed first (an open database blocks its deletion); the next entry opens a new one.
+   */
+  async #deleteLog(principal: AgentPrincipal | undefined): Promise<number> {
+    await this.settings.browserLog?.release();
+    return globalThis.indexedDB && await deleteDatabase(globalThis.indexedDB, userDatabaseNames(principal).log) ? 1 : 0;
   }
 
   /** The whole of the person's data: their databases (their key with them) and their `localStorage` keys. */

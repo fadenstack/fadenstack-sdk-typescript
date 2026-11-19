@@ -17,8 +17,9 @@ import { deletePersonalLocalEntries, pageLocalStorage, personalLocalEntries, use
  */
 export interface DataDeletion {
   /**
-   * How many of the person's things the SDK removed: their IndexedDB databases that existed (up to eight: sessions, "Allow always",
-   * their key, preferences, provenance, skills, skill switches, MCP servers) and their `localStorage` keys (the panel's language
+   * How many of the person's things the SDK removed: their IndexedDB databases that existed (up to twelve: sessions, "Allow always",
+   * their key, preferences, provenance, skills, skill switches, MCP servers, web search, apps, the record of tool calls, the browser
+   * log) and their `localStorage` keys (the panel's language
    * and notice, the saved prompts; one count per key), plus what the host's own data held (`HostData`).
    */
   storesCleared: number;
