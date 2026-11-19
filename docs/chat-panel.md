@@ -114,7 +114,8 @@ Call `chat.dispose()` when you remove the panel. It stops a running turn and sto
 
 - **The answer streams as Markdown**: headings, lists, code blocks with a copy button, tables with a copy button,
   quotes and links. It is built as elements, never as HTML: HTML in an answer shows as text. Links open only for
-  `http`, `https` and `mailto` addresses.
+  `http` and `https` addresses; a `mailto:` or any other address in an answer shows as text, so an answer cannot open the
+  person's mail app with a prepared draft (since 0.3.1; "Report a problem" opens its own mail link).
 - **Quotes and list items hold blocks**, three levels deep: a table, a list or a code block inside a quote or an item
   is drawn as one. A quote, a list item or a Markdown preview inside three others does not nest further: the content of
   a container at the third level is one block of plain text, with its markup as typed (a thousand `>` cost three levels,

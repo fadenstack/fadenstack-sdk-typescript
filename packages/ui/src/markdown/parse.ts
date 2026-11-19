@@ -8,7 +8,10 @@ export interface PlacedBlock {
   offset: number;
 }
 
-const SAFE_LINK = /^(https?:|mailto:)/i;
+// Only web addresses become links: text from a model, a skill or an import must not open the person's mail app with a
+// prefilled draft, a file or another program (OWASP ASVS 5.0 V1.2; OWASP LLM05). "Report a problem" opens its own mailto: link
+// through the host's openLink, not through Markdown. .NET: the same rule (PanelLinkPolicy.OpensFromAnswer).
+const SAFE_LINK = /^https?:/i;
 
 /** Markdown (GitHub's flavour) as blocks, with each block's offset in `source`. */
 export function parseBlocks(source: string, keyPrefix = "b"): PlacedBlock[] {

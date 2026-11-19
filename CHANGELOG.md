@@ -27,6 +27,9 @@ before 1.0, a minor version may break the API, and this file says where it does.
 
 ### Security
 
+- **Links in an answer open only for `http` and `https`.** A `mailto:` (an e-mail address too), `file:` or any other address
+  in Markdown shows as text, so text from a model, a skill or an import cannot open the person's mail app with a prepared
+  draft (OWASP ASVS 5.0 V1.2; OWASP LLM05). "Report a problem" opens its own mail link. The .NET SDK has the same rule.
 - The CSV of a table download (`@fadenstack/ui`) and the CSV export of the record of tool calls (`@fadenstack/agents`) now put a cell with a semicolon in quotes, and put a leading apostrophe before `=`, `+`, `-`, `@`, tab or carriage return not only at the start of a cell but also after a `;` or `,` inside it. Excel in a German, French or Spanish locale splits a double-clicked CSV at `;`, so text after one could start a cell with `=` and run as a formula. OWASP ASVS 5.0 V1 (output encoding, 1.2.10).
 - A governed server that names both tenant and user `standalone` no longer gets the stores of the person's own AI (`...:standalone:standalone`: chats, keys, skills, `localStorage` entries), and can no longer make "Remove my data" delete them. That person's stores are now `...:standalone:governed:standalone`; the standalone stores do not move, and no other person's stores change. OWASP ASVS 5.0 V8 (data protection: separation of one person's data from another's).
 
