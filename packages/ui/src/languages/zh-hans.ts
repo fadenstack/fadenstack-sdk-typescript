@@ -821,7 +821,7 @@ export const chineseSimplifiedStrings: UiStrings = {
   chatRetentionPolicyFixed: "由您的组织在此电脑上的策略设定。",
   contentLoggingTitle: "内容日志记录",
   contentLoggingBand: (time) => `内容日志记录已开启，截止到 ${time}。提示词和回答会写入应用的日志。`,
-  contentLoggingIntro: "开启期间，提示词和回答会写入此应用的日志。时间到或应用重启时，它会自动关闭。已写入的内容会保留在应用的日志中，直到应用将其删除；“删除我的数据”会在应用通过 SDK 保存日志的位置将其删除。",
+  contentLoggingIntro: "开启期间，提示词和回答会写入此应用的日志。时间到或应用重启时，它会自动关闭。已写入的内容会保留在应用的日志中，直到应用将其删除。",
   contentLoggingDuration: "开启时长",
   contentLoggingOneHour: "1 小时",
   contentLoggingFourHours: "4 小时",

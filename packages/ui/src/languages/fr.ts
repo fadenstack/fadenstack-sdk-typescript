@@ -826,7 +826,7 @@ export const frenchStrings: UiStrings = {
   chatRetentionPolicyFixed: "Défini par la politique de votre organisation sur cet ordinateur.",
   contentLoggingTitle: "Journalisation du contenu",
   contentLoggingBand: (time) => `La journalisation du contenu est activée jusqu'à ${time}. Les prompts et les réponses sont écrits dans les journaux de l'application.`,
-  contentLoggingIntro: "Tant qu'elle est activée, les prompts et les réponses sont écrits dans les journaux de cette application. Elle s'arrête d'elle-même à la fin du délai et au redémarrage de l'application. Ce qui a été écrit reste dans les journaux de l'application jusqu'à ce qu'elle le supprime ; « Supprimer mes données » le supprime là où l'application tient ses journaux avec le SDK.",
+  contentLoggingIntro: "Tant qu'elle est activée, les prompts et les réponses sont écrits dans les journaux de cette application. Elle s'arrête d'elle-même à la fin du délai et au redémarrage de l'application. Ce qui a été écrit reste dans les journaux de l'application jusqu'à ce qu'elle le supprime.",
   contentLoggingDuration: "Activer pour",
   contentLoggingOneHour: "1 heure",
   contentLoggingFourHours: "4 heures",
