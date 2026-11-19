@@ -444,7 +444,7 @@ export const chineseSimplifiedStrings: UiStrings = {
   wizardPlainHttpConfirm: "仍然使用",
   wizardKeyTitle: "密钥",
   wizardKeyLabel: "API 密钥",
-  wizardKeyHelp: "密钥保存在此计算机的密钥存储中，绝不保存在文件里。",
+  wizardKeyHelp: "密钥以加密形式保存在此设备上，绝不保存在设置或日志中。",
   wizardOwnChecking: "正在检查连接…",
   wizardProblem: {
     Unreachable: "无法连接到服务器。它是否在运行，地址是否正确？",

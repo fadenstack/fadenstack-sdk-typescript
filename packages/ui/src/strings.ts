@@ -1432,7 +1432,7 @@ export const englishStrings: UiStrings = {
   wizardPlainHttpConfirm: "Use it anyway",
   wizardKeyTitle: "The key",
   wizardKeyLabel: "API key",
-  wizardKeyHelp: "The key is kept in this computer's key store, never in a file.",
+  wizardKeyHelp: "The key is kept encrypted on this device, never in the settings or a log.",
   wizardOwnChecking: "Checking the connection…",
   wizardProblem: {
     Unreachable: "The server cannot be reached. Is it running, and is the address right?",

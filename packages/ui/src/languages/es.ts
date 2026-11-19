@@ -448,7 +448,7 @@ export const spanishStrings: UiStrings = {
   wizardPlainHttpConfirm: "Usarla de todos modos",
   wizardKeyTitle: "La clave",
   wizardKeyLabel: "Clave de API",
-  wizardKeyHelp: "La clave se guarda en el almacén de claves de este equipo, nunca en un archivo.",
+  wizardKeyHelp: "La clave se guarda cifrada en este dispositivo, nunca en los ajustes ni en un registro.",
   wizardOwnChecking: "Comprobando la conexión…",
   wizardProblem: {
     Unreachable: "No se puede acceder al servidor. ¿Está en marcha y es correcta la dirección?",

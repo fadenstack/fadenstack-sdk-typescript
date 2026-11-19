@@ -15,6 +15,7 @@ before 1.0, a minor version may break the API, and this file says where it does.
 ### Changed
 
 - The text of the content-logging setting (`contentLoggingIntro`, in English, German, French, Spanish and Simplified Chinese) now says that prompts and answers written while it was on stay in the app's logs until the app deletes them, and that "Remove my data" removes them where the app keeps its logs with the SDK. `docs/interop.md#content-logging` tells hosts to keep such content no longer than their logs' retention and to delete it with "Remove my data".
+- The connection wizard's key help (`wizardKeyHelp`, in English, German, French, Spanish and Simplified Chinese) no longer says the key is in "this computer's key store, never in a file", which is not true of every host (a browser keeps a non-extractable WebCrypto key in the profile's IndexedDB; the desktop an encrypted file). It now says: "The key is kept encrypted on this device, never in the settings or a log." A host's own key store must meet that sentence, or the host replaces the text (`docs/connecting.md`).
 
 ### Fixed
 

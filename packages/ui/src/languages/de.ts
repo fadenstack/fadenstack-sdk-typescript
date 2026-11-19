@@ -448,7 +448,7 @@ export const germanStrings: UiStrings = {
   wizardPlainHttpConfirm: "Trotzdem verwenden",
   wizardKeyTitle: "Der Schlüssel",
   wizardKeyLabel: "API-Schlüssel",
-  wizardKeyHelp: "Der Schlüssel wird im Schlüsselspeicher dieses Computers aufbewahrt, nie in einer Datei.",
+  wizardKeyHelp: "Der Schlüssel wird verschlüsselt auf diesem Gerät aufbewahrt, nie in den Einstellungen oder in einem Protokoll.",
   wizardOwnChecking: "Die Verbindung wird geprüft…",
   wizardProblem: {
     Unreachable: "Der Server ist nicht erreichbar. Läuft er, und stimmt die Adresse?",

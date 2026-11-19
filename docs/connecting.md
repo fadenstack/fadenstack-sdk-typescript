@@ -44,7 +44,11 @@ its own step, and its own words in five languages.
 
 **Use my own AI.** The person reads where their data goes, the provider's terms and the standalone notice, and ticks
 the consent box, which starts unticked. The wizard keeps an acceptance record: terms version, time, language and mode.
-The person picks a preset or types an address. A key goes straight into the key store. Plain http goes only:
+The person picks a preset or types an address. A key goes straight into the key store. The wizard's help text under the key field says "The key is kept encrypted on this device,
+never in the settings or a log." (in en, de, fr, es and zh-Hans: `wizardKeyHelp`). That is what the SDK's own protection does in a
+browser: a non-extractable WebCrypto key in the profile's IndexedDB, not an operating-system key store. A host that supplies its own
+`EndpointKeyStore` (an OS key store, an encrypted file) must meet that sentence, or replace the text with its own `wizardKeyHelp`.
+Plain http goes only:
 - to this computer (`localhost`, `127.0.0.1`, `[::1]`), where a key may go too;
 - to the local network after the person confirms it, and never with a key.
 
@@ -68,7 +72,7 @@ what works, what limits the connection and whether it watermarks text. Last, the
 | Contract | What it is |
 |---|---|
 | `ConnectionStore` | Where the app keeps the connection (`chrome.storage`): the server, the result, the acceptance record, and sign-out. Never a key or a token. |
-| `EndpointKeyStore` | The key store for endpoint keys (a WebCrypto key). `save` returns a token provider that reads the key when a request needs it. |
+| `EndpointKeyStore` | The key store for endpoint keys (a WebCrypto key). It must keep the key encrypted on the device and out of the settings and logs, as the wizard's key help says; a store that cannot say so replaces `wizardKeyHelp`. `save` returns a token provider that reads the key when a request needs it. |
 | `WizardStepHandler` | The app's own steps, at four points: `beforeChoice`, `beforeServerCheck`, `beforeEndpointCheck`, `afterConnect`. A step that says no stops the flow. |
 | `WizardOptions` | What the app offers, its agents and the required ones, the password fallback, whether it can search this computer, the terms version, the machine policy, the pairing keeper. |
 | `createServerSignIn`, `createEndpointChecker` | The default server and endpoint sides over the client. Tests pass fakes. |

@@ -449,7 +449,7 @@ export const frenchStrings: UiStrings = {
   wizardPlainHttpConfirm: "Utiliser quand même",
   wizardKeyTitle: "La clé",
   wizardKeyLabel: "Clé d'API",
-  wizardKeyHelp: "La clé est conservée dans le magasin de clés de cet ordinateur, jamais dans un fichier.",
+  wizardKeyHelp: "La clé est conservée chiffrée sur cet appareil, jamais dans les paramètres ni dans un journal.",
   wizardOwnChecking: "Vérification de la connexion…",
   wizardProblem: {
     Unreachable: "Le serveur est injoignable. Est-il en marche, et l'adresse est-elle correcte ?",
