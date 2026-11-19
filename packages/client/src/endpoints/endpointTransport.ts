@@ -1,6 +1,7 @@
 import type { TokenProvider } from "../auth/tokens.js";
 import { FadenstackApiError, FadenstackError, FadenstackRateLimitedError } from "../errors.js";
 import { parseError, retryAfterMs } from "../http/errorReader.js";
+import { routeTemplate } from "../http/routeTemplate.js";
 import type { FetchLike } from "../http/transport.js";
 import { ClientLog, writeLog, type FadenstackLogger } from "../logging.js";
 import type { ModelEndpoint } from "./endpoint.js";
@@ -106,7 +107,7 @@ export class EndpointTransport {
         if (this.dialect.keyHeader === "ApiKey") headers.set("api-key", key);
         else headers.set("authorization", `Bearer ${key}`);
       }
-      const route = url.pathname;
+      const route = routeTemplate(url);
       const started = performance.now();
       let response: Response;
       try {

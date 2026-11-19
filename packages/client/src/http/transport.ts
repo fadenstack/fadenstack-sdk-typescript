@@ -2,6 +2,7 @@ import type { TokenProvider } from "../auth/tokens.js";
 import { FadenstackApiError, FadenstackError, FadenstackHttpsRequiredError, FadenstackUnreachableError } from "../errors.js";
 import { ClientLog, writeLog, type FadenstackLogger } from "../logging.js";
 import { toApiError } from "./errorReader.js";
+import { routeTemplate } from "./routeTemplate.js";
 
 /** A `fetch` -- the global one, a test's, or one with the host's own settings. */
 export type FetchLike = (input: string | URL | Request, init?: RequestInit) => Promise<Response>;
@@ -170,11 +171,11 @@ export class FadenstackTransport {
         response = await this.fetch(spec.url, init);
       } catch (error) {
         if (signal.aborted) throw signal.reason ?? error;
-        writeLog(this.#logger, ClientLog.requestFailed, { Method: spec.method, Route: spec.url.pathname,
+        writeLog(this.#logger, ClientLog.requestFailed, { Method: spec.method, Route: routeTemplate(spec.url),
           ErrorType: error instanceof Error ? error.name : typeof error, DurationMs: Math.round(performance.now() - started), Attempt: attempt + 1 });
         throw new FadenstackUnreachableError(`Fadenstack could not be reached: ${describe(error)}`, { cause: error });
       }
-      writeLog(this.#logger, ClientLog.request, { Method: spec.method, Route: spec.url.pathname, Status: response.status,
+      writeLog(this.#logger, ClientLog.request, { Method: spec.method, Route: routeTemplate(spec.url), Status: response.status,
         DurationMs: Math.round(performance.now() - started), Attempt: attempt + 1 });
       // A step-up challenge (RFC 9470: a fresh sign-in is needed, `bypass_step_up_required`) is not a bad token: no
       // refresh and no second request -- it goes to the caller, who starts the second sign-in.
