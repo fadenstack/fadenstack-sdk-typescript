@@ -4,21 +4,35 @@ This page lists the features of the TypeScript SDK next to the .NET SDK's: one r
 
 This table is for SDK 0.3.0, against Fadenstack server 0.7.1. TypeScript names are camelCase and have no `Async` suffix; durations are milliseconds where .NET has `TimeSpan`. A dash means the SDK has no such feature, and the last column says why.
 
+## Packages
+
+| Feature | .NET | TypeScript | Where a browser differs |
+|---|---|---|---|
+| Server connection | `Fadenstack.Client` | `@fadenstack/client` | |
+| The agent | `Fadenstack.Agents` | `@fadenstack/agents` | |
+| View models of the chat | `Fadenstack.UI` | `@fadenstack/ui` | |
+| The skin of the chat | `Fadenstack.UI.Wpf`, `Fadenstack.UI.Avalonia` | `@fadenstack/ui-web` (the look), `@fadenstack/ui-react`, `@fadenstack/ui-vue` | |
+| Local MCP servers | `Fadenstack.Mcp` | `@fadenstack/mcp` | A browser starts no program: over HTTP only, no stdio, no scan ([Local MCP servers](local-mcp.md)). |
+| Delegation between agents on one device | `Fadenstack.Agents.Delegation` (a preview, on the fadenstack organisation's GitHub Packages feed, not on nuget.org: [Delegating to agents](../dotnet/delegation.md)) | — | A browser has no local pipe. A TypeScript A2A client comes later. |
+| Content provenance | `Fadenstack.Provenance` | `@fadenstack/provenance` | |
+| Encryption at rest on macOS and Linux | `Fadenstack.Secrets` | — | A browser encrypts its stores with a WebCrypto key ([Sessions and a person's data](#sessions-and-a-persons-data)). |
+| Test helpers | Seams and the provenance kit | `@fadenstack/testing` (`FakeGateway`) | |
+
 ## Connection and sign-in
 
 | Feature | .NET | TypeScript | Where a browser differs |
 |---|---|---|---|
-| The client for an agent | `FadenstackClient.ForAgent(serverUrl, agent, out tokens, store)` | `FadenstackClient.forAgent({ serverUrl, agent, store })`, which returns `{ client, tokens }` | |
-| Agent sign-in | `AgentTokenProvider`, `SignInAsync(loginToken, deviceLabel)` | `AgentTokenProvider`, `signIn(loginToken, deviceLabel)` | |
-| Password login | `PasswordLogin.LoginAsync` | `loginWithPassword({ apiUrl, email, password })` | |
+| A client for one agent | `FadenstackClient.ForAgent(serverUrl, agent, out tokens, store)` | `FadenstackClient.forAgent({ serverUrl, agent, store })`, which returns `{ client, tokens }` | |
+| Sign in with a login token | `AgentTokenProvider`, `SignInAsync(loginToken, deviceLabel)` | `AgentTokenProvider`, `signIn(loginToken, deviceLabel)` | |
+| A login token from a password | `PasswordLogin.LoginAsync` | `loginWithPassword({ apiUrl, email, password })` | |
 | Where the sign-in is kept | `FileTokenStore` (default; DPAPI on Windows), `MemoryTokenStore`, `ITokenStore` | `MemoryTokenStore` (default), your own `TokenStore` | No file by default: a store over `chrome.storage` in an extension, over a file in Node. |
 | Sign in by pairing | `AgentPairing`: `StartAsync`, `WaitAsync`, `RedeemAsync` | `AgentPairing`: `start`, `wait`, `redeem` | |
-| One pairing for several agents | `PairingStart.Agents`, `AgentsLeft`, `FadenstackPairingAgentException` | `PairingStart.agents`, `ignoredAgents`, `FadenstackPairingAgentError` | |
-| The sign-in page on the server's own address | Refused otherwise, with `FadenstackPairingPageElsewhereException` | Refused otherwise, with `FadenstackPairingPageElsewhereError` | |
-| Typed sign-in errors | `FadenstackUnreachableException`, `ServerCertificateException`, `FadenstackHttpsRequiredException` (an `ArgumentException`), `FadenstackBadCredentialsException` | `FadenstackUnreachableError`, `FadenstackHttpsRequiredError` (a `TypeError`), `FadenstackBadCredentialsError` | No certificate error: a browser does not say whether the certificate was the reason, so it is `FadenstackUnreachableError`. |
+| Several agents with one approval | `PairingStart.Agents`, `AgentsLeft`, `FadenstackPairingAgentException` | `PairingStart.agents`, `ignoredAgents`, `FadenstackPairingAgentError` | |
+| The sign-in page must be the server's own | Refused otherwise, with `FadenstackPairingPageElsewhereException` | Refused otherwise, with `FadenstackPairingPageElsewhereError` | |
+| Denied, expired, agent not redeemable | `FadenstackPairingDeniedException`, `FadenstackPairingExpiredException`, `FadenstackPairingAgentException` | `FadenstackPairingDeniedError`, `FadenstackPairingExpiredError`, `FadenstackPairingAgentError` | |
 | Is it a Fadenstack server (the wizard's Checking) | `ServerCheck.CheckAsync(server, http, allowInsecureHttp, trustedCaCertificate)`, `ServerCheck.Timeout` | `checkServer({ server, fetch, signal, allowInsecureHttp })`, `SERVER_CHECK_TIMEOUT_MS` | No `trustedCaCertificate`: the platform's trust decides. |
-| The connection wizard's view model (F15, I15) | `Fadenstack.UI.Wizard.ConnectionWizardViewModel` (commands as `RelayCommand`s), `WizardOptions`, `IConnectionStore`, `IEndpointKeyStore`, `IWizardStep`, `IServerSignIn`, `IEndpointChecker`, `IWizardClock`, `ServerSignIn`, `EndpointChecker`, `SystemWizardClock` | `ConnectionWizardViewModel` (commands as methods, availability in `can`, change events through `subscribe`/`onCompleted`), `WizardOptions`, `ConnectionStore`, `EndpointKeyStore`, `WizardStepHandler`, `ServerSignIn`, `EndpointChecker`, `WizardClock`, `createServerSignIn`, `createEndpointChecker`, `createSystemClock`; enums are frozen consts (`WizardStep`, ...) in camelCase strings; the texts: `services.strings` (`UiStrings`, English by default) with `strings`, `addressErrorText`, `startFailureText`, `passwordFailureText`, `problemText`, `waitingText`, `signedInText`, `resultLines`, `connectedText` | No UI thread, so no dispatcher. **The wizard's 137 texts** (`wizard…` in `UiStrings`) are the .NET texts in five languages, copied from the resx; the four enum-keyed ones are records keyed by the TS enums' values, and the countdown takes milliseconds (`wizardWaiting(leftMs)`, `m:ss`). `EndpointChecker.placeOf` answers at once (no name resolution) and there is no local search (`findLocal` finds nothing). **The app's step before an endpoint check runs inside the user gesture** (Chrome's `chrome.permissions.request`): before the command's first `await`, except after saving a key. **A pairing survives a closed side panel**: `WizardOptions.pairingKeeper` (`keep`, `restore`, `forget`; `chrome.storage.session`) with `AgentPairing.export` and `resume`; .NET has no such thing. **The views**: `ConnectionWizard` in `@fadenstack/ui-react` (the Chrome agent) and in `@fadenstack/ui-vue` (kept at parity, not used in 0.3.0), one narrow column with one view per `WizardStep`; a password or a key is read from an uncontrolled input when its button runs and cleared at once, and the app's steps are drawn through `renderAppStep` (React) or the `app-step` slot (Vue). |
-| A server too old for pairing (404, 405) | `FadenstackPairingUnsupportedException` | `FadenstackPairingUnsupportedError` | |
+| The connection wizard's view model | `Fadenstack.UI.Wizard.ConnectionWizardViewModel` (commands as `RelayCommand`s), `WizardOptions`, `IConnectionStore`, `IEndpointKeyStore`, `IWizardStep`, `IServerSignIn`, `IEndpointChecker`, `IWizardClock`, `ServerSignIn`, `EndpointChecker`, `SystemWizardClock` | `ConnectionWizardViewModel` (commands as methods, availability in `can`, change events through `subscribe`/`onCompleted`), `WizardOptions`, `ConnectionStore`, `EndpointKeyStore`, `WizardStepHandler`, `ServerSignIn`, `EndpointChecker`, `WizardClock`, `createServerSignIn`, `createEndpointChecker`, `createSystemClock`; enums are frozen consts (`WizardStep`, ...) in camelCase strings; the texts: `services.strings` (`UiStrings`, English by default) with `strings`, `addressErrorText`, `startFailureText`, `passwordFailureText`, `problemText`, `waitingText`, `signedInText`, `resultLines`, `connectedText` | No UI thread, so no dispatcher. **The wizard's 137 texts** (`wizard…` in `UiStrings`) are the .NET texts in five languages, copied from the resx; the four enum-keyed ones are records keyed by the TS enums' values, and the countdown takes milliseconds (`wizardWaiting(leftMs)`, `m:ss`). `EndpointChecker.placeOf` answers at once (no name resolution) and there is no local search (`findLocal` finds nothing). **The app's step before an endpoint check runs inside the user gesture** (Chrome's `chrome.permissions.request`): before the command's first `await`, except after saving a key. **A pairing survives a closed side panel**: `WizardOptions.pairingKeeper` (`keep`, `restore`, `forget`; `chrome.storage.session`) with `AgentPairing.export` and `resume`; .NET has no such thing. **The views**: `ConnectionWizard` in `@fadenstack/ui-react` (the Chrome agent) and in `@fadenstack/ui-vue` (kept at parity, not used in 0.3.0), one narrow column with one view per `WizardStep`; a password or a key is read from an uncontrolled input when its button runs and cleared at once, and the app's steps are drawn through `renderAppStep` (React) or the `app-step` slot (Vue). |
+| A server too old for pairing | `FadenstackPairingUnsupportedException` | `FadenstackPairingUnsupportedError` | |
 | Plain chat completions | `FadenstackClient` without an agent | `FadenstackClient` without an agent | |
 
 ## The agent
@@ -26,35 +40,39 @@ This table is for SDK 0.3.0, against Fadenstack server 0.7.1. TypeScript names a
 | Feature | .NET | TypeScript | Where a browser differs |
 |---|---|---|---|
 | The builder | `FadenstackAgent.CreateBuilder()`, `AgentBuilder` | `FadenstackAgent.createBuilder()`, `AgentBuilder` | |
-| Registering with the host's container | `AddFadenstackAgent` | None | No container: create the agent where the application starts. See [Hosting](hosting.md). |
-| Sessions, streaming a turn | `StartSessionAsync`, `OpenSessionAsync`, `StreamAsync`, `SendAsync` | `startSession`, `openSession`, `stream`, `send` | |
+| Dependency injection | `AddFadenstackAgent` | None | No container: create the agent where the application starts. See [Hosting](hosting.md). |
+| A turn | `StartSessionAsync`, `OpenSessionAsync`, `StreamAsync`, `SendAsync` | `startSession`, `openSession`, `stream`, `send` | |
+| Events of a turn | `TextDelta`, `ToolCallStarted`, `TurnCompleted`... | `{ type: "text" }`, `{ type: "tool_started" }`, `{ type: "turn_completed" }`... | |
 | Stopping a turn | A `CancellationToken` | An `AbortSignal` | |
 | Attachments, pictures, skills | `MessageAttachment`, `SendOptions` | `MessageAttachment`, `SendOptions` | |
 | Model rounds, history budget | `UseMaxRounds`, `UseHistoryBudget` | `useMaxRounds`, `useHistoryBudget` | |
 | Reporting to the server | `UseEventReporting`, `DescribeApp` | `useEventReporting`, `describeApp` (`displayNames` per language, for the panel's texts only; kept in the app record) | The app's name is quoted after "the app" in the panel's texts in every language (0.3.1). |
 | What the app reports about the device (manifest `device`) | `DescribePlugins`, `ManifestDevice`, `ManifestPlugin`, `ManifestMcpProgram`, `DeviceLimits` | `describePlugins`, `ManifestDevice`, `ManifestPlugin`, `ManifestMcpProgram`, `DEVICE_LIMITS` | `os` is the runtime's (TS: the browser's platform or Node's); TS never lists MCP programs: a browser starts none. |
-| Pin a local MCP server's program | `McpProgramPin`, `McpServerEntry.ProgramPin`, `McpHost.ConfirmNewProgramAsync` | none | The browser starts no program (http only). |
 | Outcomes, notices and errors | `AgentResult`, `FadenstackException` and its subclasses | `AgentResult`, `FadenstackError` and its subclasses | |
+| The user's language | `agent.SetUserLanguageAsync(tag)` | `agent.setUserLanguage(tag)` | |
 
 ## Tools and approvals
 
 | Feature | .NET | TypeScript | Where a browser differs |
 |---|---|---|---|
-| Declaring a host tool | `[AgentTool(ToolClass.Read)]` on a method, `AddTools` | `defineTool({ ..., toolClass: "read" })`, `addTools` | |
+| Host tools | `[AgentTool(ToolClass.Read)]` on a method, `AddTools` | `defineTool({ ..., toolClass: "read" })`, `addTools` | |
 | Tool classes and modes | `ToolClass`, `ToolMode` | `ToolClass`, `ToolMode` (`off`, `read_only`, `ask`, `auto`, `bypass`) | |
-| The approval handler | `IApprovalHandler`, `ApprovalDecision` | `ApprovalHandler`, `ApprovalDecision` | |
-| The request names its session (S-1) | `ApprovalRequest.SessionId` | `ApprovalRequest.sessionId` | |
-| Allow always, per signed-in user | `IApprovalStore` | `ApprovalStore`: `IndexedDbApprovalStore`, `MemoryApprovalStore` | IndexedDB in a browser, memory in Node. |
-| Grants for a time and for a stretch of work | `AgentGrants`, `GrantPlace`, `OfferWorkAsync` | `AgentGrants`, `GrantPlace`, `offerWork` | |
-| Bypass and the second sign-in | `StartBypassAsync`, `IStepUpHandler`, `UsePermissionMode` | `startBypass`, `StepUpHandler`, `usePermissionMode` | `browserStepUp()` opens the page in a new tab. |
-| The grant lifecycle | `GrantLifecycle` | `GrantLifecycle` | |
+| Approvals | `IApprovalHandler`, `ApprovalDecision` | `ApprovalHandler`, `ApprovalDecision` | |
+| The request names its session | `ApprovalRequest.SessionId` | `ApprovalRequest.sessionId` | |
+| Allow always | `IApprovalStore` | `ApprovalStore`: `IndexedDbApprovalStore`, `MemoryApprovalStore` | IndexedDB in a browser, memory in Node. |
+| A grant for a time | `ApprovalDecision.ApproveFor(duration)` | `ApprovalDecision.approveFor(duration)` | |
+| A grant for a stretch of work | `session.OfferWorkAsync(places)`, `GrantPlace.Document`, `Folder`, `Site`, `App`, `Desk` | `session.offerWork(places)`, `GrantPlace.document/folder/site/app/desk` | The SDK resolves paths itself; in a browser the host supplies `useGrantPlaceResolver`. |
+| Grants the server holds | `agent.Grants` (`AgentGrants`) | `agent.grants` (`AgentGrants`) | |
+| Bypass | `session.StartBypassAsync()`, `StopBypassAsync()`, `UsePermissionMode(PermissionMode.Bypass)` | `session.startBypass()`, `stopBypass()`, `usePermissionMode("bypass")` | |
+| The second sign-in | `UseStepUpHandler`, `IStepUpHandler` | `useStepUpHandler`, `browserStepUp()` | The page opens in the system browser or a new window, never in an iframe. |
+| Keeping a grant from running unattended | `GrantLifecycle` | `GrantLifecycle` | |
 | Host commands | `InvokeToolAsync`, `StreamToolAsync`, `HostCommandOptions` | `invokeTool`, `streamTool`, `HostCommandOptions` | |
-| Fresh policy for the model's host calls | `RequireHostToolPolicyChecks`, `CheckHostToolAsync` | `requireHostToolPolicyChecks`, `checkHostTool` | |
-| The organisation's tools list | `ListToolsAsync` | `listTools` | |
-| Changing tool sources | `IChangingToolSource` | `ChangingToolSource` | |
-| Tools per conversation | `IToolScope` | `ToolScope` | |
-| Local MCP servers, `find_tool` | `Fadenstack.Mcp`: `AddLocalMcp`, `LocalMcpModule`, `LocalMcpServer.Stdio` and `.Http`, `ILocalMcpPolicy`, `McpServerStatus` | `@fadenstack/mcp`: `mcpModule(options)` (`McpModule`, named `mcp.local`), `coreLocalMcpPolicy`, `McpServerStatus` with `protocolVersion`; the tool search is `OnRequestTools`' | **HTTP only in a browser:** it cannot start a process, so there are no stdio servers and no loopback scan (the .NET module does both). The client is `@modelcontextprotocol/client` 2.4.0, main entry only (never `/stdio`), `versionNegotiation: { mode: 'auto' }`: 2026-07-28 first, 2025-11-25 as the fallback. No roots, no questions to the person (elicitation) and no progress events yet (.NET has them), and never sampling. A server needs CORS that allows `MCP-Protocol-Version`, `Mcp-Method`, `Mcp-Name` and `Mcp-Session-Id`. See [Local tools](local-tools.md). |
-| The hint rule (H4) and the person's servers | The desktop's `McpServerStore` (a file), moving into `Fadenstack.Mcp` (D14) | `toolClassFor`; `McpServerStore` (`IndexedDbMcpServerStore`: IndexedDB per principal, header values sealed with the principal's WebCrypto key, deleted by `deleteMyData`); `parseMcpConfig` and `McpModule.importConfig` (the `mcpServers` key, VS Code's `servers` key; stdio entries are listed as not possible in a browser; everything arrives off) | A tool arrives unclassified; `destructiveHint: true` from any server makes it destructive; a `readOnlyHint` counts only from a server the person (standalone) or the administrator (governed, `trustedServers`) marked trusted; only they raise a tool to read or write; destructive stays a floor. Plain http only to this computer (a header with a token does not cross a network in the clear). |
+| Fresh policy for host calls | `RequireHostToolPolicyChecks`, `CheckHostToolAsync` | `requireHostToolPolicyChecks`, `checkHostTool` | |
+| The organisation's tools | `ListToolsAsync` | `listTools` | |
+| Tool sources that change | `IChangingToolSource` | `ChangingToolSource` | |
+| Tools in scope per conversation | `IToolScope` | `ToolScope` | |
+| Tools on request, `find_tool` | `Fadenstack.Mcp`: `AddLocalMcp`, `LocalMcpModule`, `LocalMcpServer.Stdio` and `.Http`, `ILocalMcpPolicy`, `McpServerStatus` | `@fadenstack/mcp`: `mcpModule(options)` (`McpModule`, named `mcp.local`), `coreLocalMcpPolicy`, `McpServerStatus` with `protocolVersion`; the tool search is `OnRequestTools`' | **HTTP only in a browser:** it cannot start a process, so there are no stdio servers and no loopback scan (the .NET module does both). The client is `@modelcontextprotocol/client` 2.4.0, main entry only (never `/stdio`), `versionNegotiation: { mode: 'auto' }`: 2026-07-28 first, 2025-11-25 as the fallback. No roots, no questions to the person (elicitation) and no progress events yet (.NET has them), and never sampling. A server needs CORS that allows `MCP-Protocol-Version`, `Mcp-Method`, `Mcp-Name` and `Mcp-Session-Id`. See [Local tools](local-tools.md). |
+| The hint rule and the person's servers | `McpServerStore` in `Fadenstack.Mcp` (a file) | `toolClassFor`; `McpServerStore` (`IndexedDbMcpServerStore`: IndexedDB per principal, header values sealed with the principal's WebCrypto key, deleted by `deleteMyData`); `parseMcpConfig` and `McpModule.importConfig` (the `mcpServers` key, VS Code's `servers` key; stdio entries are listed as not possible in a browser; everything arrives off) | A tool arrives unclassified; `destructiveHint: true` from any server makes it destructive; a `readOnlyHint` counts only from a server the person (standalone) or the administrator (governed, `trustedServers`) marked trusted; only they raise a tool to read or write; destructive stays a floor. Plain http only to this computer (a header with a token does not cross a network in the clear). |
 | The SDK's own tool names (`find_tool`, `load_skill`, `read_skill_resource`, `run_skill_script`, `web_search`) | `AgentTool.ReservedNames`; `AddTool`/`AddTools` refuse them (`ArgumentException`); a local MCP server's are left out | `RESERVED_TOOL_NAMES`; `addTools` and `OnRequestTools` refuse them (`TypeError`) | |
 | A tool source's tool whose name is taken | Left out (the app's tool wins, then the first source), logged (event 2017) | The same (event 2017) | |
 | Open-world calls ask below Auto | `ToolModes.Decide(mode, class, openWorld)`, `ToolModes.ConversationOnly`, `OpenWorldEnforced` true | `decideTool(mode, class, approval, openWorld)`, `conversationOnly`, `OPEN_WORLD_ENFORCED` true | |
@@ -63,6 +81,7 @@ This table is for SDK 0.3.0, against Fadenstack server 0.7.1. TypeScript names a
 | Approvals keyed by source, sealed | `StoredApproval.Source`, `Server`, `Covers`; `FileApprovalStore` seals each with an HMAC | `StoredApproval.source`, `server`, `approvalCovers`; IndexedDB seals each with the person's WebCrypto key | |
 | The approval floor (the never-skip list) | `ApprovalFloor` (`NeverSkipped`, `NotMarkedYet`, one constant per item, `DestructiveOrUnclassified`); [Approvals](approvals.md) | `ApprovalFloor` (`neverSkipped`, `notMarkedYet`, one key per item, `destructiveOrUnclassified`) | An MCP server's question: .NET passes it to the app (`LocalMcpModule.Ask`); the browser's MCP client declares no elicitation, so a server cannot ask. |
 | A reason for declining | `ApprovalDecision.Deny(reason)`, `MaxReasonChars`, `CleanReason`; the transcript's `reason` | `ApprovalDecision.deny(reason)`, `MAX_REASON_CHARS`, `cleanReason`; the transcript's `reason` | |
+| Details on an approval card | `ApprovalPart.TitleInlines`, `SourceLine`, `HasSourceLine`, `Reason` | `ApprovalPart.titleParts`, `sourceLine`, `hasSourceLine`, `reason` | |
 | AG-UI events | `AgUiEvents.From(events, options)`, `AgUiJson` ([Interop](interop.md)) | `agUiEvents(events, options)`, `agUiJson`; our own types following AG-UI 1.0.4 | |
 | Hooks | `IAgentHooks`, `AgentHooks`, `AddHooks(hooks, order)`, `ToolHookVerdict` | `AgentHooks`, `addHooks(hooks, order)`, `toolHook` | |
 | OpenTelemetry | `UseOpenTelemetry(...)`, opt-in | Later | |
@@ -74,44 +93,64 @@ This table is for SDK 0.3.0, against Fadenstack server 0.7.1. TypeScript names a
 |---|---|---|---|
 | Modules | `IFadenstackModule`, `Use` | `FadenstackModule`, `use` | |
 | Required client modules | `required_client_modules` | `required_client_modules` | |
-| Stages and their order | `AddChatStage`, `AddToolStage`, `IToolStage`, `StageOrder` | `addChatStage`, `addToolStage`, `ToolStage`, `StageOrder` | A chat stage wraps a `ChatStreamer`, not an `IChatClient`. |
+| Stages and modules | `AddChatStage`, `AddToolStage`, `IToolStage`, `StageOrder` | `addChatStage`, `addToolStage`, `ToolStage`, `StageOrder` | A chat stage wraps a `ChatStreamer`, not an `IChatClient`. |
 | Tool services | `AddToolService<T>(factory)`, `GetService<T>()` | `addToolService(key, factory)`, `context.services.get(key)` | A service has a typed key (`toolServiceKey`), not a type. |
 | The client's transport | `client.Transport`, `FadenstackTransport` | `client.transport`, `FadenstackTransport` | |
 | Content marking | `Fadenstack.Provenance` | `@fadenstack/provenance` | |
-| The machine policy | `MachinePolicy.Load(path)`, `FromJson`, `From(JsonElement)`; `UseMachinePolicy(policy)`; `MachinePolicyException` | `MachinePolicy.from(object)`, `fromJson`; `useMachinePolicy(policy)`; `MachinePolicyError` | A browser has no policy file, so no `Load`: an extension hands `chrome.storage.managed`'s object to `from`. `fromJson` is strict JSON (no comments or trailing commas). |
-| Endpoint watermarks (no server) | `FadenstackChatOptions.Unread` (`faden.unread`), `EndpointDialect.WatermarkSwitchOff`, `FadenstackAgent.EndpointWatermark`, `EndpointCheck.WatermarkOf`/`ServerOf` | `ChatOptions.unread`, `EndpointDialect.watermarkSwitchOff`, `agent.endpointWatermark`, `EndpointCheck.watermarkOf`/`serverOf` | `unread` is a plain option: TypeScript has no `AdditionalProperties` bag. |
-| Where an endpoint points | `EndpointCheck.PlaceOfAsync(baseUrl)` (resolves the name), `EndpointPlace` | `EndpointCheck.placeOf(url)`, `EndpointPlace` | Synchronous, by the host's spelling: a browser cannot resolve names. The check also uses the first listed model when the endpoint names none, as .NET. |
-| Records signed on the device (no server) | `LocalProvenanceBackend`, `DeviceSigner`, `UseLocalBackend`: the key in the OS key store, the log a rotating file, DigiCert by default | `LocalProvenanceBackend`, `DeviceSigner`, `localBackend`: a non-extractable WebCrypto key, the log and the kept records in IndexedDB per principal, DigiCert by default with the token check in WebCrypto and DigiCert's root embedded | A browser has no key store, files or certificate store, and `fetch` cannot reach an http-only authority from an https page (the records wait in the queue). The log keeps a number of entries, not bytes. |
-| Skills on the device | `Fadenstack.Skills`: `SkillsModule`, `SkillsOptions` (folders, bundled skills), `ILocalSkillsPolicy`; Microsoft Agent Framework's `AgentSkillsProvider` reads the folders and answers `load_skill` and `read_skill_resource` | `@fadenstack/skills`: `skillsModule`, `SkillsOptions` (bundled skills, a store), `LocalSkillsPolicy`; the SDK's own loader answers the two tools (the same names, arguments, answers and `Error: ...` texts); the person's own skills in IndexedDB per principal (`SkillStore`, database `fadenstack-skills`) | There is no Microsoft Agent Framework in TypeScript, and no folder in a browser: skills are records, import and export go through zip (later). A machine policy that lists sources keeps only the bundled skills. The `faden.yaml` reader, `SkillExtension` and the resolver are ported one to one (same limits and numbers); a keyword is matched with a Unicode-aware whole-word expression, without .NET's regular-expression timeout (a keyword is escaped text). |
+| Skills | `Fadenstack.Skills`: `SkillsModule`, `SkillsOptions` (folders, bundled skills), `ILocalSkillsPolicy`; Microsoft Agent Framework's `AgentSkillsProvider` reads the folders and answers `load_skill` and `read_skill_resource` | `@fadenstack/skills`: `skillsModule`, `SkillsOptions` (bundled skills, a store), `LocalSkillsPolicy`; the SDK's own loader answers the two tools (the same names, arguments, answers and `Error: ...` texts); the person's own skills in IndexedDB per principal (`SkillStore`, database `fadenstack-skills`) | There is no Microsoft Agent Framework in TypeScript, and no folder in a browser: skills are records, and import and export go through a zip. A machine policy that lists sources keeps only the bundled skills. The `faden.yaml` reader, `SkillExtension` and the resolver are ported one to one (same limits and numbers); a keyword is matched with a Unicode-aware whole-word expression, without .NET's regular-expression timeout (a keyword is escaped text). |
 | The skill editor | `Fadenstack.UI.Skills` (`SkillLibraryViewModel`, `SkillEditorViewModel`, `SkillDraftViewModel`), `ISkillWorkshop` and the strict SKILL.md reader in `Fadenstack.Agents`, `SkillWorkshop` in `Fadenstack.Skills` over the person's folders; import of a folder or a zip, export as a zip | The same view models in `@fadenstack/ui`, `SkillWorkshop` and the reader in `@fadenstack/agents`, `StoreSkillWorkshop` in `@fadenstack/skills` over IndexedDB; import and export as a zip only, in the browser | There is no folder in a browser: import is a zip the person picks, export a download (`SkillFileHost`). The zip reader and writer are the SDK's own (stored and deflate through `DecompressionStream`/`CompressionStream`) with .NET's guards. The switches are in the person's IndexedDB (`fadenstack-skill-switches`), not `skills.json`. A resource that is not text is refused (`BinaryFile`, one more check than .NET). Commands are methods with `can...` getters, and a model is a `ChatStreamer`. **The views**: `SkillLibrary`, `SkillEditor` and `SkillDraft` in `@fadenstack/ui-react` (the Chrome agent) and in `@fadenstack/ui-vue` (parity), in the connection wizard's column (the `fdn-wizard` classes and a few `fdn-skills` ones); the texts come from the `strings` function the view model was given; import is an `<input type="file" accept=".zip">` in the library, export and "Add a file" go through the app's `SkillFileHost` (`browserSkillFiles()` in `@fadenstack/ui-web` is a download and the browser's file picker); the preview is the chat's own Markdown rendering. |
+
+## Standalone mode
+
+| Feature | .NET | TypeScript | Where a browser differs |
+|---|---|---|---|
+| The person's own endpoint | `UseEndpoint(ModelEndpoint, EndpointReport?)` | `useEndpoint(endpoint, report?)` | |
+| Any chat client as the model | `UseChatClient(IChatClient)` | `useChatStreamer(streamer)` | |
+| The agent's definition | `UseLocalProfile(AgentDefinition.FromJson(json), ownInstructions, LocalProfileOptions?)` | `useLocalProfile(AgentDefinition.fromJson(json), ownInstructions?, options?)` | |
+| The agent as a Microsoft Agent Framework `AIAgent` | `FadenstackAgent : AIAgent`; `FadenstackAgentSession`; `RunAsync`, `RunStreamingAsync`, workflows | — | The Agent Framework is .NET's. |
+| The machine policy | `MachinePolicy.Load(path)`, `FromJson`, `From(JsonElement)`; `UseMachinePolicy(policy)`; `MachinePolicyException` | `MachinePolicy.from(object)`, `fromJson`; `useMachinePolicy(policy)`; `MachinePolicyError` | A browser has no policy file, so no `Load`: an extension hands `chrome.storage.managed`'s object to `from`. `fromJson` is strict JSON (no comments or trailing commas). |
+| How the agent is connected | `agent.Connection`, `agent.ServerClient`, `agent.EndpointUrl`; `context.Connection`, `context.ServerClient` | `agent.connection`, `agent.serverClient`, `agent.endpointUrl` | |
+| The endpoint and its dialect | `ModelEndpoint`, `EndpointDialect`, `EndpointPreset` | the same names | |
+| The endpoint as a chat client | `DirectChatClient : IChatClient` | `DirectChatClient`, a `ChatStreamer` | |
+| The endpoint check | `new EndpointCheck(endpoint).RunAsync(options)` | `new EndpointCheck(endpoint).run(options)` | |
+| Its report | `EndpointReport`, `ToJson()`, `FromJson(json)`; the same JSON in both | `EndpointReport`, `toJson()`, `fromJson(json)` | |
+| Looking for local servers | `EndpointCheck.FindLocalAsync(personConsented, ...)` | — | A page cannot scan the computer's ports: the check covers only the configured origin. |
+| The text watermark status | `report.Watermark` (`TextWatermark`, `EndpointWatermarkStatus`); `EndpointMarking` on each answer | `report.watermark`; `endpointMarking` on each answer | |
+| Endpoint watermarks (no server) | `FadenstackChatOptions.Unread` (`faden.unread`), `EndpointDialect.WatermarkSwitchOff`, `FadenstackAgent.EndpointWatermark`, `EndpointCheck.WatermarkOf`/`ServerOf` | `ChatOptions.unread`, `EndpointDialect.watermarkSwitchOff`, `agent.endpointWatermark`, `EndpointCheck.watermarkOf`/`serverOf` | `unread` is a plain option: TypeScript has no `AdditionalProperties` bag. |
+| Plain http in the local network | `ModelEndpoint.AllowPlainHttpInLan`; the addresses a name resolves to decide | `allowPlainHttpInLan`; a name decides by its form (one label, `.local`, `.lan`, `.home.arpa`, `.internal`) | A page cannot resolve names. |
+| Where an endpoint points | `EndpointCheck.PlaceOfAsync(baseUrl)` (resolves the name), `EndpointPlace` | `EndpointCheck.placeOf(url)`, `EndpointPlace` | Synchronous, by the host's spelling: a browser cannot resolve names. The check also uses the first listed model when the endpoint names none, as .NET. |
+| Redirects | One to the same origin is followed (at most three); any other is refused | The same in Node | A browser hides where a redirect points: none is followed, and the error has the code `redirect`. |
+| Errors | `EndpointKeyRejectedException`, `EndpointOriginRefusedException`, `EndpointModelNotFoundException`, `EndpointContextLengthException`, `EndpointNotCompatibleException`, `EndpointUnreachableException`, `ServerCertificateException`, `EndpointPlainHttpRefusedException`; a 429 is `FadenstackRateLimitedException` | The same names ending in `Error`; a 429 is `FadenstackRateLimitedError` | A browser cannot tell an untrusted certificate from an unreachable server: only Node reports `ServerCertificateError`. |
+| Records signed on the device (no server) | `LocalProvenanceBackend`, `DeviceSigner`, `UseLocalBackend`: the key in the OS key store, the log a rotating file, DigiCert by default | `LocalProvenanceBackend`, `DeviceSigner`, `localBackend`: a non-extractable WebCrypto key, the log and the kept records in IndexedDB per principal, DigiCert by default with the token check in WebCrypto and DigiCert's root embedded | A browser has no key store, files or certificate store, and `fetch` cannot reach an http-only authority from an https page (the records wait in the queue). The log keeps a number of entries, not bytes. |
 
 ## Sessions and a person's data
 
 | Feature | .NET | TypeScript | Where a browser differs |
 |---|---|---|---|
-| The session store | `ISessionStore`: files per user | `SessionStore`: `IndexedDbSessionStore`, `MemorySessionStore` | IndexedDB in a browser, memory in Node. |
-| Encryption of the stores | `ISecretProtector`: DPAPI or the OS key store (`FadenstackSecrets.UseOsKeyStore()`) | `SecretProtector`: a WebCrypto key, not extractable, one per user | A browser profile is not an OS account, so the protection is the browser's. See [Encryption](sessions.md#encryption). |
-| Retention, with the server's `local_retention` | `SessionRetention`, `UseSessionRetention` | `SessionRetention`, `useSessionRetention`, `withinServerRetention` | |
+| Session store | `ISessionStore`: files per user | `SessionStore`: `IndexedDbSessionStore`, `MemorySessionStore` | IndexedDB in a browser, memory in Node. |
+| Stores per signed-in user | `users\<user>\sessions` and `approvals` in the data folder | the databases `fadenstack-sessions:<tenant>:<user>` and `fadenstack-approvals:<tenant>:<user>` | |
+| Encryption | `ISecretProtector`: DPAPI or the OS key store (`FadenstackSecrets.UseOsKeyStore()`) | `SecretProtector`: a WebCrypto key, not extractable, one per user | A browser profile is not an OS account, so the protection is the browser's. See [Encryption](sessions.md#encryption). |
+| Retention | `SessionRetention`, `UseSessionRetention` | `SessionRetention`, `useSessionRetention`, `withinServerRetention` | |
 | The record of tool calls | `agent.VerifyAuditAsync()`, `ExportAuditAsync(AuditExportFormat, stream)`, `AuditRetentionDays`; `UseAuditLog(IAuditLog)`: `FileAuditLog`, `MemoryAuditLog` | `agent.verifyAudit()`, `exportAudit("csv" or "html")` (text), `auditRetentionDays`; `useAuditLog(log)`: `IndexedDbAuditLog`, `MemoryAuditLog` ([The record of tool calls](audit-log.md)) | The same entries, hash chain, seal, test vectors and texts; a file per person there, an IndexedDB database per person here. |
 | Fencing content you did not write | `UntrustedContent.Fence(label, origin, body)`, `UntrustedContent.Clean(text)` ([Tools](tools.md)) | `fenceUntrusted({ label, origin, body })`, `cleanUntrusted(text)` | |
-| The injection suite (7.1) | `tests/Fadenstack.Agents.Tests/Injection`, trait `Category=Injection`, a step of its own in `release.yml` | `packages/agents/test/injection`, a step of its own in `release.yml` | The same corpus, byte for byte; TS has no delegation channel. |
-| Content logging for a time (8.1) | `agent.ContentLogging`, `StartContentLogging(TimeSpan)`, `StopContentLogging()`, `ContentLoggingSettingsViewModel`, the band in the chat; machine policy `contentLogging` | `agent.contentLogging`, `startContentLogging(ms)`, `stopContentLogging()`, `ContentLoggingSettingsViewModel`, the band in the chat; machine policy `contentLogging` | TS has no OpenTelemetry chat client: only the hooks follow the switch. |
+| The injection suite | `tests/Fadenstack.Agents.Tests/Injection`, trait `Category=Injection` | `packages/agents/test/injection` | The same corpus, byte for byte; TS has no delegation channel. |
+| Content logging for a time | `agent.ContentLogging`, `StartContentLogging(TimeSpan)`, `StopContentLogging()`, `ContentLoggingSettingsViewModel`, the band in the chat; machine policy `contentLogging` | `agent.contentLogging`, `startContentLogging(ms)`, `stopContentLogging()`, `ContentLoggingSettingsViewModel`, the band in the chat; machine policy `contentLogging` | TS has no OpenTelemetry chat client: only the hooks follow the switch. |
 | The mark on copy | `agent.MarkCopyAsync(AnswerCopy)` (`MarkedCopy`), `IAnswerCopyMarker`, `IHtmlClipboard` | `agent.markCopy({ text, html, chat, turn })`, `AnswerCopyMarker`, `Clipboard.setContent` | .NET has no chat export; TS's saved chat is marked in its front matter. |
-| A local MCP server's program pinned (5.5) | `McpServerEntry.ProgramPin`, `McpHost.ConfirmNewProgramAsync`, the Tools view's "Use the new program" | — | A browser starts no program: an MCP server over http has nothing to pin. |
+| A local MCP server's program pinned | `McpServerEntry.ProgramPin`, `McpHost.ConfirmNewProgramAsync`, the Tools view's "Use the new program" | — | A browser starts no program: an MCP server over http has nothing to pin. |
 | Export my data | `ExportMyDataAsync(stream, DataScope scope = ThisApp)`: a ZIP | `exportMyData({ scope })`: a `MyDataExport` object | A page hands the object to the person as a download. |
 | Delete my data | `DeleteMyDataAsync(DataScope scope = ThisApp)`: `DataDeletion(FoldersRemoved, HostSessionStoreLeft, HostApprovalStoreLeft)` with `Scope`, `OtherApps`, `SharedDataKept`, `AgentsKept` | `deleteMyData({ scope })`: `DataDeletion` with `storesCleared`, `hostSessionStoreLeft`, `hostApprovalStoreLeft`, `hostStoresLeft`, `scope`, `otherApps`, `sharedDataKept`, `agentsKept` | The SDK removes IndexedDB databases, not folders. |
 | Per-app data rights | `DataScope.ThisApp` (default) or `AllApps`; `MyDataAppsAsync()`; the app record `apps/<app>.json`; the approvals' seal key goes with the last approvals | `scope: "thisApp"` (default) or `"allApps"`; `myDataApps()`; the app record in `fadenstack-apps`; no seal key (approvals are sealed under the person's data key, which goes only when no other app uses the data) | In a browser the texts say "in this browser", not "on this device". |
 | The "Your data" control | `MyDataSettingsViewModel` in `Fadenstack.UI`, with views in WPF and Avalonia | `MyDataSettingsViewModel` in `@fadenstack/ui`, with `MyDataSettings` in `@fadenstack/ui-react` and `@fadenstack/ui-vue` | |
-| The device agent registry, OS key store package | `Fadenstack.Agents.Registry`, `Fadenstack.Secrets` | — | These belong to the operating system. |
-| Everything kept on the device | [Data on the device](../dotnet/data-on-device.md): a folder per person (skills included), and shared folders for tokens, the key store, the agent registry, leases and logs | [Data on the device](data-on-device.md): nine IndexedDB databases per person, and two `localStorage` helpers | A browser has no shared folders: the sign-in, the endpoint's key and logs are the app's. |
+| Device agent registry | `DeviceAgentRegistry` in `Fadenstack.Agents.Registry` | — | These belong to the operating system. |
+| Everything kept on the device | [Data on the device](../dotnet/data-on-device.md): a folder per person (skills included), and shared folders for tokens, the key store, the agent registry, leases and logs | [Data on the device](data-on-device.md): the IndexedDB databases per person listed there, and two `localStorage` helpers | A browser has no shared folders: the sign-in, the endpoint's key and logs are the app's. |
 
 ## Thinking
 
 | Feature | .NET | TypeScript | Where a browser differs |
 |---|---|---|---|
-| The app's effort | `UseReasoning(ReasoningEffort)`: `None`, `Low`, `Medium`, `High`, `ExtraHigh` | `useReasoning(effort)`: `none`, `minimal`, `low`, `medium`, `high`, `xhigh` | `minimal` is only in TypeScript, where it is sent as set. |
+| How long the agent thinks | `UseReasoning(ReasoningEffort)`: `None`, `Low`, `Medium`, `High`, `ExtraHigh` | `useReasoning(effort)`: `none`, `minimal`, `low`, `medium`, `high`, `xhigh` | `minimal` is only in TypeScript, where it is sent as set. |
 | The levels a person picks | `ReasoningLevel`: Auto, Off, Low, Medium, High | `ReasoningLevel`: `auto`, `off`, `low`, `medium`, `high` | |
-| The server's maximum | `ui.reasoning.max`: `minimal` caps at none, `max` sets no cap | `ui.reasoning.max`: `minimal` caps at none, `max` sets no cap | |
+| The server's cap, `ui.reasoning.max` | `ui.reasoning.max`: `minimal` caps at none, `max` sets no cap | `ui.reasoning.max`: `minimal` caps at none, `max` sets no cap | |
 | The pick, kept per person and agent | `agent.ReasoningChoices`, `SetReasoningAsync`, a file in the user's folder | `agent.reasoningChoices`, `setReasoning`, `ReasoningStore` (IndexedDB) | |
 | The pill | `AgentChatViewModel`: `SelectReasoningCommand` and the options | `AgentChatViewModel`: `reasoningOptions`, `selectReasoning` | |
 
@@ -119,13 +158,15 @@ This table is for SDK 0.3.0, against Fadenstack server 0.7.1. TypeScript names a
 
 | Feature | .NET | TypeScript | Where a browser differs |
 |---|---|---|---|
-| The view models | `Fadenstack.UI`: `AgentChatViewModel` | `@fadenstack/ui`: `AgentChatViewModel` | |
+| The chat view model | `Fadenstack.UI`: `AgentChatViewModel` | `@fadenstack/ui`: `AgentChatViewModel` | |
 | The skins | `Fadenstack.UI.Wpf`, `Fadenstack.UI.Avalonia` | `@fadenstack/ui-react`, `@fadenstack/ui-vue`, with `@fadenstack/ui-web` | |
 | The approval broker | `ApprovalBroker` | `ApprovalBroker` | |
-| The turn gate | `AgentChatOptions.TurnGate`, `IsWaitingForSlot` | `turnGate`, `isWaitingForSlot` | The gate returns a lease: a function or `{ dispose() }`. |
+| A gate on running turns | `AgentChatOptions.TurnGate`, `IsWaitingForSlot` | `turnGate`, `isWaitingForSlot` | The gate returns a lease: a function or `{ dispose() }`. |
 | Host commands in the panel | `AgentChatViewModel.InvokeToolAsync`, `BeforeCommand`, `AfterCommand` | `invokeTool`, `beforeCommand`, `afterCommand` | |
-| The notice for an unmarked answer | `TellUnmarked`, preference `tell-unmarked`; off by default | `showUnmarkedNotice`, preference `unmarkedNotice`; off by default | The preference is in `localStorage`. |
-| Nested Markdown, preview, Mermaid | Depth 3, preview and source, Mermaid marked | The same | Mermaid is shown as marked text, not drawn. |
+| Answers without an AI mark | `TellUnmarked`, preference `tell-unmarked`; off by default | `showUnmarkedNotice`, preference `unmarkedNotice`; off by default | The preference is in `localStorage`. |
+| Nested Markdown, three levels | `MarkdownParser.MaxNestingDepth` | `MAX_NESTING_DEPTH` | |
+| A `markdown` fence as a preview | `PreviewBlock` (`Source`, `Blocks`) | a block of kind `preview` (`source`, `blocks`) | |
+| A `mermaid` fence | `CodeBlock.IsDiagram`, shown as text | a code block with `diagram: true`, shown as text | Mermaid is shown as marked text, not drawn. |
 | Report a problem | The sheet over the chat (WPF, Avalonia): from About and from a failed turn's error; `AgentChatOptions.SupportEmail`, the policy key `supportEmail`; "Copy details" and "Open the log folder" | `chat.openReportProblem()`, `chat.reportProblem`, `chat.writeReportMail()`, `chat.copyReportDetails()`, `supportEmail`, `buildReport`; the policy key `supportEmail` | The same sheet and byte-identical subject, body and copy for the same facts (a shared table of cases). The system line is the browser's name and OS (`navigator.userAgentData`, else a parsed user agent), and "Copy details" adds the last 50 entries of the browser log (`useBrowserLog`) instead of a log folder. |
 | Languages | English, German, French, Spanish, Simplified Chinese | The same | |
 
@@ -133,9 +174,7 @@ This table is for SDK 0.3.0, against Fadenstack server 0.7.1. TypeScript names a
 
 | Feature | .NET | TypeScript | Where a browser differs |
 |---|---|---|---|
-| The logger | `UseLogging(ILoggerFactory)` | `useLogging(FadenstackLogger)` | |
-| Event ids and names | `Fadenstack.Client` 1000 to 1099, `Fadenstack.Agents` 2000 to 2099 | The same ids, names and fields | |
-| Content in logs | Never | Never | |
+| Content-free logs | `UseLogging(ILoggerFactory)`; ids 1000 to 1099 client, 2000 to 2099 agent; never any content | `useLogging(FadenstackLogger)`; the same event ids, names and fields; never any content | |
 | A log file | `FadenstackFileLoggerProvider` | — | A browser has no folder to write to: forward the events to your own logger, or keep a small log on the device (next row). |
 | A log on the device | `FadenstackFileLoggerProvider` (`MaxTotalBytes`, `MaxAge`, `Dropped`) | `useBrowserLog({ maxEntries, maxAgeDays, minLevel })`, `BrowserLog` (`entries()`, `clear()`, `dropped`) | An IndexedDB database of the signed-in person (`fadenstack-log`), 500 entries and 7 days by default, content-free, deleted with "Remove my data"; in memory in Node. Counts entries, not bytes. |
 | Traces and metrics | `FadenstackTelemetry` | — | |

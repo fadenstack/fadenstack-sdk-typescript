@@ -74,6 +74,22 @@ and `@fadenstack/ui-vue` draw them as `SkillLibrary`, `SkillEditor` and `SkillDr
 
 **Nothing is saved until the person presses Save.**
 
+The editor's limits: the name up to 64 characters, the description up to 1,024, `compatibility` up to 500; a body over
+about 5,000 tokens gets a warning, not a refusal; a file up to 1 MiB, all of a skill's files up to 5 MiB, at most 100
+files; a zip up to 6 MiB, and one that expands to more than 100 times its size is refused.
+
+## Drafting a skill
+
+`SkillDraftViewModel` ("Draft from this chat") asks the chat's own model once for a `SKILL.md` and a `faden.yaml` that
+fit the conversation, and opens the answer in the editor as a proposal.
+
+- The model is shown the conversation, newest turns first, up to 24,000 characters; a single message is cut at 4,000.
+- The model gets no tool. Its answer is read as text and held to the same rules as any skill, so a draft that breaks one
+  opens in the editor with the problem shown.
+- The draft has no way to save. Only the person's Save in the editor writes the skill. A model that could save skills
+  could be talked into it by text in a document or a web page, and the skill would come back into every later chat.
+- It says plainly when there is no chat to draw from (`NoChat`), no model (`NoModel`), or the answer could not be read.
+
 ## Security
 
 - Skill text is information, never a rule: it never changes a tool's class, a tool mode or a grant. `preferred_tools`

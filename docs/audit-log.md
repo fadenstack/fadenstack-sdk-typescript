@@ -54,7 +54,7 @@ answers, with source `gateway`: `ran` means it was released to the gateway, whic
 `function.arguments` string, `ToolCall.argumentsJson`), UTF-8, lowercase hex; a blank text is `{}`, as the SDK writes it back.
 The server stores the SDK's value and never computes it itself, so both SDKs must agree, and they do (a shared test vector is
 in both suites). For a person's own command (`invokeTool`) the text is the canonical command JSON the server's check also
-sees. For a call a gateway holds (`faden.approval_required` with an `approvalId`), core 0.7.1 rc22 adds `arguments` (the text, cut
+sees. For a call a gateway holds (`faden.approval_required` with an `approvalId`), core 0.7.1 adds `arguments` (the text, cut
 at 8000 characters), `argumentsTruncated` (only when it was cut) and `argumentsSha256` (of the whole text) to the event. The entry
 takes the gateway's hash; if only the text came and it was not cut, the SDK hashes it; a cut text without a hash leaves the field
 empty. An older gateway sends none of these, so the field is empty.

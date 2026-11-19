@@ -5,7 +5,7 @@ Two ways an agent ends at once: the person stops it (the emergency stop), or the
 
 ## Stop everything
 
-`agent.stopAll()` (.NET: `StopAllAsync()`) is the emergency stop (release plan 8.11):
+`agent.stopAll()` (.NET: `StopAllAsync()`) is the emergency stop:
 
 1. Every running turn in every open chat stops the way the chat's own Stop button does. The turn ends as stopped (its stream throws an
    `AbortError`, the transcript says `cancelled`), a tool call that waits for the person's answer is answered **no** (the transcript and
@@ -44,13 +44,13 @@ session ending).
 
 ### Access tokens are short
 
-Core cuts the agent access token to 300 seconds at most (from rc21). The SDKs refresh from `expires_in`, 30 seconds ahead, and assume no
+Core cuts the agent access token to 300 seconds at most. The SDKs refresh from `expires_in`, 30 seconds ahead, and assume no
 lifetime. A device signed out stops within one token's life; an agent turned off, a person deactivated or a sign-in ended stop at the next
 request.
 
 ## The off-switch
 
-An administrator can **turn an agent off** in the console (release plan 8.3). From then on every agent route but the profile, the events
+An administrator can **turn an agent off** in the console. From then on every agent route but the profile, the events
 and the manifest answers 403 `agent_disabled` ("Your organisation turned this agent off."), for everyone, and the server has ended the
 agent's grants (`revoked_by: agent_turned_off`).
 
