@@ -222,6 +222,7 @@ pass (see [The host's services](#the-hosts-services)), and these, which all have
 | `turnGate` | Limits how many turns work at the same time across chats. See [Limiting running turns](#limiting-running-turns). |
 | `branding` | The muted Fadenstack link under the message box. On by default; `false` hides it. About stays. |
 | `refSource` | Your app's name in the links to fadenstack.com. `sdk` by default. See [About and the Fadenstack link](#about-and-the-fadenstack-link). |
+| `supportEmail` | Your app's own support address, for [Report a problem](#report-a-problem) when the agent is standalone: one plain mail address, at most 254 characters. A value that is not one throws a `TypeError` when the view model is made. In governed mode it is never used. | `support@fadenstack.com` (standalone) |
 | `previewLength` | How many characters of a tool's input and output are shown. Default 4 000. |
 | `initialTurns` | How many turns an opened session shows at first. |
 | `pageSize` | How many older turns "Show earlier messages" adds. |
@@ -483,6 +484,49 @@ each link opens in a new tab.
 `chat.setAboutOpen(true)`, `chat.about` and `chat.copyAboutDetails()` do from code what About does. For a skin of
 your own, `@fadenstack/ui` exports the link helpers: `fadenstackLink`, `footerLink`, `helpLink`, `refSource` and
 `majorMinor`.
+
+## Report a problem
+
+A sheet over the panel that says to whom a report goes and shows exactly what the mail will contain. The SDK sends nothing: the
+person's mail app sends the mail, or the person pastes the copied text into webmail. It opens from two places: **Report a problem**
+beside *Copy details* in About, and a **Report a problem** link on the error of a failed turn, which adds that error's code (and the
+server's request id, where the error carries one). Escape, Close or a press outside closes it; the focus goes back to what opened it.
+
+**To whom.** In this order: the machine policy's key [`supportEmail`](machine-policy.md#keys) (both modes); then, in standalone mode only,
+the chat option `supportEmail`; then, in standalone mode only, `support@fadenstack.com`. In governed mode only the policy's key counts:
+never the host's address, never ours. Without the key a governed agent offers no mail: the sheet says to ask the organisation's IT,
+shows its Help link (`<server>/help/`) and keeps *Copy details*, which then has no `To` line. An address must be one plain address;
+anything else cannot reach the draft (a policy value counts as absent, an option throws).
+
+**The mail.** The subject is `Problem with Word add-in 1.2.0 (Fadenstack SDK 0.3.1)`, or `Problem with Fadenstack SDK 0.3.1` when you did not
+describe your app (`describeApp`). The body has the line *What happened:* with two empty lines to write in, a `-- ` line, and then
+one line each, left out when unknown: the app, the SDK (`Fadenstack SDK 0.3.1 (TypeScript)`), the system (the browser's name and major
+version and the OS, such as `Chrome 131, Windows`; in Node `Node 24, win32`; never the full user-agent string), the mode, the agent
+(its name, version or draft, model), the server (governed), the endpoint's kind and where it points (standalone, such as
+`ollama, on this computer`; never its address), the time in UTC, and the error. Labels are in the panel's language; values are never
+translated. Never in the report: prompts, answers, reasoning, attachments, file or page names, tool arguments, keys, tokens, the
+person's name, mail address or user id. Line breaks in the mail are CRLF.
+
+**The link.** `mailto:<address>?subject=...&body=...`, percent-encoded as UTF-8 (RFC 6068), at most 2,000 characters. If it would be
+longer, the body's lines go from the end (the error first, then the time, and so on), never the subject or the *What happened* line.
+It opens through `openLink`, like About's links; a host that cannot open `mailto:` still has *Copy details*.
+
+**Copy details** copies the address and the subject, an empty line, and the body with LF line breaks. When the agent keeps a
+[browser log](agent.md#a-log-in-the-browser) (`useBrowserLog`), it adds a `-- ` line and the log's last 50 entries after *Recent log:*, one per line
+(`<time> <level> <category> <event id> <message>`); the log never goes into the mail. The log's entries are the SDK's own and are copied as they
+are: a line such as `Tool lookup (read, host) ended ok` names a tool.
+
+```ts
+const chat = new AgentChatViewModel(agent, approvals, {
+  ...browserChatServices(),
+  supportEmail: "support@my-app.example", // standalone: your own support; governed: IT's policy key decides
+  openLink: (url) => chrome.tabs.create({ url }), // also opens the mailto: link
+});
+```
+
+`chat.openReportProblem(error?)`, `chat.closeReportProblem()`, `chat.reportProblem` (the sheet's texts and the preview),
+`chat.writeReportMail()` and `chat.copyReportDetails()` do from code what the sheet does. `buildReport` in `@fadenstack/ui` is the pure
+builder both SDKs share; `isSupportEmail` is the address rule.
 
 ## Settings
 

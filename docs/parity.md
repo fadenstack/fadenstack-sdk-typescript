@@ -126,6 +126,7 @@ This table is for SDK 0.3.0, against Fadenstack server 0.7.1. TypeScript names a
 | Host commands in the panel | `AgentChatViewModel.InvokeToolAsync`, `BeforeCommand`, `AfterCommand` | `invokeTool`, `beforeCommand`, `afterCommand` | |
 | The notice for an unmarked answer | `TellUnmarked`, preference `tell-unmarked`; off by default | `showUnmarkedNotice`, preference `unmarkedNotice`; off by default | The preference is in `localStorage`. |
 | Nested Markdown, preview, Mermaid | Depth 3, preview and source, Mermaid marked | The same | Mermaid is shown as marked text, not drawn. |
+| Report a problem | The sheet over the chat (WPF, Avalonia): from About and from a failed turn's error; `AgentChatOptions.SupportEmail`, the policy key `supportEmail`; "Copy details" and "Open the log folder" | `chat.openReportProblem()`, `chat.reportProblem`, `chat.writeReportMail()`, `chat.copyReportDetails()`, `supportEmail`, `buildReport`; the policy key `supportEmail` | The same sheet and byte-identical subject, body and copy for the same facts (a shared table of cases). The system line is the browser's name and OS (`navigator.userAgentData`, else a parsed user agent), and "Copy details" adds the last 50 entries of the browser log (`useBrowserLog`) instead of a log folder. |
 | Languages | English, German, French, Spanish, Simplified Chinese | The same | |
 
 ## Logging
