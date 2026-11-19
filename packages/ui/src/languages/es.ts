@@ -152,7 +152,7 @@ export const spanishStrings: UiStrings = {
   reportTo: "Para",
   reportSubjectLabel: "Asunto",
   reportRecentLog: "Registro reciente",
-  reportModeGoverned: "Gestionado",
+  reportModeGoverned: "Organización",
   reportModeOwnAi: "IA propia",
   reportPlaceThisComputer: "en este equipo",
   reportPlaceLocalNetwork: "en la red local",

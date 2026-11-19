@@ -153,7 +153,7 @@ export const frenchStrings: UiStrings = {
   reportTo: "À",
   reportSubjectLabel: "Objet",
   reportRecentLog: "Journal récent",
-  reportModeGoverned: "Géré",
+  reportModeGoverned: "Organisation",
   reportModeOwnAi: "IA personnelle",
   reportPlaceThisComputer: "sur cet ordinateur",
   reportPlaceLocalNetwork: "dans le réseau local",

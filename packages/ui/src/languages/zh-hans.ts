@@ -148,7 +148,7 @@ export const chineseSimplifiedStrings: UiStrings = {
   reportTo: "收件人",
   reportSubjectLabel: "主题",
   reportRecentLog: "最近日志",
-  reportModeGoverned: "受管",
+  reportModeGoverned: "组织",
   reportModeOwnAi: "自有 AI",
   reportPlaceThisComputer: "在此计算机上",
   reportPlaceLocalNetwork: "在本地网络中",

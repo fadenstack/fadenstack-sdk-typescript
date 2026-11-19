@@ -1136,7 +1136,7 @@ export const englishStrings: UiStrings = {
   reportTo: "To",
   reportSubjectLabel: "Subject",
   reportRecentLog: "Recent log",
-  reportModeGoverned: "Governed",
+  reportModeGoverned: "Organisation",
   reportModeOwnAi: "Own AI",
   reportPlaceThisComputer: "on this computer",
   reportPlaceLocalNetwork: "in the local network",

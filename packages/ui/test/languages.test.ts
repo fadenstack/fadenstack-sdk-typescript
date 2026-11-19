@@ -48,7 +48,7 @@ describe("stringsFor", () => {
         const a = englishStrings[key as keyof UiStrings], b = strings[key as keyof UiStrings];
         return typeof a === "string" && a === b && key !== "direction";
       });
-      expect(same.length, `${tag}: ${same.join(", ")}`).toBeLessThanOrEqual(17); // 6 as the .NET test allows, and the report mail's five labels that are the same word in German (App, SDK, System, Agent, Server), and the Tools view's "Name" (twice in German) and its row of dots, which are no words: the wizard's example address "https://…/v1" is no word; and the three product names of the web search sheet (Brave, Brave Search, SearXNG)
+      expect(same.length, `${tag}: ${same.join(", ")}`).toBeLessThanOrEqual(18); // 6 as the .NET test allows, and the report mail's six labels that are the same word in German (App, SDK, System, Agent, Server, Organisation), and the Tools view's "Name" (twice in German) and its row of dots, which are no words: the wizard's example address "https://…/v1" is no word; and the three product names of the web search sheet (Brave, Brave Search, SearXNG)
     }
   });
 });

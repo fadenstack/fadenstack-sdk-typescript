@@ -152,7 +152,7 @@ export const germanStrings: UiStrings = {
   reportTo: "An",
   reportSubjectLabel: "Betreff",
   reportRecentLog: "Letzte Protokolleinträge",
-  reportModeGoverned: "Verwaltet",
+  reportModeGoverned: "Organisation",
   reportModeOwnAi: "Eigene KI",
   reportPlaceThisComputer: "auf diesem Computer",
   reportPlaceLocalNetwork: "im lokalen Netzwerk",
